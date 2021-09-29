@@ -329,20 +329,50 @@ public class ImageProcessor
 		    getDeltasFromValues(shrunk_green, delta, xdim / 2, ydim / 2);
 		    getValuesFromDeltas(delta, value, xdim / 2, ydim / 2);
 		    
-		    green_max = -1;
-		    green_min = 256;
+		    green_max = green_min = delta[0];
 		    for(int i = 0; i < size / 4; i++)
 		    {
-		    	if(value[i] > green_max)
-		    		green_max = value[i];
-		    	if(value[i] < green_min)
-		    		green_min = value[i];
+		    	if(delta[i] > green_max)
+		    		green_max = delta[i];
+		    	if(delta[i] < green_min)
+		    		green_min = delta[i];
 		    }
 		    
 		    
-		    System.out.println("The low value in the shrunken green channel is " + green_min);
-		    System.out.println("The high value in the shrunken green channel is " + green_max);
+		    System.out.println("The low value in the shrunken green delta channel is " + green_min);
+		    System.out.println("The high value in the shrunken green delta channel is " + green_max);
+		    
+		    for(int i = 0; i < size / 4; i++)
+            {
+	            delta[i] -= green_min;
+	            delta[i] >>= pixel_shift;   
+            }
 		  
+		    	
+		    
+		    green_max = green_min = delta[0];
+		    for(int i = 0; i < size / 4; i++)
+		    {
+		    	if(delta[i] > green_max)
+		    		green_max = delta[i];
+		    	if(delta[i] < green_min)
+		    		green_min = delta[i];
+		    }
+		    
+		    int number_of_different_values = green_max - green_min + 1;
+			System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
+			
+		    
+		    System.out.println("The low value in the shrunken shifted green delta channel is " + green_min);
+		    System.out.println("The high value in the shrunken shifted green delta channel is " + green_max);
+		    
+		    byte [] bit_strings = new byte[5 * xdim * ydim];
+		    int number_of_bits  = packStrings(delta, size / 4, number_of_different_values, bit_strings);
+		    System.out.println("Number of bits is " + number_of_bits);
+		    int number_of_bytes = unpackStrings(bit_strings, number_of_different_values, delta, size / 4);
+		    System.out.println("Number of bytes is " + number_of_bytes);
+		   
+		    
 		    total_error = 0;
 		    for(int i = 0; i < size; i++)
 		    {
@@ -537,7 +567,7 @@ public class ImageProcessor
                 }
             }
         }
-        else
+        else  // Looks wrong.
         {
             for(i = 0; i < r - 1; i += 2)
             {
@@ -638,8 +668,164 @@ public class ImageProcessor
         }
     }
     
+    public int packStrings(int src[], int size, int number_of_different_values, byte dst[])
+    {
+        int i, j, k;
+        int current_byte;
+        byte current_bit, value; 
+        byte next_bit; 
+        int  index, second_index;
+        int  number_of_bits;
+        int inverse_table[], table[], mask[];
+    
+        inverse_table = new int[number_of_different_values]; 
+        inverse_table[0] = number_of_different_values / 2;
+        i = j = number_of_different_values / 2;
+        k = 1;
+        j++;
+        i--;
+        while(i >= 0)
+        {
+            inverse_table[k] = j;
+            k++;
+            j++;
+            inverse_table[k] = i;
+            k++;
+            i--;
+        }
+
+        table = new int[number_of_different_values];
+        for(i = 0; i < number_of_different_values; i++)
+        {
+            j        = inverse_table[i];
+            table[j] = i;
+        }
+    
+        mask  = new int[8];
+        mask[0] = 1;
+        for(i = 1; i < 8; i++)
+        {
+            mask[i] = mask[i - 1];
+            mask[i] *= 2;
+            mask[i]++;
+        }
     
     
+        current_bit = 0;
+        current_byte = 0;
+        dst[current_byte] = 0;
+        for(i = 0; i < size; i++)
+        {
+            k     = src[i];
+            index = table[k];
+            if(index == 0)
+            {
+                current_bit++;
+                if(current_bit == 8)
+                    dst[++current_byte] = current_bit = 0;
+            }
+            else
+            {
+                next_bit = (byte)((current_bit + index + 1) % 8);
+                if(index <= 7)
+                {
+                    dst[current_byte] |= (byte) (mask[index - 1] << current_bit);
+                    if(next_bit <= current_bit)
+                    {
+                        dst[++current_byte] = 0;
+                        if(next_bit != 0)
+                            dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
+                    }
+                }
+                else if(index > 7)
+                {
+                    dst[current_byte] |= (byte)(mask[7] << current_bit);
+                    j = (index - 8) / 8;
+                    for(k = 0; k < j; k++)
+                        dst[++current_byte] = (byte)(mask[7]);
+                    dst[++current_byte] = 0;
+                    if(current_bit != 0)
+                        dst[current_byte] |= (byte)(mask[7] >> (8 - current_bit));
+    
+                    if(index % 8 != 0)
+                    {
+                        second_index = index % 8 - 1;
+                        dst[current_byte] |= (byte)(mask[second_index] << current_bit);
+                        if(next_bit <= current_bit)
+                        {
+                            dst[++current_byte] = 0;
+                            if(next_bit != 0)
+                                dst[current_byte] |= (byte)(mask[second_index] >> (8 - current_bit));
+                        }
+                    }
+                    else if(next_bit <= current_bit)
+                            dst[++current_byte] = 0;
+                }
+                current_bit = next_bit;
+            }
+        }
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        return(number_of_bits);
+    }
+    
+    public int unpackStrings(byte src[], int number_of_different_values, int dst[], int size)
+    {
+        int  number_of_bytes_unpacked;
+        int  current_src_byte, current_dst_byte;
+        byte non_zero, mask, current_bit;
+        int  index, current_length;
+        int  table[];
+        int  i, j, k;
+    
+        table = new int[number_of_different_values]; 
+        table[0] = number_of_different_values / 2;
+        i = j = number_of_different_values / 2;
+        k = 1;
+        j++;
+        i--;
+        while(i >= 0)
+        {
+            table[k] = j;
+            k++;
+            j++;
+            table[k] = i;
+            k++;
+            i--;
+        }
+        current_length = 1;
+        current_src_byte = 0;
+        mask = 0x01;
+        current_bit = 0;
+        current_dst_byte = 0;
+        while(current_dst_byte < size)
+        {
+            non_zero = (byte)(src[current_src_byte] & (byte)(mask << current_bit));
+            if(non_zero != 0)
+                current_length++;
+            else
+            {
+                index = current_length - 1;
+                dst[current_dst_byte++] = table[index];
+                current_length = 1;
+            }
+            current_bit++;
+            if(current_bit == 8)
+            {
+                current_bit = 0;
+                current_src_byte++;
+            }
+        }
+        if(current_bit == 0)
+            number_of_bytes_unpacked = current_src_byte;
+        else
+            number_of_bytes_unpacked = current_src_byte + 1;
+        return(number_of_bytes_unpacked);
+    }
+
     
     
     
