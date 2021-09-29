@@ -323,6 +323,23 @@ public class ImageProcessor
 		    		green_min = shrunk_green[i];
 		    }
 		    
+		    int [] delta = new int[size / 4];
+		    int [] value = new int[size / 4];
+		    
+		    getDeltasFromValues(shrunk_green, delta, xdim / 2, ydim / 2);
+		    getValuesFromDeltas(delta, value, xdim / 2, ydim / 2);
+		    
+		    green_max = -1;
+		    green_min = 256;
+		    for(int i = 0; i < size / 4; i++)
+		    {
+		    	if(value[i] > green_max)
+		    		green_max = value[i];
+		    	if(value[i] < green_min)
+		    		green_min = value[i];
+		    }
+		    
+		    
 		    System.out.println("The low value in the shrunken green channel is " + green_min);
 		    System.out.println("The high value in the shrunken green channel is " + green_max);
 		  
@@ -554,7 +571,7 @@ public class ImageProcessor
                 }
             }
         }
-        else
+        else // Looks wrong.
         {
             for(i = 0; i < r - 1; i += 2)
             {
@@ -568,5 +585,74 @@ public class ImageProcessor
             }
         }
     }
+    
+   
+    
+    public void getDeltasFromValues(int src[], int dst[], int xdim, int ydim)
+    {
+        int i, j, k;
+        int current_value;
+        int start_value;
+        int delta_value;
+    
+        k = 0;
+        start_value = 0;
+        for(i = 0; i < ydim; i++)
+        {
+            delta_value  = src[k] - start_value;
+            
+            start_value += delta_value;
+            dst[k]     = delta_value;
+            k++;
+            current_value = start_value; 
+            for(j = 1; j < xdim; j++)
+            {
+                delta_value    = src[k]  - current_value;
+                current_value += delta_value;
+                dst[k]       = delta_value;
+                k++;
+            }
+        }
+    }
+
+    public void getValuesFromDeltas(int src[], int dst[], int xdim, int ydim)
+    {
+        int current_value;
+        int start_value;
+        int i, j, k;
+    
+        k = 0;
+        start_value = 0;
+        for(i = 0; i < ydim; i++)
+        {
+            start_value  += src[k];
+            current_value = start_value;
+            dst[k] = current_value;
+            k++;
+            for(j = 1; j < xdim; j++)
+            {
+                current_value += src[k];
+                dst[k]       = current_value;
+                k++;
+            }
+        }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 }
 
