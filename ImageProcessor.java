@@ -20,6 +20,8 @@ public class ImageProcessor
 	ImageCanvas   image_canvas;
 	int           pixel_shift = 3;
 	int           xdim, ydim;
+	byte[]        temp;
+	double        zero_ratio;
 	
 	public static void main(String[] args)
 	{
@@ -48,7 +50,8 @@ public class ImageProcessor
 			//System.out.println("The number of bits per pixel is " + number_of_bits);
 			xdim = original_image.getWidth();
 			ydim = original_image.getHeight();
-			//System.out.println("Xdim is " + xdim + " and ydim is " + ydim);
+			temp = new byte[5 * xdim * ydim];
+			System.out.println("Xdim is " + xdim + " and ydim is " + ydim);
 			
 			// Only interested in 3 channel RGB for now.
 			
@@ -385,7 +388,63 @@ public class ImageProcessor
 		    	green[i] = scratch[i];
 		    }
 		    System.out.println("Total error after adjusting for error is " + total_error);
-		     
+		    
+		    int[] blue_green = new int[xdim * ydim];
+		    int[] red_green  = new int[xdim * ydim];
+		    for(int i = 0; i < size; i++)
+		    {
+		    	blue_green[i] = green[i]  - blue[i];
+		    	blue_green[i] >>= pixel_shift;
+		    	red_green[i]  = green[i] - red[i];
+		    	red_green[i] >>= pixel_shift;
+		    }
+		    
+		    int [] blue_green_delta = new int[xdim * ydim];
+		    int [] red_green_delta  = new int[xdim * ydim];
+		    getDeltasFromValues(blue_green, blue_green_delta, xdim, ydim);
+		    getDeltasFromValues(red_green, red_green_delta, xdim, ydim);
+		    green_max = green_min = blue_green_delta[0];
+		    for(int i = 0; i < size; i++)
+		    {
+		    	if(blue_green_delta[i] > green_max)
+		    		green_max = blue_green_delta[i];
+		    	if(blue_green_delta[i] < green_min)
+		    		green_min = blue_green_delta[i];
+		    }
+		    
+		    number_of_different_values = green_max - green_min + 1;
+			System.out.println("The number of different values in the blue green delta channel is " + number_of_different_values);
+			for(int i = 0; i < size; i++)
+				blue_green_delta[i] -= green_min;	
+		    
+		    number_of_bits  = packStrings(blue_green_delta, size, number_of_different_values, bit_strings);
+		    
+		    System.out.println("Number of bits in strings is " + number_of_bits);
+		   
+		    number_of_bytes = unpackStrings(bit_strings, number_of_different_values, red_green_delta, size);
+		    System.out.println("Number of bytes unpacked is " + number_of_bytes);
+		    
+		    total_error = 0;
+		    for(int i = 0; i < size; i++)
+		    {
+		    	int error = blue_green_delta[i] - red_green_delta[i];
+		    	total_error += error;
+		    	
+		    }
+		    
+		    System.out.println("Total error after packing and unpacking strings is " + total_error);
+		    /*
+		    byte[] compressed_bit_strings = new byte[5 * size];
+		    int compressed_number_of_bits = compressStrings(bit_strings, number_of_different_values, compressed_bit_strings);
+		    System.out.println("Number of bits in compressed strings is " + compressed_number_of_bits);
+		    */
+		    
+		    
+		    //double amount_of_compression = (double)compressed_number_of_bits / (double)number_of_bits;
+		    
+		    //System.out.println("The amount of compression from the blue green delta strings was " + amount_of_compression);
+		    
+		    
 		    green_max = -1;
 		    green_min = 256;
 		    for(int i = 0; i < size; i++)
@@ -676,29 +735,64 @@ public class ImageProcessor
         byte next_bit; 
         int  index, second_index;
         int  number_of_bits;
-        int inverse_table[], table[], mask[];
+        int  table[], inverse_table[], mask[];
     
+        /*
         inverse_table = new int[number_of_different_values]; 
         inverse_table[0] = number_of_different_values / 2;
         i = j = number_of_different_values / 2;
         k = 1;
         j++;
         i--;
-        while(i >= 0)
+        while(i >= 0 && k < number_of_different_values)
         {
             inverse_table[k] = j;
             k++;
             j++;
-            inverse_table[k] = i;
+            if(k < number_of_different_values)
+                inverse_table[k] = i;
             k++;
             i--;
         }
+        */
+        
+        
+       
 
         table = new int[number_of_different_values];
+        
+        i = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	table[j--] = i;
+        	i += 2;
+        }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	table[j++] = i;
+        	i += 2;
+        }
+        
         for(i = 0; i < number_of_different_values; i++)
         {
-            j        = inverse_table[i];
-            table[j] = i;
+            System.out.println(" Table[" + i + "] = " + table[i]);
         }
     
         mask  = new int[8];
@@ -709,7 +803,6 @@ public class ImageProcessor
             mask[i] *= 2;
             mask[i]++;
         }
-    
     
         current_bit = 0;
         current_byte = 0;
@@ -778,24 +871,54 @@ public class ImageProcessor
         int  current_src_byte, current_dst_byte;
         byte non_zero, mask, current_bit;
         int  index, current_length;
-        int  table[];
+        int  table[], inverse_table[];
         int  i, j, k;
     
-        table = new int[number_of_different_values]; 
-        table[0] = number_of_different_values / 2;
-        i = j = number_of_different_values / 2;
-        k = 1;
-        j++;
-        i--;
-        while(i >= 0)
+        inverse_table = new int[number_of_different_values];
+        
+        i = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        inverse_table[j--] = i;
+        i += 2;
+        while(j >= 0)
         {
-            table[k] = j;
-            k++;
-            j++;
-            table[k] = i;
-            k++;
-            i--;
+        	inverse_table[j--] = i;
+        	i += 2;
         }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        inverse_table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	inverse_table[j++] = i;
+        	i += 2;
+        }
+        
+        table = new int[number_of_different_values];
+        for(i = 0; i < number_of_different_values; i++)
+        {
+            j = inverse_table[i];
+            table[j] = i;
+        }
+        
+        
+        
+        
+        
+        
+        
+      
         current_length = 1;
         current_src_byte = 0;
         mask = 0x01;
@@ -825,20 +948,339 @@ public class ImageProcessor
             number_of_bytes_unpacked = current_src_byte + 1;
         return(number_of_bytes_unpacked);
     }
+    
+    public int compressZeroBits(byte src[], int size, byte dst[])
+    {
+        byte mask, current_bit;
+        int  current_byte;
+        int  number_of_zero_bits;
+        int  number_of_bits;
+        int  current_length;
+        int  i, j, k;
+        int  minimum_amount_of_compression, byte_size;
 
+        byte_size = size / 8;
+        minimum_amount_of_compression = 0;
+        j = k = number_of_zero_bits = 0;
+        current_byte = 0;
+        current_bit = 0;
+        mask = 0x01;
+        dst[0] = 0;
+
+        for(i = 0; i < size; i++)
+        {
+            if((current_byte + (byte_size - i / 8) / 2 + minimum_amount_of_compression) > byte_size) 
+                return(-1);
+            if((src[k] & (mask << j)) == 0)
+            {
+                i++;
+                j++;
+                if(j == 8)
+                {
+                    j = 0;
+                    k++;
+                }
+                if((src[k] & (mask << j)) == 0)
+                {
+                    number_of_zero_bits++;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                else
+                {
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+            }
+            else
+            {
+                dst[current_byte] |= (byte)mask << current_bit;
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+                number_of_zero_bits++;
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            j++;
+            if(j == 8)
+            {
+                j = 0;
+                k++;
+            }
+        }    
+       
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        return(number_of_bits);
+    }
+
+    public int decompressZeroBits(byte src[], int size, byte dst[])
+    {
+        byte mask, current_bit;
+        int  current_byte;
+        int  current_length;
+        int  number_of_bits;
+        int  i, j, k;
+
+        current_length = 0;
+        current_byte = 0;
+        current_bit  = 0;
+        dst[0] = 0;
+        mask = 0x01;
+        j = k = 0;
+       
+            for(i = 0; i < size; i++)
+            {
+                if((src[k] & (mask << j)) != 0)
+                {
+                    i++;
+                    j++;
+                    if(j == 8)
+                    {
+                        j = 0;
+                        k++;
+                    }
+                    if((src[k] & (mask << j)) != 0)
+                    {
+                        current_bit++;
+                        if(current_bit == 8)
+                        {
+                            current_byte++;
+                            current_bit = dst[current_byte] = 0;
+                        }
+                        dst[current_byte] |= (byte)mask << current_bit;
+                        current_bit++;
+                        if(current_bit == 8)
+                        {
+                            current_byte++;
+                            current_bit = dst[current_byte] = 0;
+                        }
+                    }
+                    else
+                    {
+                        dst[current_byte] |= (byte)mask << current_bit;
+                        current_bit++;
+                        if(current_bit == 8)
+                        {
+                            current_byte++;
+                            current_bit = dst[current_byte] = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                j++;
+                if(j == 8)
+                {
+                    j = 0;
+                    k++;
+                }
+            }
+        
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        return(number_of_bits);
+    }
+
+    public int compressStrings(byte src[], int size, byte dst[])
+    {
+        int number_of_iterations, current_size, previous_size;
+        int byte_size, i;
+        byte mask;
+        
+        byte_size = size / 8;
+        if(size % 8 != 0)
+            byte_size++;
+        number_of_iterations = 1;
+        current_size = previous_size = size;
+        current_size = compressZeroBits(src, previous_size, dst);
+        while(current_size < previous_size && current_size > 1)
+        {
+            previous_size = current_size;
+            if(number_of_iterations % 2 == 1)
+                current_size = compressZeroBits(dst, previous_size, temp);
+            else
+                current_size = compressZeroBits(temp, previous_size, dst);
+            number_of_iterations++;
+        }
+        if(current_size == -1 && number_of_iterations > 1)
+        {
+            current_size = previous_size;
+            number_of_iterations--;
+        }
+        if(number_of_iterations % 2 == 0)
+        {
+            byte_size = current_size / 8;
+            if(current_size % 8 != 0)
+                byte_size++; 
+            for(i = 0; i < byte_size; i++)
+                dst[i] = temp[i];
+        }        
     
+        if(current_size > 0)
+        {
+            // System.out.println("The number of iterations was " + number_of_iterations);
+            if(current_size % 8 == 0)
+            {
+                byte_size      = current_size / 8;
+                dst[byte_size] = (byte) number_of_iterations;
+                dst[byte_size] &= 127;
+            }
+            else
+            {
+                int  remainder = current_size % 8;
+                byte_size = current_size / 8;
+
+                dst[byte_size] |= (byte) (number_of_iterations << remainder);
+                byte_size++;
+                dst[byte_size] = 0;
+                if(remainder > 1)
+                    dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+            }
+            return(current_size + 8);
+        }
+        else
+        	return(current_size);
+    }
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    public int decompressStrings(byte src[], int size, byte dst[])
+    {
+        int  byte_index;
+        int  type, number_of_iterations;
+        int  addend;
+        int  mask;
+        int  remainder, i, even, odd;
+        int  previous_size, current_size, byte_size;
+        double new_zero_one_ratio[] = new double[1];
+        
+        byte_index = size / 8 - 1;
+        remainder  = size % 8;
+        if(remainder != 0)
+        {
+            int value = 254;
+            addend = 2;
+            for(i = 1; i < remainder; i++)
+            {
+                value -= addend;
+                addend <<= 1;
+            } 
+            mask = value;
+            number_of_iterations = src[byte_index];
+            if(number_of_iterations < 0)
+                number_of_iterations += 256;
+            number_of_iterations &= mask;
+            number_of_iterations >>= remainder;
+            byte_index++;
+            if(remainder > 1)
+            {
+                mask = 1;
+                for(i = 2; i < remainder; i++)
+                {
+                    mask <<= 1;
+                    mask++;
+                }
+                addend = src[byte_index]; 
+                if(addend < 0)
+                    addend += 256;
+                addend &= mask;
+                addend <<= 8 - remainder;
+                number_of_iterations += addend;
+                mask++;
+            }
+            else
+                mask = 1;
+        }
+        else
+        {
+           mask = 127;
+           number_of_iterations = src[byte_index];
+           if(number_of_iterations < 0)
+               number_of_iterations += 256; 
+           number_of_iterations &= mask;
+           mask++;
+        }
+        // System.out.println("The number of iterations was " + number_of_iterations);
+        // System.out.println("The type was " + type);
+        
+        current_size = 0;
+        if(number_of_iterations == 1)
+        {
+            current_size = decompressZeroBits(src, size - 8, dst);
+            number_of_iterations--;
+        }
+        else if(number_of_iterations % 2 == 0)
+        {
+            current_size = decompressZeroBits(src, size - 8, temp);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressZeroBits(dst, previous_size, temp);
+                else
+                    current_size = decompressZeroBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        else
+        {
+            current_size = decompressZeroBits(src, size - 8, dst);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressZeroBits(dst, previous_size, temp);
+                else
+                    current_size = decompressZeroBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        return(current_size);
+    }
+
 }
 
