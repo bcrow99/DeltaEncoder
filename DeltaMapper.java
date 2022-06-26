@@ -1,0 +1,943 @@
+import java.util.*;
+import java.util.zip.*;
+import java.lang.Math.*;
+
+public class DeltaMapper
+{
+	// This shrinks the source by one pixel in both dimensions.
+	public static int[][] contract(int[][] source)
+	{
+		int ydim = source.length;
+		int xdim = source[0].length;
+		
+		int[][] dest = new int[ydim - 1][xdim - 1];
+		
+	    for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				double w = (double) source[i][j]; 
+				double x = (double) source[i][j + 1];
+				double y = (double) source[i + 1][j];
+				double z = (double) source[i + 1][j + 1];
+				
+				dest[i][j] = (int) ((w + x + y + z) * .25);
+				
+				// Rounding up seems to increase error when re-expanding,
+				// although theoretically more accurate.
+				// dest[i][j] = (int) ((w + x + y + z) * .25 + .5)
+			}
+		}
+		return(dest);
+	}
+
+	// 1-d version of same function.
+	public static int[] contract(int[] source, int xdim, int ydim)
+	{
+		int[] dest = new int[(ydim - 1) * (xdim - 1)];
+		
+		int k = 0;
+		for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				double w = (double) source[i * xdim + j];
+				double x = (double) source[i * xdim + j + 1];
+				double y = (double) source[(i + 1) * xdim + j];
+				double z = (double) source[(i + 1) * xdim + j + 1];
+				dest[k++] = (int) ((w + x + y + z) * .25);
+			}
+		}
+		return(dest);
+	}
+	
+	public static double[] contract(double[] source, int xdim, int ydim)
+	{
+		double[] dest = new double[(ydim - 1) * (xdim - 1)];
+		
+		int k = 0;
+		for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				double w = (double) source[i * xdim + j];
+				double x = (double) source[i * xdim + j + 1];
+				double y = (double) source[(i + 1) * xdim + j];
+				double z = (double) source[(i + 1) * xdim + j + 1];
+				dest[k++] = (int) ((w + x + y + z) * .25);
+			}
+		}
+		return(dest);
+	}
+	
+	public static int[] shrink(int src[], int xdim, int ydim)
+	{
+		int [] dst = new int[(xdim - 1) * (ydim - 1)];
+		
+		int k = 0;
+		for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)	
+			{
+			    dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1] +
+			    		    src[(i + 1) * xdim + j] + src[(i + 1) * xdim + j + 1]) / 4;	
+			}
+		}
+		return(dst);
+	}
+	
+	public static int[] shrink(int src[], int xdim, int ydim, int error[])
+	{
+		int [] dst = new int[(xdim - 1) * (ydim - 1)];
+		int k = 0;
+		for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)	
+			{
+			    dst[k] = (src[i * xdim + j] + src[i * xdim + j + 1] +
+			    		    src[(i + 1) * xdim + j] + src[(i + 1) * xdim + j + 1]) / 4;	
+			    //dst[k] += error[i * xdim + j] / 4;
+			    dst[k] += error[i * xdim + j];
+			    k++;
+			    //error[i * xdim + j + 1] -= error[i * xdim + j];
+			    //error[i * xdim + j + 1] -= error[i * xdim + j] / 4;
+			    //error[(i + 1) * xdim + j] -= error[i * xdim + j] / 4;
+			    //error[(i + 1) * xdim + j + 1] -= error[i * xdim + j] / 4;
+			}
+		}
+		return(dst);
+	}
+	
+	public static int[] expand(int src[], int xdim, int ydim)
+	{
+		int [] dst = new int[(xdim + 1) * (ydim + 1)];
+		
+		
+		int k = 0;
+		for(int i = 0; i < ydim - 1; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)	
+			{
+			    if(i == 0)
+			    {
+			        if(j == 0)
+			        {
+			            dst[k++] = src[0];	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = src[i * xdim + j - 1];	
+			        }
+			        else
+			        {
+			            dst[k++] = (src[i * xdim + j] + src[i * xdim + j - 1]) / 2;	
+			        }
+			    }
+			    else if(i == ydim)
+			    {
+			    	if(j == 0)
+			        {
+			            dst[k++] = src[(i - 1) * xdim + j];	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = src[(i - 1) * xdim + j - 1];	
+			        }
+			        else
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]) / 2;	
+			        }   	
+			    }
+			    else
+			    {
+			    	if(j == 0)
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j] + src[i * xdim + j]) / 2;	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j - 1] + src[i * xdim + j - 1]) / 2;	
+			        }
+			        else 
+			        {
+			            //dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1] + src[i * xdim + j] + src[i * xdim + j - 1]) / 4;	
+			        	dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]
+		            		    + src[i * xdim + j] + src[i * xdim + j - 1]) / 4;	
+			        }   	
+			    }
+			}
+		}
+		return(dst);
+	}
+	
+	public static double[] expand(double src[], int xdim, int ydim)
+	{
+		double [] dst = new double[(xdim + 1) * (ydim + 1)];
+		int k = 0;
+		for(int i = 0; i < ydim + 1; i++)
+		{
+			for(int j = 0; j < xdim + 1; j++)	
+			{
+			    if(i == 0)
+			    {
+			        if(j == 0)
+			        {
+			            dst[k++] = src[i * xdim + j];	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = src[i * xdim + j - 1];	
+			        }
+			        else
+			        {
+			            dst[k++] = (src[i * xdim + j] + src[i * xdim + j - 1]) / 2;	
+			        }
+			    }
+			    else if(i == ydim)
+			    {
+			    	if(j == 0)
+			        {
+			            dst[k++] = src[(i - 1) * xdim + j];	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = src[(i - 1) * xdim + j - 1];	
+			        }
+			        else
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]) / 2;	
+			        }   	
+			    }
+			    else
+			    {
+			    	if(j == 0)
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j] + src[i * xdim + j]) / 2;	
+			        }
+			        else if(j == xdim)
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j - 1] + src[i * xdim + j - 1]) / 2;	
+			        }
+			        else
+			        {
+			            dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]
+			            		    + src[i * xdim + j] + src[i * xdim + j - 1]) / 4;	
+			        }   	
+			    }
+			}
+		}
+		return(dst);
+	}
+	
+    public static void expand4(int src[], int xdim, int ydim, int dst[])
+    {
+        int       i, j, x, y, new_xdim;
+        new_xdim  = 2 * xdim;
+        i         = 0; 
+        j         = 0;
+
+        // Process the top row.
+        dst[j]                = src[i];
+        dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227;
+        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
+        dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
+        i++; 
+        j                    += 2;
+        for(x = 1; x < xdim - 1; x++)
+        {
+            dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
+            dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
+            dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227; 
+            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227; 
+            j += 2;
+            i++;
+        }
+        dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227;
+        dst[j + 1]            = src[i];
+        dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
+        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
+        i++; 
+        j                    += new_xdim + 2;
+
+        // Process the middle section.
+        for(y = 1; y < ydim - 1; y++)
+        {
+            dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
+            dst[j + 1]            = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
+            dst[j + new_xdim]     = (1333 * src[i] +  894 * src[i + xdim]) / 2227; 
+            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
+            i++;
+            j += 2;
+            for(x = 1; x < xdim - 1; x++)
+            {
+                dst[j]                = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i - 1] + 333 * src[i - xdim - 1]) / 2227;
+                dst[j + 1]            = (1000 * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
+                dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i + xdim] + 447 * src[i - 1] + 333 * src[i + xdim - 1]) / 2227; 
+                dst[j + new_xdim + 1] = (1000 * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
+                i++;
+                j += 2;
+            }
+            dst[j]                = (1000  * src[i] + 894 * src[i - xdim] + 447 * src[i - 1]) / 2227;
+            dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
+            dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
+            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227; 
+            i++;
+            j += new_xdim + 2;
+        }
+
+        // Process the bottom row.
+        dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
+        dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227;
+        dst[j + new_xdim]     = src[i];
+        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227;
+        i++;
+        j                    += 2;
+        for(x = 1; x < xdim - 1; x++)
+        {
+            dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227; 
+            dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227; 
+            dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
+            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
+            i++;
+            j += 2;
+        }
+        dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227;
+        dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
+        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227;
+        dst[j + new_xdim + 1] = src[i];
+    }
+
+    public static void shrink4(int src[], int xdim, int ydim, int dst[])
+    {
+        int    i, j, k, r, c;
+        int    sum;
+    
+        r = ydim;
+        c = xdim;
+        k = 0;
+        if(xdim % 2 == 0)
+        {
+            for(i = 0; i < r - 1; i += 2)
+            {
+                for (j = 0; j < c - 1; j += 2)
+                {
+                    sum = (src[i *c + j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
+                    dst[k++] = sum;
+                }
+            }
+        }
+        else  // Looks wrong.
+        {
+            for(i = 0; i < r - 1; i += 2)
+            {
+                for(j = 0; j < c - 1; j += 2)
+                {
+                    sum = (src[i * c+j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
+                    dst[k++] = sum;
+                }
+                k++;
+            }
+        }
+    }
+    
+    public static void shrink4(int src[], int xdim, int ydim, int dst[], int error[])
+    {
+        int    i, j, k, r, c;
+        int    sum;
+    
+        r = ydim;
+        c = xdim;
+        k = 0;
+        if(xdim % 2 == 0)
+        {
+            for(i = 0; i < r - 1; i += 2)
+            {
+                for (j = 0; j < c - 1; j += 2)
+                {
+                	/*
+                    sum = (src[i * c + j] + error[i * c + j] + src[i * c + j + 1] + error[i * c + j + 1] 
+                    		+ src[(i + 1) * c + j] + error[(i + 1) * c + j] + src[(i + 1) * c + j + 1] + error[(i + 1) * c + j + 1]) / 4;
+                    */
+                	int current_error = (error[i * c + j] + error[(i + 1) * c + j]) / 2;
+                
+                	sum = (src[i * c + j] + src[i * c + j + 1] + src[(i + 1) * c + j]  + src[(i + 1) * c + j + 1] + (error[i * c + j + 1]  +  + error[(i + 1) * c + j + 1])) / 4 / 4;
+                    dst[k++] = sum;
+                }
+            }
+        }
+        else // Looks wrong.
+        {
+            for(i = 0; i < r - 1; i += 2)
+            {
+                for(j = 0; j < c - 1; j += 2)
+                {
+                    sum = (src[i * c + j] + error[i * c + j] +  src[i * c + j + 1] + error[i * c + j + 1]
+                    		+ src[(i + 1) * c + j] + error[(i + 1) * c + j] + src[(i + 1) * c + j + 1] + error[(i + 1) * c + j + 1]) / 4;
+                    dst[k++] = sum;
+                }
+                k++;
+            }
+        }
+    }
+    
+   
+    
+	public static void extract(int src[], int xdim, int ydim, int xoffset, int yoffset, int dst[], int new_xdim, int new_ydim)
+	{
+		int xend = xoffset + new_xdim;
+		int yend = yoffset + new_ydim;
+		int j = 0;
+		for (int y = yoffset; y < yend; y++)
+		{
+			int i = y * xdim + xoffset;
+			for (int x = xoffset; x < xend; x++)
+			{
+				dst[j] = src[i];
+				j++;
+				i++;
+			}
+		}
+	}
+
+	public static void avgAreaXTransform(int src[], int xdim, int ydim, int dst[], int new_xdim, int start_fraction[], int end_fraction[], int number_of_pixels[])
+	{
+		double differential = (double) xdim / (double) new_xdim;
+		int weight          = (int) (differential * xdim);
+		weight             *= 1000;
+		int factor          = 1000 * xdim;
+
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+		for(int i = 0; i < new_xdim; i++)
+		{
+			double previous_position     = real_position;
+			int    previous_whole_number = current_whole_number;
+			real_position               += differential;
+			current_whole_number         = (int) (real_position);
+			number_of_pixels[i]          = current_whole_number - previous_whole_number;
+			start_fraction[i]            = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]              = (int) (1000. * (real_position - (double) (current_whole_number)));
+		}
+
+		int x = 0;
+		for(int y = 0; y < ydim; y++)
+		{
+			int i = y * new_xdim;
+			int j = y * xdim;
+			for(x = 0; x < new_xdim - 1; x++)
+			{
+				if (number_of_pixels[x] == 0)
+				{
+					dst[i] = src[j];
+					i++;
+				} 
+				else
+				{
+					int total = start_fraction[x] * xdim * src[j];
+					j++;
+					int k = number_of_pixels[x] - 1;
+					while (k > 0)
+					{
+						total += factor * src[j];
+						j++;
+						k--;
+					}
+					total += end_fraction[x] * xdim * src[j];
+					total /= weight;
+					dst[i] = total;
+					i++;
+				}
+			}
+			if (number_of_pixels[x] == 0)
+				dst[i] = src[j];
+			else
+			{
+				int total = start_fraction[x] * xdim * src[j];
+				j++;
+				int k = number_of_pixels[x] - 1;
+				while(k > 0)
+				{
+					total += factor * src[j];
+					j++;
+					k--;
+				}
+				total /= weight - end_fraction[x] * xdim;
+				dst[i] = total;
+			}
+		}
+	}
+
+	public static void avgAreaYTransform(int src[], int xdim, int ydim, int dst[], int new_ydim, int start_fraction[],
+			int end_fraction[], int number_of_pixels[])
+	{
+		int weight, current_whole_number, previous_whole_number;
+		int total, factor;
+		double real_position, differential, previous_position;
+
+		differential = (double) ydim / (double) new_ydim;
+		weight = (int) (differential * ydim);
+		weight *= 1000;
+		factor = ydim * 1000;
+
+		real_position = 0.;
+		current_whole_number = 0;
+		for (int i = 0; i < new_ydim; i++)
+		{
+			previous_position = real_position;
+			previous_whole_number = current_whole_number;
+			real_position += differential;
+			current_whole_number = (int) (real_position);
+			number_of_pixels[i] = current_whole_number - previous_whole_number;
+			start_fraction[i] = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i] = (int) (1000. * (real_position - (double) (current_whole_number)));
+		}
+
+		int y = 0;
+		for (int x = 0; x < xdim; x++)
+		{
+			int i = x;
+			int j = x;
+			for (y = 0; y < new_ydim - 1; y++)
+			{
+				if (number_of_pixels[y] == 0)
+				{
+					dst[i] = src[j];
+					i += xdim;
+				} else
+				{
+					total = start_fraction[y] * ydim * src[j];
+					j += xdim;
+					int k = number_of_pixels[y] - 1;
+					while (k > 0)
+					{
+						total += factor * src[j];
+						j += xdim;
+						k--;
+					}
+					total += end_fraction[y] * ydim * src[j];
+					total /= weight;
+					dst[i] = total;
+					i += xdim;
+				}
+			}
+			if (number_of_pixels[y] == 0)
+				dst[i] = src[j];
+			else
+			{
+				total = start_fraction[y] * ydim * src[j];
+				j += xdim;
+				int k = number_of_pixels[y] - 1;
+				while (k > 0)
+				{
+					total += factor * src[j];
+					j += xdim;
+					k--;
+				}
+				total /= weight - end_fraction[y] * ydim;
+				dst[i] = total;
+			}
+		}
+	}
+
+	public static void avgAreaTransform(int src[], int xdim, int ydim, int dst[], int new_xdim, int new_ydim, int workspace[],
+			int start_fraction[], int end_fraction[], int number_of_pixels[])
+	{
+		avgAreaXTransform(src, xdim, ydim, workspace, new_xdim, start_fraction, end_fraction, number_of_pixels);
+		avgAreaYTransform(workspace, new_xdim, ydim, dst, new_ydim, start_fraction, end_fraction, number_of_pixels);
+	}
+	
+	
+	public static int[] avgAreaXTransform(int source[], int xdim, int ydim, int new_xdim)
+	{
+		double differential         = (double) xdim / (double) new_xdim;
+		int    weight               = (int)(differential * xdim) * 1000;
+		int    factor               = xdim * 1000;
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+
+		int [] start_fraction   = new int[new_xdim];
+		int [] end_fraction     = new int[new_xdim];
+		int [] number_of_pixels = new int[new_xdim];
+		for(int i = 0; i < new_xdim; i++)
+		{
+		    double  previous_position     = real_position;
+		    int     previous_whole_number = current_whole_number;
+		    
+		    real_position       += differential;
+		    current_whole_number = (int) (real_position);
+			number_of_pixels[i]  = current_whole_number - previous_whole_number;
+			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));	
+		}
+		
+		int[] dest = new int[ydim * new_xdim];	
+		for (int y = 0; y < ydim; y++)
+		{
+			int i = y * new_xdim;
+			int j = y * xdim;
+			for (int x = 0; x < new_xdim - 1; x++)
+			{
+				if (number_of_pixels[x] == 0)
+				{
+					dest[i] = source[j];
+					i++;
+				} 
+				else
+				{
+					int total = start_fraction[x] * xdim * source[j];
+					j++;
+					int k = number_of_pixels[x] - 1;
+					while (k > 0)
+					{
+						total += factor * source[j];
+						j++;
+						k--;
+					}
+					total += end_fraction[x] * xdim * source[j];
+					total /= weight;
+					dest[i] = total;
+					i++;
+				}
+			}
+			
+			int x = new_xdim - 1;
+			if (number_of_pixels[x] == 0)
+				dest[i] = source[j];
+			else
+			{
+				int total = start_fraction[x] * xdim * source[j];
+				j++;
+				int k = number_of_pixels[x] - 1;
+				while (k > 0)
+				{
+					total += factor * source[j];
+					j++;
+					k--;
+				}
+				total /= weight - end_fraction[x] * xdim;
+				dest[i] = total;
+			}
+		}
+		return(dest);
+	}
+	
+	public static int[][] avgAreaXTransform(int src[][], int new_xdim)
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+		int[][] dst = new int[ydim][new_xdim];	
+		
+		int [] source = new int[xdim * ydim];
+		int [] dest   = new int[new_xdim * ydim];
+		
+		// Changing from 2-d array to 1-d array to simplify processing.
+		// The main issue is a 2-d format complicates making the transform
+		// work in both directions.  On the other hand, the 2-d format
+		// is occasionally convenient.  
+		for (int i = 0; i < ydim; i++)
+		{
+			for (int j = 0; j < xdim; j++)
+			{
+				int k = i * xdim + j;
+				source[k] = src[i][j];
+			}
+		}
+		
+		double differential         = (double) xdim / (double) new_xdim;
+		int    weight               = (int)(differential * xdim) * 1000;
+		int    factor               = xdim * 1000;
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+
+		int [] start_fraction   = new int[new_xdim];
+		int [] end_fraction     = new int[new_xdim];
+		int [] number_of_pixels = new int[new_xdim];
+		
+		for(int i = 0; i < new_xdim; i++)
+		{
+		    double  previous_position     = real_position;
+		    int     previous_whole_number = current_whole_number;
+		    
+		    real_position       += differential;
+		    current_whole_number = (int) (real_position);
+			number_of_pixels[i]  = current_whole_number - previous_whole_number;
+			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));	
+		}
+		
+		for (int y = 0; y < ydim; y++)
+		{
+			int i = y * new_xdim;
+			int j = y * xdim;
+			for (int x = 0; x < new_xdim - 1; x++)
+			{
+				if (number_of_pixels[x] == 0)
+				{
+					dest[i] = source[j];
+					i++;
+				} 
+				else
+				{
+					int total = start_fraction[x] * xdim * source[j];
+					j++;
+					int k = number_of_pixels[x] - 1;
+					while (k > 0)
+					{
+						total += factor * source[j];
+						j++;
+						k--;
+					}
+					total += end_fraction[x] * xdim * source[j];
+					total /= weight;
+					dest[i] = total;
+					i++;
+				}
+			}
+			
+			int x = new_xdim - 1;
+			if (number_of_pixels[x] == 0)
+				dest[i] = source[j];
+			else
+			{
+				int total = start_fraction[x] * xdim * source[j];
+				j++;
+				int k = number_of_pixels[x] - 1;
+				while (k > 0)
+				{
+					total += factor * source[j];
+					j++;
+					k--;
+				}
+				total /= weight - end_fraction[x] * xdim;
+				dest[i] = total;
+			}
+		}
+		
+		// Back to 2-d.
+		for (int i = 0; i < ydim; i++)
+		{
+			for (int j = 0; j < new_xdim; j++)
+			{
+				int k = i * new_xdim + j;
+				dst[i][j] = dest[k];
+			}
+		}
+		return(dst);
+	}
+	
+	public static int [] avgAreaYTransform(int src[], int xdim, int ydim, int new_ydim)
+	{
+		double differential         = (double) ydim / (double) new_ydim;
+		int    weight               = (int) (differential * ydim) * 1000;
+		int    factor               = ydim * 1000;
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+		
+		int [] start_fraction   = new int[new_ydim];
+		int [] end_fraction     = new int[new_ydim];
+		int [] number_of_pixels = new int[new_ydim];
+		for (int i = 0; i < new_ydim; i++)
+		{
+			double previous_position     = real_position;
+			int    previous_whole_number = current_whole_number;
+			
+			real_position       += differential;
+			current_whole_number = (int) (real_position);
+			number_of_pixels[i]  = current_whole_number - previous_whole_number;
+			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
+		}
+
+		int [] dst = new int[xdim * new_ydim];
+		for (int x = 0; x < xdim; x++)
+		{
+			int i = x;
+			int j = x;
+			for (int y = 0; y < new_ydim - 1; y++)
+			{
+				if (number_of_pixels[y] == 0)
+				{
+					dst[i] = src[j];
+					i += xdim;
+				} 
+				else
+				{
+					int total = start_fraction[y] * ydim * src[j];
+					j += xdim;
+					int k = number_of_pixels[y] - 1;
+					while (k > 0)
+					{
+						total += factor * src[j];
+						j += xdim;
+						k--;
+					}
+					total += end_fraction[y] * ydim * src[j];
+					total /= weight;
+					dst[i] = total;
+					i += xdim;
+				}
+			}
+			int y = new_ydim - 1;
+			if (number_of_pixels[y] == 0)
+				dst[i] = src[j];
+			else
+			{
+				int total = start_fraction[y] * ydim * src[j];
+				j += xdim;
+				int k = number_of_pixels[y] - 1;
+				while (k > 0)
+				{
+					total += factor * src[j];
+					j += xdim;
+					k--;
+				}
+				total /= weight - end_fraction[y] * ydim;
+				dst[i] = total;
+			}
+		}
+		return(dst);
+	}
+	
+	public static int[][] avgAreaYTransform(int src[][], int new_ydim)
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+			
+		// Changing from 2-d array to 1-d array to simplify processing.
+		int [] source = new int[xdim * ydim];
+		int [] dest   = new int[xdim * new_ydim];
+		for (int i = 0; i < ydim; i++)
+		{
+			int k = 0;
+			for (int j = 0; j < xdim; j++)
+			{
+				source[k] = src[i][j];
+				k++;
+			}
+		}
+		
+		double differential         = (double) ydim / (double) new_ydim;
+		int    weight               = (int) (differential * ydim) * 1000;
+		int    factor               = ydim * 1000;
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+		
+		int [] start_fraction   = new int[new_ydim];
+		int [] end_fraction     = new int[new_ydim];
+		int [] number_of_pixels = new int[new_ydim];
+		for (int i = 0; i < new_ydim; i++)
+		{
+			double previous_position     = real_position;
+			int    previous_whole_number = current_whole_number;
+			
+			real_position       += differential;
+			current_whole_number = (int) (real_position);
+			number_of_pixels[i]  = current_whole_number - previous_whole_number;
+			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
+		}
+
+		for (int x = 0; x < xdim; x++)
+		{
+			int i = x;
+			int j = x;
+			for (int y = 0; y < new_ydim - 1; y++)
+			{
+				if (number_of_pixels[y] == 0)
+				{
+					dest[i] = source[j];
+					i += xdim;
+				} 
+				else
+				{
+					int total = start_fraction[y] * ydim * source[j];
+					j += xdim;
+					int k = number_of_pixels[y] - 1;
+					while (k > 0)
+					{
+						total += factor * source[j];
+						j += xdim;
+						k--;
+					}
+					total += end_fraction[y] * ydim * source[j];
+					total /= weight;
+					dest[i] = total;
+					i += xdim;
+				}
+			}
+			int y = new_ydim - 1;
+			if (number_of_pixels[y] == 0)
+				dest[i] = source[j];
+			else
+			{
+				int total = start_fraction[y] * ydim * source[j];
+				j += xdim;
+				int k = number_of_pixels[y] - 1;
+				while (k > 0)
+				{
+					total += factor * source[j];
+					j += xdim;
+					k--;
+				}
+				total /= weight - end_fraction[y] * ydim;
+				dest[i] = total;
+			}
+		}
+		
+		// Back to 2-d.
+		int[][] dst = new int[new_ydim][xdim];
+		for (int i = 0; i < new_ydim; i++)
+		{
+			int k = 0;
+			for (int j = 0; j < xdim; j++)
+			{
+				dst[i][j] = dest[k];
+				k++;
+			}
+		}
+		return(dst);
+		
+	}
+	
+	public static int [] avgAreaTransform(int src[], int xdim, int ydim, int new_xdim, int new_ydim)
+	{
+		int [] intermediate = avgAreaXTransform(src, xdim, ydim, new_xdim);
+	    int [] dst          = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
+	    return(dst);
+	}
+	
+	public static int [][] avgAreaTransform(int src[][], int new_xdim, int new_ydim)
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+			
+		// Changing from 2-d array to 1-d array to simplify processing.
+		int [] source = new int[xdim * ydim];
+		for (int i = 0; i < ydim; i++)
+		{
+			int k = 0;
+			for (int j = 0; j < xdim; j++)
+			{
+				source[k] = src[i][j];
+				k++;
+			}
+		}
+		int [] intermediate = avgAreaXTransform(source, xdim, ydim, new_xdim);
+		int [] dest         = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
+		
+		// Back to 2-d.
+		int[][] dst = new int[new_ydim][new_xdim];
+		for (int i = 0; i < new_ydim; i++)
+		{
+			int k = 0;
+			for (int j = 0; j < xdim; j++)
+			{
+				dst[i][j] = dest[k];
+				k++;
+			}
+		}
+
+		return(dst);
+	}
+	
+}
