@@ -72,9 +72,19 @@ public class ImageProcessor
 		            System.err.println("Error grabbing pixels.");
 		            System.exit(1);
 		        }
+			  
+			    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+			    
+			  
+			    for(int i = 0; i < xdim; i++)
+			    {
+			    	for(int j = 0; j < ydim; j++)
+			    	{
+			    		image.setRGB(i, j, pixel[j * xdim + i]);
+			    	}
+			    }
 			    
 			    
-			    /*
 			    int[]          red     = new int[xdim * ydim];
 			    int[]          green   = new int[xdim * ydim];
 			    int[]          blue    = new int[xdim * ydim];
@@ -96,18 +106,7 @@ public class ImageProcessor
                     pixel[i] |= green[i] << 8;
                     pixel[i] |= blue[i];
                 }
-               */
-			  
-			    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			    
-			  
-			    for(int i = 0; i < xdim; i++)
-			    {
-			    	for(int j = 0; j < ydim; j++)
-			    	{
-			    		image.setRGB(i, j, pixel[j * xdim + i]);
-			    	}
-			    }
+               
 			   
 			    JFrame frame = new JFrame("Image Processor");
 				WindowAdapter window_handler = new WindowAdapter()
@@ -194,6 +193,8 @@ public class ImageProcessor
 				frame.pack();
 				frame.setLocation(400, 200);
 				frame.setVisible(true);
+				
+				
 				/*
 			    try
 				{
@@ -231,6 +232,10 @@ public class ImageProcessor
 		int [] scratch;
 		int [] error;
 		
+		double[] green_double;
+		double[] scratch_double;
+		double[] green_contract;
+		double[] green_expand;
 		
 		ApplyHandler()
 		{
@@ -241,6 +246,8 @@ public class ImageProcessor
 		    blue           = new int[xdim * ydim];
 		    scratch        = new int[xdim * ydim];
 		    error          = new int[xdim * ydim];
+		    
+		    green_double   = new double[xdim * ydim];
 		    
 		    
 		    
@@ -277,6 +284,7 @@ public class ImageProcessor
 		    		green_max = green[i];
 		    	if(green[i] < green_min)
 		    		green_min = green[i];
+		    	green_double[i] = green[i];
 		    }
 		    
 		    System.out.println("The low value in the green channel is " + green_min);
@@ -286,10 +294,24 @@ public class ImageProcessor
 		    int [] shrunk_green = new int[size / 4];
 		    int [] shrunk_error = new int[size / 4];
 		    
+		    /*
+		    shrink4(green, xdim, ydim, shrunk_green);
+		    expand4(shrunk_green, xdim / 2, ydim /2, scratch);
+		    */
 		    
-		    shrink(green, xdim, ydim, shrunk_green);
-		    expand(shrunk_green, xdim / 2, ydim /2, scratch);
+		   
+		    /*
+		    green_contract = DeltaMapper.contract(green_double, xdim, ydim);
+		    green_expand   = DeltaMapper.expand(green_contract, xdim - 1, ydim - 1);
+		    for(int i = 0; i < size; i++)
+		    {
+		    	scratch[i] = (int)(green_expand[i] + .5);
+		    }
+		    */
 		    
+		    
+		    shrunk_green = DeltaMapper.shrink(green, xdim, ydim);
+		    scratch      = DeltaMapper.expand(shrunk_green, xdim, ydim);
 		    
 		    
 		    
@@ -303,8 +325,8 @@ public class ImageProcessor
 		    	if(scratch[i] < scratch_min)
 		    		scratch_min = scratch[i];
 		    }
-		    //System.out.println("The low value in the processed green channel is " + scratch_min);
-		    //System.out.println("The high value in the processed green channel is " + scratch_max);
+		    System.out.println("The low value in the processed green channel is " + scratch_min);
+		    System.out.println("The high value in the processed green channel is " + scratch_max);
 		    
 		    int total_error = 0;
 		    for(int i = 0; i < size; i++)
@@ -314,8 +336,20 @@ public class ImageProcessor
 		    }
 		    System.out.println("Total error is " + total_error);
 		    
-		    shrink(green, xdim, ydim, shrunk_green, error);
-		    expand(shrunk_green, xdim / 2, ydim /2, scratch);
+		    shrunk_green = DeltaMapper.shrink(green, xdim, ydim, error);
+		    scratch      = DeltaMapper.expand(shrunk_green, xdim - 1, ydim  - 1);
+		    
+		    total_error = 0;
+		    for(int i = 0; i < size; i++)
+		    {
+		    	error[i] = green[i] - scratch[i];
+		    	total_error += error[i];
+		    }
+		    System.out.println("Total error shrinking with error is " + total_error);
+		    
+		    
+		    /*
+		    
 		    green_max = -1;
 		    green_min = 256;
 		    for(int i = 0; i < size / 4; i++)
@@ -331,6 +365,14 @@ public class ImageProcessor
 		    
 		    getDeltasFromValues(shrunk_green, delta, xdim / 2, ydim / 2);
 		    getValuesFromDeltas(delta, value, xdim / 2, ydim / 2);
+		    
+		    total_error = 0;
+		    for(int i = 0; i < size / 4; i++)
+		    {
+		        int error = Math.abs(shrunk_green[i] - value[i]);
+		        total_error += error;
+		    }
+		    System.out.println("Total error after deltas is " + total_error);
 		    
 		    green_max = green_min = delta[0];
 		    for(int i = 0; i < size / 4; i++)
@@ -383,7 +425,7 @@ public class ImageProcessor
 		    		scratch[i] = 0;
 		    	if(scratch[i] > 255)
 		    		scratch[i] = 255;
-		    	error[i] = green[i] - scratch[i];
+		    	error[i] = Math.abs(green[i] - scratch[i]);
 		    	total_error += error[i];
 		    	green[i] = scratch[i];
 		    }
@@ -433,16 +475,27 @@ public class ImageProcessor
 		    }
 		    
 		    System.out.println("Total error after packing and unpacking strings is " + total_error);
-		    /*
+		    
 		    byte[] compressed_bit_strings = new byte[5 * size];
-		    int compressed_number_of_bits = compressStrings(bit_strings, number_of_different_values, compressed_bit_strings);
+		    byte[]decompressed_bit_strings = new byte[5 * size];
+		    int compressed_number_of_bits = compressStrings(bit_strings, number_of_bits, compressed_bit_strings);
 		    System.out.println("Number of bits in compressed strings is " + compressed_number_of_bits);
-		    */
 		    
+		    int number_of_decompressed_bits = decompressStrings(compressed_bit_strings, compressed_number_of_bits, decompressed_bit_strings);
 		    
-		    //double amount_of_compression = (double)compressed_number_of_bits / (double)number_of_bits;
+		    // Extra bits, maybe from the way the iterations number is being set, but correct amount of data is uncorrupted.
+		    System.out.println("Number of bits in decompressed strings is " + number_of_decompressed_bits);
+		    number_of_bytes = compressed_number_of_bits / 8;
+		    if(compressed_number_of_bits % 8 != 0)
+		    	number_of_bytes++;
+		    total_error = 0;
+		    for(int i = 0; i < number_of_bytes; i++)
+		    {
+		    	int error = decompressed_bit_strings[i] - bit_strings[i];
+		    	total_error += Math.abs(error);
+		    }
 		    
-		    //System.out.println("The amount of compression from the blue green delta strings was " + amount_of_compression);
+		    System.out.println("Total error after compressing and decompressing bits is " + total_error);
 		    
 		    
 		    green_max = -1;
@@ -473,7 +526,8 @@ public class ImageProcessor
 		    		image.setRGB(i, j, pixel[j * xdim + i]);
 		    	}
 		    }
-		   
+		    
+		    */
 		    image_canvas.repaint();
 		    System.out.println("Processed image.");
 		}
@@ -528,154 +582,6 @@ public class ImageProcessor
 			image_canvas.repaint();
 		}
 	}
-	
-    public void expand(int src[], int xdim, int ydim, int dst[])
-    {
-        int       i, j, x, y, new_xdim;
-        new_xdim  = 2 * xdim;
-        i         = 0; 
-        j         = 0;
-
-        // Process the top row.
-        dst[j]                = src[i];
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-        i++; 
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
-        {
-            dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227; 
-            j += 2;
-            i++;
-        }
-        dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + 1]            = src[i];
-        dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        i++; 
-        j                    += new_xdim + 2;
-
-        // Process the middle section.
-        for(y = 1; y < ydim - 1; y++)
-        {
-            dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-            dst[j + new_xdim]     = (1333 * src[i] +  894 * src[i + xdim]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-            i++;
-            j += 2;
-            for(x = 1; x < xdim - 1; x++)
-            {
-                dst[j]                = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i - 1] + 333 * src[i - xdim - 1]) / 2227;
-                dst[j + 1]            = (1000 * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-                dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i + xdim] + 447 * src[i - 1] + 333 * src[i + xdim - 1]) / 2227; 
-                dst[j + new_xdim + 1] = (1000 * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-                i++;
-                j += 2;
-            }
-            dst[j]                = (1000  * src[i] + 894 * src[i - xdim] + 447 * src[i - 1]) / 2227;
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227; 
-            i++;
-            j += new_xdim + 2;
-        }
-
-        // Process the bottom row.
-        dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227;
-        dst[j + new_xdim]     = src[i];
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        i++;
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
-        {
-            dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227; 
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227; 
-            dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            i++;
-            j += 2;
-        }
-        dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227;
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + new_xdim + 1] = src[i];
-    }
-
-    public void shrink(int src[], int xdim, int ydim, int dst[])
-    {
-        int    i, j, k, r, c;
-        int    sum;
-    
-        r = ydim;
-        c = xdim;
-        k = 0;
-        if(xdim % 2 == 0)
-        {
-            for(i = 0; i < r - 1; i += 2)
-            {
-                for (j = 0; j < c - 1; j += 2)
-                {
-                    sum = (src[i *c + j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
-                }
-            }
-        }
-        else  // Looks wrong.
-        {
-            for(i = 0; i < r - 1; i += 2)
-            {
-                for(j = 0; j < c - 1; j += 2)
-                {
-                    sum = (src[i * c+j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
-                }
-                k++;
-            }
-        }
-    }
-    
-    public void shrink(int src[], int xdim, int ydim, int dst[], int error[])
-    {
-        int    i, j, k, r, c;
-        int    sum;
-    
-        r = ydim;
-        c = xdim;
-        k = 0;
-        if(xdim % 2 == 0)
-        {
-            for(i = 0; i < r - 1; i += 2)
-            {
-                for (j = 0; j < c - 1; j += 2)
-                {
-                    sum = (src[i * c + j] + error[i * c + j] + src[i * c + j + 1] + error[i * c + j + 1] 
-                    		+ src[(i + 1) * c + j] + error[(i + 1) * c + j] + src[(i + 1) * c + j + 1] + error[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
-                }
-            }
-        }
-        else // Looks wrong.
-        {
-            for(i = 0; i < r - 1; i += 2)
-            {
-                for(j = 0; j < c - 1; j += 2)
-                {
-                    sum = (src[i * c + j] + error[i * c + j] +  src[i * c + j + 1] + error[i * c + j + 1]
-                    		+ src[(i + 1) * c + j] + error[(i + 1) * c + j] + src[(i + 1) * c + j + 1] + error[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
-                }
-                k++;
-            }
-        }
-    }
-    
-   
     
     public void getDeltasFromValues(int src[], int dst[], int xdim, int ydim)
     {
@@ -1033,11 +939,15 @@ public class ImageProcessor
             }
         }    
        
+        /*
         if(current_bit != 0)
             current_byte++;
         number_of_bits = current_byte * 8;
         if(current_bit != 0)
             number_of_bits -= 8 - current_bit;
+        */
+        number_of_bits = current_byte * 8;
+        number_of_bits += current_bit;
         return(number_of_bits);
     }
 
@@ -1056,72 +966,76 @@ public class ImageProcessor
         mask = 0x01;
         j = k = 0;
        
-            for(i = 0; i < size; i++)
+        for(i = 0; i < size; i++)
+        {
+            if((src[k] & (mask << j)) != 0)
             {
-                if((src[k] & (mask << j)) != 0)
-                {
-                    i++;
-                    j++;
-                    if(j == 8)
-                    {
-                        j = 0;
-                        k++;
-                    }
-                    if((src[k] & (mask << j)) != 0)
-                    {
-                        current_bit++;
-                        if(current_bit == 8)
-                        {
-                            current_byte++;
-                            current_bit = dst[current_byte] = 0;
-                        }
-                        dst[current_byte] |= (byte)mask << current_bit;
-                        current_bit++;
-                        if(current_bit == 8)
-                        {
-                            current_byte++;
-                            current_bit = dst[current_byte] = 0;
-                        }
-                    }
-                    else
-                    {
-                        dst[current_byte] |= (byte)mask << current_bit;
-                        current_bit++;
-                        if(current_bit == 8)
-                        {
-                            current_byte++;
-                            current_bit = dst[current_byte] = 0;
-                        }
-                    }
-                }
-                else
-                {
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                }
+                i++;
                 j++;
                 if(j == 8)
                 {
                     j = 0;
                     k++;
                 }
+                if((src[k] & (mask << j)) != 0)
+                {
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                else
+                {
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
             }
+            else
+            {
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            j++;
+            if(j == 8)
+            {
+                j = 0;
+                k++;
+            }
+        }    
         
+        /*
         if(current_bit != 0)
             current_byte++;
         number_of_bits = current_byte * 8;
         if(current_bit != 0)
             number_of_bits -= 8 - current_bit;
+        */
+        number_of_bits = current_byte * 8;
+        number_of_bits += current_bit;
         return(number_of_bits);
     }
 
@@ -1162,7 +1076,7 @@ public class ImageProcessor
     
         if(current_size > 0)
         {
-            // System.out.println("The number of iterations was " + number_of_iterations);
+            System.out.println("The number of iterations was " + number_of_iterations);
             if(current_size % 8 == 0)
             {
                 byte_size      = current_size / 8;
@@ -1182,19 +1096,17 @@ public class ImageProcessor
             }
             return(current_size + 8);
         }
-        else
-        	return(current_size);
+        return(current_size);
     }
     
     public int decompressStrings(byte src[], int size, byte dst[])
     {
         int  byte_index;
-        int  type, number_of_iterations;
+        int  number_of_iterations;
         int  addend;
         int  mask;
-        int  remainder, i, even, odd;
+        int  remainder, i;
         int  previous_size, current_size, byte_size;
-        double new_zero_one_ratio[] = new double[1];
         
         byte_index = size / 8 - 1;
         remainder  = size % 8;
@@ -1242,8 +1154,8 @@ public class ImageProcessor
            number_of_iterations &= mask;
            mask++;
         }
-        // System.out.println("The number of iterations was " + number_of_iterations);
-        // System.out.println("The type was " + type);
+        
+        System.out.println("The number of iterations was " + number_of_iterations);
         
         current_size = 0;
         if(number_of_iterations == 1)
@@ -1281,6 +1193,5 @@ public class ImageProcessor
         }
         return(current_size);
     }
-
 }
 
