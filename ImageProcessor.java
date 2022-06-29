@@ -300,24 +300,23 @@ public class ImageProcessor
 		    */
 		    
 		   
-		    /*
+		    
 		    green_contract = DeltaMapper.contract(green_double, xdim, ydim);
+		    //green_contract = DeltaMapper.shrinkXY(green_double, xdim, ydim);
+		    //green_expand   = DeltaMapper.expandXY(green_contract, xdim - 1, ydim - 1);
 		    green_expand   = DeltaMapper.expand(green_contract, xdim - 1, ydim - 1);
 		    for(int i = 0; i < size; i++)
 		    {
 		    	scratch[i] = (int)(green_expand[i] + .5);
 		    }
-		    */
 		    
-		    
-		    shrunk_green = DeltaMapper.shrink(green, xdim, ydim);
-		    scratch      = DeltaMapper.expand(shrunk_green, xdim, ydim);
-		    
-		    
+		   
 		    
 		    
 		    int scratch_max = -1;
 		    int scratch_min = 256;
+		    
+		    size = xdim * ydim;
 		    for(int i = 0; i < size; i++)
 		    {
 		    	if(scratch[i] > scratch_max)
@@ -329,21 +328,27 @@ public class ImageProcessor
 		    System.out.println("The high value in the processed green channel is " + scratch_max);
 		    
 		    int total_error = 0;
+		    
+		    double[] error_double = new double[size];
 		    for(int i = 0; i < size; i++)
 		    {
-		    	error[i] = green[i] - scratch[i];
-		    	total_error += error[i];
+		    	error_double[i] = green[i] - scratch[i];
+		    	total_error += Math.abs(error_double[i]);
 		    }
 		    System.out.println("Total error is " + total_error);
 		    
-		    shrunk_green = DeltaMapper.shrink(green, xdim, ydim, error);
-		    scratch      = DeltaMapper.expand(shrunk_green, xdim - 1, ydim  - 1);
-		    
+		    double[] shrunk_green_double = DeltaMapper.shrink(green_double, xdim, ydim, error_double);
+		    green_expand   = DeltaMapper.expandXY(shrunk_green_double, xdim - 1, ydim - 1);
+		    for(int i = 0; i < size; i++)
+		    {
+		    	scratch[i] = (int)(green_expand[i] + .5);
+		    }
+		   
 		    total_error = 0;
 		    for(int i = 0; i < size; i++)
 		    {
 		    	error[i] = green[i] - scratch[i];
-		    	total_error += error[i];
+		    	total_error += Math.abs(error[i]);
 		    }
 		    System.out.println("Total error shrinking with error is " + total_error);
 		    
