@@ -4,74 +4,6 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
-	// This shrinks the source by one pixel in both dimensions.
-	public static int[][] contract(int[][] source)
-	{
-		int ydim = source.length;
-		int xdim = source[0].length;
-		
-		int[][] dest = new int[ydim - 1][xdim - 1];
-		
-	    for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				double w = source[i][j]; 
-				double x = source[i][j + 1];
-				double y = source[i + 1][j];
-				double z = source[i + 1][j + 1];
-				
-				dest[i][j] = (int) ((w + x + y + z) * .25);
-				
-				// Rounding up seems to increase error when re-expanding,
-				// although theoretically more accurate.
-				// dest[i][j] = (int) ((w + x + y + z) * .25 + .5)
-			}
-		}
-	    
-		return(dest);
-	}
-
-	// 1-d version of same function.
-	public static int[] contract(int[] source, int xdim, int ydim)
-	{
-		int[] dest = new int[(ydim - 1) * (xdim - 1)];
-		
-		int k = 0;
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				double w  = source[i * xdim + j];
-				double x  = source[i * xdim + j + 1];
-				double y  = source[(i + 1) * xdim + j];
-				double z  = source[(i + 1) * xdim + j + 1];
-				dest[k++] = (int) ((w + x + y + z) * .25);
-			}
-		}
-		
-		return(dest);
-	}
-	
-	public static double[] contract(double[] source, int xdim, int ydim)
-	{
-		double[] dest = new double[(ydim - 1) * (xdim - 1)];
-		
-		int k = 0;
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				double w  = source[i * xdim + j];
-				double x  = source[i * xdim + j + 1];
-				double y  = source[(i + 1) * xdim + j];
-				double z  = source[(i + 1) * xdim + j + 1];
-				dest[k++] = (int) ((w + x + y + z) * .25);
-			}
-		}
-		
-		return(dest);
-	}
 	
 	public static int[] shrink(int src[], int xdim, int ydim)
 	{
@@ -87,6 +19,7 @@ public class DeltaMapper
 				int y    = src[(i + 1) * xdim + j];
 				int z    = src[(i + 1) * xdim + j + 1];
 			    dst[k++] = (w + x + y + z) / 4;	
+			    // Rounding up seems to increase the error when we expand back.  
 			}
 		}
 		return(dst);
@@ -441,67 +374,6 @@ public class DeltaMapper
 		return(dst);
 	}
 
-	/*
-	public static double[] expand(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[(xdim + 1) * (ydim + 1)];
-		int k = 0;
-		for(int i = 0; i < ydim + 1; i++)
-		{
-			for(int j = 0; j < xdim + 1; j++)	
-			{
-			    if(i == 0)
-			    {
-			        if(j == 0)
-			        {
-			            dst[k++] = src[i * xdim];	
-			        }
-			        else if(j == xdim)
-			        {
-			            dst[k++] = src[i * xdim + j - 1];	
-			        }
-			        else
-			        {
-			            dst[k++] = (src[i * xdim + j] + src[i * xdim + j - 1]) / 2;	
-			        }
-			    }
-			    else if(i == ydim)
-			    {
-			    	if(j == 0)
-			        {
-			            dst[k++] = src[(i - 1) * xdim + j];	
-			        }
-			        else if(j == xdim)
-			        {
-			            dst[k++] = src[(i - 1) * xdim + j - 1];	
-			        }
-			        else
-			        {
-			            dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]) / 2;	
-			        }   	
-			    }
-			    else
-			    {
-			    	if(j == 0)
-			        {
-			            dst[k++] = (src[(i - 1) * xdim + j] + src[i * xdim + j]) / 2;	
-			        }
-			        else if(j == xdim)
-			        {
-			            dst[k++] = (src[(i - 1) * xdim + j - 1] + src[i * xdim + j - 1]) / 2;	
-			        }
-			        else
-			        {
-			            dst[k++] = (src[(i - 1) * xdim + j] + src[(i - 1) * xdim + j - 1]+ src[i * xdim + j] + src[i * xdim + j - 1]) / 4;	
-			        }   	
-			    }
-			}
-		}
-		System.out.println("k = " + k);
-		return(dst);
-	}
-	*/
-	
 	
     public static void expand4(int src[], int xdim, int ydim, int dst[])
     {
