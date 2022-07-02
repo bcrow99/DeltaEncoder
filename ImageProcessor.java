@@ -291,27 +291,15 @@ public class ImageProcessor
 		    System.out.println("The high value in the green channel is " + green_max);
 			
 		   
-		    int [] shrunk_green = new int[size / 4];
-		    int [] shrunk_error = new int[size / 4];
 		    
-		    /*
-		    shrink4(green, xdim, ydim, shrunk_green);
-		    expand4(shrunk_green, xdim / 2, ydim /2, scratch);
-		    */
-		    
-		   
-		    
-		    green_contract = DeltaMapper.contract(green_double, xdim, ydim);
-		    //green_contract = DeltaMapper.shrinkXY(green_double, xdim, ydim);
-		    //green_expand   = DeltaMapper.expandXY(green_contract, xdim - 1, ydim - 1);
-		    green_expand   = DeltaMapper.expand(green_contract, xdim - 1, ydim - 1);
+		    green_contract = DeltaMapper.shrink4(green_double, xdim, ydim);
+		    green_expand   = DeltaMapper.expand4(green_contract, xdim / 2, ydim / 2);
+		    //green_expand   = DeltaMapper.expandGradient(green_contract, xdim - 1, ydim - 1);
+		    //green_expand   = DeltaMapper.expandAverage(green_contract, xdim - 1, ydim - 1);
 		    for(int i = 0; i < size; i++)
 		    {
 		    	scratch[i] = (int)(green_expand[i] + .5);
 		    }
-		    
-		   
-		    
 		    
 		    int scratch_max = -1;
 		    int scratch_min = 256;
@@ -323,6 +311,12 @@ public class ImageProcessor
 		    		scratch_max = scratch[i];
 		    	if(scratch[i] < scratch_min)
 		    		scratch_min = scratch[i];
+		    	/*
+		    	if(scratch[i] < 0)
+		    		scratch[i] = 0;
+		    	if(scratch[i] > 255)
+		    		scratch[i] = 255;
+		    	*/
 		    }
 		    System.out.println("The low value in the processed green channel is " + scratch_min);
 		    System.out.println("The high value in the processed green channel is " + scratch_max);
@@ -333,25 +327,33 @@ public class ImageProcessor
 		    for(int i = 0; i < size; i++)
 		    {
 		    	error_double[i] = green[i] - scratch[i];
-		    	total_error += Math.abs(error_double[i]);
+		    	//error_double[i] = scratch[i] - green[i];
+		    	total_error    += Math.abs(error_double[i]);
+		    	//total_error += error[i];
 		    }
 		    System.out.println("Total error is " + total_error);
 		    
-		    double[] shrunk_green_double = DeltaMapper.shrink(green_double, xdim, ydim, error_double);
-		    green_expand   = DeltaMapper.expandXY(shrunk_green_double, xdim - 1, ydim - 1);
+		    double[] shrunk_green_double = DeltaMapper.shrink4(green_double, xdim, ydim, error_double);
+		    green_expand   = DeltaMapper.expand4(shrunk_green_double, xdim / 2, ydim /2);
+		    
 		    for(int i = 0; i < size; i++)
 		    {
 		    	scratch[i] = (int)(green_expand[i] + .5);
+		    	if(scratch[i] < 0)
+		    		scratch[i] = 0;
+		    	if(scratch[i] > 255)
+		    		scratch[i] = 255;
 		    }
 		   
 		    total_error = 0;
 		    for(int i = 0; i < size; i++)
 		    {
 		    	error[i] = green[i] - scratch[i];
+		    	//total_error += error[i];
 		    	total_error += Math.abs(error[i]);
+		    	error_double[i] = error[i];
 		    }
 		    System.out.println("Total error shrinking with error is " + total_error);
-		    
 		    
 		    /*
 		    
