@@ -375,10 +375,10 @@ public class ImageProcessor
 		    }
 		    for(int i = 0; i < size / 4; i++)
 		    	delta[i] -= delta_min;
+		    
+		  
 		    int number_of_different_values = delta_max - delta_min + 1;
 			System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
-			
-		    
 		    System.out.println("The low value  is " + delta_min);
 		    System.out.println("The high value is " + delta_max);
 		    
@@ -387,7 +387,12 @@ public class ImageProcessor
 		    System.out.println("Number of bits is " + number_of_bits);
 		    int number_of_bytes = DeltaMapper.unpackStrings(bit_strings, number_of_different_values, delta, size / 4);
 		    System.out.println("Number of bytes is " + number_of_bytes);
+		   
+		    
+		    for(int i = 0; i < size / 4; i++)
+		    	delta[i] += delta_min;
 		    int[] value = DeltaMapper.getValuesFromDeltas(delta, xdim / 2, ydim / 2);
+		    
 		    total_error = 0;
 		    for(int i = 0; i < size / 4; i++)
 		    {
