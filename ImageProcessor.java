@@ -378,16 +378,124 @@ public class ImageProcessor
 		    
 		  
 		    int number_of_different_values = delta_max - delta_min + 1;
-			System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
-		    System.out.println("The low value  is " + delta_min);
-		    System.out.println("The high value is " + delta_max);
+		    
+		    int table[] = new int[number_of_different_values];
+		    for(int i = 0; i < number_of_different_values; i++)
+		    	table[i] = 0;
+		    for(int i = 0; i < delta.length; i++)
+		    {
+		    	int j = delta[i];
+		    	table[j]++;
+		    }
+		    
+		    for(int i = 0; i < number_of_different_values; i++)
+		    	System.out.println(i + " -> " + table[i]);
+		    
+		    
+		    ArrayList key_list = new ArrayList();
+		    Hashtable _table   = new Hashtable();
+		    for(int i = 0; i < number_of_different_values; i++)
+		    {
+		    	double key = table[i];
+		    	while(_table.containsKey(key))
+		    	{
+		    		key += .01;
+		    		//System.out.println("Got here.");
+		    		//System.out.println("Key = " + key);
+		    	}
+		    	_table.put(key, i);
+		    	key_list.add(key);
+		    }
+		    
+		    Collections.sort(key_list);
+		    System.out.println("Sorted keys: ");
+		    int k = 0;
+		    for(int i = number_of_different_values - 1; i >= 0; i--)
+		    {
+		    	double key = (double)key_list.get(i);
+		    	int    j   = (int)_table.get(key);
+		    	table[k++]   = j;
+		    	System.out.println("Key = " + key + ", value = " + j);
+		    }
+		    System.out.println();
+		    
+		   
+		    
+		    int modal_value = table[0];
+		    
+		    int lower_value = modal_value;
+		    int upper_value = modal_value + 1;
+		    
+		    table[0] = lower_value;
+		    if(upper_value < number_of_different_values)
+		        table[1] = upper_value;
+		    else
+		    {
+		    	lower_value--;
+		    	table[1] = lower_value;
+		    }
+		    
+		    for(int i = 2; i < number_of_different_values; i += 2)
+		    {
+		        if(lower_value > 0)	
+		        {
+		        	lower_value--;
+		        	table[i] = lower_value;
+		        	upper_value++;
+		        	if(upper_value < number_of_different_values)
+		        		table[i + 1] = upper_value;
+		        	else
+		        	{
+		        		lower_value--;
+			        	table[i + 1] = lower_value;   	
+		        	}
+		        }
+		        else
+		        {
+		        	upper_value++;
+		            table[i] = upper_value;
+		            upper_value++;
+		            table[i + 1] = upper_value;
+		        }
+		    }
+		    
+		    if(number_of_different_values % 2 == 1)
+		    {
+		    	if(lower_value > 0)
+		    		table[number_of_different_values - 1] = 0;	
+		    	else
+		    		table[number_of_different_values - 1] = number_of_different_values - 1;
+		    }
+	        	
+		    System.out.println("Lookup table:");
+		    for(int i = 0; i < number_of_different_values; i++)
+		    {
+		    	System.out.println(i + "-> " + table[i]);
+		    }
+		    System.out.println();
+			//System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
+		    //System.out.println("The low value  is " + delta_min);
+		    //System.out.println("The high value is " + delta_max);
+		    
+		    // Assuming a gaussian distribution might not be working.
+		    // Can try using a histogram, but that will require supplying the
+		    // same table to unpackStrings, and introduce a dependency
+		    // into the processing. 
 		    
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
-		    int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_values, bit_strings);
-		    System.out.println("Number of bits is " + number_of_bits);
-		    int number_of_bytes = DeltaMapper.unpackStrings(bit_strings, number_of_different_values, delta, size / 4);
+		    int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_values, bit_strings, table);
+		    System.out.println("Number of bits in unary strings is " + number_of_bits);
+		    
+		    /*
+		    byte [] compressed_bit_strings = new byte[5 * xdim * ydim];
+		    int compressed_number_of_bits = DeltaMapper.compressZeroBits(bit_strings, number_of_bits, compressed_bit_strings);
+		    int decompressed_number_of_bits = DeltaMapper.decompressZeroBits(compressed_bit_strings, compressed_number_of_bits, bit_strings);
+		    System.out.println("Number of compressed bits is       " + compressed_number_of_bits);
+		    System.out.println("Number of decompressed bits is       " + decompressed_number_of_bits);
+		    */
+		    int number_of_bytes = DeltaMapper.unpackStrings(bit_strings, number_of_different_values, delta, size / 4, table);
 		    System.out.println("Number of bytes is " + number_of_bytes);
-		   
+		 
 		    
 		    for(int i = 0; i < size / 4; i++)
 		    	delta[i] += delta_min;
