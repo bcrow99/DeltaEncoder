@@ -462,799 +462,611 @@ public class DeltaMapper
 		return dst;
     }
 	
-	/*
-	public static double[] expand4(double src[], int xdim, int ydim)
+	 
+    public static int[] getDeltasFromValues(int src[], int xdim, int ydim)
     {
-        int       i, j, x, y;
-        int new_xdim  = 2 * xdim;
-        int new_ydim  = 2 * ydim;
-        
-        i         = 0; 
-        j         = 0;
-        
-        double[] dst = new double[new_xdim * new_ydim];
-
-        // Process the top row.
-        dst[j]                = src[i];
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-        i++; 
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
+        int[] dst = new int[xdim * ydim];
+    	
+        int k     = 0;
+        int value = 126;
+        for(int i = 0; i < ydim; i++)
         {
-            dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227; 
-            j += 2;
-            i++;
-        }
-        dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + 1]            = src[i];
-        dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        i++; 
-        j                    += new_xdim + 2;
-
-        // Process the middle section.
-        for(y = 1; y < ydim - 1; y++)
-        {
-            dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-            dst[j + new_xdim]     = (1333 * src[i] +  894 * src[i + xdim]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-            i++;
-            j += 2;
-            for(x = 1; x < xdim - 1; x++)
+            int delta     = src[k] - value;
+            value        += delta;
+            dst[k++]      = delta;
+            int current_value = value; 
+            for(int j = 1; j < xdim; j++)
             {
-                dst[j]                = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i - 1] + 333 * src[i - xdim - 1]) / 2227;
-                dst[j + 1]            = (1000 * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-                dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i + xdim] + 447 * src[i - 1] + 333 * src[i + xdim - 1]) / 2227; 
-                dst[j + new_xdim + 1] = (1000 * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-                i++;
-                j += 2;
+                delta          = src[k]  - current_value;
+                current_value += delta;
+                dst[k++]       = delta;
             }
-            dst[j]                = (1000  * src[i] + 894 * src[i - xdim] + 447 * src[i - 1]) / 2227;
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227; 
-            i++;
-            j += new_xdim + 2;
         }
-
-        // Process the bottom row.
-        dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227;
-        dst[j + new_xdim]     = src[i];
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        i++;
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
-        {
-            dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227; 
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227; 
-            dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            i++;
-            j += 2;
-        }
-        dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227;
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + new_xdim + 1] = src[i];
         
         return dst;
     }
-	
-    public static void expand4(int src[], int xdim, int ydim, int dst[])
+
+    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim)
     {
-        int       i, j, x, y, new_xdim;
-        new_xdim  = 2 * xdim;
-        i         = 0; 
-        j         = 0;
-
-        // Process the top row.
-        dst[j]                = src[i];
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-        i++; 
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
+    	int[] dst = new int[xdim * ydim];
+    	
+        int k     = 0;
+        int value = 126;
+        for(int i = 0; i < ydim; i++)
         {
-            dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227; 
-            j += 2;
-            i++;
-        }
-        dst[j]                = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + 1]            = src[i];
-        dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227;
-        i++; 
-        j                    += new_xdim + 2;
-
-        // Process the middle section.
-        for(y = 1; y < ydim - 1; y++)
-        {
-            dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-            dst[j + new_xdim]     = (1333 * src[i] +  894 * src[i + xdim]) / 2227; 
-            dst[j + new_xdim + 1] = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
-            i++;
-            j += 2;
-            for(x = 1; x < xdim - 1; x++)
+            value            += src[k];
+            int current_value = value;
+            dst[k++]          = current_value;
+            for(int j = 1; j < xdim; j++)
             {
-                dst[j]                = (1000  * src[i] + 447 * src[i - xdim] + 447 * src[i - 1] + 333 * src[i - xdim - 1]) / 2227;
-                dst[j + 1]            = (1000 * src[i] + 447 * src[i - xdim] + 447 * src[i + 1] + 333 * src[i - xdim + 1]) / 2227;
-                dst[j + new_xdim]     = (1000 * src[i] + 447 * src[i + xdim] + 447 * src[i - 1] + 333 * src[i + xdim - 1]) / 2227; 
-                dst[j + new_xdim + 1] = (1000 * src[i] + 447 * src[i + 1] + 447 * src[i + xdim] + 333 * src[i + xdim + 1]) / 2227;
+                current_value += src[k];
+                dst[k++]       = current_value;
+            }
+        }
+        
+        return dst;
+    }
+    
+    public static int packStrings(int src[], int size, int number_of_different_values, byte dst[])
+    {
+        int i, j, k;
+        int current_byte;
+        byte current_bit, value; 
+        byte next_bit; 
+        int  index, second_index;
+        int  number_of_bits;
+        int  table[], inverse_table[], mask[];
+    
+        /*
+        inverse_table = new int[number_of_different_values]; 
+        inverse_table[0] = number_of_different_values / 2;
+        i = j = number_of_different_values / 2;
+        k = 1;
+        j++;
+        i--;
+        while(i >= 0 && k < number_of_different_values)
+        {
+            inverse_table[k] = j;
+            k++;
+            j++;
+            if(k < number_of_different_values)
+                inverse_table[k] = i;
+            k++;
+            i--;
+        }
+        */
+        
+        
+       
+
+        table = new int[number_of_different_values];
+        
+        i = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	table[j--] = i;
+        	i += 2;
+        }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	table[j++] = i;
+        	i += 2;
+        }
+        
+        for(i = 0; i < number_of_different_values; i++)
+        {
+            System.out.println(" Table[" + i + "] = " + table[i]);
+        }
+    
+        mask  = new int[8];
+        mask[0] = 1;
+        for(i = 1; i < 8; i++)
+        {
+            mask[i] = mask[i - 1];
+            mask[i] *= 2;
+            mask[i]++;
+        }
+    
+        current_bit = 0;
+        current_byte = 0;
+        dst[current_byte] = 0;
+        for(i = 0; i < size; i++)
+        {
+            k     = src[i];
+            index = table[k];
+            if(index == 0)
+            {
+                current_bit++;
+                if(current_bit == 8)
+                    dst[++current_byte] = current_bit = 0;
+            }
+            else
+            {
+                next_bit = (byte)((current_bit + index + 1) % 8);
+                if(index <= 7)
+                {
+                    dst[current_byte] |= (byte) (mask[index - 1] << current_bit);
+                    if(next_bit <= current_bit)
+                    {
+                        dst[++current_byte] = 0;
+                        if(next_bit != 0)
+                            dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
+                    }
+                }
+                else if(index > 7)
+                {
+                    dst[current_byte] |= (byte)(mask[7] << current_bit);
+                    j = (index - 8) / 8;
+                    for(k = 0; k < j; k++)
+                        dst[++current_byte] = (byte)(mask[7]);
+                    dst[++current_byte] = 0;
+                    if(current_bit != 0)
+                        dst[current_byte] |= (byte)(mask[7] >> (8 - current_bit));
+    
+                    if(index % 8 != 0)
+                    {
+                        second_index = index % 8 - 1;
+                        dst[current_byte] |= (byte)(mask[second_index] << current_bit);
+                        if(next_bit <= current_bit)
+                        {
+                            dst[++current_byte] = 0;
+                            if(next_bit != 0)
+                                dst[current_byte] |= (byte)(mask[second_index] >> (8 - current_bit));
+                        }
+                    }
+                    else if(next_bit <= current_bit)
+                            dst[++current_byte] = 0;
+                }
+                current_bit = next_bit;
+            }
+        }
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        return(number_of_bits);
+    }
+    
+    public static int unpackStrings(byte src[], int number_of_different_values, int dst[], int size)
+    {
+        int  number_of_bytes_unpacked;
+        int  current_src_byte, current_dst_byte;
+        byte non_zero, mask, current_bit;
+        int  index, current_length;
+        int  table[], inverse_table[];
+        int  i, j, k;
+    
+        inverse_table = new int[number_of_different_values];
+        
+        i = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        inverse_table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	inverse_table[j--] = i;
+        	i += 2;
+        }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        inverse_table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	inverse_table[j++] = i;
+        	i += 2;
+        }
+        
+        table = new int[number_of_different_values];
+        for(i = 0; i < number_of_different_values; i++)
+        {
+            j = inverse_table[i];
+            table[j] = i;
+        }
+        
+        
+        
+        
+        
+        
+        
+      
+        current_length = 1;
+        current_src_byte = 0;
+        mask = 0x01;
+        current_bit = 0;
+        current_dst_byte = 0;
+        while(current_dst_byte < size)
+        {
+            non_zero = (byte)(src[current_src_byte] & (byte)(mask << current_bit));
+            if(non_zero != 0)
+                current_length++;
+            else
+            {
+                index = current_length - 1;
+                dst[current_dst_byte++] = table[index];
+                current_length = 1;
+            }
+            current_bit++;
+            if(current_bit == 8)
+            {
+                current_bit = 0;
+                current_src_byte++;
+            }
+        }
+        if(current_bit == 0)
+            number_of_bytes_unpacked = current_src_byte;
+        else
+            number_of_bytes_unpacked = current_src_byte + 1;
+        return(number_of_bytes_unpacked);
+    }
+    
+    public static int compressZeroBits(byte src[], int size, byte dst[])
+    {
+        byte mask, current_bit;
+        int  current_byte;
+        int  number_of_zero_bits;
+        int  number_of_bits;
+        int  current_length;
+        int  i, j, k;
+        int  minimum_amount_of_compression, byte_size;
+
+        byte_size = size / 8;
+        minimum_amount_of_compression = 0;
+        j = k = number_of_zero_bits = 0;
+        current_byte = 0;
+        current_bit = 0;
+        mask = 0x01;
+        dst[0] = 0;
+
+        for(i = 0; i < size; i++)
+        {
+            if((current_byte + (byte_size - i / 8) / 2 + minimum_amount_of_compression) > byte_size) 
+                return(-1);
+            if((src[k] & (mask << j)) == 0)
+            {
                 i++;
-                j += 2;
-            }
-            dst[j]                = (1000  * src[i] + 894 * src[i - xdim] + 447 * src[i - 1]) / 2227;
-            dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-            dst[j + new_xdim]     = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i + xdim] + 333 * src[i + xdim - 1]) / 2227;
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + xdim]) / 2227; 
-            i++;
-            j += new_xdim + 2;
-        }
-
-        // Process the bottom row.
-        dst[j]                = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227;
-        dst[j + new_xdim]     = src[i];
-        dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227;
-        i++;
-        j                    += 2;
-        for(x = 1; x < xdim - 1; x++)
-        {
-            dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227; 
-            dst[j + 1]            = (1000  * src[i] + 447 * src[i + 1] + 447 * src[i - xdim] + 333 * src[i - xdim + 1]) / 2227; 
-            dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227; 
-            dst[j + new_xdim + 1] = (1333 * src[i] + 894 * src[i + 1]) / 2227; 
-            i++;
-            j += 2;
-        }
-        dst[j]                = (1000  * src[i] + 447 * src[i - 1] + 447 * src[i - xdim] + 333 * src[i - xdim - 1]) / 2227;
-        dst[j + 1]            = (1333 * src[i] + 894 * src[i - xdim]) / 2227;
-        dst[j + new_xdim]     = (1333 * src[i] + 894 * src[i - 1]) / 2227;
-        dst[j + new_xdim + 1] = src[i];
-    }
-    */
-
-    
-    /*
-    public static void shrink4(int src[], int xdim, int ydim, int dst[])
-    {
-        int    i, j, k, r, c;
-        int    sum;
-    
-        r = ydim;
-        c = xdim;
-        k = 0;
-        if(xdim % 2 == 0)
-        {
-            for(i = 0; i < r - 1; i += 2)
-            {
-                for (j = 0; j < c - 1; j += 2)
+                j++;
+                if(j == 8)
                 {
-                    sum = (src[i *c + j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
+                    j = 0;
+                    k++;
+                }
+                if((src[k] & (mask << j)) == 0)
+                {
+                    number_of_zero_bits++;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                else
+                {
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
                 }
             }
-        }
-        else  // Looks wrong.
-        {
-            for(i = 0; i < r - 1; i += 2)
+            else
             {
-                for(j = 0; j < c - 1; j += 2)
+                dst[current_byte] |= (byte)mask << current_bit;
+                current_bit++;
+                if(current_bit == 8)
                 {
-                    sum = (src[i * c+j] + src[i * c + j + 1] + src[(i + 1) * c + j] + src[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
                 }
+                number_of_zero_bits++;
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            j++;
+            if(j == 8)
+            {
+                j = 0;
                 k++;
             }
-        }
+        }    
+       
+        /*
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        */
+        number_of_bits = current_byte * 8;
+        number_of_bits += current_bit;
+        return(number_of_bits);
     }
-    
-    public static void shrink4(int src[], int xdim, int ydim, int dst[], int error[])
+
+    public static int decompressZeroBits(byte src[], int size, byte dst[])
     {
-        int    i, j, k, r, c;
-        int    sum;
-    
-        r = ydim;
-        c = xdim;
-        k = 0;
-        if(xdim % 2 == 0)
+        byte mask, current_bit;
+        int  current_byte;
+        int  current_length;
+        int  number_of_bits;
+        int  i, j, k;
+
+        current_length = 0;
+        current_byte = 0;
+        current_bit  = 0;
+        dst[0] = 0;
+        mask = 0x01;
+        j = k = 0;
+       
+        for(i = 0; i < size; i++)
         {
-            for(i = 0; i < r - 1; i += 2)
+            if((src[k] & (mask << j)) != 0)
             {
-                for (j = 0; j < c - 1; j += 2)
+                i++;
+                j++;
+                if(j == 8)
                 {
-                	int current_error = (error[i * c + j] + error[(i + 1) * c + j]) / 2;
-                
-                	sum = (src[i * c + j] + src[i * c + j + 1] + src[(i + 1) * c + j]  + src[(i + 1) * c + j + 1] + (error[i * c + j + 1]  +  + error[(i + 1) * c + j + 1])) / 4 / 4;
-                    dst[k++] = sum;
+                    j = 0;
+                    k++;
+                }
+                if((src[k] & (mask << j)) != 0)
+                {
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                else
+                {
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
                 }
             }
-        }
-        else // Looks wrong.
-        {
-            for(i = 0; i < r - 1; i += 2)
+            else
             {
-                for(j = 0; j < c - 1; j += 2)
+                current_bit++;
+                if(current_bit == 8)
                 {
-                    sum = (src[i * c + j] + error[i * c + j] +  src[i * c + j + 1] + error[i * c + j + 1]
-                    		+ src[(i + 1) * c + j] + error[(i + 1) * c + j] + src[(i + 1) * c + j + 1] + error[(i + 1) * c + j + 1]) / 4;
-                    dst[k++] = sum;
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
                 }
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            j++;
+            if(j == 8)
+            {
+                j = 0;
                 k++;
             }
-        }
+        }    
+        
+        /*
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        */
+        number_of_bits = current_byte * 8;
+        number_of_bits += current_bit;
+        return(number_of_bits);
     }
-    */
-   
+
+    public static int compressStrings(byte src[], int size, byte dst[])
+    {
+        int number_of_iterations, current_size, previous_size;
+        int byte_size, i;
+        byte mask;
+        byte[]  temp = new byte[5 * size];
+        
+        byte_size = size / 8;
+        if(size % 8 != 0)
+            byte_size++;
+        number_of_iterations = 1;
+        current_size = previous_size = size;
+        current_size = compressZeroBits(src, previous_size, dst);
+        while(current_size < previous_size && current_size > 1)
+        {
+            previous_size = current_size;
+            if(number_of_iterations % 2 == 1)
+                current_size = compressZeroBits(dst, previous_size, temp);
+            else
+                current_size = compressZeroBits(temp, previous_size, dst);
+            number_of_iterations++;
+        }
+        if(current_size == -1 && number_of_iterations > 1)
+        {
+            current_size = previous_size;
+            number_of_iterations--;
+        }
+        if(number_of_iterations % 2 == 0)
+        {
+            byte_size = current_size / 8;
+            if(current_size % 8 != 0)
+                byte_size++; 
+            for(i = 0; i < byte_size; i++)
+                dst[i] = temp[i];
+        }        
     
-	public static void extract(int src[], int xdim, int ydim, int xoffset, int yoffset, int dst[], int new_xdim, int new_ydim)
-	{
-		int xend = xoffset + new_xdim;
-		int yend = yoffset + new_ydim;
-		int j = 0;
-		for (int y = yoffset; y < yend; y++)
-		{
-			int i = y * xdim + xoffset;
-			for (int x = xoffset; x < xend; x++)
-			{
-				dst[j] = src[i];
-				j++;
-				i++;
-			}
-		}
-	}
+        if(current_size > 0)
+        {
+            System.out.println("The number of iterations was " + number_of_iterations);
+            if(current_size % 8 == 0)
+            {
+                byte_size      = current_size / 8;
+                dst[byte_size] = (byte) number_of_iterations;
+                dst[byte_size] &= 127;
+            }
+            else
+            {
+                int  remainder = current_size % 8;
+                byte_size = current_size / 8;
 
-	public static void avgAreaXTransform(int src[], int xdim, int ydim, int dst[], int new_xdim, int start_fraction[], int end_fraction[], int number_of_pixels[])
-	{
-		double differential = (double) xdim / (double) new_xdim;
-		int weight          = (int) (differential * xdim);
-		weight             *= 1000;
-		int factor          = 1000 * xdim;
-
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-		for(int i = 0; i < new_xdim; i++)
-		{
-			double previous_position     = real_position;
-			int    previous_whole_number = current_whole_number;
-			real_position               += differential;
-			current_whole_number         = (int) (real_position);
-			number_of_pixels[i]          = current_whole_number - previous_whole_number;
-			start_fraction[i]            = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]              = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		int x = 0;
-		for(int y = 0; y < ydim; y++)
-		{
-			int i = y * new_xdim;
-			int j = y * xdim;
-			for(x = 0; x < new_xdim - 1; x++)
-			{
-				if (number_of_pixels[x] == 0)
-				{
-					dst[i] = src[j];
-					i++;
-				} 
-				else
-				{
-					int total = start_fraction[x] * xdim * src[j];
-					j++;
-					int k = number_of_pixels[x] - 1;
-					while (k > 0)
-					{
-						total += factor * src[j];
-						j++;
-						k--;
-					}
-					total += end_fraction[x] * xdim * src[j];
-					total /= weight;
-					dst[i] = total;
-					i++;
-				}
-			}
-			if (number_of_pixels[x] == 0)
-				dst[i] = src[j];
-			else
-			{
-				int total = start_fraction[x] * xdim * src[j];
-				j++;
-				int k = number_of_pixels[x] - 1;
-				while(k > 0)
-				{
-					total += factor * src[j];
-					j++;
-					k--;
-				}
-				total /= weight - end_fraction[x] * xdim;
-				dst[i] = total;
-			}
-		}
-	}
-
-	public static void avgAreaYTransform(int src[], int xdim, int ydim, int dst[], int new_ydim, int start_fraction[],
-			int end_fraction[], int number_of_pixels[])
-	{
-		int weight, current_whole_number, previous_whole_number;
-		int total, factor;
-		double real_position, differential, previous_position;
-
-		differential = (double) ydim / (double) new_ydim;
-		weight = (int) (differential * ydim);
-		weight *= 1000;
-		factor = ydim * 1000;
-
-		real_position = 0.;
-		current_whole_number = 0;
-		for (int i = 0; i < new_ydim; i++)
-		{
-			previous_position = real_position;
-			previous_whole_number = current_whole_number;
-			real_position += differential;
-			current_whole_number = (int) (real_position);
-			number_of_pixels[i] = current_whole_number - previous_whole_number;
-			start_fraction[i] = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i] = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		int y = 0;
-		for (int x = 0; x < xdim; x++)
-		{
-			int i = x;
-			int j = x;
-			for (y = 0; y < new_ydim - 1; y++)
-			{
-				if (number_of_pixels[y] == 0)
-				{
-					dst[i] = src[j];
-					i += xdim;
-				} else
-				{
-					total = start_fraction[y] * ydim * src[j];
-					j += xdim;
-					int k = number_of_pixels[y] - 1;
-					while (k > 0)
-					{
-						total += factor * src[j];
-						j += xdim;
-						k--;
-					}
-					total += end_fraction[y] * ydim * src[j];
-					total /= weight;
-					dst[i] = total;
-					i += xdim;
-				}
-			}
-			if (number_of_pixels[y] == 0)
-				dst[i] = src[j];
-			else
-			{
-				total = start_fraction[y] * ydim * src[j];
-				j += xdim;
-				int k = number_of_pixels[y] - 1;
-				while (k > 0)
-				{
-					total += factor * src[j];
-					j += xdim;
-					k--;
-				}
-				total /= weight - end_fraction[y] * ydim;
-				dst[i] = total;
-			}
-		}
-	}
-
-	public static void avgAreaTransform(int src[], int xdim, int ydim, int dst[], int new_xdim, int new_ydim, int workspace[],
-			int start_fraction[], int end_fraction[], int number_of_pixels[])
-	{
-		avgAreaXTransform(src, xdim, ydim, workspace, new_xdim, start_fraction, end_fraction, number_of_pixels);
-		avgAreaYTransform(workspace, new_xdim, ydim, dst, new_ydim, start_fraction, end_fraction, number_of_pixels);
-	}
-	
-	
-	public static int[] avgAreaXTransform(int source[], int xdim, int ydim, int new_xdim)
-	{
-		double differential         = (double) xdim / (double) new_xdim;
-		int    weight               = (int)(differential * xdim) * 1000;
-		int    factor               = xdim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_xdim];
-		int [] end_fraction     = new int[new_xdim];
-		int [] number_of_pixels = new int[new_xdim];
-		for(int i = 0; i < new_xdim; i++)
-		{
-		    double  previous_position     = real_position;
-		    int     previous_whole_number = current_whole_number;
-		    
-		    real_position       += differential;
-		    current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));	
-		}
-		
-		int[] dest = new int[ydim * new_xdim];	
-		for (int y = 0; y < ydim; y++)
-		{
-			int i = y * new_xdim;
-			int j = y * xdim;
-			for (int x = 0; x < new_xdim - 1; x++)
-			{
-				if (number_of_pixels[x] == 0)
-				{
-					dest[i] = source[j];
-					i++;
-				} 
-				else
-				{
-					int total = start_fraction[x] * xdim * source[j];
-					j++;
-					int k = number_of_pixels[x] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j++;
-						k--;
-					}
-					total += end_fraction[x] * xdim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i++;
-				}
-			}
-			
-			int x = new_xdim - 1;
-			if (number_of_pixels[x] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[x] * xdim * source[j];
-				j++;
-				int k = number_of_pixels[x] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j++;
-					k--;
-				}
-				total /= weight - end_fraction[x] * xdim;
-				dest[i] = total;
-			}
-		}
-		return(dest);
-	}
-	
-	public static int[][] avgAreaXTransform(int src[][], int new_xdim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		int[][] dst = new int[ydim][new_xdim];	
-		
-		int [] source = new int[xdim * ydim];
-		int [] dest   = new int[new_xdim * ydim];
-		
-		// Changing from 2-d array to 1-d array to simplify processing.
-		// The main issue is a 2-d format complicates making the transform
-		// work in both directions.  On the other hand, the 2-d format
-		// is occasionally convenient.  
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < xdim; j++)
-			{
-				int k = i * xdim + j;
-				source[k] = src[i][j];
-			}
-		}
-		
-		double differential         = (double) xdim / (double) new_xdim;
-		int    weight               = (int)(differential * xdim) * 1000;
-		int    factor               = xdim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_xdim];
-		int [] end_fraction     = new int[new_xdim];
-		int [] number_of_pixels = new int[new_xdim];
-		
-		for(int i = 0; i < new_xdim; i++)
-		{
-		    double  previous_position     = real_position;
-		    int     previous_whole_number = current_whole_number;
-		    
-		    real_position       += differential;
-		    current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));	
-		}
-		
-		for (int y = 0; y < ydim; y++)
-		{
-			int i = y * new_xdim;
-			int j = y * xdim;
-			for (int x = 0; x < new_xdim - 1; x++)
-			{
-				if (number_of_pixels[x] == 0)
-				{
-					dest[i] = source[j];
-					i++;
-				} 
-				else
-				{
-					int total = start_fraction[x] * xdim * source[j];
-					j++;
-					int k = number_of_pixels[x] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j++;
-						k--;
-					}
-					total += end_fraction[x] * xdim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i++;
-				}
-			}
-			
-			int x = new_xdim - 1;
-			if (number_of_pixels[x] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[x] * xdim * source[j];
-				j++;
-				int k = number_of_pixels[x] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j++;
-					k--;
-				}
-				total /= weight - end_fraction[x] * xdim;
-				dest[i] = total;
-			}
-		}
-		
-		// Back to 2-d.
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < new_xdim; j++)
-			{
-				int k = i * new_xdim + j;
-				dst[i][j] = dest[k];
-			}
-		}
-		return(dst);
-	}
-	
-	public static int [] avgAreaYTransform(int src[], int xdim, int ydim, int new_ydim)
-	{
-		double differential         = (double) ydim / (double) new_ydim;
-		int    weight               = (int) (differential * ydim) * 1000;
-		int    factor               = ydim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-		
-		int [] start_fraction   = new int[new_ydim];
-		int [] end_fraction     = new int[new_ydim];
-		int [] number_of_pixels = new int[new_ydim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			double previous_position     = real_position;
-			int    previous_whole_number = current_whole_number;
-			
-			real_position       += differential;
-			current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		int [] dst = new int[xdim * new_ydim];
-		for (int x = 0; x < xdim; x++)
-		{
-			int i = x;
-			int j = x;
-			for (int y = 0; y < new_ydim - 1; y++)
-			{
-				if (number_of_pixels[y] == 0)
-				{
-					dst[i] = src[j];
-					i += xdim;
-				} 
-				else
-				{
-					int total = start_fraction[y] * ydim * src[j];
-					j += xdim;
-					int k = number_of_pixels[y] - 1;
-					while (k > 0)
-					{
-						total += factor * src[j];
-						j += xdim;
-						k--;
-					}
-					total += end_fraction[y] * ydim * src[j];
-					total /= weight;
-					dst[i] = total;
-					i += xdim;
-				}
-			}
-			int y = new_ydim - 1;
-			if (number_of_pixels[y] == 0)
-				dst[i] = src[j];
-			else
-			{
-				int total = start_fraction[y] * ydim * src[j];
-				j += xdim;
-				int k = number_of_pixels[y] - 1;
-				while (k > 0)
-				{
-					total += factor * src[j];
-					j += xdim;
-					k--;
-				}
-				total /= weight - end_fraction[y] * ydim;
-				dst[i] = total;
-			}
-		}
-		return(dst);
-	}
-	
-	public static int[][] avgAreaYTransform(int src[][], int new_ydim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-			
-		// Changing from 2-d array to 1-d array to simplify processing.
-		int [] source = new int[xdim * ydim];
-		int [] dest   = new int[xdim * new_ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				source[k] = src[i][j];
-				k++;
-			}
-		}
-		
-		double differential         = (double) ydim / (double) new_ydim;
-		int    weight               = (int) (differential * ydim) * 1000;
-		int    factor               = ydim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-		
-		int [] start_fraction   = new int[new_ydim];
-		int [] end_fraction     = new int[new_ydim];
-		int [] number_of_pixels = new int[new_ydim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			double previous_position     = real_position;
-			int    previous_whole_number = current_whole_number;
-			
-			real_position       += differential;
-			current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		for (int x = 0; x < xdim; x++)
-		{
-			int i = x;
-			int j = x;
-			for (int y = 0; y < new_ydim - 1; y++)
-			{
-				if (number_of_pixels[y] == 0)
-				{
-					dest[i] = source[j];
-					i += xdim;
-				} 
-				else
-				{
-					int total = start_fraction[y] * ydim * source[j];
-					j += xdim;
-					int k = number_of_pixels[y] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j += xdim;
-						k--;
-					}
-					total += end_fraction[y] * ydim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i += xdim;
-				}
-			}
-			int y = new_ydim - 1;
-			if (number_of_pixels[y] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[y] * ydim * source[j];
-				j += xdim;
-				int k = number_of_pixels[y] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j += xdim;
-					k--;
-				}
-				total /= weight - end_fraction[y] * ydim;
-				dest[i] = total;
-			}
-		}
-		
-		// Back to 2-d.
-		int[][] dst = new int[new_ydim][xdim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				dst[i][j] = dest[k];
-				k++;
-			}
-		}
-		return(dst);
-		
-	}
-	
-	public static int [] avgAreaTransform(int src[], int xdim, int ydim, int new_xdim, int new_ydim)
-	{
-		int [] intermediate = avgAreaXTransform(src, xdim, ydim, new_xdim);
-	    int [] dst          = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
-	    return(dst);
-	}
-	
-	public static int [][] avgAreaTransform(int src[][], int new_xdim, int new_ydim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-			
-		// Changing from 2-d array to 1-d array to simplify processing.
-		int [] source = new int[xdim * ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				source[k] = src[i][j];
-				k++;
-			}
-		}
-		int [] intermediate = avgAreaXTransform(source, xdim, ydim, new_xdim);
-		int [] dest         = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
-		
-		// Back to 2-d.
-		int[][] dst = new int[new_ydim][new_xdim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				dst[i][j] = dest[k];
-				k++;
-			}
-		}
-
-		return(dst);
-	}
-	
+                dst[byte_size] |= (byte) (number_of_iterations << remainder);
+                byte_size++;
+                dst[byte_size] = 0;
+                if(remainder > 1)
+                    dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+            }
+            return(current_size + 8);
+        }
+        return(current_size);
+    }
+    
+    public static int decompressStrings(byte src[], int size, byte dst[])
+    {
+        int  byte_index;
+        int  number_of_iterations;
+        int  addend;
+        int  mask;
+        int  remainder, i;
+        int  previous_size, current_size, byte_size;
+        byte[]  temp = new byte[5 * size];
+        
+        byte_index = size / 8 - 1;
+        remainder  = size % 8;
+        if(remainder != 0)
+        {
+            int value = 254;
+            addend = 2;
+            for(i = 1; i < remainder; i++)
+            {
+                value -= addend;
+                addend <<= 1;
+            } 
+            mask = value;
+            number_of_iterations = src[byte_index];
+            if(number_of_iterations < 0)
+                number_of_iterations += 256;
+            number_of_iterations &= mask;
+            number_of_iterations >>= remainder;
+            byte_index++;
+            if(remainder > 1)
+            {
+                mask = 1;
+                for(i = 2; i < remainder; i++)
+                {
+                    mask <<= 1;
+                    mask++;
+                }
+                addend = src[byte_index]; 
+                if(addend < 0)
+                    addend += 256;
+                addend &= mask;
+                addend <<= 8 - remainder;
+                number_of_iterations += addend;
+                mask++;
+            }
+            else
+                mask = 1;
+        }
+        else
+        {
+           mask = 127;
+           number_of_iterations = src[byte_index];
+           if(number_of_iterations < 0)
+               number_of_iterations += 256; 
+           number_of_iterations &= mask;
+           mask++;
+        }
+        
+        System.out.println("The number of iterations was " + number_of_iterations);
+        
+        current_size = 0;
+        if(number_of_iterations == 1)
+        {
+            current_size = decompressZeroBits(src, size - 8, dst);
+            number_of_iterations--;
+        }
+        else if(number_of_iterations % 2 == 0)
+        {
+            current_size = decompressZeroBits(src, size - 8, temp);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressZeroBits(dst, previous_size, temp);
+                else
+                    current_size = decompressZeroBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        else
+        {
+            current_size = decompressZeroBits(src, size - 8, dst);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressZeroBits(dst, previous_size, temp);
+                else
+                    current_size = decompressZeroBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        return(current_size);
+    }
 }
