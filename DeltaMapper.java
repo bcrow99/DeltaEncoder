@@ -516,28 +516,6 @@ public class DeltaMapper
         int  index, second_index;
         int  number_of_bits;
         int  table[], inverse_table[], mask[];
-    
-        /*
-        inverse_table = new int[number_of_different_values]; 
-        inverse_table[0] = number_of_different_values / 2;
-        i = j = number_of_different_values / 2;
-        k = 1;
-        j++;
-        i--;
-        while(i >= 0 && k < number_of_different_values)
-        {
-            inverse_table[k] = j;
-            k++;
-            j++;
-            if(k < number_of_different_values)
-                inverse_table[k] = i;
-            k++;
-            i--;
-        }
-        */
-        
-        
-       
 
         table = new int[number_of_different_values];
         
@@ -701,7 +679,7 @@ public class DeltaMapper
             else
             {
                 index = current_length - 1;
-                dst[current_dst_byte++] = table[index];
+                dst[current_dst_byte++] = inverse_table[index];
                 current_length = 1;
             }
             current_bit++;
