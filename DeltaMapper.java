@@ -570,11 +570,6 @@ public class DeltaMapper
         	i += 2;
         }
         
-        for(i = 0; i < number_of_different_values; i++)
-        {
-            System.out.println(" Table[" + i + "] = " + table[i]);
-        }
-    
         mask  = new int[8];
         mask[0] = 1;
         for(i = 1; i < 8; i++)
@@ -654,7 +649,8 @@ public class DeltaMapper
         int  table[], inverse_table[];
         int  i, j, k;
     
-        inverse_table = new int[number_of_different_values];
+        
+        table = new int[number_of_different_values];
         
         i = 0;
         
@@ -663,11 +659,11 @@ public class DeltaMapper
         else
         	j = number_of_different_values / 2 - 1;
         
-        inverse_table[j--] = i;
+        table[j--] = i;
         i += 2;
         while(j >= 0)
         {
-        	inverse_table[j--] = i;
+        	table[j--] = i;
         	i += 2;
         }
         
@@ -677,28 +673,21 @@ public class DeltaMapper
         	j = number_of_different_values / 2;
         
         i = 1;
-        inverse_table[j++] = i;
+        table[j++] = i;
         i += 2;
         while(j < number_of_different_values)
         {
-        	inverse_table[j++] = i;
+        	table[j++] = i;
         	i += 2;
         }
         
-        table = new int[number_of_different_values];
+        inverse_table = new int[number_of_different_values];
         for(i = 0; i < number_of_different_values; i++)
         {
-            j = inverse_table[i];
-            table[j] = i;
+            j = table[i];
+            inverse_table[j] = i;
         }
         
-        
-        
-        
-        
-        
-        
-      
         current_length = 1;
         current_src_byte = 0;
         mask = 0x01;
