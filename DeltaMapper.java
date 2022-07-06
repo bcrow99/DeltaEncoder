@@ -702,7 +702,7 @@ public class DeltaMapper
         return(number_of_ints_unpacked);
     }
     
-    
+
     public static int packStrings(int src[], int size, int number_of_different_values, byte dst[], int table[])
     {
         int current_byte;
@@ -815,7 +815,6 @@ public class DeltaMapper
                 current_src_byte++;
             }
         }
-       
         return(number_of_ints_unpacked);
     }
     
@@ -839,11 +838,6 @@ public class DeltaMapper
         		number_of_different_values++;
         }
         
-        System.out.println("Range of values is            " + range_of_values);
-        System.out.println("Number of different values is " + number_of_different_values);
-        System.out.println();
-        
-        
         int[] mask  = new int[8];
         mask[0] = 1;
         for(int i = 1; i < 8; i++)
@@ -852,32 +846,40 @@ public class DeltaMapper
             mask[i] *= 2;
             mask[i]++;
         }
-    
-        byte current_bit = 0;
-        int current_byte = 0;
+     
+        byte current_bit  = 0;
+        int current_byte  = 0;
         dst[current_byte] = 0;
         int k = 0;
+        
         for(int i = 0; i < size; i++)
         {
-            k     = src[i];
+            k         = src[i];
             int index = table[k];
             if(index == 0)
             {
+            	// If the index is 0, put down a zero stop bit by skipping ahead.
                 current_bit++;
+                // Make sure the next byte is initalized to zeros.
                 if(current_bit == 8)
                     dst[++current_byte] = current_bit = 0;
             }
             else
             {
-                byte next_bit = (byte)((current_bit + index + 1) % 8);
+            	byte next_bit = (byte)((current_bit + index + 1) % 8);
+            	if(index == number_of_different_values - 1)
+            		next_bit--;
                 if(index <= 7)
                 {
+                	
                     dst[current_byte] |= (byte) (mask[index - 1] << current_bit);
                     if(next_bit <= current_bit)
                     {
                         dst[++current_byte] = 0;
                         if(next_bit != 0)
                             dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
+                        else if(next_bit == 0 && index == number_of_different_values - 1)
+                        	dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
                     }
                 }
                 else if(index > 7)
@@ -899,6 +901,8 @@ public class DeltaMapper
                             dst[++current_byte] = 0;
                             if(next_bit != 0)
                                 dst[current_byte] |= (byte)(mask[second_index] >> (8 - current_bit));
+                            else if(next_bit == 0 && index == number_of_different_values - 1)
+                            	dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
                         }
                     }
                     else if(next_bit <= current_bit)
@@ -939,20 +943,25 @@ public class DeltaMapper
             inverse_table[j] = i;
         }
         
-        int  current_length          = 1;
         int  current_src_byte        = 0;
         int  current_dst_byte        = 0;
         int  number_of_ints_unpacked = 0;
         byte mask                    = 0x01;
         byte current_bit             = 0;
+        int  current_length          = 1;
+        int  maximum_length          = number_of_different_values - 1;
+        
         while(current_dst_byte < size)
         {
             byte non_zero = (byte)(src[current_src_byte] & (byte)(mask << current_bit));
-            if(non_zero != 0)
+            if(non_zero != 0 && current_length < maximum_length)
                 current_length++;
             else
             {
-                dst[current_dst_byte++] = inverse_table[current_length - 1];
+            	if(non_zero == 0)
+                    dst[current_dst_byte++] = inverse_table[current_length - 1];
+            	else
+            		dst[current_dst_byte++] = inverse_table[current_length];
                 current_length          = 1;
                 number_of_ints_unpacked++;
             }
