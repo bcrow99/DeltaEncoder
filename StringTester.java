@@ -108,7 +108,7 @@ public class StringTester
                 }
                
 			   
-			    JFrame frame = new JFrame("Table Tester");
+			    JFrame frame = new JFrame("String Tester");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
 			        public void windowClosing(WindowEvent event)
@@ -537,7 +537,7 @@ public class StringTester
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
-		    int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_delta_values, bit_strings, random_lut);
+		    int number_of_bits  = DeltaMapper.packStrings2(delta, size / 4, number_of_different_delta_values, bit_strings, random_lut);
 		    //int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_delta_values, bit_strings, modal_lut);
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
@@ -550,7 +550,7 @@ public class StringTester
 		    System.out.println("Number of decompressed bits is      " + decompressed_number_of_bits);
 		    
 		   
-		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta, size / 4, random_lut);
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, number_of_different_delta_values, delta, size / 4, random_lut);
 		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta, size / 4, modal_lut);
 		    //System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
