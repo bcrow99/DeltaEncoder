@@ -702,6 +702,321 @@ public class DeltaMapper
         return(number_of_ints_unpacked);
     }
     
+    /*
+    public static int packStrings(int src[], int number_of_different_values, byte dst[])
+    {
+        int size     = src.length;
+        int [] table = new int[number_of_different_values];
+    	
+        
+        
+       
+        
+        //int  index, second_index;
+        //int  number_of_bits;
+
+        
+        
+        // Construct a symmetric lookup table assuming a distribution
+        // centered around the middle value or values if the number
+        // of different values is even.
+        
+        int i = 0;
+        int j = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	table[j--] = i;
+        	i += 2;
+        }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	table[j++] = i;
+        	i += 2;
+        }
+       
+        byte[] mask  = new byte[8];
+        mask[0] = 1;
+        for(i = 1; i < 8; i++)
+        {
+            mask[i] = mask[i - 1];
+            mask[i] *= 2;
+            mask[i]++;
+        }
+    
+        byte bit = 0;
+        int dst_byte = 0;
+        dst[dst_byte] = 0;
+        for(i = 0; i < size; i++)
+        {
+            j     = src[i];
+            int k = table[j];
+            if(k == 0)
+            {
+                bit++;
+                if(bit == 8)
+                    dst[++dst_byte] = bit = 0;
+            }
+            else
+            {
+                byte next_bit = (byte)((bit + k + 1) % 8);
+                if(k <= 7)
+                {
+                    dst[dst_byte] |= (byte) (mask[k - 1] << bit);
+                    if(next_bit <= bit)
+                    {
+                        dst[++dst_byte] = 0;
+                        if(next_bit != 0)
+                            dst[dst_byte] |= (byte)(mask[k - 1] >> (8 - bit));
+                    }
+                }
+                else if(k > 7)
+                {
+                    dst[dst_byte] |= (byte)(mask[7] << bit);
+                    int m = (k - 8) / 8;
+                    for(int n = 0; n < m; n++)
+                        dst[++dst_byte] = (byte)(mask[7]);
+                    dst[++dst_byte] = 0;
+                    if(bit != 0)
+                        dst[dst_byte] |= (byte)(mask[7] >> (8 - bit));
+    
+                    if(k % 8 != 0)
+                    {
+                        m = k % 8 - 1;
+                        dst[dst_byte] |= (byte)(mask[m] << bit);
+                        if(next_bit <= bit)
+                        {
+                            dst[++dst_byte] = 0;
+                            if(next_bit != 0)
+                                dst[dst_byte] |= (byte)(mask[m] >> (8 - bit));
+                        }
+                    }
+                    else if(next_bit <= bit)
+                            dst[++dst_byte] = 0;
+                }
+                bit = next_bit;
+            }
+        }
+        if(bit != 0)
+            dst_byte++;
+        int number_of_bits = dst_byte * 8;
+        if(bit != 0)
+            number_of_bits -= 8 - bit;
+        return(number_of_bits);
+    }
+    */
+    
+    
+    
+    public static int packStrings(int src[], int number_of_different_values, byte dst[])
+    {
+    	int size = src.length;
+        int i, j, k;
+        int current_byte;
+        byte current_bit; 
+        byte next_bit; 
+        int  index, second_index;
+        int  number_of_bits;
+        int  table[],  mask[];
+
+        table = new int[number_of_different_values];
+        
+        // Construct a symmetric lookup table assuming a distribution
+        // centered around the middle value(s).
+        i = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	table[j--] = i;
+        	i += 2;
+        }
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        i = 1;
+        table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	table[j++] = i;
+        	i += 2;
+        }
+       
+        mask  = new int[8];
+        mask[0] = 1;
+        for(i = 1; i < 8; i++)
+        {
+            mask[i] = mask[i - 1];
+            mask[i] *= 2;
+            mask[i]++;
+        }
+    
+        current_bit = 0;
+        current_byte = 0;
+        dst[current_byte] = 0;
+        for(i = 0; i < size; i++)
+        {
+            k     = src[i];
+            index = table[k];
+            if(index == 0)
+            {
+                current_bit++;
+                if(current_bit == 8)
+                    dst[++current_byte] = current_bit = 0;
+            }
+            else
+            {
+                next_bit = (byte)((current_bit + index + 1) % 8);
+                if(index <= 7)
+                {
+                    dst[current_byte] |= (byte) (mask[index - 1] << current_bit);
+                    if(next_bit <= current_bit)
+                    {
+                        dst[++current_byte] = 0;
+                        if(next_bit != 0)
+                            dst[current_byte] |= (byte)(mask[index - 1] >> (8 - current_bit));
+                    }
+                }
+                else if(index > 7)
+                {
+                    dst[current_byte] |= (byte)(mask[7] << current_bit);
+                    j = (index - 8) / 8;
+                    for(k = 0; k < j; k++)
+                        dst[++current_byte] = (byte)(mask[7]);
+                    dst[++current_byte] = 0;
+                    if(current_bit != 0)
+                        dst[current_byte] |= (byte)(mask[7] >> (8 - current_bit));
+    
+                    if(index % 8 != 0)
+                    {
+                        second_index = index % 8 - 1;
+                        dst[current_byte] |= (byte)(mask[second_index] << current_bit);
+                        if(next_bit <= current_bit)
+                        {
+                            dst[++current_byte] = 0;
+                            if(next_bit != 0)
+                                dst[current_byte] |= (byte)(mask[second_index] >> (8 - current_bit));
+                        }
+                    }
+                    else if(next_bit <= current_bit)
+                            dst[++current_byte] = 0;
+                }
+                current_bit = next_bit;
+            }
+        }
+        if(current_bit != 0)
+            current_byte++;
+        number_of_bits = current_byte * 8;
+        if(current_bit != 0)
+            number_of_bits -= 8 - current_bit;
+        return(number_of_bits);
+    }
+    
+    
+    
+    public static int unpackStrings(byte src[], int number_of_different_values, int dst[])
+    {
+        int size            = dst.length;
+        int number_unpacked = 0;
+        int [] table        = new int[number_of_different_values];
+        
+        // Construct a symmetric lookup table assuming a distribution
+        // centered around the middle value(s).
+        int i = 0;
+        int j = 0;
+        
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2;
+        else
+        	j = number_of_different_values / 2 - 1;
+        
+        table[j--] = i;
+        i += 2;
+        while(j >= 0)
+        {
+        	table[j--] = i;
+        	i += 2;
+        }
+          
+        i = 1;
+        if(number_of_different_values % 2 == 1)
+            j = number_of_different_values / 2 + 1;
+        else
+        	j = number_of_different_values / 2;
+        
+        table[j++] = i;
+        i += 2;
+        while(j < number_of_different_values)
+        {
+        	table[j++] = i;
+        	i += 2;
+        }
+       
+        // Get the inverse table we use to unpack ints.
+        int [] inverse_table = new int[number_of_different_values];
+        for(i = 0; i < number_of_different_values; i++)
+        {
+            j                = table[i];
+            inverse_table[j] = i;
+        }
+        
+        int length   = 1;
+        int src_byte = 0;
+        int dst_byte  = 0;
+        
+        
+        byte mask = 0x01;
+        byte bit  = 0;
+        
+        while(dst_byte < size)
+        {
+            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
+            if(non_zero != 0)
+                length++;
+            else
+            {
+                int k = length - 1;
+                dst[dst_byte++] = inverse_table[k];
+                number_unpacked++;
+                length = 1;
+            }
+            bit++;
+            if(bit == 8)
+            {
+                bit = 0;
+                src_byte++;
+            }
+        }
+       
+        return(number_unpacked);
+    }
+    
 
     public static int packStrings(int src[], int size, int number_of_different_values, byte dst[], int table[])
     {
@@ -1156,10 +1471,9 @@ public class DeltaMapper
                         
                         // For now, we wont do this.
                         // Put down a one bit if this is the maximum length code.
-                        /*
+                        
                         else if(end_bit == 0 && k == number_of_different_values - 1)
                         	dst[current_byte] |= (byte)(mask[k - 1] >> (8 - current_bit));
-                        */
                        
                     }
                 }
@@ -1185,7 +1499,7 @@ public class DeltaMapper
                                 dst[current_byte] |= (byte)(mask[p] >> (8 - current_bit));
                             // Put down a one bit if this is the maximum length code.
                             
-                            // The parser does not care whether this is a zero or a one bit,
+                            // The parser does not seem to care whether this is a zero or a one bit,
                             // just the length of the code.
                             // Theoretically, leaving it a zero bit should improve the 
                             // bit compression but we get the exact same length bit string.
@@ -1193,10 +1507,10 @@ public class DeltaMapper
                             // but that would seem impossible.
                             
                             // For now, we wont do this.
-                            /*
+                            
                             else if(end_bit == 0 && k == number_of_different_values - 1)
                             	dst[current_byte] |= (byte)(mask[p] >> (8 - current_bit));
-                            */
+                            
                             
                         }
                     }

@@ -455,14 +455,14 @@ public class StringTester
 		    	//System.out.println("Key = " + key + ", value = " + j);
 		    }
 		    
-		   
+		   /*
 		    System.out.println("Random table:");
 		    for(int i = 0; i < number_of_different_delta_values; i++)
 		    {
 		    	System.out.println(i + "-> " + random_lut[i]);
 		    }
 		    System.out.println();
-		 
+		    */
 		    
 		    
 		    
@@ -534,29 +534,37 @@ public class StringTester
 			//System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
 		    //System.out.println("The low value  is " + delta_min);
 		    //System.out.println("The high value is " + delta_max);
+		    
+		    
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
-		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
+		    
+		    
+		    //int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
 		    //int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_delta_values, bit_strings, modal_lut);
+		    int number_of_bits  = DeltaMapper.packStrings(delta, number_of_different_delta_values, bit_strings);
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
 		    
-		    
+		    /*
 		    byte [] compressed_bit_strings = new byte[5 * xdim * ydim];
 		    int compressed_number_of_bits = DeltaMapper.compressZeroBits(bit_strings, number_of_bits, compressed_bit_strings);
 		    int decompressed_number_of_bits = DeltaMapper.decompressZeroBits(compressed_bit_strings, compressed_number_of_bits, bit_strings);
 		    System.out.println("Number of compressed bits is        " + compressed_number_of_bits);
 		    System.out.println("Number of decompressed bits is      " + decompressed_number_of_bits);
+		    */
 		    
 		   
-		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
+		    //int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
 		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta, size / 4, modal_lut);
-		    //System.out.println("Number of ints unpacked is " + number_of_ints);
+		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta);
+		    System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
-		    
+		   
 		    for(int i = 0; i < size / 4; i++)
 		    	delta[i] += delta_min;
+		  
 		    new_shrunk_green = DeltaMapper.getValuesFromDeltas(delta, xdim / 2, ydim / 2);
 		    
 		    green_min = 256;
