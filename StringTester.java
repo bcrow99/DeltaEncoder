@@ -455,14 +455,14 @@ public class StringTester
 		    	//System.out.println("Key = " + key + ", value = " + j);
 		    }
 		    
-		    /*
+		   
 		    System.out.println("Random table:");
 		    for(int i = 0; i < number_of_different_delta_values; i++)
 		    {
 		    	System.out.println(i + "-> " + random_lut[i]);
 		    }
 		    System.out.println();
-		    */
+		 
 		    
 		    
 		    
@@ -537,7 +537,7 @@ public class StringTester
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
-		    int number_of_bits  = DeltaMapper.packStrings2(delta, size / 4, number_of_different_delta_values, bit_strings, random_lut);
+		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
 		    //int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_delta_values, bit_strings, modal_lut);
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
@@ -550,7 +550,7 @@ public class StringTester
 		    System.out.println("Number of decompressed bits is      " + decompressed_number_of_bits);
 		    
 		   
-		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, number_of_different_delta_values, delta, size / 4, random_lut);
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
 		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta, size / 4, modal_lut);
 		    //System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
@@ -568,7 +568,7 @@ public class StringTester
 		    		green_max = new_shrunk_green[i];
 		    	if(new_shrunk_green[i] < green_min)
 		    		green_min = new_shrunk_green[i];
-		    	total_error += new_shrunk_green[i] - shrunk_green[i];
+		    	total_error += Math.abs(new_shrunk_green[i] - shrunk_green[i]);
 		    }
 		    range_of_pixel_values = green_max - green_min + 1;
 		    System.out.println("Range of pixel values is               " + range_of_pixel_values);
