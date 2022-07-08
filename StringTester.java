@@ -397,9 +397,7 @@ public class StringTester
 		    	total_error += Math.abs(new_shrunk_green[i] - shrunk_green[i]);
 		    }
 		    System.out.println("Difference between orignal image and delta encoded image is " + total_error);
-		    
-		    
-		    
+		   
 		    green_min = 256;
 		    green_max = -1;
 		    for(int i = 0; i < new_shrunk_green.length; i++)
@@ -435,7 +433,7 @@ public class StringTester
 		    	double key = histogram[i];
 		    	while(rank_table.containsKey(key))
 		    	{
-		    		key += .01;
+		    		key +=.001;
 		    	}
 		    	rank_table.put(key, i);
 		    	key_list.add(key);
@@ -443,29 +441,73 @@ public class StringTester
 		    Collections.sort(key_list);
 		    
 		    int random_lut[] = new int[number_of_different_delta_values];
-		    int k     = 0;
+		    int k     = -1;
 		    //System.out.println("Sorted keys:");
 		    for(int i = number_of_different_delta_values - 1; i >= 0; i--)
 		    {
 		    	double key = (double)key_list.get(i);
 		    	int    j   = (int)rank_table.get(key);
-		    	random_lut[j]   = k;
+		    	/*
 		    	if(key >= 1)
-		    		k++;
+		    	    random_lut[j]   = ++k;
+		    	else
+		    		random_lut[j]   = k;
+		    	*/
+		    	random_lut[j]   = ++k;
 		    	//System.out.println("Key = " + key + ", value = " + j);
 		    }
 		    
-		   /*
+		   
 		    System.out.println("Random table:");
 		    for(int i = 0; i < number_of_different_delta_values; i++)
 		    {
 		    	System.out.println(i + "-> " + random_lut[i]);
 		    }
 		    System.out.println();
+		    
+		    
+		    int [] symmetric_lut = new int[number_of_different_delta_values];
+		    int i = 0;
+	        int j = 0;
+	        
+	        if(number_of_different_delta_values % 2 == 1)
+	            j = number_of_different_delta_values / 2;
+	        else
+	        	j = number_of_different_delta_values / 2 - 1;
+	        
+	        symmetric_lut[j--] = i;
+	        i += 2;
+	        while(j >= 0)
+	        {
+	        	symmetric_lut[j--] = i;
+	        	i += 2;
+	        }
+	        
+	        if(number_of_different_delta_values % 2 == 1)
+	            j = number_of_different_delta_values / 2 + 1;
+	        else
+	        	j = number_of_different_delta_values / 2;
+	        
+	        i = 1;
+	        symmetric_lut[j++] = i;
+	        i += 2;
+	        while(j < number_of_different_delta_values)
+	        {
+	        	symmetric_lut[j++] = i;
+	        	i += 2;
+	        }
+	       
+	        
+		    /*
+		    System.out.println("Symmetric table:");
+		    for(i = 0; i < number_of_different_delta_values; i++)
+		    {
+		    	System.out.println(i + "-> " + symmetric_lut[i]);
+		    }
+		    System.out.println();
 		    */
-		    
-		    
-		    
+	        
+	        
 		    double modal_key   = (double)key_list.get(number_of_different_delta_values - 1);
 		    int    modal_value = (int)rank_table.get(modal_key);
 		    int modal_lut[]    = new int[number_of_different_delta_values];
@@ -484,7 +526,7 @@ public class StringTester
 		    	modal_lut[lower_value] = index++;
 		    }
 		    
-		    for(int i = 2; i < number_of_different_delta_values; i += 2)
+		    for(i = 2; i < number_of_different_delta_values; i += 2)
 		    {
 		        if(lower_value > 0)	
 		        {
@@ -536,14 +578,14 @@ public class StringTester
 		    //System.out.println("The high value is " + delta_max);
 		    
 		    
-		    for(int i = 0; i < delta.length; i++)
+		    for(i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
 		    
 		    
-		    //int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
-		    //int number_of_bits  = DeltaMapper.packStrings(delta, size / 4, number_of_different_delta_values, bit_strings, modal_lut);
-		    int number_of_bits  = DeltaMapper.packStrings(delta, number_of_different_delta_values, bit_strings);
+		    //int number_of_bits  = DeltaMapper.packStrings(delta, random_lut, bit_strings);
+		    int number_of_bits  = DeltaMapper.packStrings(delta, delta.length, random_lut.length, bit_strings, random_lut);
+		    //int number_of_bits  = DeltaMapper.packStrings2(delta,size / 4, number_of_different_delta_values, bit_strings, random_lut);
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
 		    
@@ -555,14 +597,14 @@ public class StringTester
 		    System.out.println("Number of decompressed bits is      " + decompressed_number_of_bits);
 		    */
 		    
-		   
+		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings,number_of_different_delta_values, delta, size / 4, random_lut);
+		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, random_lut, delta);
+		    //int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, number_of_different_delta_values, delta, size / 4, random_lut);
 		    //int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
-		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta, size / 4, modal_lut);
-		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, number_of_different_delta_values, delta);
 		    System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
 		   
-		    for(int i = 0; i < size / 4; i++)
+		    for(i = 0; i < size / 4; i++)
 		    	delta[i] += delta_min;
 		  
 		    new_shrunk_green = DeltaMapper.getValuesFromDeltas(delta, xdim / 2, ydim / 2);
@@ -570,7 +612,7 @@ public class StringTester
 		    green_min = 256;
 		    green_max = -1;
 		    total_error = 0;
-		    for(int i = 0; i < new_shrunk_green.length; i++)
+		    for(i = 0; i < new_shrunk_green.length; i++)
 		    {
 		    	if(new_shrunk_green[i] > green_max)
 		    		green_max = new_shrunk_green[i];
