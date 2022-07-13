@@ -457,13 +457,14 @@ public class StringTester
 		    	//System.out.println("Key = " + key + ", value = " + j);
 		    }
 		    
-		   
+		   /*
 		    System.out.println("Random table:");
 		    for(int i = 0; i < number_of_different_delta_values; i++)
 		    {
 		    	System.out.println(i + "-> " + random_lut[i]);
 		    }
 		    System.out.println();
+		    */
 		    
 		    
 		    int [] symmetric_lut = new int[number_of_different_delta_values];
@@ -582,10 +583,47 @@ public class StringTester
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
 		    
+		    //System.out.println("The number of bits in a byte is " + Byte.SIZE);
+		  
+		    /*
+		    byte mask = 1;
+		   
 		    
-		    //int number_of_bits  = DeltaMapper.packStrings(delta, random_lut, bit_strings);
-		    int number_of_bits  = DeltaMapper.packStrings(delta, delta.length, random_lut.length, bit_strings, random_lut);
-		    //int number_of_bits  = DeltaMapper.packStrings2(delta,size / 4, number_of_different_delta_values, bit_strings, random_lut);
+		    for(i = 0; i < 7; i++)
+		    {
+		    	mask <<= 1;
+		    	System.out.println("Mask = " + mask);
+		    }
+		    System.out.println();
+		    
+		    for(i = 0; i < 7; i++)
+		    {
+		    	mask >>= 1;
+		    	System.out.println("Mask = " + mask);
+		    }
+		    System.out.println();
+		    
+		    mask = -1;
+		    for(i = 0; i < 7; i++)
+		    {
+		    	mask <<= 1;
+		    	System.out.println("Mask = " + mask);
+		    }
+		    System.out.println();
+		    
+		    }
+		    */
+		    
+		    //byte mask = (byte)0b11111110;
+		    //int mask = 0b11111110;
+		    
+		    //System.out.println("Mask = " + mask);
+		
+		    //System.out.println();
+		    
+
+		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
+	
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
 		    
@@ -597,10 +635,9 @@ public class StringTester
 		    System.out.println("Number of decompressed bits is      " + decompressed_number_of_bits);
 		    */
 		    
-		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings,number_of_different_delta_values, delta, size / 4, random_lut);
-		    //int number_of_ints = DeltaMapper.unpackStrings(bit_strings, random_lut, delta);
-		    //int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, number_of_different_delta_values, delta, size / 4, random_lut);
-		    //int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
+		   
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
+		  
 		    System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
 		   
