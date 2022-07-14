@@ -595,6 +595,7 @@ public class DeltaMapper
     
     public static int packStrings2(int src[], int table[], byte dst[])
     {
+
     	int size             = src.length;
     	
     	int number_of_values = table.length;
@@ -652,134 +653,14 @@ public class DeltaMapper
                 
                 if(k <= 7)
                 {
-                	if(k != number_of_values - 1)
-                        dst[p] |= (byte) (mask[k - 1] << start_bit);
-                	else
-                		dst[p] |= (byte) (mask[k - 2] << start_bit);
+                    dst[p] |= (byte) (mask[k - 1] << start_bit);
+                	
                     if(stop_bit <= start_bit)
                     {
                         dst[++p] = 0;
                         if(stop_bit != 0)
+                        {
                             dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
-                    }
-                }
-                else if(k > 7)
-                {
-                	dst[p] |= (byte)(mask[7] << start_bit);
-            		int m = (k - 8) / 8;
-                    for(int n = 0; n < m; n++)
-                        dst[++p] = (byte)(mask[7]);
-                    dst[++p] = 0;
-                    if(start_bit != 0)
-                        dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
-                    
-                    if(k % 8 != 0)
-                    {
-                        m = k % 8 - 1;
-                        if(k != number_of_values - 1)
-                            dst[p] |= (byte)(mask[m] << start_bit);
-                        else 
-                        	dst[p] |= (byte)(mask[m - 1] << start_bit);
-                        if(stop_bit <= start_bit)
-                        {
-                            dst[++p] = 0;
-                            if(stop_bit != 0)
-                            {
-                            	if(k != number_of_values - 1)
-                                    dst[p] |= (byte)(mask[m] >> (8 - start_bit));
-                            	else
-                            		 dst[p] |= (byte)(mask[m - 1] >> (8 - start_bit));
-                            }
-                        }
-                    }
-                    else if(stop_bit <= start_bit)
-                            dst[++p] = 0;
-                }
-                start_bit = stop_bit;
-            }
-        }
-        
-        
-        if(start_bit != 0)
-            p++;
-        int number_of_bits = p * 8;
-        if(start_bit != 0)
-            number_of_bits -= 8 - start_bit;
-        return(number_of_bits);
-    }
-        
-    public static int packStrings3(int src[], int table[], byte dst[])
-    {
-    	int size             = src.length;
-    	
-    	int number_of_values = table.length;
-        
-        int [] mask  = new int[8];
-        
-        mask[0] = 1;
-        mask[1] = 3;
-        mask[2] = 7;
-        mask[3] = 15;
-        mask[4] = 31;
-        mask[5] = 63;
-        mask[6] = 127;
-        mask[7] = 255;
-        
-        // Not currently used.
-        int [] start_mask  = new int[8];
-        
-        start_mask[0] = 128;
-        start_mask[1] = 192;
-        start_mask[2] = 224;
-        start_mask[3] = 240;
-        start_mask[4] = 248;
-        start_mask[5] = 252;
-        start_mask[6] = 254;
-        start_mask[7] = 255;
-    
-        int start_bit  = 0;
-        int stop_bit   = 0;
-        int p   = 0;
-        dst[p]  = 0;
-        
-        for(int i = 0; i < size; i++)
-        {
-            int j = src[i];
-            int k = table[j];
-            if(k == 0)
-            {
-                start_bit++;
-                if(start_bit == 8)
-                {
-                    dst[++p] = 0;
-                    start_bit       = 0;
-                }
-            }
-            else
-            {
-                stop_bit = (start_bit + k + 1) % 8;
-                if(k == number_of_values - 1)
-                {
-                	stop_bit--;
-                	if(stop_bit < 0)
-                		stop_bit = 7;
-                }
-                
-                if(k <= 7)
-                {
-                	if(k != number_of_values - 1)
-                        dst[p] |= (byte) (mask[k - 1] << start_bit);
-                	else
-                		dst[p] |= (byte) (mask[k - 2] << start_bit);
-                    if(stop_bit <= start_bit)
-                    {
-                        dst[++p] = 0;
-                        if(stop_bit != 0)
-                        {
-                        	if(k != number_of_values - 1)
-                                dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
-                        	else
-                        		dst[p] |= (byte)(mask[k - 2] >> (8 - start_bit));
                         }
                     }
                 }
@@ -796,19 +677,14 @@ public class DeltaMapper
                     if(k % 8 != 0)
                     {
                         m = k % 8 - 1;
-                        if(k != number_of_values - 1)
-                            dst[p] |= (byte)(mask[m] << start_bit);
-                        else 
-                        	dst[p] |= (byte)(mask[m - 1] << start_bit);
+                        dst[p] |= (byte)(mask[m] << start_bit);
+                        
                         if(stop_bit <= start_bit)
                         {
                             dst[++p] = 0;
                             if(stop_bit != 0)
                             {
-                            	if(k != number_of_values - 1)
-                                    dst[p] |= (byte)(mask[m] >> (8 - start_bit));
-                            	else
-                            		 dst[p] |= (byte)(mask[m - 1] >> (8 - start_bit));
+                                dst[p] |= (byte)(mask[m] >> (8 - start_bit));
                             }
                         }
                     }
@@ -819,7 +695,6 @@ public class DeltaMapper
             }
         }
         
-        
         if(start_bit != 0)
             p++;
         int number_of_bits = p * 8;
@@ -827,16 +702,14 @@ public class DeltaMapper
             number_of_bits -= 8 - start_bit;
         return(number_of_bits);
     }
-    
  
     public static int unpackStrings(byte src[], int table[], int dst[])
     {
         int size                       = dst.length;
         int number_of_different_values = table.length;
         int number_unpacked            = 0;
-   
-       
-        // Get the inverse table we use to unpack ints.
+        
+        
         int [] inverse_table = new int[number_of_different_values];
         for(int i = 0; i < number_of_different_values; i++)
         {
@@ -847,10 +720,8 @@ public class DeltaMapper
         int length   = 1;
         int src_byte = 0;
         int dst_byte = 0;
-        
-        
-        byte mask = 0x01;
-        byte bit  = 0;
+        byte mask    = 0x01;
+        byte bit     = 0;
         
         while(dst_byte < size)
         {
@@ -878,18 +749,20 @@ public class DeltaMapper
 
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
-        int size                       = dst.length;
-        int number_of_different_values = table.length;
-        int number_unpacked            = 0;
-        int maximum_length             = number_of_different_values - 1;
+        int size             = dst.length;
+        int number_of_values = table.length;
+        int number_unpacked  = 0;
+        int maximum_length   = number_of_values - 1;
    
-       
+        int [] index = new int[number_of_values];
+        
         // Get the inverse table we use to unpack ints.
-        int [] inverse_table = new int[number_of_different_values];
-        for(int i = 0; i < number_of_different_values; i++)
+        int [] inverse_table = new int[number_of_values];
+        for(int i = 0; i < number_of_values; i++)
         {
             int j            = table[i];
             inverse_table[j] = i;
+            index[i]         = 0;
         }
         
         int length   = 1;
@@ -903,19 +776,25 @@ public class DeltaMapper
         while(dst_byte < size)
         {
             byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
-            if(non_zero != 0)
+            if(non_zero != 0 && length < maximum_length)
                 length++;
-            else
+            else if(non_zero == 0)
             {
                 int k = length - 1;
-                dst[dst_byte++] = inverse_table[k];
+                dst[dst_byte++] = inverse_table[k]; 
+               
+                index[k]++;
+                
                 number_unpacked++;
                 length = 1;
             }
-            if(length == maximum_length)
+            else if(length == maximum_length)
             {
             	int k = length;
             	dst[dst_byte++] = inverse_table[k];
+            	
+                index[k]++;
+                
                 number_unpacked++;
                 length = 1;
             }
@@ -926,6 +805,13 @@ public class DeltaMapper
                 src_byte++;
             }
         }
+        
+        /*
+        for(int i = 0; i < number_of_values; i++)
+        {
+        	System.out.println("Index " + i + " occurred " + index[i] + " times.");
+        }
+        */
         return(number_unpacked);
     }
     
@@ -1084,7 +970,7 @@ public class DeltaMapper
                 k++;
             }
         }    
-        
+       
         int number_of_bits = current_byte * 8;
         number_of_bits    += current_bit - 1;
         return(number_of_bits);

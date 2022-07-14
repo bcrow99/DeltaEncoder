@@ -622,7 +622,7 @@ public class StringTester
 		    //System.out.println();
 		    
 
-		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
+		    int number_of_bits  = DeltaMapper.packStrings(delta, random_lut, bit_strings);
 	
 		    System.out.println("Number of bits in original image is " + (xdim * ydim * 2));
 		    System.out.println("Number of bits in unary strings is  " + number_of_bits);
@@ -636,7 +636,7 @@ public class StringTester
 		    */
 		    
 		   
-		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
+		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, random_lut, delta);
 		  
 		    System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
