@@ -507,6 +507,50 @@ public class DeltaMapper
         return dst;
     }
     
+    public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
+    {
+        int[] dst = new int[xdim * ydim];
+    	
+        int k     = 0;
+        int value = init_value;
+        for(int i = 0; i < ydim; i++)
+        {
+            int delta     = src[k] - value;
+            value        += delta;
+            dst[k++]      = delta;
+            int current_value = value; 
+            for(int j = 1; j < xdim; j++)
+            {
+                delta          = src[k]  - current_value;
+                current_value += delta;
+                dst[k++]       = delta;
+            }
+        }
+        
+        return dst;
+    }
+
+    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+    	
+        int k     = 0;
+        int value = init_value;
+        for(int i = 0; i < ydim; i++)
+        {
+            value            += src[k];
+            int current_value = value;
+            dst[k++]          = current_value;
+            for(int j = 1; j < xdim; j++)
+            {
+                current_value += src[k];
+                dst[k++]       = current_value;
+            }
+        }
+        
+        return dst;
+    }
+    
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
