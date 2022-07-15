@@ -507,7 +507,6 @@ public class DeltaMapper
         return dst;
     }
     
-    
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
@@ -595,7 +594,6 @@ public class DeltaMapper
     
     public static int packStrings2(int src[], int table[], byte dst[])
     {
-
     	int size             = src.length;
     	
     	int number_of_values = table.length;
