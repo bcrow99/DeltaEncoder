@@ -138,11 +138,89 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static double[] getDifference(double src[], double src2[])
+	{
+		int length = src.length;
+		double [] difference = new double[length];
+		
+		for(int i = 0; i < length; i++)
+		{
+			difference[i] = src[i] - src2[i];
+		}
+		return(difference);
+	}
+	
+	public static int[] getDifference(int src[], int src2[])
+	{
+		int length = src.length;
+		int [] difference = new int[length];
+		
+		for(int i = 0; i < length; i++)
+		{
+			difference[i] = src[i] - src2[i];
+		}
+		return(difference);
+	}
+	
+	
+	public static double[] shrink4_error(double src[], int xdim, int ydim)
+	{
+		int _xdim        = xdim / 2;
+		int _ydim        = ydim / 2;
+		double [] shrink = shrink4(src, xdim, ydim);
+		double [] expand = expand4(shrink, _xdim, _ydim);
+		double [] error  = getDifference(src, expand);
+		
+		System.out.println("Got here 2.");
+		int k = 0;
+		int m = 0;
+		for(int i = 0; i < _ydim; i++)
+		{
+			int n = 0;
+			for(int j = 0; j < _xdim; j++)	
+			{
+				double w = src[m * xdim + n];
+				double x = src[m * xdim + n + 1];
+				double y = src[(m + 1) * xdim + n];
+				double z = src[(m + 1) * xdim + n + 1];
+				
+				double _w = error[m * xdim + n];
+				double _x = error[m * xdim + n + 1];
+				double _y = error[(m + 1) * xdim + n];
+				double _z = error[(m + 1) * xdim + n + 1];
+				
+				
+				//double _error     = _w + _x + _y + _z;
+				double _error     = _w;
+				double error_root = 0;
+				if(_error > 0)
+				    error_root = Math.sqrt(_error);
+				else
+				{
+					error_root = Math.sqrt(-_error);
+					error_root = -error_root;
+				}
+				shrink[k] = (w + x + y + z) / 4. + error_root;
+				if(shrink[k] < 0)
+					shrink[k] = 0;
+				else if(shrink[k] > 255)
+				    shrink[k] = 255;	
+			    n       += 2;
+			    expand = expand4(shrink, _xdim, _ydim);
+			    error = getDifference(src, expand);
+			    System.out.println("Got here 3.");
+			}
+			m += 2;
+		}
+		return(shrink);
+	}
+	
+	
 	public static double[] shrink4(double src[], int xdim, int ydim, double error[])
 	{
 		int _xdim = xdim / 2;
 		int _ydim = ydim / 2;
-		double [] dst = new double[_xdim * _ydim];
+		double [] shrink = shrink4(src, xdim, ydim);
 		
 		int k = 0;
 		int m = 0;
@@ -171,12 +249,18 @@ public class DeltaMapper
 					error_root = Math.sqrt(-_error);
 					error_root = -error_root;
 				}
-				dst[k++] = (w + x + y + z) / 4. + error_root;
+				shrink[k] = (w + x + y + z) / 4. + error_root;
+				if(shrink[k] < 0)
+					shrink[k] = 0;
+				else if(shrink[k] > 255)
+				    shrink[k] = 255;	
 			    n       += 2;
+			    double [] expand = expand4(shrink, _xdim, _ydim);
+			    error = getDifference(src, expand);
 			}
 			m += 2;
 		}
-		return(dst);
+		return(shrink);
 	}
 	
 
@@ -1014,7 +1098,8 @@ public class DeltaMapper
         }    
        
         int number_of_bits = current_byte * 8;
-        number_of_bits    += current_bit - 1;
+        if(current_bit != 0)
+            number_of_bits    += current_bit - 1;
         return(number_of_bits);
     }
 
