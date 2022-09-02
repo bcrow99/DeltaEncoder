@@ -281,24 +281,16 @@ public class QuantTester
 		
 		public void actionPerformed(ActionEvent event)
 		{
-		    int    size            = xdim * ydim;
-		    double factor          = Math.pow(2., (double)pixel_shift);
-		    double fraction        = 1. / factor;
+		    int    size     = xdim * ydim;
+		    double _factor  = Math.pow(2., (double)pixel_shift);
+		    int    factor   = (int)_factor;
+		    double fraction = 1. / _factor;
 		    
-		    System.out.println("Fraction is " + fraction);
-		    int    number_of_lists = (int)factor;
-		    
-		    
-		    ArrayList error_list = new ArrayList();
-		    int []    position   = new int[number_of_lists];
-		    for(int i = 0; i < number_of_lists; i++)
-		    {
-		    	position[i] = 0;
-		    	ArrayList list = new ArrayList();
-		    	error_list.add(list);
-		    }
+		    //System.out.println("Fraction is " + fraction);
 		    
 		    int [] error = new int[size];
+		    int [] root  = new int[size];
+		    
 		    int original_green_min = Integer.MAX_VALUE;
 		    int original_green_max = -Integer.MAX_VALUE;
 		    int shifted_green_min = Integer.MAX_VALUE;
@@ -316,44 +308,83 @@ public class QuantTester
                 //red[i]   >>= pixel_shift;
                 //green[i] >>= pixel_shift;
                 
-                error[i] = green[i] % number_of_lists;
-                int j    = green[i] / number_of_lists;
-                int k    = error[i];
-                
-                ArrayList list = (ArrayList) error_list.get(k);
-                list.add(j);
-                
+                error[i] = green[i] % factor;
+                root[i]  = green[i] / factor;
+             
                 //blue[i]  >>= pixel_shift; 
                 //red[i]   <<= pixel_shift;
                 //green[i] <<= pixel_shift;
                 //blue[i]  <<= pixel_shift;
-                
-               
 		    }
 		    
+		  
+		    
+            int init_value = root[0];
+		    
+		    int[] delta = DeltaMapper.getDeltasFromValues(root, xdim, ydim, init_value);
+		    
+		    
+		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+		    int       delta_min      = (int)histogram_list.get(0);
+		    int[]     histogram      = (int[])histogram_list.get(1);
+		    int       delta_range    = histogram.length;
+		    int       delta_max      = delta_min + delta_range - 1;
+		   
+		    
+		    System.out.println("The delta min is " + delta_min);
+		    System.out.println("The delta max is " + delta_max);
+		    System.out.println("The range is     " + delta_range);
+		    System.out.println();
+		    
+            /*
+		    System.out.println("Delta histogram:");
+		    for(int i = 0; i < histogram.length; i++)
+		    	System.out.println(i + " -> " + histogram[i]);
+		    System.out.println();
+		    */
+		    
+		    int delta_random_lut[] = DeltaMapper.getRandomTable(histogram);
+		    
+		    for(int i = 0; i < delta.length; i++)
+		    	delta[i] -= delta_min;
+		    
+		    byte [] bit_strings = new byte[25 * xdim * ydim];
+		   
+		    int delta_number_of_bits  = DeltaMapper.packStrings2(delta, delta_random_lut, bit_strings);
+		    
+		    //System.out.println("Number of pixel bits is " + (xdim * ydim * 8));
+		    //System.out.println("Number of packed delta root bits is " + delta_number_of_bits);
+		    System.out.println("The ratio of packed delta root bits to pixel bits is " + (double)(delta_number_of_bits / (double)(xdim * ydim * 8)));
+		   
+		    for(int i = 0; i < delta.length; i++)
+		    	delta[i] += delta_min;
+		    
+		    root = DeltaMapper.getValuesFromDeltas(delta, xdim, ydim, init_value);
+		    
+		    histogram_list            = DeltaMapper.getHistogram(error);
+		    int       error_min       = (int)histogram_list.get(0);
+		    int[]     error_histogram = (int[])histogram_list.get(1);
+		    int       error_range     = histogram.length;
+		    int       error_max       = error_min + error_range - 1;
+		   
+		    
+		    for(int i = 0; i < error.length; i++)
+		    	error[i] -= error_min;
+		    int error_random_lut[]    = DeltaMapper.getRandomTable(error_histogram);
+		    int error_number_of_bits  = DeltaMapper.packStrings2(error, error_random_lut, bit_strings);
+		    for(int i = 0; i < error.length; i++)
+		    	error[i] += error_min;
+		    System.out.println("The ratio of packed error bits to pixel bits is " + ((double)error_number_of_bits /(double)(xdim * ydim * 8)));
+		    System.out.println();
 		    
 		    for(int i = 0; i < size; i++)
             {
-                int j          = error[i];
-                ArrayList list = (ArrayList) error_list.get(j);
-                int k          = (int) list.get(position[j]);
-                position[j]++;
-                
-                int current_error = j;
-                
-                
-                int value         = k * number_of_lists;
-                if(value == 248)
-                {
-                	System.out.println("Current error is " + current_error);
-                	value += current_error;
-                	System.out.println("Value is " + value);
-                	System.out.println();
-                }
-                else
-                    value += current_error;
-                
-                
+                int value      = root[i] * factor;
+                double d_error = error[i] * fraction;
+                d_error       *= factor;
+                int _error     = (int)d_error;
+                value         += _error;
+               
                 green[i]             = value;
                 
                 
@@ -362,7 +393,6 @@ public class QuantTester
                 if(green[i] < shifted_green_min)
                 	shifted_green_min = green[i];
             }
-		    
 		    
 		    
 		    System.out.println("Orginal green min is " + original_green_min);

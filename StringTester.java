@@ -52,6 +52,8 @@ public class StringTester
 			ydim = original_image.getHeight();
 			temp = new byte[5 * xdim * ydim];
 			//System.out.println("Xdim is " + xdim + " and ydim is " + ydim);
+			System.out.println("Number of pixel bits is " + (xdim * ydim * 8));
+			System.out.println();
 			
 			// Only interested in 3 channel RGB for now.
 			
@@ -291,10 +293,10 @@ public class StringTester
                 blue[i]  =  original_pixel[i] & 0xff; 
 		    }
 		    
-		    //System.out.println("Got here.");
+		    System.out.println("Pixel shift is " + pixel_shift);
 		    for(int i = 0; i < size; i++)
 		    { 
-		    	//red[i] >>= pixel_shift;
+		    	red[i] >>= pixel_shift;
 	    	    red_double[i] = red[i];
 	    	    
 	    	    
@@ -302,7 +304,7 @@ public class StringTester
 		    	green_double[i] = green[i];
 		    	
 		    	
-		    	//blue[i] >>= pixel_shift;
+		    	blue[i] >>= pixel_shift;
 		    	blue_double[i] = blue[i];
 		    }
 		    
@@ -354,68 +356,31 @@ public class StringTester
 		    }
 		    
 		    int pixel_range = shrunk_pixel_max - shrunk_pixel_min + 1;
-		    System.out.println("The pixel min is " + shrunk_pixel_min);
-		    System.out.println("The pixel max is " + shrunk_pixel_max);
-		    System.out.println("The pixel range is " + pixel_range);
+		    
+		    
+		    System.out.println("The shrunk pixel min is " + shrunk_pixel_min);
+		    System.out.println("The shrunk pixel max is " + shrunk_pixel_max);
+		    System.out.println("The shrunk pixel range is " + pixel_range);
 		    System.out.println();
 		    
 		    
-		    int histogram[] = new int[pixel_range];
-		    for(int i = 0; i < pixel_range; i++)
-		    	histogram[i] = 0;
-		    for(int i = 0; i < shrunk_pixel.length; i++)
-		    {
-		    	int j = pixel[i] - shrunk_pixel_min;
-		    	histogram[j]++;
-		    }
-		    
-		    ArrayList key_list = new ArrayList();
-		    Hashtable rank_table   = new Hashtable();
-		    for(int i = 0; i < pixel_range; i++)
-		    {
-		    	double key = histogram[i];
-		    	while(rank_table.containsKey(key))
-		    	{
-		    		key +=.001;
-		    	}
-		    	rank_table.put(key, i);
-		    	key_list.add(key);
-		    }
-		    Collections.sort(key_list);
-		   
-		    int pixel_random_lut[] = new int[pixel_range];
-		    int k     = -1;
-		    for(int i = pixel_range - 1; i >= 0; i--)
-		    {
-		    	double key = (double)key_list.get(i);
-		    	int    j   = (int)rank_table.get(key);
-		    	pixel_random_lut[j]   = ++k;
-		    }
+		    int histogram[] = DeltaMapper.getHistogram(shrunk_pixel, pixel_range, shrunk_pixel_min);
 		    
 		    
 		    
+		    System.out.println("Pixel histogram:");
+		    for(int i = 0; i < histogram.length; i++)
+		    	System.out.println(i + " -> " + histogram[i]);
+		    System.out.println();
 		    
 		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
+		    int pixel_random_lut[] = DeltaMapper.getRandomTable(histogram);
 		    
 		    int init_value = shrunk_pixel[0];
 		    
 		    int[] delta = DeltaMapper.getDeltasFromValues(shrunk_pixel, xdim / 2, ydim / 2, init_value);
 		    
+		    /*
 		    int delta_min = delta[0];
 		    int delta_max = delta[0];
 		   
@@ -427,77 +392,33 @@ public class StringTester
 		    		delta_min = delta[i];
 		    }
 		    int delta_range = delta_max - delta_min + 1;
+		   
 		    
-		    System.out.println("The delta min is " + delta_min);
-		    System.out.println("The delta max is " + delta_max);
-		    System.out.println("The range is     " + delta_range);
-		    System.out.println();
 		    
-		    histogram = new int[delta_range];
-		    for(int i = 0; i < delta_range; i++)
-		    	histogram[i] = 0;
-		    for(int i = 0; i < delta.length; i++)
-		    {
-		    	int j = delta[i] - delta_min;
-		    	histogram[j]++;
-		    }
-		    
-		    /*
-		    for(int i = 0; i < delta_range; i++)
-		    	System.out.println(i + " -> " + histogram[i]);
+		    histogram = DeltaMapper.getHistogram(delta, delta_range, delta_min);
 		    */
 		    
-		    key_list = new ArrayList();
-		    rank_table   = new Hashtable();
-		    for(int i = 0; i < delta_range; i++)
-		    {
-		    	double key = histogram[i];
-		    	while(rank_table.containsKey(key))
-		    	{
-		    		key +=.001;
-		    	}
-		    	rank_table.put(key, i);
-		    	key_list.add(key);
-		    }
-		    Collections.sort(key_list);
-		    //System.out.println("Sorted keys:");
-		    int delta_random_lut[] = new int[delta_range];
-		    k     = -1;
-		    for(int i = delta_range - 1; i >= 0; i--)
-		    {
-		    	double key = (double)key_list.get(i);
-		    	int    j   = (int)rank_table.get(key);
-		    	delta_random_lut[j]   = ++k;
-		    	//System.out.println("Key = " + key + ", value = " + j);
-		    }
+		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+		    
+		    int delta_min = (int) histogram_list.get(0);
+		    histogram = (int[]) histogram_list.get(1);
+		    
+		    
+		    int delta_random_lut[] = DeltaMapper.getRandomTable(histogram);
 		
-		    /*
-		    System.out.println("Random table:");
-		    for(int i = 0; i <delta_range; i++)
-		    {
-		    	System.out.println(i + "-> " + delta_random_lut[i]);
-		    }
-		    System.out.println();
-		    */
 		    
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
 		    
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
 		    
 		    int pixel_number_of_bits  = DeltaMapper.packStrings2(shrunk_pixel, pixel_random_lut, bit_strings);
 		    int delta_number_of_bits  = DeltaMapper.packStrings2(delta, delta_random_lut, bit_strings);
+		    
+		    System.out.println("Number of packed shrunken pixel bits is " + pixel_number_of_bits);
+		    System.out.println("Number of packed shrunken delta bits is " + delta_number_of_bits);
 	
+		    /*
 		    byte [] compressed_bit_strings = new byte[5 * xdim * ydim];
 		    byte [] compressed_bit_strings2 = new byte[5 * xdim * ydim];
 		    byte [] compressed_bit_strings3 = new byte[5 * xdim * ydim];
@@ -515,52 +436,31 @@ public class StringTester
 		    System.out.println("Number of compressed bits on third pass is  " + compressed_number_of_bits3);
 		    System.out.println("Number of decompressed bits is              " + decompressed_number_of_bits);
 		    System.out.println();
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    //  Regression testing.
-		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, delta_random_lut, delta);
-		  
-		    //System.out.println("Number of ints unpacked is " + number_of_ints);
+		    */
 		 
+		    
+		    
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, delta_random_lut, delta);
 		    for(int i = 0; i < size / 4; i++)
 		    	delta[i] += delta_min;
 		   
             int[] new_shrunk_pixel = DeltaMapper.getValuesFromDeltas(delta, xdim / 2, ydim / 2, init_value);
-		    
-		    int new_shrunk_pixel_min = new_shrunk_pixel[0];
-		    int new_shrunk_pixel_max = new_shrunk_pixel[0];
-		   
-		    for(int i = 0; i < new_shrunk_pixel.length; i++)
-		    {
-		    	if(new_shrunk_pixel[i] > new_shrunk_pixel_max)
-		    		new_shrunk_pixel_max = new_shrunk_pixel[i];
-		    	if(new_shrunk_pixel[i] < new_shrunk_pixel_min)
-		    		new_shrunk_pixel_min = new_shrunk_pixel[i];
-		    }
-		    
-		    int range_of_pixel_values = new_shrunk_pixel_max - new_shrunk_pixel_min + 1;
-		    
-		    
-		    System.out.println("The pixel min is " + new_shrunk_pixel_min);
-		    System.out.println("The pixel max is " + new_shrunk_pixel_max);
-		    System.out.println("The range is     " + range_of_pixel_values);
-		    System.out.println();
-		    
-		    /*
-		    System.out.println("The low value in the processed green channel is " + green_min);
-		    System.out.println("The high value in the processed green channel is " + green_max);
+            for(int i = 0; i < size / 4; i++)
+            {
+            	new_shrunk_pixel[i] += shrunk_pixel_min;
+            	blue_shrink[i] = green_shrink[i] + new_shrunk_pixel[i];
+            }
+            
+            blue_double = DeltaMapper.expand4(blue_shrink, xdim / 2, ydim / 2);
+            
+            for(int i = 0; i < blue_double.length; i++)
+            {
+            	//blue[i]   = (int)(blue_double[i] + .5);
+            	blue[i] <<= pixel_shift;
+            	red[i]  <<= pixel_shift;
+            	green[i] <<= pixel_shift;
+            }
+          
 		    for(int i = 0; i < size; i++)
             {
                 pixel[i] = 0;
@@ -578,7 +478,7 @@ public class StringTester
 		    	}
 		    }
 		    
-		    */
+		    
 		    image_canvas.repaint();
 		    //System.out.println("Processed image.");
 		    System.out.println();

@@ -97,7 +97,6 @@ public class TableTester
                     blue[i]  = pixel[i] & 0xff; 
 			    }
 			    
-		
 			    for(int i = 0; i < size; i++)
                 {
                     pixel[i] = 0;
@@ -107,7 +106,6 @@ public class TableTester
                     pixel[i] |= blue[i];
                 }
                
-			   
 			    JFrame frame = new JFrame("String Tester");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
@@ -362,6 +360,13 @@ public class TableTester
 		    
 		    int[] delta = DeltaMapper.getDeltasFromValues(shrunk_pixel, xdim / 2, ydim / 2, init_value);
 		    
+		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+		    int       delta_min      = (int)histogram_list.get(0);
+		    int[]     histogram      = (int[])histogram_list.get(1);
+		    int       delta_range    = histogram.length;
+		    int       delta_max      = delta_min + delta_range - 1;
+		    
+		    /*
 		    int delta_min = delta[0];
 		    int delta_max = delta[0];
 		   
@@ -373,49 +378,19 @@ public class TableTester
 		    		delta_min = delta[i];
 		    }
 		    int range_of_delta_values = delta_max - delta_min + 1;
+		    */
 		    
 		    System.out.println("The delta min is " + delta_min);
 		    System.out.println("The delta max is " + delta_max);
-		    System.out.println("The range is     " + range_of_delta_values);
+		    System.out.println("The range is     " + delta_range);
 		    System.out.println();
 		    
-		    int histogram[] = new int[range_of_delta_values];
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    	histogram[i] = 0;
-		    for(int i = 0; i < delta.length; i++)
-		    {
-		    	int j = delta[i] - delta_min;
-		    	histogram[j]++;
-		    }
 		    
-		    /*
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    	System.out.println(i + " -> " + histogram[i]);
-		    */
+		    int random_lut[]    = DeltaMapper.getRandomTable(histogram);
+		    int symmetric_lut[] = DeltaMapper.getSymmetricTable(histogram.length);
+		    int modal_lut[]     = DeltaMapper.getModalTable(histogram);
 		    
-		    ArrayList key_list = new ArrayList();
-		    Hashtable rank_table   = new Hashtable();
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    {
-		    	double key = histogram[i];
-		    	while(rank_table.containsKey(key))
-		    	{
-		    		key +=.001;
-		    	}
-		    	rank_table.put(key, i);
-		    	key_list.add(key);
-		    }
-		    Collections.sort(key_list);
-		    //System.out.println("Sorted keys:");
-		    int random_lut[] = new int[range_of_delta_values];
-		    int k     = -1;
-		    for(int i = range_of_delta_values - 1; i >= 0; i--)
-		    {
-		    	double key = (double)key_list.get(i);
-		    	int    j   = (int)rank_table.get(key);
-		    	random_lut[j]   = ++k;
-		    	//System.out.println("Key = " + key + ", value = " + j);
-		    }
+		 
 		
 		    /*
 		    System.out.println("Random table:");
@@ -426,39 +401,7 @@ public class TableTester
 		    System.out.println();
 		    */
 		    
-		    /*
-		    int [] symmetric_lut = new int[range_of_delta_values];
-		    int i = 0;
-	        int j = 0;
-	        
-	        if(range_of_delta_values % 2 == 1)
-	            j = range_of_delta_values / 2;
-	        else
-	        	j = range_of_delta_values / 2 - 1;
-	        
-	        symmetric_lut[j--] = i;
-	        i += 2;
-	        while(j >= 0)
-	        {
-	        	symmetric_lut[j--] = i;
-	        	i += 2;
-	        }
-	        
-	        if(range_of_delta_values % 2 == 1)
-	            j = range_of_delta_values / 2 + 1;
-	        else
-	        	j = range_of_delta_values / 2;
-	        
-	        i = 1;
-	        symmetric_lut[j++] = i;
-	        i += 2;
-	        while(j < range_of_delta_values)
-	        {
-	        	symmetric_lut[j++] = i;
-	        	i += 2;
-	        }
-	        */
-	       
+		    
 		    /*
 		    System.out.println("Symmetric table:");
 		    for(i = 0; i < range_of_delta_values; i++)
@@ -467,65 +410,7 @@ public class TableTester
 		    }
 		    System.out.println();
 		    */
-	        
-	        /*
-		    double modal_key   = (double)key_list.get(range_of_delta_values - 1);
-		    int    modal_value = (int)rank_table.get(modal_key);
-		    int modal_lut[]    = new int[range_of_delta_values];
-		  
 		    
-		    int lower_value = modal_value;
-		    int upper_value = modal_value + 1;
-		    
-		    int index = 0;
-		    modal_lut[lower_value] = index++;
-		    if(upper_value < range_of_delta_values)
-		    	modal_lut[upper_value] = index++;
-		    else
-		    {
-		    	lower_value--;
-		    	modal_lut[lower_value] = index++;
-		    }
-		    
-		    for(i = 2; i < range_of_delta_values; i += 2)
-		    {
-		        if(lower_value > 0)	
-		        {
-		        	lower_value--;
-		        	modal_lut[lower_value] = index++;
-		        	upper_value++;
-		        	if(upper_value < range_of_delta_values)
-		        		modal_lut[upper_value] = index++;
-		        	else
-		        	{
-		        		if(lower_value > 0)
-		        		{
-		        		    lower_value--;
-		        		    modal_lut[lower_value] = index++;   
-		        		}
-		        	}
-		        }
-		        else
-		        {
-		        	upper_value++;
-		        	modal_lut[upper_value] = index++;
-		        	if(upper_value < range_of_delta_values - 1)
-		        	{
-		        		upper_value++;
-		                modal_lut[upper_value] = index++;
-		        	}
-		        }
-		    }
-		    
-		    if(range_of_delta_values % 2 == 1)
-		    {
-		    	if(lower_value > 0)
-		    		modal_lut[0] = 0;	
-		    	else
-		    		modal_lut[range_of_delta_values - 1] = range_of_delta_values - 1;
-		    }
-		    */
-	        
 		    /*
 		    System.out.println("Modal table:");
 		    for(int i = 0; i < number_of_different_delta_values; i++)
@@ -534,29 +419,15 @@ public class TableTester
 		    }
 		    System.out.println();
 		    */
-		    
-			//System.out.println("The number of different values in the shifted shrunken green delta channel is " + number_of_different_values);
-		    //System.out.println("The low value  is " + delta_min);
-		    //System.out.println("The high value is " + delta_max);
-		    
-		    
+
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    byte [] bit_strings = new byte[5 * xdim * ydim];
-		    
-		   
-		    
-		    
-		    //byte mask = (byte)0b11111110;
-		    //int mask = 0b11111110;
-		    
-		    //System.out.println("Mask = " + mask);
-		
-		    //System.out.println();
-		    
+		 
           
-		    int number_of_bits  = DeltaMapper.packStrings(delta, random_lut, bit_strings);
-	
+		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
+		    //int number_of_bits  = DeltaMapper.packStrings2(delta, symmetric_lut, bit_strings);
+		    //int number_of_bits  = DeltaMapper.packStrings2(delta, modal_lut, bit_strings);
 		    byte [] compressed_bit_strings = new byte[5 * xdim * ydim];
 		    byte [] compressed_bit_strings2 = new byte[5 * xdim * ydim];
 		    byte [] compressed_bit_strings3 = new byte[5 * xdim * ydim];
@@ -581,7 +452,7 @@ public class TableTester
 		    
 		    
 		    //  Regression testing.
-		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, random_lut, delta);
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
 		  
 		    //System.out.println("Number of ints unpacked is " + number_of_ints);
 		 

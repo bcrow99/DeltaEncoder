@@ -138,6 +138,31 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static double getTotal(double src[])
+	{
+		int length = src.length;
+		double total = 0;
+		
+		for(int i = 0; i < length; i++)
+		{
+			total += src[i];
+		}
+		return(total);
+	}
+	
+	public static double getAbsoluteTotal(double src[])
+	{
+		int length = src.length;
+		double total = 0;
+		
+		for(int i = 0; i < length; i++)
+		{
+			total += Math.abs(src[i]);
+		}
+		return(total);
+	}
+	
+	
 	public static double[] getDifference(double src[], double src2[])
 	{
 		int length = src.length;
@@ -162,6 +187,180 @@ public class DeltaMapper
 		return(difference);
 	}
 	
+	public static int[] getHistogram(int value[], int value_range, int value_min)
+	{
+	    int [] histogram = new int[value_range];
+	    for(int i = 0; i < value_range; i++)
+	    	histogram[i] = 0;
+	    for(int i = 0; i < value.length; i++)
+	    {
+	    	int j = value[i] - value_min;
+	    	histogram[j]++;
+	    }
+	    return histogram;
+	}
+	
+	public static ArrayList getHistogram(int value[])
+	{  
+	    int value_min = value[0];
+	    int value_max = value[0];
+	    for(int i = 0; i < value.length; i++)
+	    {
+	    	if(value[i] > value_max)
+	    		value_max = value[i];
+	    	if(value[i] < value_min)
+	    		value_min = value[i];
+	    }
+	    int value_range = value_max - value_min + 1;
+	    int [] histogram = new int[value_range];
+	    for(int i = 0; i < value_range; i++)
+	    	histogram[i] = 0;
+	    for(int i = 0; i < value.length; i++)
+	    {
+	    	int j = value[i] - value_min;
+	    	histogram[j]++;
+	    }
+	    
+	    ArrayList histogram_list = new ArrayList();
+	    histogram_list.add(value_min);
+	    histogram_list.add(histogram);
+	    return histogram_list;
+	}
+	
+	public static int[] getRandomTable(int histogram[])
+	{
+		ArrayList key_list     = new ArrayList();
+	    Hashtable rank_table   = new Hashtable();
+	    for(int i = 0; i < histogram.length; i++)
+	    {
+	    	double key = histogram[i];
+	    	while(rank_table.containsKey(key))
+	    	{
+	    		key +=.001;
+	    	}
+	    	rank_table.put(key, i);
+	    	key_list.add(key);
+	    }
+	    Collections.sort(key_list);
+	    //System.out.println("Sorted keys:");
+	    int random_lut[] = new int[histogram.length];
+	    int k     = -1;
+	    for(int i = histogram.length - 1; i >= 0; i--)
+	    {
+	    	double key = (double)key_list.get(i);
+	    	int    j   = (int)rank_table.get(key);
+	    	random_lut[j]   = ++k;
+	    	//System.out.println("Key = " + key + ", value = " + j);
+	    }	
+	    return random_lut;
+	}
+	
+	public static int[] getModalTable(int histogram[])
+	{
+		int max_value = histogram[0];
+		int mode      = 0;
+		for(int i = 1; i < histogram.length; i++)
+		{
+			if(histogram[i] > max_value)
+			{
+				max_value = histogram[i];
+				mode      = i;
+			}
+		}
+		
+		int[] modal_lut = new int[histogram.length];
+		
+		
+		int lower_value = mode;
+	    int upper_value = mode + 1;
+	    
+	    int index = 0;
+	    modal_lut[lower_value] = index++;
+	    if(upper_value < histogram.length)
+	    	modal_lut[upper_value] = index++;
+	    else
+	    {
+	    	lower_value--;
+	    	modal_lut[lower_value] = index++;
+	    }
+	    
+	    for(int i = 2; i < histogram.length; i += 2)
+	    {
+	        if(lower_value > 0)	
+	        {
+	        	lower_value--;
+	        	modal_lut[lower_value] = index++;
+	        	upper_value++;
+	        	if(upper_value < histogram.length)
+	        		modal_lut[upper_value] = index++;
+	        	else
+	        	{
+	        		if(lower_value > 0)
+	        		{
+	        		    lower_value--;
+	        		    modal_lut[lower_value] = index++;   
+	        		}
+	        	}
+	        }
+	        else
+	        {
+	        	upper_value++;
+	        	modal_lut[upper_value] = index++;
+	        	if(upper_value < histogram.length - 1)
+	        	{
+	        		upper_value++;
+	                modal_lut[upper_value] = index++;
+	        	}
+	        }
+	    }
+	    
+	    if(histogram.length % 2 == 1)
+	    {
+	    	if(lower_value > 0)
+	    		modal_lut[0] = 0;	
+	    	else
+	    		modal_lut[histogram.length - 1] = histogram.length - 1;
+	    }
+		return modal_lut;
+	}
+	
+	
+	
+	public static int[] getSymmetricTable(int size)
+	{
+		int[] symmetric_lut = new int[size];
+		
+		int i = 0;
+	    int j = 0;
+	        
+	    if(size % 2 == 1)
+	        j = size / 2;
+	    else
+	        j = size / 2 - 1;
+	        
+	    symmetric_lut[j--] = i;
+	    i += 2;
+	    while(j >= 0)
+	    {
+	        symmetric_lut[j--] = i;
+	        i += 2;
+	    }
+	        
+	    if(size % 2 == 1)
+	        j = size / 2 + 1;
+	    else
+	        j = size / 2;
+	        
+	    i = 1;
+	    symmetric_lut[j++] = i;
+	    i += 2;
+	    while(j < size)
+	    {
+	        symmetric_lut[j++] = i;
+	        i += 2;
+	    }
+	    return symmetric_lut;
+	}
 	
 	public static double[] shrink4_error(double src[], int xdim, int ydim)
 	{
