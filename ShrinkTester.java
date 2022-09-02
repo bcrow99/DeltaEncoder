@@ -301,26 +301,50 @@ public class ShrinkTester
 		    System.out.println("Green max is " + original_green_max);
 		    System.out.println();
 		    
+		    
 		    for(int i = 0; i < size; i++)
 		    { 
 		    	//red[i] >>= pixel_shift;
 	    	    red_double[i] = red[i];
 	    	    
-	    	    
+	    	    double original_green = green[i];
 		    	green[i] >>= pixel_shift;
-		    	green_double[i] = green[i];
+		    	green[i] <<= pixel_shift;
+		    	double shifted_green  = green[i]; 
+		    	green[i] >>= pixel_shift;
 		    	
+		    	
+		    	
+		    	green_double[i] = green[i];
+		    	if(pixel_shift > 0)
+		    	{
+		    		double delta = original_green - shifted_green;
+			    	double denominator = Math.pow(2.,pixel_shift);
+			    	double error_fraction = delta / denominator;
+			    	//error_fraction /= pixel_shift;
+			    	green_double[i] += error_fraction;
+		    	}
 		    	
 		    	//blue[i] >>= pixel_shift;
 		    	blue_double[i] = blue[i];
 		    }
 		    
+		    
 		    red_shrink   = DeltaMapper.shrink4(red_double, xdim, ydim);
 		    blue_shrink  = DeltaMapper.shrink4(blue_double, xdim, ydim);
+		    green_shrink = DeltaMapper.shrink4(green_double, xdim, ydim);
+		    green_expand = DeltaMapper.expand4(green_shrink, xdim / 2, ydim / 2);
+		    
+		    double [] green_difference = DeltaMapper.getDifference(green_double, green_expand);
+		    double total_error = DeltaMapper.getAbsoluteTotal(green_difference);
+		    double total_biased_error = DeltaMapper.getTotal(green_difference);
+		    
+		    System.out.println("Absolute error shrinking is " + total_error);
+		    System.out.println("Biased error shrinking is " + total_biased_error);
 		    
 		    
-		    green_shrink = DeltaMapper.shrink4_error(green_double, xdim, ydim);
-		    //green_shrink = DeltaMapper.shrink4(green_double, xdim, ydim);
+		    //green_shrink = DeltaMapper.shrink4_error(green_double, xdim, ydim);
+		    
 		    double green_shrink_min = Double.MAX_VALUE;
 		    double green_shrink_max = -Double.MAX_VALUE;
 		    for(int i = 0; i < green_shrink.length; i++)
@@ -340,7 +364,7 @@ public class ShrinkTester
 		    
 		    for(int i = 0; i < size / 4; i++)
 		    {
-		    	shrunk_pixel[i] = (int) (green_shrink[i] + .5);
+		    	shrunk_pixel[i] = (int) (green_shrink[i]);
 		    	if(shrunk_pixel[i] > shrunk_pixel_max)
 		        	shrunk_pixel_max = shrunk_pixel[i];
 		        if(shrunk_pixel[i] < shrunk_pixel_min)
@@ -356,62 +380,14 @@ public class ShrinkTester
 		    
 		    int[] delta = DeltaMapper.getDeltasFromValues(shrunk_pixel, xdim / 2, ydim / 2, init_value);
 		    
-		    int delta_min = delta[0];
-		    int delta_max = delta[0];
-		   
-		    for(int i = 0; i < size / 4; i++)
-		    {
-		    	if(delta[i] > delta_max)
-		    		delta_max = delta[i];
-		    	if(delta[i] < delta_min)
-		    		delta_min = delta[i];
-		    }
-		    int range_of_delta_values = delta_max - delta_min + 1;
+		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+		    int       delta_min      = (int)histogram_list.get(0);
+		    int[]     histogram      = (int[])histogram_list.get(1);
+		    int       delta_range    = histogram.length;
+		    int       delta_max      = delta_min + delta_range - 1;
+		    int       random_lut[]   = DeltaMapper.getRandomTable(histogram);
 		    
-		    /*
-		    System.out.println("The delta min is " + delta_min);
-		    System.out.println("The delta max is " + delta_max);
-		    System.out.println("The range is     " + range_of_delta_values);
-		    System.out.println();
-		    */
 		    
-		    int histogram[] = new int[range_of_delta_values];
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    	histogram[i] = 0;
-		    for(int i = 0; i < delta.length; i++)
-		    {
-		    	int j = delta[i] - delta_min;
-		    	histogram[j]++;
-		    }
-		    
-		    /*
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    	System.out.println(i + " -> " + histogram[i]);
-		    */
-		    
-		    ArrayList key_list = new ArrayList();
-		    Hashtable rank_table   = new Hashtable();
-		    for(int i = 0; i < range_of_delta_values; i++)
-		    {
-		    	double key = histogram[i];
-		    	while(rank_table.containsKey(key))
-		    	{
-		    		key +=.001;
-		    	}
-		    	rank_table.put(key, i);
-		    	key_list.add(key);
-		    }
-		    Collections.sort(key_list);
-		    //System.out.println("Sorted keys:");
-		    int random_lut[] = new int[range_of_delta_values];
-		    int k     = -1;
-		    for(int i = range_of_delta_values - 1; i >= 0; i--)
-		    {
-		    	double key = (double)key_list.get(i);
-		    	int    j   = (int)rank_table.get(key);
-		    	random_lut[j]   = ++k;
-		    	//System.out.println("Key = " + key + ", value = " + j);
-		    }
 		
 		    /*
 		    System.out.println("Random table:");
@@ -430,16 +406,10 @@ public class ShrinkTester
 		   
 		   
           
-		    int number_of_bits  = DeltaMapper.packStrings(delta, random_lut, bit_strings);
+		    int number_of_bits  = DeltaMapper.packStrings2(delta, random_lut, bit_strings);
 	
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    int number_of_ints = DeltaMapper.unpackStrings(bit_strings, random_lut, delta);
+		   
+		    int number_of_ints = DeltaMapper.unpackStrings2(bit_strings, random_lut, delta);
 		  
 		    //System.out.println("Number of ints unpacked is " + number_of_ints);
 		 
@@ -477,6 +447,7 @@ public class ShrinkTester
 		    int final_green_min = Integer.MAX_VALUE;
 		    int final_green_max = -Integer.MAX_VALUE;
 		    
+		    
 		    for(int i = 0; i < green_double.length; i++)
 		    {
 		    	green[i] = (int)(green_double[i] + .5);
@@ -486,7 +457,7 @@ public class ShrinkTester
                 if(green[i] < final_green_min)
                 	final_green_min = green[i];
 		    }
-		  
+		    
 		    System.out.println("Green min after processing is " + final_green_min);
 		    System.out.println("Green max after processing is " + final_green_max);
 		    System.out.println();
