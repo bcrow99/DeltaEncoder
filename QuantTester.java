@@ -18,10 +18,16 @@ public class QuantTester
 	JDialog       shift_dialog;
 	JTextField    shift_value;
 	ImageCanvas   image_canvas;
-	int           pixel_shift = 3;
+	
 	int           xdim, ydim;
-	byte[]        temp;
-	double        zero_ratio;
+	String        filename;
+	
+	byte[]        root_bit_strings;
+	byte[]        error_bit_strings;
+	int           root_length  = 0;
+	int           error_length = 0;
+	int           pixel_shift  = 3;
+	
 	
 	public static void main(String[] args)
 	{
@@ -35,29 +41,28 @@ public class QuantTester
 		QuantTester processor = new QuantTester(prefix + filename);
 	}
 
-	public QuantTester(String filename)
+	public QuantTester(String _filename)
 	{
+		filename = _filename;
 		try
 		{
-			File file = new File(filename);
-			original_image = ImageIO.read(file);
-			int raster_type = original_image.getType();
-			//System.out.println("The raster type is " + raster_type);
+			File file              = new File(filename);
+			original_image         = ImageIO.read(file);
+			int raster_type        = original_image.getType();
 			ColorModel color_model = original_image.getColorModel();
 			int number_of_channels = color_model.getNumColorComponents();
-			//System.out.println("The number of channels is " + number_of_channels);
-			int number_of_bits = color_model.getPixelSize();
-			//System.out.println("The number of bits per pixel is " + number_of_bits);
-			xdim = original_image.getWidth();
-			ydim = original_image.getHeight();
-			temp = new byte[5 * xdim * ydim];
-			//System.out.println("Xdim is " + xdim + " and ydim is " + ydim);
+			int number_of_bits     = color_model.getPixelSize();
+			xdim                   = original_image.getWidth();
+			ydim                   = original_image.getHeight();
+			root_bit_strings       = new byte[xdim * ydim * 25];
+			error_bit_strings      = new byte[xdim * ydim * 25];
 			
-			// Only interested in 3 channel RGB for now.
+			System.out.println("Size of image in bytes is " + (xdim * ydim));
+			System.out.println();
 			
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
-				int[]          pixel = new int[xdim * ydim];
+				int[]        pixel         = new int[xdim * ydim];
 				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, pixel, 0, xdim);
 		        try
 		        {
@@ -88,7 +93,6 @@ public class QuantTester
 			    int[]          red     = new int[xdim * ydim];
 			    int[]          green   = new int[xdim * ydim];
 			    int[]          blue    = new int[xdim * ydim];
-			    
 			    int            size    = xdim * ydim;
 			    for(int i = 0; i < size; i++)
 			    {
@@ -98,19 +102,7 @@ public class QuantTester
 			    }
 			    
 		
-			    /*
-			    for(int i = 0; i < size; i++)
-                {
-                    pixel[i] = 0;
-                    pixel[i] |= 255 << 24;
-                    pixel[i] |= red[i] << 16;
-                    pixel[i] |= green[i] << 8;
-                    pixel[i] |= blue[i];
-                }
-                */
-               
-			   
-			    JFrame frame = new JFrame("Shrink Tester");
+			    JFrame frame = new JFrame("Quantize Tester");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
 			        public void windowClosing(WindowEvent event)
@@ -128,16 +120,20 @@ public class QuantTester
 
 				JMenu     file_menu  = new JMenu("File");
 				
-				apply_item           = new JMenuItem("Apply");
-				ApplyHandler apply_handler        = new ApplyHandler();
+				apply_item                 = new JMenuItem("Apply");
+				ApplyHandler apply_handler = new ApplyHandler();
 				apply_item.addActionListener(apply_handler);
-				
-				JMenuItem reload_item = new JMenuItem("Reload");
-				ReloadHandler reload_handler        = new ReloadHandler();
-				reload_item.addActionListener(reload_handler);
-				
 				file_menu.add(apply_item);
+				
+				JMenuItem reload_item        = new JMenuItem("Reload");
+				ReloadHandler reload_handler = new ReloadHandler();
+				reload_item.addActionListener(reload_handler);
 				file_menu.add(reload_item);
+				
+				JMenuItem save_item        = new JMenuItem("Save");
+				SaveHandler save_handler = new SaveHandler();
+				save_item.addActionListener(save_handler);
+				file_menu.add(save_item);
 				
 				JMenu settings_menu = new JMenu("Settings");
 				
@@ -254,15 +250,12 @@ public class QuantTester
 		    green_double   = new double[xdim * ydim];
 		    blue_double   = new double[xdim * ydim];
 		    
-		    
 		    red_error = new double[xdim * ydim];
 		    green_error = new double[xdim * ydim];
 		    blue_error = new double[xdim * ydim];
 		    
 		    red_green = new double[xdim * ydim / 4];
 		    blue_green = new double[xdim * ydim / 4];
-		    
-		    
 		    
 			PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, original_pixel, 0, xdim);
 	        try
@@ -310,14 +303,8 @@ public class QuantTester
                 
                 error[i] = green[i] % factor;
                 root[i]  = green[i] / factor;
-             
-                //blue[i]  >>= pixel_shift; 
-                //red[i]   <<= pixel_shift;
-                //green[i] <<= pixel_shift;
-                //blue[i]  <<= pixel_shift;
+            
 		    }
-		    
-		  
 		    
             int init_value = root[0];
 		    
@@ -347,14 +334,13 @@ public class QuantTester
 		    
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] -= delta_min;
-		    
-		    byte [] bit_strings = new byte[25 * xdim * ydim];
 		   
-		    int delta_number_of_bits  = DeltaMapper.packStrings2(delta, delta_random_lut, bit_strings);
+		    root_length  = DeltaMapper.packStrings2(delta, delta_random_lut, root_bit_strings);
 		    
-		    //System.out.println("Number of pixel bits is " + (xdim * ydim * 8));
-		    //System.out.println("Number of packed delta root bits is " + delta_number_of_bits);
-		    System.out.println("The ratio of packed delta root bits to pixel bits is " + (double)(delta_number_of_bits / (double)(xdim * ydim * 8)));
+		    double root_pixel_ratio = root_length;
+		    root_pixel_ratio        /= xdim * ydim * 8;
+		  
+		    System.out.println("The ratio of packed delta root bits to pixel bits is " + String.format("%.2f", root_pixel_ratio));
 		   
 		    for(int i = 0; i < delta.length; i++)
 		    	delta[i] += delta_min;
@@ -371,10 +357,14 @@ public class QuantTester
 		    for(int i = 0; i < error.length; i++)
 		    	error[i] -= error_min;
 		    int error_random_lut[]    = DeltaMapper.getRandomTable(error_histogram);
-		    int error_number_of_bits  = DeltaMapper.packStrings2(error, error_random_lut, bit_strings);
+		    error_length              = DeltaMapper.packStrings2(error, error_random_lut, error_bit_strings);
 		    for(int i = 0; i < error.length; i++)
 		    	error[i] += error_min;
-		    System.out.println("The ratio of packed error bits to pixel bits is " + ((double)error_number_of_bits /(double)(xdim * ydim * 8)));
+		    
+		    double error_pixel_ratio = error_length;
+		    error_pixel_ratio /= xdim * ydim * 8;
+		    
+		    System.out.println("The ratio of packed error bits to pixel bits is " + String.format("%.2f", error_pixel_ratio));
 		    System.out.println();
 		    
 		    for(int i = 0; i < size; i++)
@@ -384,10 +374,7 @@ public class QuantTester
                 d_error       *= factor;
                 int _error     = (int)d_error;
                 value         += _error;
-               
-                green[i]             = value;
-                
-                
+                green[i]       = value;
                 if(green[i] > shifted_green_max)
                 	shifted_green_max = green[i];
                 if(green[i] < shifted_green_min)
@@ -401,8 +388,6 @@ public class QuantTester
 		    System.out.println("Shifted green max is " + shifted_green_max);
 		    System.out.println();
 		    
-		    
-		   
 		    for(int i = 0; i < size; i++)
             {
                 pixel[i] = 0;
@@ -468,10 +453,80 @@ public class QuantTester
 		    	{
 		    		image.setRGB(i, j, pixel[j * xdim + i]);
 		    	}
-		    	
 		    } 
 			System.out.println("Reloaded original image.");
 			image_canvas.repaint();
 		}
 	}
+	
+
+	class SaveHandler implements ActionListener
+	{
+		public void actionPerformed(ActionEvent event)
+		{
+			StringTokenizer tokenizer = new StringTokenizer(filename, ".");
+		    String          root      = tokenizer.nextToken();
+			String          extension = tokenizer.nextToken();
+			
+			String raw_root_filename = new String(root + "_r_" + pixel_shift + ".raw");
+			String zip_root_filename = new String(root + "_r_" + pixel_shift + ".gz");
+			String raw_error_filename = new String(root + "_e_" + pixel_shift + ".raw");
+			String zip_error_filename = new String(root + "_e_" + pixel_shift + ".gz");
+			System.out.println();
+			
+			if(root_length == 0)
+			{
+			    System.out.println("No current data.");
+			}
+			else
+			{
+			    int number_of_root_bytes = root_length / 8;
+			    if(root_length % 8 != 0)
+			    	number_of_root_bytes++;
+			    
+			    int number_of_error_bytes = error_length / 8;
+			    if(error_length % 8 != 0)
+			    	number_of_error_bytes++;
+			    
+			    try
+			    {
+			        FileOutputStream root_out = new FileOutputStream(raw_root_filename, false);
+			        root_out.write(root_bit_strings, 0, number_of_root_bytes);
+			        root_out.close();
+			        
+			        FileOutputStream error_out = new FileOutputStream(raw_error_filename, false);
+			        error_out.write(error_bit_strings, 0, number_of_error_bytes);
+			        error_out.close();
+			        
+			        GZIPOutputStream root_zip = new GZIPOutputStream(new FileOutputStream(zip_root_filename)); 
+			        root_zip.write(root_bit_strings, 0, number_of_root_bytes);
+			        root_zip.close();
+			        
+			        GZIPOutputStream error_zip = new GZIPOutputStream(new FileOutputStream(zip_error_filename)); 
+			        error_zip.write(error_bit_strings, 0, number_of_error_bytes);
+			        error_zip.close();
+			    }
+			    catch(Exception e)
+			    {
+			    	System.out.println(e.toString());
+			    }
+			    
+			}
+		}
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 }
