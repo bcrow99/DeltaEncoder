@@ -402,11 +402,11 @@ public class CompressTester
 			        raw_delta_out.write(delta_strings, 0, delta_length);
 			        raw_delta_out.close();
 			        
-			        FileOutputStream zip_delta_out = new FileOutputStream(zip_delta_filename, false);
+			        GZIPOutputStream  zip_delta_out = new GZIPOutputStream(new FileOutputStream(zip_delta_filename)); 
 			        zip_delta_out.write(delta_strings, 0, delta_length);
 			        zip_delta_out.close();
 			        
-			        GZIPOutputStream compressed = new GZIPOutputStream(new FileOutputStream(raw_compressed_filename)); 
+			        FileOutputStream compressed = new  FileOutputStream(raw_compressed_filename); 
 			        compressed.write(compressed_strings, 0, compressed_length);
 			        compressed.close();
 			        
