@@ -486,8 +486,66 @@ public class DeltaMapper
 		return(shrink);
 	}
 	
-
-	
+	public static int[] expand4(int src[], int xdim, int ydim)
+	{
+		int [] dst = new int[xdim * ydim * 4];
+		
+		int k = 0;
+		int m = 0;
+		
+		for(int i = 0; i < ydim; i += 2)
+		{
+			for(int j = 0; j < xdim; j += 2)
+			{
+				dst[k * xdim * 2 + m]     = src[i * xdim + j];
+				dst[k * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .75 + src[i * xdim + j + 1] * .25);
+				dst[k * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .25 + src[i * xdim + j + 1] * .75);
+				dst[k * xdim * 2 + m + 3]   = src[i * xdim + j + 1];
+				
+				dst[(k + 1) * xdim * 2 + m]     = (int)(src[i * xdim + j] *.75 + src[(i + 1) * xdim + j] * .25);
+				dst[(k + 1) * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .5625 + src[i * xdim + j + 1] * .1875 + src[(i + 1) * xdim + j] * .1875 + src[(i + 1) * xdim + j + 1] * .0625);
+				dst[(k + 1) * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .1875 + src[i * xdim + j + 1] * .5625 + src[(i + 1) * xdim + j] * .0625 + src[(i + 1) * xdim + j + 1] * .1875);
+				dst[(k + 1) * xdim * 2 + m + 3] = (int)(src[i * xdim + j + 1] * .75 + src[(i + 1) * xdim + j + 1] * .25);	
+				
+				dst[(k + 2) * xdim * 2 + m]     = (int)(src[i * xdim + j] *.25 + src[(i + 1) * xdim + j] * 75);
+				dst[(k + 2) * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .1875 + src[i * xdim + j + 1] * .0625 + src[(i + 1) * xdim + j] * .5625 + src[(i + 1) * xdim + j + 1] * .1875);
+				dst[(k + 2) * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .0625 + src[i * xdim + j + 1] * .1875 + src[(i + 1) * xdim + j] * .1875 + src[(i + 1) * xdim + j + 1] * .5625);
+				dst[(k + 2) * xdim * 2 + m + 3] = (int)(src[i * xdim + j + 1] *.25 + src[(i + 1) * xdim + j + 1] * 75);
+				
+				dst[(k + 3) * xdim * 2 + m]     = src[(i + 1) * xdim + j];
+				dst[(k + 3) * xdim * 2 + m + 1] = (int)(src[(i + 1) * xdim + j] * .75 + src[(i + 1) * xdim + j + 1] * .25);
+				dst[(k + 3) * xdim * 2 + m + 2] = (int)(src[(i + 1) * xdim + j] * .25 + src[(i + 1) * xdim + j + 1] * .75);
+				dst[(k + 3) * xdim * 2 + m + 3] = src[(i + 1) * xdim + j + 1];
+				
+				/*
+				dst[k][m + 1]     = (int)(src[i][j] * .75 + src[i][j + 1] * .25);
+				dst[k][m + 2]     = (int)(src[i][j] * .25 + src[i][j + 1] * .75);
+				dst[k][m + 3]     = src[i][j + 1];
+				
+				dst[k + 1][m]     = (int)(src[i][j] *.75 + src[i + 1] [j] * 25);
+				dst[k + 1][m + 1] = (int)(src[i][j] * .5625 + src[i][j + 1] * .1875 + src[i + 1][j] * .1875 + src[i + 1][j + 1] * .0625);
+				dst[k + 1][m + 2] = (int)(src[i][j] * .1875 + src[i][j + 1] * .5625 + src[i + 1][j] * .0625 + src[i + 1][j + 1] * .1875);
+				dst[k + 1][m + 3] = (int)(src[i][j + 1] *.75 + src[i + 1] [j + 1] * .25);
+				
+				dst[k + 2][m]     = (int)(src[i][j] *.25 + src[i + 1][j] * 75);
+				dst[k + 2][m + 1] = (int)(src[i][j] * .1875 + src[i][j + 1] * .0625 + src[i + 1][j] * .5625 + src[i + 1][j + 1] * .1875);
+				dst[k + 2][m + 2] = (int)(src[i][j] * .0625 + src[i][j + 1] * .1875 + src[i + 1][j] * .1875 + src[i + 1][j + 1] * .5625);
+				dst[k + 2][m + 3] = (int)(src[i][j + 1] *.25 + src[i + 1][j + 1] * 75);
+						
+				dst[k + 3][m]     = src[i + 1][j];
+				dst[k + 3][m + 1] = (int)(src[i + 1][j] * .75 + src[i + 1][j + 1] * .25);
+				dst[k + 3][m + 2] = (int)(src[i + 1][j] * .25 + src[i + 1][j + 1] * .75);
+				dst[k + 3][m + 3] = src[i + 1][j + 1];
+				*/
+				
+				m += 4;
+			}
+			k += 4;
+		}
+		
+		return dst;
+	}
+	/*
 	public static int[] expand4(int src[], int xdim, int ydim)
 	{
 		int length = src.length;
@@ -500,15 +558,21 @@ public class DeltaMapper
 		    
 		    double [] src_double = new double[length];
 		    
+		    int number_of_iterations = 1;
 		    
 		    while(current_xdim < xdim * 2)
 		    {
 		        double[] dst_double = expandAverage(src_double, current_xdim, current_ydim);
 		        
+		        System.out.println("Got here " + number_of_iterations);
+		        number_of_iterations++;
+		        
 		        if(current_xdim == xdim * 2 - 1)
 		        {
 		            for(int i = 0; i < length * 4; i++)
 		            	dst[i] = (int)dst_double[i];
+		            current_xdim++;
+		            current_ydim++;
 		        }
 		        else
 		        {
@@ -522,7 +586,7 @@ public class DeltaMapper
 			System.out.println("Dimensions inconsistent with length.");
 		return dst;
 	}
-	
+	*/
 	
 	
 	
