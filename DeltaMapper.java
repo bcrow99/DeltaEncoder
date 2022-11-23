@@ -17,9 +17,11 @@ public class DeltaMapper
 				int x    = src[i * xdim + j + 1];
 				int y    = src[(i + 1) * xdim + j];
 				int z    = src[(i + 1) * xdim + j + 1];
-			    dst[k++] = (w + x + y + z) / 4;	
-			    // Rounding up seems to increase the error when we expand back. 
-			    // Double check.
+			    
+				// Leaving the error biased (instead of rounding up) means
+			    // we are introducing less artifacts later when we
+			    // adjust the contrast range.
+				dst[k++] = (w + x + y + z) / 4;	
 			}
 		}
 		return(dst);
@@ -112,6 +114,30 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static int[] shrink4(int src[], int xdim, int ydim)
+	{
+		int _xdim = xdim / 2;
+		int _ydim = ydim / 2;
+		int [] dst = new int[_xdim * _ydim];
+		
+		int k = 0;
+		int m = 0;
+		for(int i = 0; i < _ydim; i++)
+		{
+			int n = 0;
+			for(int j = 0; j < _xdim; j++)	
+			{
+				int w    = src[m * xdim + n];
+				int x    = src[m * xdim + n + 1];
+				int y    = src[(m + 1) * xdim + n];
+				int z    = src[(m + 1) * xdim + n + 1];
+			    dst[k++] = (w + x + y + z) / 4;
+			    n       += 2;
+			}
+			m += 2;
+		}
+		return(dst);
+	}
 	
 	public static double[] shrink4(double src[], int xdim, int ydim)
 	{
@@ -250,7 +276,6 @@ public class DeltaMapper
 	    	double key = (double)key_list.get(i);
 	    	int    j   = (int)rank_table.get(key);
 	    	random_lut[j]   = ++k;
-	    	//System.out.println("Key = " + key + ", value = " + j);
 	    }	
 	    return random_lut;
 	}
@@ -414,7 +439,6 @@ public class DeltaMapper
 		return(shrink);
 	}
 	
-	
 	public static double[] shrink4(double src[], int xdim, int ydim, double error[])
 	{
 		int _xdim = xdim / 2;
@@ -463,6 +487,45 @@ public class DeltaMapper
 	}
 	
 
+	
+	public static int[] expand4(int src[], int xdim, int ydim)
+	{
+		int length = src.length;
+		int [] dst = new int[length * 4];
+		
+		if(xdim * ydim == length)
+		{
+		    int current_xdim = xdim;
+		    int current_ydim = ydim;
+		    
+		    double [] src_double = new double[length];
+		    
+		    
+		    while(current_xdim < xdim * 2)
+		    {
+		        double[] dst_double = expandAverage(src_double, current_xdim, current_ydim);
+		        
+		        if(current_xdim == xdim * 2 - 1)
+		        {
+		            for(int i = 0; i < length * 4; i++)
+		            	dst[i] = (int)dst_double[i];
+		        }
+		        else
+		        {
+		            current_xdim++;
+		            current_ydim++;
+		            src_double = dst_double;
+		        }
+		    }
+		}
+		else
+			System.out.println("Dimensions inconsistent with length.");
+		return dst;
+	}
+	
+	
+	
+	
 	public static double[] expandX(double src[], int xdim, int ydim)
 	{
 		double [] dst = new double[(xdim + 1) * ydim];
@@ -830,7 +893,38 @@ public class DeltaMapper
                 dst[k++]       = current_value;
             }
         }
-        
+        return dst;
+    }
+    public static int[] getDeltasFromValues(int src[])
+    {
+    	int   length = src.length;
+        int[] dst = new int[length];
+    	
+        int value  = src[0];
+        dst[0]     = value;
+        int j      = 0;
+        for(int i = 1; i < length; i++)
+        {
+            int delta     = src[i] - value;
+            value        += delta;
+            dst[i]      = delta;
+        }
+        return dst;
+    }
+
+    public static int[] getValuesFromDeltas(int src[])
+    {
+    	int length = src.length;
+    	int[] dst = new int[length];
+    	
+        int value = src[0];
+        dst[0]    = value;
+        for(int i = 1; i < length; i++)
+        {
+            value  = dst[i - 1];
+            value += src[i];
+            dst[i] = value;
+        }
         return dst;
     }
     
