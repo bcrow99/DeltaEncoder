@@ -46,74 +46,6 @@ public class DeltaMapper
 		return(dst);
 	}
 	
-	public static double[] shrink(double src[], int xdim, int ydim, double error[])
-	{
-		double [] dst = new double[(xdim - 1) * (ydim - 1)];
-		
-		int k = 0;
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)	
-			{
-				double w  = src[i * xdim + j];
-				double x  = src[i * xdim + j + 1];
-				double y  = src[(i + 1) * xdim + j];
-				double z  = src[(i + 1) * xdim + j + 1];
-				
-				double _w = error[i * xdim + j];
-				double _x = error[i * xdim + j + 1];
-				double _y = error[(i + 1) * xdim + j];
-				double _z = error[(i + 1) * xdim + j + 1];
-				
-				double _error     = _w + _x + _y + _z;
-				double error_root = 0;
-				if(_error > 0)
-				    error_root = Math.sqrt(_error);
-				else
-				{
-					error_root = Math.sqrt(-_error);
-					error_root = -error_root;
-				}
-				dst[k++] = (w + x + y + z) / 4. + error_root;
-			}
-		}
-		return(dst);
-	}
-	
-	public static int[] shrink(int src[], int xdim, int ydim, int error[])
-	{
-        int [] dst = new int[(xdim - 1) * (ydim - 1)];
-		
-		int k = 0;
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)	
-			{
-				int w  = src[i * xdim + j];
-				int x  = src[i * xdim + j + 1];
-				int y  = src[(i + 1) * xdim + j];
-				int z  = src[(i + 1) * xdim + j + 1];
-				
-				int _w = error[i * xdim + j];
-				int _x = error[i * xdim + j + 1];
-				int _y = error[(i + 1) * xdim + j];
-				int _z = error[(i + 1) * xdim + j + 1];
-				
-				int _error     = _w + _x + _y + _z;
-				int error_root = 0;
-				if(_error > 0)
-				    error_root = (int)Math.sqrt(_error);
-				else
-				{
-					error_root = (int)Math.sqrt(-_error);
-					error_root = -error_root;
-				}
-				dst[k++]  = (int)((w + x + y + z) / 4. + error_root);
-			}
-		}
-		return(dst);
-	}
-	
 	public static int[] shrink4(int src[], int xdim, int ydim)
 	{
 		int _xdim = xdim / 2;
@@ -387,288 +319,138 @@ public class DeltaMapper
 	    return symmetric_lut;
 	}
 	
-	public static double[] shrink4_error(double src[], int xdim, int ydim)
+	public static int[][] expandX(int src[][], int expand)
 	{
-		int _xdim        = xdim / 2;
-		int _ydim        = ydim / 2;
-		double [] shrink = shrink4(src, xdim, ydim);
-		double [] expand = expand4(shrink, _xdim, _ydim);
-		double [] error  = getDifference(src, expand);
+		int ydim = src.length;
+		int xdim = src[0].length;
 		
-		System.out.println("Got here 2.");
-		int k = 0;
-		int m = 0;
-		for(int i = 0; i < _ydim; i++)
-		{
-			int n = 0;
-			for(int j = 0; j < _xdim; j++)	
-			{
-				double w = src[m * xdim + n];
-				double x = src[m * xdim + n + 1];
-				double y = src[(m + 1) * xdim + n];
-				double z = src[(m + 1) * xdim + n + 1];
-				
-				double _w = error[m * xdim + n];
-				double _x = error[m * xdim + n + 1];
-				double _y = error[(m + 1) * xdim + n];
-				double _z = error[(m + 1) * xdim + n + 1];
-				
-				
-				//double _error     = _w + _x + _y + _z;
-				double _error     = _w;
-				double error_root = 0;
-				if(_error > 0)
-				    error_root = Math.sqrt(_error);
-				else
-				{
-					error_root = Math.sqrt(-_error);
-					error_root = -error_root;
-				}
-				shrink[k] = (w + x + y + z) / 4. + error_root;
-				if(shrink[k] < 0)
-					shrink[k] = 0;
-				else if(shrink[k] > 255)
-				    shrink[k] = 255;	
-			    n       += 2;
-			    expand = expand4(shrink, _xdim, _ydim);
-			    error = getDifference(src, expand);
-			    System.out.println("Got here 3.");
-			}
-			m += 2;
-		}
-		return(shrink);
-	}
-	
-	public static double[] shrink4(double src[], int xdim, int ydim, double error[])
-	{
-		int _xdim = xdim / 2;
-		int _ydim = ydim / 2;
-		double [] shrink = shrink4(src, xdim, ydim);
+		int _xdim = (xdim - 1) * expand + xdim;
 		
-		int k = 0;
-		int m = 0;
-		for(int i = 0; i < _ydim; i++)
-		{
-			int n = 0;
-			for(int j = 0; j < _xdim; j++)	
-			{
-				double w = src[m * xdim + n];
-				double x = src[m * xdim + n + 1];
-				double y = src[(m + 1) * xdim + n];
-				double z = src[(m + 1) * xdim + n + 1];
-				
-				double _w = error[m * xdim + n];
-				double _x = error[m * xdim + n + 1];
-				double _y = error[(m + 1) * xdim + n];
-				double _z = error[(m + 1) * xdim + n + 1];
-				
-				
-				double _error     = _w + _x + _y + _z;
-				double error_root = 0;
-				if(_error > 0)
-				    error_root = Math.sqrt(_error);
-				else
-				{
-					error_root = Math.sqrt(-_error);
-					error_root = -error_root;
-				}
-				shrink[k] = (w + x + y + z) / 4. + error_root;
-				if(shrink[k] < 0)
-					shrink[k] = 0;
-				else if(shrink[k] > 255)
-				    shrink[k] = 255;	
-			    n       += 2;
-			    double [] expand = expand4(shrink, _xdim, _ydim);
-			    error = getDifference(src, expand);
-			}
-			m += 2;
-		}
-		return(shrink);
-	}
-	
-	
-	/*
-	public static int[] expand4(int src[], int xdim, int ydim)
-	{
-		int [] dst = new int[xdim * ydim * 4];
-		
-		int k = 0;
-		int m = 0;
-		
-		for(int i = 0; i < ydim; i += 2)
-		{
-			for(int j = 0; j < xdim; j += 2)
-			{
-				dst[k * xdim * 2 + m]     = src[i * xdim + j];
-				dst[k * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .75 + src[i * xdim + j + 1] * .25);
-				dst[k * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .25 + src[i * xdim + j + 1] * .75);
-				dst[k * xdim * 2 + m + 3]   = src[i * xdim + j + 1];
-				
-				dst[(k + 1) * xdim * 2 + m]     = (int)(src[i * xdim + j] *.75 + src[(i + 1) * xdim + j] * .25);
-				dst[(k + 1) * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .5625 + src[i * xdim + j + 1] * .1875 + src[(i + 1) * xdim + j] * .1875 + src[(i + 1) * xdim + j + 1] * .0625);
-				dst[(k + 1) * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .1875 + src[i * xdim + j + 1] * .5625 + src[(i + 1) * xdim + j] * .0625 + src[(i + 1) * xdim + j + 1] * .1875);
-				dst[(k + 1) * xdim * 2 + m + 3] = (int)(src[i * xdim + j + 1] * .75 + src[(i + 1) * xdim + j + 1] * .25);	
-				
-				dst[(k + 2) * xdim * 2 + m]     = (int)(src[i * xdim + j] *.25 + src[(i + 1) * xdim + j] * 75);
-				dst[(k + 2) * xdim * 2 + m + 1] = (int)(src[i * xdim + j] * .1875 + src[i * xdim + j + 1] * .0625 + src[(i + 1) * xdim + j] * .5625 + src[(i + 1) * xdim + j + 1] * .1875);
-				dst[(k + 2) * xdim * 2 + m + 2] = (int)(src[i * xdim + j] * .0625 + src[i * xdim + j + 1] * .1875 + src[(i + 1) * xdim + j] * .1875 + src[(i + 1) * xdim + j + 1] * .5625);
-				dst[(k + 2) * xdim * 2 + m + 3] = (int)(src[i * xdim + j + 1] *.25 + src[(i + 1) * xdim + j + 1] * 75);
-				
-				dst[(k + 3) * xdim * 2 + m]     = src[(i + 1) * xdim + j];
-				dst[(k + 3) * xdim * 2 + m + 1] = (int)(src[(i + 1) * xdim + j] * .75 + src[(i + 1) * xdim + j + 1] * .25);
-				dst[(k + 3) * xdim * 2 + m + 2] = (int)(src[(i + 1) * xdim + j] * .25 + src[(i + 1) * xdim + j + 1] * .75);
-				dst[(k + 3) * xdim * 2 + m + 3] = src[(i + 1) * xdim + j + 1];
-				
-			
-				//dst[k][m + 1]     = (int)(src[i][j] * .75 + src[i][j + 1] * .25);
-				//dst[k][m + 2]     = (int)(src[i][j] * .25 + src[i][j + 1] * .75);
-				//dst[k][m + 3]     = src[i][j + 1];
-				
-				//dst[k + 1][m]     = (int)(src[i][j] *.75 + src[i + 1] [j] * 25);
-				//dst[k + 1][m + 1] = (int)(src[i][j] * .5625 + src[i][j + 1] * .1875 + src[i + 1][j] * .1875 + src[i + 1][j + 1] * .0625);
-				//dst[k + 1][m + 2] = (int)(src[i][j] * .1875 + src[i][j + 1] * .5625 + src[i + 1][j] * .0625 + src[i + 1][j + 1] * .1875);
-				//dst[k + 1][m + 3] = (int)(src[i][j + 1] *.75 + src[i + 1] [j + 1] * .25);
-				
-				//dst[k + 2][m]     = (int)(src[i][j] *.25 + src[i + 1][j] * 75);
-				//dst[k + 2][m + 1] = (int)(src[i][j] * .1875 + src[i][j + 1] * .0625 + src[i + 1][j] * .5625 + src[i + 1][j + 1] * .1875);
-				//dst[k + 2][m + 2] = (int)(src[i][j] * .0625 + src[i][j + 1] * .1875 + src[i + 1][j] * .1875 + src[i + 1][j + 1] * .5625);
-				//dst[k + 2][m + 3] = (int)(src[i][j + 1] *.25 + src[i + 1][j + 1] * 75);
-						
-				//dst[k + 3][m]     = src[i + 1][j];
-				//dst[k + 3][m + 1] = (int)(src[i + 1][j] * .75 + src[i + 1][j + 1] * .25);
-				//dst[k + 3][m + 2] = (int)(src[i + 1][j] * .25 + src[i + 1][j + 1] * .75);
-				//dst[k + 3][m + 3] = src[i + 1][j + 1];
-				
-				
-				m += 4;
-			}
-			k += 4;
-			m  = 0;
-		}
-		
-		return dst;
-	}
-	
-	public static int[] expand4(int src[], int xdim, int ydim)
-	{
-		int length = src.length;
-		int [] dst = new int[length * 4];
-		
-		if(xdim * ydim == length)
-		{
-		    int current_xdim = xdim;
-		    int current_ydim = ydim;
-		    
-		    double [] src_double = new double[length];
-		    
-		    int number_of_iterations = 1;
-		    
-		    while(current_xdim < xdim * 2)
-		    {
-		        double[] dst_double = expandAverage(src_double, current_xdim, current_ydim);
-		        
-		        System.out.println("Got here " + number_of_iterations);
-		        number_of_iterations++;
-		        
-		        if(current_xdim == xdim * 2 - 1)
-		        {
-		            for(int i = 0; i < length * 4; i++)
-		            	dst[i] = (int)dst_double[i];
-		            current_xdim++;
-		            current_ydim++;
-		        }
-		        else
-		        {
-		            current_xdim++;
-		            current_ydim++;
-		            src_double = dst_double;
-		        }
-		    }
-		}
-		else
-			System.out.println("Dimensions inconsistent with length.");
-		return dst;
-	}
-	*/
-	
-	
-	
-	public static double[] expandX(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[(xdim + 1) * ydim];
-		
-		int k = 0;
+		int [][] dst = new int[ydim][_xdim];
 		for(int i = 0; i < ydim; i++)
 		{
-			for(int j = 0; j < xdim - 1; j++)	
+			int k = 0;
+			int end_value = 0;
+			for(int j = 0; j < xdim - 1; j++)
 			{
-			    if(j == 0)
-			    {
-			        dst[k++] = src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + 1]) / 2.;	
-			        dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2.;
-			    }
-			    else if(j < xdim - 2)
-			    {
-			        dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2.;	
-			    }
-			    else if(j == xdim - 2)
-			    {
-			    	dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2.;
-			    	dst[k++] = src[i * xdim + j] + (src[i * xdim + j + 1] - src[i * xdim + j]) / 2.;	
-			    }
+				int start_value  = src[i][j];
+				end_value        = src[i][j + 1];
+				dst[i][k++]      = start_value;
+				double delta     = start_value - end_value;
+				double increment = delta / (expand + 1);
+				for(int m = 0; m < expand; m++)
+				{
+					start_value += increment;
+					dst[i][k++]  = start_value;
+				}
 			}
+			dst[i][k] = end_value;
 		}
 		return(dst);
 	}
 	
-	public static double[] expandY(double src[], int xdim, int ydim)
+	public static int[] expandX(int src[], int xdim, int ydim, int expand)
 	{
-		double [] dst = new double[(ydim + 1) * xdim];
+		int _xdim = (xdim - 1) * expand + xdim;
 		
-		//System.out.println("Dst length = " + dst.length);
+		int [] dst = new int[ydim * _xdim];
+		for(int i = 0; i < ydim; i++)
+		{
+			int k = 0;
+			int end_value = 0;
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				int start_value  = src[i * xdim + j];
+				end_value        = src[i * xdim + j + 1];
+				dst[k++]         = start_value;
+				double delta     = start_value - end_value;
+				double increment = delta / (expand + 1);
+				for(int m = 0; m < expand; m++)
+				{
+					start_value += increment;
+					dst[k++]     = start_value;
+				}
+			}
+			dst[k++] = end_value;
+		}
+		return(dst);
+	}
+	
+	public static int[][] expandY(int src[][], int expand)
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+		
+		int _ydim = (ydim - 1) * expand + ydim;
+		
+		int [][] dst = new int[_ydim][xdim];
+		
 		int k = 0;
+		int end_value = 0;
+		int i = 0;
 		for(int j = 0; j < xdim; j++)
 		{
-			k = j;
-			for(int i = 0; i < ydim - 1; i++)	
-			{
-			    if(i == 0)
-			    {
-			        dst[k]        = src[i * xdim + j] + (src[i * xdim + j] - src[(i + 1) * xdim + j]) / 2.;	
-			        dst[k + xdim] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2.;	
-			        k += 2 * xdim;
-			    }
-			    else if(i < ydim - 2)
-			    {
-			        dst[k] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2.;	
-			        k += xdim;
-			    }
-			    else if(i == ydim - 2)
-			    {
-			    	dst[k]        = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2.;
-			    	dst[k + xdim] = src[i * xdim + j] + (src[(i + 1) * xdim + j] - src[i * xdim + j]) / 2.;
-			    }
-			}
+		     for(i = 0; i < ydim - 1; i++)
+		     {
+		         k = j;
+			     int start_value  = src[i][j];
+				 end_value        = src[i + 1][j];
+				 dst[i][k]        = start_value;
+				 double delta     = start_value - end_value;
+				 double increment = delta / (expand + 1);
+				 for(int m = 0; m < expand; m++)
+				 {
+					k += xdim;
+					start_value += increment;
+					dst[i][k]  = start_value;
+				 }
+			 }
+		     k += xdim;
+			 dst[i][k] = end_value;
+		}
+		return(dst);
+	}
+
+	public static int[] expandY(int src[], int xdim, int ydim, int expand)
+	{
+		int _ydim = (ydim - 1) * expand + ydim;
+		
+		int [] dst = new int[xdim * _ydim];
+		
+		int k = 0;
+		int end_value = 0;
+		int i = 0;
+		for(int j = 0; j < xdim; j++)
+		{
+		     for(i = 0; i < ydim - 1; i++)
+		     {
+		         k = j;
+			     int start_value   = src[i * xdim + j];
+				 end_value         = src[(i + 1) * xdim + j];
+				 dst[i * xdim + k] = start_value;
+				 double delta      = start_value - end_value;
+				 double increment  = delta / (expand + 1);
+				 for(int m = 0; m < expand; m++)
+				 {
+					k += xdim;
+					start_value += increment;
+					dst[i * xdim + k]  = start_value;
+				 }
+			 }
+		     k += xdim;
+			 dst[i * xdim + k] = end_value;
 		}
 		return(dst);
 	}
 	
-	public static double[] expandYX(double src[], int xdim, int ydim)
+	public static int[] expand(int src[], int xdim, int ydim)
 	{
-	    double[] intermediate = expandY(src, xdim, ydim);
-	    double[] dst          = expandX(intermediate, xdim, ydim + 1);
+	    int[] intermediate = expandX(src, xdim, ydim, 1);
+	    int[] dst          = expandY(intermediate, xdim * 2 - 1, ydim, 1);
 	    return dst;
 	}
 	
-	public static double[] expandXY(double src[], int xdim, int ydim)
-	{
-	    double[] intermediate = expandX(src, xdim, ydim);
-	    double[] dst          = expandY(intermediate, xdim + 1, ydim);
-	    return dst;
-	}
-	
-	
-	public static int[] expandX(int src[], int xdim, int ydim)
+	public static int[] dilateX(int src[], int xdim, int ydim)
 	{
 		int [] dst = new int[(xdim + 1) * ydim];
 		
@@ -693,82 +475,13 @@ public class DeltaMapper
 			    }
 			}
 		}
-		return(dst);
+		return dst;
 	}
 	
-	public static int[] expandX2(int src[], int xdim, int ydim)
-	{
-		int [] dst = new int[2 * xdim * ydim];
-		
-		int k = 0;
-		int m = xdim / 2;
-		int j = 0;
-		for(int i = 0; i < ydim; i++)
-		{
-			for(j = 0; j < xdim; j++)	
-			{
-				dst[k++] = src[i * xdim + j];
-				if(j < xdim - 1)
-				{
-					/*
-				    if(j == m)
-					    dst[k++] = src[i * xdim + j];
-					*/	
-				    dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;
-				    /*
-				    if(j == m)
-					    dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;
-					*/
-				}
-			}
-			System.out.println("j = " + j);
-			System.out.println("k = " + k);
-		}
-		return(dst);
-	}
-	
-	public static int[] expandY2(int src[], int xdim, int ydim)
-	{
-		int [] dst = new int[2 * xdim * ydim];
-		
-		int m = ydim / 2;
-		for(int j = 0; j < xdim; j++)
-		{
-			int k = j;
-			for(int i = 0; i < ydim; i++)	
-			{
-				//System.out.println("i = " + i);
-				dst[k]        = src[i * xdim + j];
-				k += xdim;
-				if(i < ydim - 1)
-				{
-					/*
-				    if(i == m)
-				    {
-					    dst[k] = src[i * xdim + j];
-					    k += xdim;
-				    }
-				    */
-				    dst[k] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2;	
-				    k += xdim;
-				    /*
-				    if(i == m)
-				    {
-					    dst[k] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2;
-					    k += xdim;
-				    }
-				    */
-				}
-			}
-		}
-		return(dst);
-	}
-	
-	public static int[] expandY(int src[], int xdim, int ydim)
+	public static int[] dilateY(int src[], int xdim, int ydim)
 	{
 		int [] dst = new int[(ydim + 1) * xdim];
 		
-		//System.out.println("Dst length = " + dst.length);
 		int k = 0;
 		for(int j = 0; j < xdim; j++)
 		{
@@ -796,157 +509,14 @@ public class DeltaMapper
 		return(dst);
 	}
 	
-	public static int[] expandYX(int src[], int xdim, int ydim)
+	
+	public static int[] dilate(int src[], int xdim, int ydim)
 	{
-	    int[] intermediate = expandY(src, xdim, ydim);
-	    int[] dst          = expandX(intermediate, xdim, ydim + 1);
+	    int[] intermediate = dilateX(src, xdim, ydim);
+	    int[] dst          = dilateY(intermediate, xdim + 1, ydim);
 	    return dst;
 	}
 	
-	public static int[] expandXY(int src[], int xdim, int ydim)
-	{
-	    int[] intermediate = expandX(src, xdim, ydim);
-	    int[] dst          = expandY(intermediate, xdim + 1, ydim);
-	    return dst;
-	}
-	
-	public static int[] expandXY2(int src[], int xdim, int ydim)
-	{
-	    int[] intermediate = expandY2(src, xdim, ydim);
-	    int[] dst          = expandX2(intermediate, xdim, 2 * ydim);
-	    return dst;
-	}
-	public static double[] expandAverage(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[(xdim + 1) * (ydim + 1)];
-		
-		// Expanding the NW quadrant w/ left up filter.
-		for(int i = 0; i < ydim - 1; i++)
-		{
-		    int k = i * xdim;
-		    for(int j = 0; j < xdim - 1; j++)
-		    {
-		    	
-		        dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1] +
-		                    src[i * xdim + j + xdim] + src[i * xdim + j + xdim + 1]) / 4;
-		    }
-		}
-		
-		// Expanding the NE quadrant w/ right up filter.
-		for(int i = 0; i < ydim - 1; i++)
-		{
-		    int k  = i * xdim + xdim - 1;
-		    int j  = xdim - 1;
-		    dst[k] = (src[i * xdim + j] + src[i * xdim + j - 1] + src[i * xdim + xdim + j] + src[i * xdim + xdim + j - 1]) / 4;
-		}
-		
-		// Expanding the SW quadrant w/ left down filter.
-		int i = ydim - 1;
-		int k = i * xdim;
-		for(int j = 0; j < xdim - 2; j++)
-		{
-		    dst[k++] = ((src[i * xdim + j] + src[i * xdim + j + 1] + (src[(i - 1) * xdim + j] - src[(i - 1) * xdim + j + 1]) /2)) / 4;
-		}
-		
-		// Expanding the SE quadrant w/ right down filter.
-		i = ydim - 1;
-		int j = xdim - 1;
-		k = (i + 1) * xdim - 1;
-		dst[k] = ((src[i * xdim + j] +  src[i * xdim + j - 1] + + (src[(i - 1) * xdim + j] - src[(i - 1) * xdim + j - 1]) /2)) / 4;
-		
-		return(dst);
-	}
-
-	public static double[] expandGradient(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[(xdim + 1) * (ydim + 1)];
-		
-		// Expanding the NW quadrant w/ left up filter.
-		for(int i = 0; i < ydim - 2; i++)
-		{
-		    int k = i * xdim;
-		    for(int j = 0; j < xdim - 2; j++)
-		    {
-		        dst[k++] = ((src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + 1]) / 2 ) +
-		                    (src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + xdim]) /2)) / 2;
-		    }
-		}
-		
-		
-		// Expanding the NE quadrant w/ right up filter.
-		for(int i = 0; i < ydim - 2; i++)
-		{
-		    int k = i * xdim + xdim - 2;
-		    for(int j = xdim - 2; j < xdim; j++)
-		    {
-		        dst[k++] = ((src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j - 1]) /2) +
-		                    (src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + xdim]) /2)) / 2;
-		    }
-		}
-		
-		// Expanding the SW quadrant w/ left down filter.
-		for(int i = ydim - 2; i < ydim; i++)
-		{
-		    int k = i * xdim;
-			for(int j = 0; j < xdim - 2; j++)
-			{
-		        dst[k++] = ((src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + 1]) / 2 ) +
-				             (src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j - xdim]) /2)) / 2;
-		    }
-		}
-		
-		// Expanding the SE quadrant w/ right down filter.
-		for(int i = ydim - 2; i < ydim; i++)
-		{
-		    int k = i * xdim + xdim - 2;
-			for(int j = xdim - 2; j < xdim; j++)
-			{
-			    dst[k++] = ((src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j - 1]) / 2 ) +
-						    (src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j - xdim]) /2)) / 2;
-			}
-		}
-		
-		return(dst);
-	}
-
-	public static double[] expand4(double src[], int xdim, int ydim)
-    {
-		int _xdim = xdim * 2;
-		int _ydim = ydim * 2;
-		
-		double[] dst = new double[_xdim * _ydim];
-		
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				int k              = (2 * i + 1) * _xdim + 1 + 2 * j;
-				dst[k]             = (src[i * xdim + j]           + (src[i * xdim + j + 1] + src[(i + 1) * xdim + j])     / 2) / 2;
-				dst[k + 1]         = (src[i * xdim + j + 1]       + (src[i * xdim + j]     + src[(i + 1) * xdim + j + 1]) / 2) / 2;
-				dst[k + _xdim]     = (src[(i + 1) * xdim + j]     + (src[i * xdim + j]     + src[(i + 1) * xdim + j + 1]) / 2) / 2;
-				dst[k + _xdim + 1] = (src[(i + 1) * xdim + j + 1] + (src[i * xdim + j + 1] + src[(i + 1) * xdim + j])     / 2) / 2;
-			
-			}
-		}
-	    
-		dst[0] = src[0];
-		for(int j = 1; j < _xdim - 1; j++)
-		    dst[j] = (src[j / 2] + dst[_xdim + j]) / 2;
-	    dst[_xdim - 1] = src[xdim - 1];
-	    
-	    dst[_xdim * (_ydim - 1)] = src[xdim * (ydim - 1)];
-	    for(int j = 1; j < _xdim - 1; j++)
-		    dst[_xdim * (_ydim - 1) + j] = (src[j / 2] + dst[_xdim + j]) / 2;
-	    dst[_xdim * _ydim - 1] = src[xdim * ydim - 1];
-	    
-	    for(int i = 1; i < _ydim - 1; i++)
-	    {
-	        dst[i * _xdim]             = (src[(i / 2) * xdim]            + dst[i * _xdim + 1])	       / 2;
-	        dst[i * _xdim + _xdim - 1] = (src[(i / 2) * xdim + xdim - 1] + dst[i * _xdim + _xdim - 2]) / 2;
-	    }
-		
-		return dst;
-    }
 	
 	 
     public static int[] getDeltasFromValues(int src[], int xdim, int ydim)
