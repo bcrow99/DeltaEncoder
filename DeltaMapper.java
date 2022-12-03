@@ -318,6 +318,26 @@ public class DeltaMapper
 	    }
 	    return symmetric_lut;
 	}
+
+	public static int[][] expandX(int src[][])
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+		
+		int _xdim = 2 * xdim - 1;
+		
+		int [][] dst = new int[ydim][_xdim];
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				dst[i][j * 2]     = src[i][j];
+				dst[i][j * 2 + 1] = (src[i][j] + src[i][j + 1]) / 2;
+			}
+			dst[i][_xdim - 1] = src[i][xdim - 1];
+		}
+		return(dst);
+	}
 	
 	public static int[][] expandX(int src[][], int expand)
 	{
@@ -376,77 +396,51 @@ public class DeltaMapper
 		return(dst);
 	}
 	
-	public static int[][] expandY(int src[][], int expand)
+	public static int[][] expandY(int src[][])
 	{
 		int ydim = src.length;
 		int xdim = src[0].length;
 		
-		int _ydim = (ydim - 1) * expand + ydim;
+		int _ydim = 2 * ydim - 1;
 		
 		int [][] dst = new int[_ydim][xdim];
 		
-		int k = 0;
-		int end_value = 0;
-		int i = 0;
 		for(int j = 0; j < xdim; j++)
 		{
-		     for(i = 0; i < ydim - 1; i++)
+		     for(int i = 0; i < ydim - 1; i++)
 		     {
-		         k = j;
-			     int start_value  = src[i][j];
-				 end_value        = src[i + 1][j];
-				 dst[i][k]        = start_value;
-				 double delta     = start_value - end_value;
-				 double increment = delta / (expand + 1);
-				 for(int m = 0; m < expand; m++)
-				 {
-					k += xdim;
-					start_value += increment;
-					dst[i][k]  = start_value;
-				 }
+				 dst[i * 2][j]     = src[i][j];
+				 dst[i * 2 + 1][j] = (src[i][j] + src[i + 1][j]) / 2;
 			 }
-		     k += xdim;
-			 dst[i][k] = end_value;
-		}
-		return(dst);
-	}
-
-	public static int[] expandY(int src[], int xdim, int ydim, int expand)
-	{
-		int _ydim = (ydim - 1) * expand + ydim;
-		
-		int [] dst = new int[xdim * _ydim];
-		
-		int k = 0;
-		int end_value = 0;
-		int i = 0;
-		for(int j = 0; j < xdim; j++)
-		{
-		     for(i = 0; i < ydim - 1; i++)
-		     {
-		         k = j;
-			     int start_value   = src[i * xdim + j];
-				 end_value         = src[(i + 1) * xdim + j];
-				 dst[i * xdim + k] = start_value;
-				 double delta      = start_value - end_value;
-				 double increment  = delta / (expand + 1);
-				 for(int m = 0; m < expand; m++)
-				 {
-					k += xdim;
-					start_value += increment;
-					dst[i * xdim + k]  = start_value;
-				 }
-			 }
-		     k += xdim;
-			 dst[i * xdim + k] = end_value;
+		     int i = _ydim - 1;
+		     dst[i][j] = src[ydim - 1][j];
 		}
 		return(dst);
 	}
 	
 	public static int[] expand(int src[], int xdim, int ydim)
 	{
-	    int[] intermediate = expandX(src, xdim, ydim, 1);
-	    int[] dst          = expandY(intermediate, xdim * 2 - 1, ydim, 1);
+		int[][] _src = new int[ydim][xdim];
+		int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim; j++)
+			{
+				_src[i][j] = src[k++];
+			}
+		}
+	    int[][] intermediate = expandX(_src);
+	    int[][] _dst         = expandY(intermediate);
+	    
+	    int [] dst = new int[(2 * xdim - 1)*(2 * ydim - 1)];
+	    k = 0;
+	    for(int i = 0; i < ydim * 2 - 1; i++)
+		{
+			for(int j = 0; j < xdim * 2 - 1; j++)
+			{
+				dst[k++] = _dst[i][j];
+			}
+		}
 	    return dst;
 	}
 	
@@ -459,6 +453,7 @@ public class DeltaMapper
 		{
 			for(int j = 0; j < xdim - 1; j++)	
 			{
+				double current_value = 0;
 			    if(j == 0)
 			    {
 			        dst[k++] = src[i * xdim + j] + (src[i * xdim + j] - src[i * xdim + j + 1]) / 2;	
@@ -466,7 +461,11 @@ public class DeltaMapper
 			    }
 			    else if(j < xdim - 2)
 			    {
-			        dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;	
+			    	current_value  = (src[i * xdim + j] + src[i * xdim + j + 1]);
+			    	current_value *= .5;
+			    	current_value += .5;
+			        //dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;	
+			    	dst[k++] = (int)current_value;
 			    }
 			    else if(j == xdim - 2)
 			    {
@@ -496,7 +495,11 @@ public class DeltaMapper
 			    }
 			    else if(i < ydim - 2)
 			    {
-			        dst[k] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2;	
+			    	double current_value = (src[i * xdim + j] + src[(i + 1) * xdim + j]);
+			    	current_value *= .5;
+			    	current_value += .5;
+			    	dst[k] = (int)current_value;
+			        //dst[k] = (src[i * xdim + j] + src[(i + 1) * xdim + j]) / 2;	
 			        k += xdim;
 			    }
 			    else if(i == ydim - 2)
