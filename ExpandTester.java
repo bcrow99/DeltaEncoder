@@ -281,7 +281,7 @@ public class ExpandTester
 		    	if(green[i] < green_min)
 	            	green_min = green[i];
 		    	if(green[i] > green_max)
-            	green_max = green[i];
+            	    green_max = green[i];
 		    }
 		    
 		    System.out.println("Green min is " + green_min);
@@ -331,9 +331,6 @@ public class ExpandTester
 		    System.out.println("Green dilate min is " + green_dilate_min);
 		    System.out.println("Green dilate max is " + green_dilate_max);
 		    
-		    
-		    
-		    
 		    //blue_green = DeltaMapper.getDifference(blue, green_dilate);
 		    //red_green  = DeltaMapper.getDifference(red, green_dilate);
 		    
@@ -342,8 +339,8 @@ public class ExpandTester
 		    
 		    for(int i = 0; i < size; i++)
 		    {
-		    	//green[i] = green_dilate[i];
-		    	green[i] >>= pixel_shift;
+		    	green[i] = green_dilate[i];
+		    	//green[i] >>= pixel_shift;
 		    }
 		    
 		    int blue_green_min = 0;
@@ -406,7 +403,7 @@ public class ExpandTester
             int[] new_green = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
             for(int i = 0; i < new_green.length; i++)
             {
-            	new_green[i] <<= pixel_shift;
+            	//new_green[i] <<= pixel_shift;
             }
             
 		    for(int i = 0; i < size; i++)
@@ -415,6 +412,7 @@ public class ExpandTester
                 pixel[i] |= 255 << 24;
                 pixel[i] |= red[i] << 16;
                 pixel[i] |= new_green[i] << 8;
+                //pixel[i] |= green[i] << 8;
                 pixel[i] |= blue[i];
             }
 		    
