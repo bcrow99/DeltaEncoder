@@ -4,6 +4,76 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
+	public static int[] subsampleX(int src[], int xdim, int ydim, boolean even)
+	{
+		int size = xdim / 2;
+		if(xdim % 2 != 0 && !even)
+			size++;
+	    int [] dst = new int[size * ydim];
+	    
+	    int start = 0;
+	    if(even)
+	    	start++;
+	    int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = start; j < xdim; j += 2)
+				dst[k++] = src[i * xdim + j];
+		}
+		return dst;
+	}
+	
+	
+	public static int[] subsampleY(int src[], int xdim, int ydim, boolean even)
+	{
+		int size = ydim / 2;
+		if(ydim % 2 != 0 && !even)
+			size++;
+		int [] dst = new int[size * xdim];
+		int start = 0;
+	    if(even)
+	    	start++;
+	   
+		for(int j = 0; j < xdim; j++)
+		{
+			 int k = j;
+		     for(int i = start; i < ydim; i += 2)
+		     {
+				 dst[k] = src[i * xdim + j];
+				 k     += xdim;
+			 }
+		}
+		return(dst);  	
+	}
+	
+	public static int[] subsample(int src[], int xdim, int ydim, boolean even)
+	{
+		int [] intermediate = subsampleX(src, xdim, ydim, even);
+		int _xdim = xdim / 2;
+		if(xdim % 2 != 0 && !even)
+			_xdim++;
+		int [] dst = subsampleY(intermediate, _xdim, ydim, even);
+		
+		int _ydim = ydim / 2;
+		if(ydim % 2 != 0 && !even)
+		    _ydim++;
+		return dst;
+	}
+	
+	// Separating the average 4 function into 2 directions
+	// may offer a simpler approach to minimizing error.
+	/*
+	public static int[] shrinkX(int src[], int xdim, int ydim)
+	{
+		
+	}
+	
+	public static int[] shrinkY(int src[], int xdim, int ydim)
+	{
+		
+	}
+	*/
+	
 	public static int[] shrink(int src[], int xdim, int ydim)
 	{
 		int [] dst = new int[(xdim - 1) * (ydim - 1)];
@@ -133,14 +203,35 @@ public class DeltaMapper
 		return(difference);
 	}
 	
-	public static int[] getDifference(int src[], int src2[])
+	public static int[] getDifference(int src1[], int src2[])
 	{
-		int length = src.length;
+		int length = src1.length;
 		int [] difference = new int[length];
 		
-		for(int i = 0; i < length; i++)
+		// Could throw an exception here, but will
+		// just return uninitialized array the same length
+		// as src1.
+		if(src2.length == length)
 		{
-			difference[i] = src[i] - src2[i];
+		    for(int i = 0; i < length; i++)
+		    {
+			    difference[i] = src1[i] - src2[i];
+		    }
+		}
+		return(difference);
+	}
+	
+	public static int[] getSum(int src1[], int src2[])
+	{
+		int length = src1.length;
+		int [] difference = new int[length];
+		
+		if(src2.length == length)  // else return uninitialzed array.
+		{
+		    for(int i = 0; i < length; i++)
+		    {
+			    difference[i] = src1[i] + src2[i];
+		    }
 		}
 		return(difference);
 	}
@@ -460,8 +551,8 @@ public class DeltaMapper
 				if(j == xdim - 1)
 					dst[k++] = src[i * xdim + j];
 				*/
-				if(j == xdim - 1)
-				   k++;
+				if(j == xdim / 2)
+					dst[k++] = src[i * xdim + j];	
 			}
 		}
 		return dst;
@@ -479,6 +570,11 @@ public class DeltaMapper
 			{
                 dst[k] = src[i * xdim + j];	
                 k      += xdim;
+                if(i == ydim / 2)
+                {
+                	dst[k] = src[i * xdim + j];	
+                    k      += xdim;	
+                }
 			}
 		}
 		
