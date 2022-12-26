@@ -947,7 +947,8 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
-
+    // This fails sometimes with certain inputs.  Not sure if the error
+    // is in the packing or unpacking function.  
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
         int size             = dst.length;

@@ -39,13 +39,12 @@ public class LoadTester
 			System.out.println("Usage: java LoadTester <filename>");
 			System.exit(0);
 		}
-		String    prefix    = new String("C:/Users/Brian Crowley/Desktop/");
-		String    filename  = new String(args[0]);
+		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
-		
-		String os = System.getProperty("os.name");
-		String os_version = System.getProperty("os.version");
-		String machine = System.getProperty("os.arch");
+		String os           = System.getProperty("os.name");
+		String os_version   = System.getProperty("os.version");
+		String machine      = System.getProperty("os.arch");
 		System.out.println("Current java version is " + java_version);
 		System.out.println("Current os is " + os + " " + os_version + " on " + machine);
 		System.out.println("Image file is " + filename);
@@ -219,15 +218,16 @@ public class LoadTester
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			 int [] new_alpha = new int[xdim * ydim]; 
-		     int [] new_blue  = new int[xdim * ydim];
-		     
+			 int [] new_alpha    = new int[xdim * ydim]; 
+		     int [] new_blue     = new int[xdim * ydim];
+		     int [] shifted_blue = new int[xdim * ydim];
 		     
 		     int [] new_green    = new int[xdim * ydim];
 		     int [] shifted_green = new int[xdim * ydim];
 		     
-		     int [] new_red   = new int[xdim * ydim];
-		     int [] new_pixel = new int[xdim * ydim];
+		     int [] new_red     = new int[xdim * ydim];
+		     int [] shifted_red = new int[xdim * ydim];
+		     int [] new_pixel   = new int[xdim * ydim];
 		     
 		     //int mask = 255;
 		     //int k = 0;
@@ -250,7 +250,9 @@ public class LoadTester
 		         //new_green[i] <<= pixel_shift;
 		         //new_green[i]   &= mask;
 		        
+		         shifted_blue[i]  = blue[i]  >> pixel_shift;
 		         shifted_green[i] = green[i] >> pixel_shift;
+			     shifted_red[i]   = red[i] >> pixel_shift;
 		        
 		        
 		        
@@ -260,7 +262,7 @@ public class LoadTester
 		         //new_red[i]   &= mask;
 			}
 		    
-		    int init_value     = shifted_green[0];
+		    int init_value           = shifted_green[0];
 			int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
 			ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			int delta_min            = (int)histogram_list.get(0);
@@ -269,30 +271,276 @@ public class LoadTester
 			for(int i = 0; i < delta.length; i++)
 			    delta[i] -= delta_min;
 			int delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			    
-			int number_of_ints = DeltaMapper.unpackStrings2(delta_strings, delta_random_lut, delta);
-			for(int i = 0; i < delta.length; i++)
-			     delta[i] += delta_min;
-			   
-	        new_green = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-	        
-	        for(int i = 0; i < xdim * ydim; i++)
+			delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+			
+			
+			int zipped_delta_length = 0;
+            int string_length = delta_length / 8;
+		    if(delta_length % 8 != 0)
+		    	string_length++;
+		    byte [] strings = new byte[string_length];
+		    
+		    for(int i = 0; i < string_length; i++)
+		        strings[i] = delta_strings[i];	
+		    byte [] zipped_strings       = new byte[xdim * ydim * 2];
+		    byte [] unzipped_strings     = new byte[xdim * ydim * 2];
+		    byte [] compressed_strings   = new byte[xdim * ydim * 10];
+		    byte [] recompressed_strings = new byte[xdim * ydim * 2];
+		    
+		    try
 		    {
-	        	new_green[i] <<= pixel_shift;
+		    	//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		    	
+		    	deflater.setInput(strings);
+		    	deflater.finish();
+		    	zipped_delta_length = deflater.deflate(zipped_strings);
+		    	deflater.end();
+		    	
+		        System.out.println("Green string length was " + string_length);
+		        System.out.println("Zipped string length was " + zipped_delta_length);
+		        
+		        
+		        int compressed_length = DeltaMapper.compressZeroBits(strings, string_length, compressed_strings);
+		        System.out.println("Compressed string length was " + compressed_length);
+		        deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		        deflater.setInput(compressed_strings, 0, compressed_length);
+		        int zipped_compressed_length = deflater.deflate(recompressed_strings);
+		        System.out.println("Zipped compressed string length was " + zipped_compressed_length);
+		        
+		        
+		        
+		        
+		        Inflater inflater = new Inflater();
+		        inflater.setInput(zipped_strings, 0, zipped_delta_length);
+		        int unzipped_length = inflater.inflate(unzipped_strings);
+		        
+		        System.out.println("Unzipped length was " + unzipped_length);
+		        System.out.println();
+		    }
+		    catch(Exception e)
+		    {
+		    	System.out.println(e.toString());
+		    }
+			
+			int [] new_delta = new int[delta.length];
+			int number_of_ints = DeltaMapper.unpackStrings(unzipped_strings, delta_random_lut, new_delta);
+			for(int i = 0; i < delta.length; i++)
+			     new_delta[i] += delta_min;
+			   
+	        new_green = DeltaMapper.getValuesFromDeltas(new_delta, xdim , ydim, init_value);
+	        
+	        int [] shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
+	       
+	        int blue_green_min = 0;
+		    for(int i = 0; i < xdim * ydim; i++)
+		    	if(shifted_blue_green[i] < blue_green_min)
+	            	blue_green_min = shifted_blue_green[i];
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	shifted_blue_green[i] -= blue_green_min;
+		    }
+	     
+		    init_value       = shifted_blue_green[0];
+		    delta            = DeltaMapper.getDeltasFromValues(shifted_blue_green, xdim, ydim, init_value);
+		    histogram_list   = DeltaMapper.getHistogram(delta);
+		    delta_min        = (int)histogram_list.get(0);
+		    histogram        = (int[])histogram_list.get(1);
+		    delta_random_lut = DeltaMapper.getRandomTable(histogram); 
+		    for(int i = 0; i < delta.length; i++)
+		    	delta[i] -= delta_min;
+		    delta_length = 0;
+		    
+		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+		    new_delta = new int[delta.length];
+		    
+		    zipped_delta_length = 0;
+            string_length = delta_length / 8;
+		    if(delta_length % 8 != 0)
+		    	string_length++;
+		    strings = new byte[string_length];
+		    
+		    for(int i = 0; i < string_length; i++)
+		        strings[i] = delta_strings[i];	
+		    
+		    try
+		    {
+		    	//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		    	deflater.setInput(strings);
+		    	deflater.finish();
+		    	zipped_delta_length = deflater.deflate(zipped_strings);
+		    	deflater.end();
+		    	
+		        System.out.println("Blue green string length was " + string_length);
+		        System.out.println("Zipped string length was " + zipped_delta_length);
+		        
+		        int compressed_length = DeltaMapper.compressZeroBits(strings, string_length, compressed_strings);
+		        System.out.println("Compressed string length was " + compressed_length);
+		        
+		        deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		        deflater.setInput(compressed_strings, 0, compressed_length);
+		        int zipped_compressed_length = deflater.deflate(recompressed_strings);
+		        System.out.println("Zipped compressed string length was " + zipped_compressed_length);
+		        
+		        
+		        
+		        
+		        
+		        
+		        Inflater inflater = new Inflater();
+		        inflater.setInput(zipped_strings, 0, zipped_delta_length);
+		        int unzipped_length = inflater.inflate(unzipped_strings);
+		        
+		        System.out.println("Unzipped length was " + unzipped_length);
+		        System.out.println();
+		    }
+		    catch(Exception e)
+		    {
+		    	System.out.println(e.toString());
+		    }
+			
+		    number_of_ints = DeltaMapper.unpackStrings(unzipped_strings, delta_random_lut, new_delta);
+		    for(int i = 0; i < delta.length; i++)
+		    {
+		    	new_delta[i] += delta_min;
+		    	delta[i] += delta_min;
+		    	
+		    	if(new_delta[i] != delta[i])
+		    	{
+		    		System.out.println("Unpacked value different from original value.");
+		    	}
+		    }
+		   
+            int[] new_blue_green = DeltaMapper.getValuesFromDeltas(new_delta, xdim , ydim, init_value);
+            
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	new_blue_green[i] += blue_green_min;
+		    }
+		   
+		    new_blue = DeltaMapper.getSum(new_blue_green, new_green);
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	new_blue[i] <<= pixel_shift;
+		    	if(new_blue[i] < 0)
+		    	{
+		    		new_blue[i] = 0;
+		    		System.out.println("Negative value out of range.");
+		    	}
+		    	else if(new_blue[i] > 255)
+		    	{
+		    		new_blue[i] = 255;
+		    		System.out.println("Positive value out of range.");
+		    	}
 		    }
 		    
-	        int [] blue_green = DeltaMapper.getDifference(blue, new_green);
-	        new_blue = DeltaMapper.getSum(blue_green, new_green);
-	        
-	        
-	        
-	        
-	        
+		    
+	        int [] red_green = DeltaMapper.getDifference(shifted_red, new_green);
+	        int red_green_min = 0;
+		    for(int i = 0; i < xdim * ydim; i++)
+		    	if(red_green[i] < red_green_min)
+	            	red_green_min = red_green[i];
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	red_green[i] -= red_green_min;
+		    }
+	     
+		    init_value       = red_green[0];
+		    delta            = DeltaMapper.getDeltasFromValues(red_green, xdim, ydim, init_value);
+		    histogram_list   = DeltaMapper.getHistogram(delta);
+		    delta_min        = (int)histogram_list.get(0);
+		    histogram        = (int[])histogram_list.get(1);
+		    delta_random_lut = DeltaMapper.getRandomTable(histogram); 
+		    for(int i = 0; i < delta.length; i++)
+		    	delta[i] -= delta_min;
+		    delta_length = 0;
+		    
+		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+		    
+		    zipped_delta_length = 0;
+            string_length = delta_length / 8;
+		    if(delta_length % 8 != 0)
+		    	string_length++;
+		    strings = new byte[string_length];
+		    
+		    for(int i = 0; i < string_length; i++)
+		        strings[i] = delta_strings[i];	
+		    
+		    try
+		    {
+		    	//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		    	deflater.setInput(strings);
+		    	deflater.finish();
+		    	zipped_delta_length = deflater.deflate(zipped_strings);
+		    	deflater.end();
+		    	
+		        System.out.println("Red green string length was " + string_length);
+		        System.out.println("Zipped string length was " + zipped_delta_length);
+		        
+		        int compressed_length = DeltaMapper.compressZeroBits(strings, string_length, compressed_strings);
+		        System.out.println("Compressed string length was " + compressed_length);
+		        
+		        deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		        deflater.setInput(compressed_strings, 0, compressed_length);
+		        int zipped_compressed_length = deflater.deflate(recompressed_strings);
+		        System.out.println("Zipped compressed string length was " + zipped_compressed_length);
+		        
+		        Inflater inflater = new Inflater();
+		        inflater.setInput(zipped_strings, 0, zipped_delta_length);
+		        int unzipped_length = inflater.inflate(unzipped_strings);
+		        
+		        System.out.println("Unzipped length was " + unzipped_length);
+		        System.out.println();
+		    }
+		    catch(Exception e)
+		    {
+		    	System.out.println(e.toString());
+		    }
+			
+		    
+		    new_delta = new int[delta.length];
+		    number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+		    for(int i = 0; i < delta.length; i++)
+		    {
+		    	new_delta[i] += delta_min;
+		    	delta[i] += delta_min;
+		    	
+		    	if(new_delta[i] != delta[i])
+		    	{
+		    		System.out.println("Unpacked value different from original value.");
+		    	}
+		    }
+		   
+            int[] new_red_green = DeltaMapper.getValuesFromDeltas(new_delta, xdim , ydim, init_value);
+            
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	new_red_green[i] += red_green_min;
+		    }
+		   
+		    new_red = DeltaMapper.getSum(new_red_green, new_green);
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	new_red[i] <<= pixel_shift;
+		    	if(new_red[i] < 0)
+		    	{
+		    		new_red[i] = 0;
+		    		System.out.println("Negative value out of range.");
+		    	}
+		    	else if(new_red[i] > 255)
+		    	{
+		    		new_red[i] = 255;
+		    		System.out.println("Positive value out of range.");
+		    	}
+		    }
+		   
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        // Not initalizing the alpha channel.
-	            new_pixel[i]  = 0;
+	            new_pixel[i] = 0;
+	            new_green[i] <<= pixel_shift;
 	            new_pixel[i] |= new_blue[i] << 16;
 	            new_pixel[i] |= new_green[i] << 8;    
 	            new_pixel[i] |= new_red[i];	
@@ -303,15 +551,13 @@ public class LoadTester
 			    for(int j = 0; j < ydim; j++)
 			    {
 			    	image.setRGB(i, j, new_pixel[j * xdim + i]);
-			    }
-			    	
+			    }	
 			} 
 		    System.out.println("Processed image.");
+		    System.out.println();
 		    image_canvas.repaint();
 		}
 	}
-	
-	
 	
 	class ReloadHandler implements ActionListener
 	{
