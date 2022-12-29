@@ -277,8 +277,8 @@ public class CompressTester
 			byte [] compressed_strings = new byte[xdim * ydim * 10];
 			byte [] decompressed_strings = new byte[xdim * ydim * 10];
 			
-			int compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			
+			//int compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length, compressed_strings);
 			int array_length = compressed_delta_length / 8;
 			if(compressed_delta_length % 8 != 0)
 				array_length++;
@@ -317,8 +317,8 @@ public class CompressTester
 			}
 			
 			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
-			int decompressed_delta_length = DeltaMapper.decompressZeroBits(strings, compressed_delta_length, decompressed_strings);
-			
+			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(strings, compressed_delta_length, decompressed_strings);
+			int decompressed_delta_length =  DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
 			System.out.println("The length of the green delta string in bits is " + delta_length);
 			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
 			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
