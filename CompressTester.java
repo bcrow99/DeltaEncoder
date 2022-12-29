@@ -278,11 +278,51 @@ public class CompressTester
 			byte [] decompressed_strings = new byte[xdim * ydim * 10];
 			
 			int compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			int decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
 			
-			System.out.println("The length of the delta string in bits is " + delta_length);
+			int array_length = compressed_delta_length / 8;
+			if(compressed_delta_length % 8 != 0)
+				array_length++;
+			
+			byte [] strings = new byte[array_length];
+			for(int i = 0; i < array_length; i++)
+			    strings[i] = compressed_strings[i];
+			byte [] zipped_strings = new byte[array_length * 2];
+			try
+		    {
+		    	//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+		    	
+		    	deflater.setInput(strings);
+		    	deflater.finish();
+		    	int zipped_length = deflater.deflate(zipped_strings);
+		    	deflater.end();
+		    	
+		        System.out.println("Zipped string length in bits was " + (zipped_length * 8));
+		        
+		        Inflater inflater = new Inflater();
+		        inflater.setInput(zipped_strings, 0, zipped_length);
+		        int unzipped_length = inflater.inflate(strings);
+		        
+		        System.out.println("Unzipped string length in bits was " + (unzipped_length * 8));
+		    }
+		    catch(Exception e)
+		    {
+		    	System.out.println(e.toString());
+		    }
+			
+			for(int i = 0; i < array_length; i++)
+			{
+				if(strings[i] != compressed_strings[i])
+					System.out.println("Unzipped value was not equal to original value.");
+			}
+			
+			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
+			int decompressed_delta_length = DeltaMapper.decompressZeroBits(strings, compressed_delta_length, decompressed_strings);
+			
+			System.out.println("The length of the green delta string in bits is " + delta_length);
 			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
 			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
+			System.out.println();
 			
 			int string_length = delta_length / 8;
 			
@@ -326,11 +366,20 @@ public class CompressTester
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
 		    new_delta = new int[delta.length];
 			
-		    number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+		    compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
+		    
+			System.out.println("The length of the blue green delta string in bits is " + delta_length);
+			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
+			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
+			System.out.println();
+		    
+		    //number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+			number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
 		    for(int i = 0; i < delta.length; i++)
 		    {
 		    	new_delta[i] += delta_min;
-		    	delta[i] += delta_min;
+		    	delta[i]     += delta_min;
 		    	
 		    	if(new_delta[i] != delta[i])
 		    	{
@@ -383,10 +432,19 @@ public class CompressTester
 		    
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
 		    
-			
+		    compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
 		    
-		    new_delta = new int[delta.length];
-		    number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+			System.out.println("The length of the red green delta string in bits is " + delta_length);
+			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
+			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
+			System.out.println();
+		    
+		    
+			
+			new_delta = new int[delta.length];
+		    //number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+		    number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
 		    for(int i = 0; i < delta.length; i++)
 		    {
 		    	new_delta[i] += delta_min;
