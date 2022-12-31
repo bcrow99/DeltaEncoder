@@ -713,6 +713,9 @@ public class DeltaMapper
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
+        
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
     	
     	int number_of_values = table.length;
         
@@ -791,6 +794,8 @@ public class DeltaMapper
         int number_of_bits = p * 8;
         if(start_bit != 0)
             number_of_bits -= 8 - start_bit;
+        //System.out.println("Start bit is " + start_bit);
+        //System.out.println("Stop bit is " + stop_bit);
         return(number_of_bits);
     }
     
@@ -798,7 +803,6 @@ public class DeltaMapper
     public static int packStrings2(int src[], int table[], byte dst[])
     {
     	int size             = src.length;
-    	
     	int number_of_values = table.length;
         
         int [] mask  = new int[8];
@@ -906,7 +910,10 @@ public class DeltaMapper
  
     public static int unpackStrings(byte src[], int table[], int dst[])
     {
-        int size                       = dst.length;
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+    	
+    	int size                       = dst.length;
         int number_of_different_values = table.length;
         int number_unpacked            = 0;
         
@@ -1026,55 +1033,65 @@ public class DeltaMapper
     	// decrease the length of the bit string.
         int number_of_zero_bits = 0;
         
-        
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
         int current_byte        = 0;
         int current_bit         = 0;
         byte mask               = 0x01;
         dst[0]                  = 0;
         
+        int i = 0;
         int j = 0;
         int k = 0;
-        for(int i = 0; i < size; i++)
+        for(i = 0; i < size; i++)
         {
-            if((src[k] & (mask << j)) == 0)
+            if((src[k] & (mask << j)) == 0 && i < size - 1)
             {
                 i++;
-                j++;
-                if(j == 8)
-                {
-                    j = 0;
-                    k++;
-                }
-                if((src[k] & (mask << j)) == 0)
-                {
-                    number_of_zero_bits++;
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                }
-                else
-                {
-                    dst[current_byte] |= (byte)mask << current_bit;
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                    dst[current_byte] |= (byte)mask << current_bit;
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                }
+                
+                //if(i < size)
+                //{
+                    j++;
+                
+                   if(j == 8)
+                   {
+                       j = 0;
+                       k++;
+                   }
+                   if((src[k] & (mask << j)) == 0)
+                   {
+                	   // Current bit is a 0.
+                       number_of_zero_bits++;
+                       current_bit++;
+                       if(current_bit == 8)
+                       {
+                           current_byte++;
+                           current_bit = dst[current_byte] = 0;
+                       }
+                   }
+                   else
+                   {
+                	   // Current bit is a 1.
+                       dst[current_byte] |= (byte)mask << current_bit;
+                       current_bit++;
+                       if(current_bit == 8)
+                       {
+                           current_byte++;
+                           current_bit = dst[current_byte] = 0;
+                       }
+                       dst[current_byte] |= (byte)mask << current_bit;
+                       current_bit++;
+                       if(current_bit == 8)
+                       {
+                           current_byte++;
+                           current_bit = dst[current_byte] = 0;
+                       }
+                   }
+                //}
             }
             else
             {
+            	// Current first bit is a 1.
                 dst[current_byte] |= (byte)mask << current_bit;
                 current_bit++;
                 if(current_bit == 8)
@@ -1097,24 +1114,46 @@ public class DeltaMapper
                 k++;
             }
         }    
-       
         int number_of_bits = current_byte * 8;
         number_of_bits    += current_bit;
+        if(i == size - 1)
+        {
+        	// Incrementing the number of bits adds an odd 0 to the string.
+        	// The last bit in a packed string has to be a 0.
+            number_of_bits++;
+            System.out.println("Did not parse last bit, which has to be a 0.");
+        }
+        
+        if(i > size)
+        {
+        	System.out.println("Parsed extra bit.");
+        }
+        else
+        {
+        	System.out.println("Parsed expected number of bits.");
+        }
+        
         return(number_of_bits);
     }
 
     public static int decompressZeroBits(byte src[], int size, byte dst[])
     {
+    	for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+    	
         int  current_byte = 0;
         int  current_bit  = 0;
         byte mask         = 0x01;
+        boolean odd       = false;
         dst[0]            = 0;
         
         int j = 0;
         int k = 0;
+        
         for(int i = 0; i < size; i++)
         {
-            if((src[k] & (mask << j)) != 0)
+        	
+            if(((src[k] & (mask << j)) != 0) && i < size - 1)
             {
                 i++;
                 j++;
@@ -1150,6 +1189,11 @@ public class DeltaMapper
                     }
                 }
             }
+            else if(((src[k] & (mask << j)) == 0) && i == size - 1)
+            {
+            	// We need to add an odd 0 bit to preserve the recursive property.
+            	odd = true;
+            }
             else
             {
                 current_bit++;
@@ -1174,8 +1218,13 @@ public class DeltaMapper
         }    
        
         int number_of_bits = current_byte * 8;
-        if(current_bit != 0)
-            number_of_bits    += current_bit - 1;
+        number_of_bits += current_bit;
+        
+        /*
+        if(odd)
+        	number_of_bits++;
+        */
+        
         return(number_of_bits);
     }
 
