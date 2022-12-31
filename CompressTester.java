@@ -229,39 +229,15 @@ public class CompressTester
 		     int [] shifted_red = new int[xdim * ydim];
 		     int [] new_pixel   = new int[xdim * ydim];
 		     
-		     //int mask = 255;
-		     //int k = 0;
-		     //for(int j = 0; j < pixel_shift; j++)
-		     //	 k += (int)Math.pow(2., j);
-		     //mask -= k;
-		     //System.out.println("Mask = " + mask);
 		     
-		     for(int i = 0; i < xdim * ydim; i++)
-			 {
-		         new_alpha[i] = alpha[i];
-		         
-			     new_blue[i]    = blue[i];
-			     new_blue[i]  >>= pixel_shift;
-		         new_blue[i]  <<= pixel_shift;
-		         //new_blue[i]   &= mask;
-			    
-			     //new_green[i]   = green[i];
-			     //new_green[i] >>= pixel_shift;
-		         //new_green[i] <<= pixel_shift;
-		         //new_green[i]   &= mask;
-		        
-		         shifted_blue[i]  = blue[i]  >> pixel_shift;
-		         shifted_green[i] = green[i] >> pixel_shift;
-			     shifted_red[i]   = red[i] >> pixel_shift;
-		        
-		        
-		        
-	             new_red[i]     = red[i];
-	             new_red[i]   >>= pixel_shift;
-		         new_red[i]   <<= pixel_shift;
-		         //new_red[i]   &= mask;
-			}
 		    
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		        shifted_blue[i]  = blue[i]  >> pixel_shift;
+		        shifted_green[i] = green[i] >> pixel_shift;
+			    shifted_red[i]   = red[i]   >> pixel_shift; 
+		    }
+		     
 		    int init_value           = shifted_green[0];
 			int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
 			ArrayList histogram_list = DeltaMapper.getHistogram(delta);
@@ -273,12 +249,11 @@ public class CompressTester
 			int delta_length = 0;
 			delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
 			
-			
 			byte [] compressed_strings = new byte[xdim * ydim * 10];
 			byte [] decompressed_strings = new byte[xdim * ydim * 10];
 			
 			//int compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length, compressed_strings);
+			int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
 			int array_length = compressed_delta_length / 8;
 			if(compressed_delta_length % 8 != 0)
 				array_length++;
@@ -297,13 +272,13 @@ public class CompressTester
 		    	int zipped_length = deflater.deflate(zipped_strings);
 		    	deflater.end();
 		    	
-		        System.out.println("Zipped string length in bits was " + (zipped_length * 8));
+		        //System.out.println("Zipped string length in bits was " + (zipped_length * 8));
 		        
 		        Inflater inflater = new Inflater();
 		        inflater.setInput(zipped_strings, 0, zipped_length);
 		        int unzipped_length = inflater.inflate(strings);
 		        
-		        System.out.println("Unzipped string length in bits was " + (unzipped_length * 8));
+		        //System.out.println("Unzipped string length in bits was " + (unzipped_length * 8));
 		    }
 		    catch(Exception e)
 		    {
@@ -317,7 +292,7 @@ public class CompressTester
 			}
 			
 			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
-			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(strings, compressed_delta_length, decompressed_strings);
+			
 			int decompressed_delta_length =  DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
 			System.out.println("The length of the green delta string in bits is " + delta_length);
 			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
@@ -337,6 +312,7 @@ public class CompressTester
 			int [] new_delta = new int[delta.length];
 			//int number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
 			int number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
+			//int number_of_ints = DeltaMapper.unpackStrings2(decompressed_strings, delta_random_lut, new_delta);
 			for(int i = 0; i < delta.length; i++)
 			     new_delta[i] += delta_min;
 			   
@@ -364,18 +340,22 @@ public class CompressTester
 		    delta_length = 0;
 		    
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
-		    new_delta = new int[delta.length];
-			
-		    compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
+		    //delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    
-			System.out.println("The length of the blue green delta string in bits is " + delta_length);
+		    new_delta = new int[delta.length];
+		    compressed_delta_length = DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
+		    //compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			decompressed_delta_length = DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
+			//decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
+			
+			System.out.println("The length of the blue green delta string in bits is " + (delta_length + 8));
 			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
 			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
 			System.out.println();
 		    
 		    //number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
 			number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
+			//number_of_ints = DeltaMapper.unpackStrings2(decompressed_strings, delta_random_lut, new_delta);
 		    for(int i = 0; i < delta.length; i++)
 		    {
 		    	new_delta[i] += delta_min;
@@ -401,7 +381,7 @@ public class CompressTester
 		    	if(new_blue[i] < 0)
 		    	{
 		    		new_blue[i] = 0;
-		    		System.out.println("Negative value out of range.");
+		    		System.out.println("Negative value out of range at i = " + i);
 		    	}
 		    	else if(new_blue[i] > 255)
 		    	{
@@ -431,11 +411,16 @@ public class CompressTester
 		    delta_length = 0;
 		    
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+		    //delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+		   
 		    
-		    compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
+		    //delta_length -= 8;
+		    compressed_delta_length = DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
+		    //compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			decompressed_delta_length = DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
+			//decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
 		    
-			System.out.println("The length of the red green delta string in bits is " + delta_length);
+			System.out.println("The length of the red green delta string in bits is " + (delta_length + 8));
 			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
 			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
 			System.out.println();
@@ -470,7 +455,7 @@ public class CompressTester
 		    	if(new_red[i] < 0)
 		    	{
 		    		new_red[i] = 0;
-		    		System.out.println("Negative value out of range.");
+		    		System.out.println("Negative value out of range at i = " + i);
 		    	}
 		    	else if(new_red[i] > 255)
 		    	{
@@ -478,6 +463,40 @@ public class CompressTester
 		    		System.out.println("Positive value out of range.");
 		    	}
 		    }
+		   
+		    // This code produces an image that should be exactly the same
+		    // as the processed image.  It also confirms that the <<= operator
+		    // pads with zeros, not with the right-most bit value, since 
+		    // the masked values are the same as the shifted values.
+		    /*
+		    int mask = 255;
+		    int k = 0;
+		    for(int j = 0; j < pixel_shift; j++)
+		        k += (int)Math.pow(2., j);
+		    mask -= k;
+		    //System.out.println("Mask = " + mask);
+		    
+		    
+		    for(int i = 0; i < xdim * ydim; i++)
+			{
+		         new_alpha[i] = alpha[i];
+		         
+			     new_blue[i]    = blue[i];
+			     new_blue[i]  >>= pixel_shift;
+		         new_blue[i]  <<= pixel_shift;
+		         //new_blue[i]   &= mask;
+			    
+			     new_green[i]   = green[i];
+			     new_green[i] >>= pixel_shift;
+		         new_green[i] <<= pixel_shift;
+		         //new_green[i]   &= mask;
+	            
+			     new_red[i]     = red[i];
+	             new_red[i]   >>= pixel_shift;
+		         new_red[i]   <<= pixel_shift;
+		         //new_red[i]   &= mask;
+			}
+			*/
 		   
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
@@ -488,7 +507,7 @@ public class CompressTester
 	            new_pixel[i] |= new_green[i] << 8;    
 	            new_pixel[i] |= new_red[i];	
 		    }
-		        
+		     
 			for(int i = 0; i < xdim; i++)
 			{
 			    for(int j = 0; j < ydim; j++)
@@ -515,7 +534,6 @@ public class CompressTester
 		    	}
 		    	
 		    } 
-		    
 			System.out.println("Reloaded original image.");
 			image_canvas.repaint();
 		}
