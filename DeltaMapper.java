@@ -89,7 +89,7 @@ public class DeltaMapper
 				int z    = src[(i + 1) * xdim + j + 1];
 			    
 				// Leaving the error biased (instead of rounding up) means
-			    // we are introducing less artifacts later when we
+			    // we are introducing less artifacts later if we
 			    // adjust the contrast range.
 				dst[k++] = (w + x + y + z) / 4;	
 			}
@@ -710,7 +710,7 @@ public class DeltaMapper
         return dst;
     }
     
-    // Returns length of bitstring in bits.
+
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
@@ -795,11 +795,63 @@ public class DeltaMapper
         int number_of_bits = p * 8;
         if(start_bit != 0)
             number_of_bits -= 8 - start_bit;
-       
         return(number_of_bits);
     }
     
- 
+    public static int unpackStrings(byte src[], int table[], int dst[])
+    {
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+    	
+    	int size                       = dst.length;
+        int number_of_different_values = table.length;
+        int number_unpacked            = 0;
+        
+        
+        int [] inverse_table = new int[number_of_different_values];
+        for(int i = 0; i < number_of_different_values; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = i;
+        }
+        
+        int length   = 1;
+        int src_byte = 0;
+        int dst_byte = 0;
+        byte mask    = 0x01;
+        byte bit     = 0;
+        
+        while(dst_byte < size)
+        {
+            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
+            if(non_zero != 0)
+                length++;
+            else
+            {
+                int k = length - 1;
+                dst[dst_byte++] = inverse_table[k];
+                number_unpacked++;
+                length = 1;
+            }
+            bit++;
+            if(bit == 8)
+            {
+                bit = 0;
+                src_byte++;
+            }
+        }
+        return(number_unpacked);
+    }
+    
+    
+    // These packing/unpacking functions fail on some inputs.
+    // Suspect it has something to do with an uneven distribution
+    // of negative/positive values but not sure.
+    // Works with simple binary images, which is the only time
+    // it offers significantly more compression than the functions
+    // above.  It also seems to work with data that originally consists 
+    // of  all positive values. Would like to understand this better, but
+    // probably not important.
     public static int packStrings2(int src[], int table[], byte dst[])
     {
     	int size             = src.length;
@@ -816,17 +868,6 @@ public class DeltaMapper
         mask[6] = 127;
         mask[7] = 255;
         
-        // Not currently used.
-        int [] start_mask  = new int[8];
-        
-        start_mask[0] = 128;
-        start_mask[1] = 192;
-        start_mask[2] = 224;
-        start_mask[3] = 240;
-        start_mask[4] = 248;
-        start_mask[5] = 252;
-        start_mask[6] = 254;
-        start_mask[7] = 255;
     
         int start_bit  = 0;
         int stop_bit   = 0;
@@ -837,6 +878,7 @@ public class DeltaMapper
         {
             int j = src[i];
             int k = table[j];
+            
             if(k == 0)
             {
                 start_bit++;
@@ -907,56 +949,11 @@ public class DeltaMapper
             number_of_bits -= 8 - start_bit;
         return(number_of_bits);
     }
- 
-    public static int unpackStrings(byte src[], int table[], int dst[])
-    {
-        for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
-    	
-    	int size                       = dst.length;
-        int number_of_different_values = table.length;
-        int number_unpacked            = 0;
-        
-        
-        int [] inverse_table = new int[number_of_different_values];
-        for(int i = 0; i < number_of_different_values; i++)
-        {
-            int j            = table[i];
-            inverse_table[j] = i;
-        }
-        
-        int length   = 1;
-        int src_byte = 0;
-        int dst_byte = 0;
-        byte mask    = 0x01;
-        byte bit     = 0;
-        
-        while(dst_byte < size)
-        {
-            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
-            if(non_zero != 0)
-                length++;
-            else
-            {
-                int k = length - 1;
-                dst[dst_byte++] = inverse_table[k];
-                number_unpacked++;
-                length = 1;
-            }
-            bit++;
-            if(bit == 8)
-            {
-                bit = 0;
-                src_byte++;
-            }
-        }
-        return(number_unpacked);
-    }
     
-    // This fails sometimes with certain inputs.  Not sure if the error
-    // is in the packing or unpacking function.  
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
+    	for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
         int size             = dst.length;
         int number_of_values = table.length;
         int number_unpacked  = 0;
@@ -964,7 +961,6 @@ public class DeltaMapper
    
         int [] index = new int[number_of_values];
         
-        // Get the inverse table we use to unpack ints.
         int [] inverse_table = new int[number_of_values];
         for(int i = 0; i < number_of_values; i++)
         {
@@ -1016,7 +1012,6 @@ public class DeltaMapper
         
         return(number_unpacked);
     }
-    
     
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
