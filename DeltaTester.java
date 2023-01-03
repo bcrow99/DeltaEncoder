@@ -29,6 +29,7 @@ public class DeltaTester
 	int [] blue;
 	
 	int pixel_shift  = 3;
+	int pixel_length = 0;
 	
 	byte[] delta_strings;
 	
@@ -64,8 +65,8 @@ public class DeltaTester
 			int number_of_bits = color_model.getPixelSize();
 			xdim = original_image.getWidth();
 			ydim = original_image.getHeight();
-			//System.out.println("Xdim is " + xdim + " and ydim is " + ydim);
-		    System.out.println("Number of pixel bits per channel is " + (xdim * ydim * 8));
+			int pixel_length = xdim * ydim * 8;
+		    
 			
 		    original_pixel = new int[xdim * ydim];
 		    alpha          = new int[xdim * ydim];
@@ -74,6 +75,7 @@ public class DeltaTester
 		    red            = new int[xdim * ydim];
 		    
 		    delta_strings  = new byte[xdim * ydim * 2];
+		    
 			
 			System.out.println();
 			
@@ -218,19 +220,20 @@ public class DeltaTester
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			 int [] new_alpha    = new int[xdim * ydim]; 
-		     int [] new_blue     = new int[xdim * ydim];
-		     int [] shifted_blue = new int[xdim * ydim];
+		    int [] new_alpha    = new int[xdim * ydim]; 
+		    int [] new_blue     = new int[xdim * ydim];
+		    int [] shifted_blue = new int[xdim * ydim];
 		     
-		     int [] new_green    = new int[xdim * ydim];
-		     int [] shifted_green = new int[xdim * ydim];
+		    int [] new_green    = new int[xdim * ydim];
+		    int [] shifted_green = new int[xdim * ydim];
 		     
-		     int [] new_red     = new int[xdim * ydim];
-		     int [] shifted_red = new int[xdim * ydim];
-		     int [] new_pixel   = new int[xdim * ydim];
-		     
-		     
+		    int [] new_red     = new int[xdim * ydim];
+		    int [] shifted_red = new int[xdim * ydim];
+		    int [] new_pixel   = new int[xdim * ydim];
 		    
+		    int pixel_length = xdim * ydim * 8;
+		    System.out.println("Pixel shift is " + pixel_shift);
+		    System.out.println();
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        shifted_blue[i]  = blue[i]  >> pixel_shift;
@@ -249,69 +252,120 @@ public class DeltaTester
 			int delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
+			double ratio = delta_length;
+			ratio /= pixel_length;
+			System.out.println("The ratio of green delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			
+			// Getting the number of bytes from the number of bits.
+			int delta_array_length = delta_length / 8;
+			if(delta_length % 8 != 0)
+				delta_array_length++;
+			
+			//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	byte [] zipped_strings = new byte[xdim * ydim * 10];
+	    	deflater.finish();
+	    	int zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+	    	
+	    	ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
+	    	
+	    	byte [] unzipped_strings = new byte[xdim * ydim * 10];
+	    	Inflater inflater = new Inflater();
+	        inflater.setInput(zipped_strings, 0, zipped_length);
+	        int unzipped_length = 0;
+	        try
+	        {
+	            unzipped_length = inflater.inflate(unzipped_strings);
+	            for(int i = 0; i < delta_array_length; i++)
+		        {
+		        	if(delta_strings[i] != unzipped_strings[i])
+		        	{
+		        		System.out.println("Unzipped value not equal to original value at i = " + i);
+		        	}
+		        }
+	        }
+	        catch(Exception e)
+	        {
+	            System.out.println(e.toString());	
+	        }
+	        
+	        for(int i = 0; i < delta_array_length; i++)
+	        {
+	        	if(delta_strings[i] != unzipped_strings[i])
+	        	{
+	        		System.out.println("Unzipped value not equal to original value at i = " + i);
+	        	}
+	        }
+			
 			byte [] compressed_strings = new byte[xdim * ydim * 10];
-			byte [] decompressed_strings = new byte[xdim * ydim * 10];
 			
-			//int compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+			// Padding the input to enable recursion, which corrupts trailing bits in string;
 			int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
-			int array_length = compressed_delta_length / 8;
-			if(compressed_delta_length % 8 != 0)
-				array_length++;
+			ratio  = compressed_delta_length;
+			ratio /= pixel_length;
+			System.out.println("The ratio of compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			
-			byte [] strings = new byte[array_length];
-			for(int i = 0; i < array_length; i++)
-			    strings[i] = compressed_strings[i];
-			byte [] zipped_strings = new byte[array_length * 2];
-			try
+			int compressed_array_length = compressed_delta_length / 8;
+			if(compressed_delta_length %8 != 0)
+				compressed_array_length++;
+			
+			byte [] decompressed_strings = new byte[xdim * ydim * 10];
+			int decompressed_delta_length =  DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
+			for(int i = 0; i < delta_array_length; i++)
+	        {
+	        	if(delta_strings[i] != decompressed_strings[i])
+	        	{
+	        		System.out.println("Decompressed value not equal to original value at i = " + i);
+	        	}
+	        }
+			
+		
+			deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    deflater.setInput(compressed_strings, 0, compressed_array_length);
+		    deflater.finish();
+		    zipped_length = deflater.deflate(zipped_strings);
+		    deflater.end();
+		    	
+		    ratio = zipped_length * 8;
+		    ratio /= pixel_length;
+		    System.out.println("The ratio of zipped compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		        
+		    inflater = new Inflater();
+		    inflater.setInput(zipped_strings, 0, zipped_length);
+		    
+		    try
 		    {
-		    	//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-		    	Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-		    	
-		    	deflater.setInput(strings);
-		    	deflater.finish();
-		    	int zipped_length = deflater.deflate(zipped_strings);
-		    	deflater.end();
-		    	
-		        //System.out.println("Zipped string length in bits was " + (zipped_length * 8));
-		        
-		        Inflater inflater = new Inflater();
-		        inflater.setInput(zipped_strings, 0, zipped_length);
-		        int unzipped_length = inflater.inflate(strings);
-		        
-		        //System.out.println("Unzipped string length in bits was " + (unzipped_length * 8));
+		        unzipped_length = inflater.inflate(unzipped_strings);
+		   
+			    for(int i = 0; i < unzipped_length; i++)
+			    {
+				    if(unzipped_strings[i] != compressed_strings[i])
+					System.out.println("Unzipped value was not equal to original value.");
+			    }
 		    }
 		    catch(Exception e)
 		    {
 		    	System.out.println(e.toString());
 		    }
 			
-			for(int i = 0; i < array_length; i++)
-			{
-				if(strings[i] != compressed_strings[i])
-					System.out.println("Unzipped value was not equal to original value.");
-			}
+			decompressed_delta_length =  DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
 			
-			//int decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
 			
-			int decompressed_delta_length =  DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
-			System.out.println("The length of the green delta string in bits is " + delta_length);
-			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
-			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
-			System.out.println();
-			
-			int string_length = delta_length / 8;
-			
-			for(int i = 0; i < string_length; i++)
+			for(int i = 0; i < delta_array_length; i++)
 			{
 				if(decompressed_strings[i] != delta_strings[i])
 				{
 					System.out.println("Original value different from decompressed value at i = " + i);
 				}
 			}
+			System.out.println();
+			
 			
 			int [] new_delta = new int[delta.length];
-			//int number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
-			//int number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
 			int number_of_ints = DeltaMapper.unpackStrings2(decompressed_strings, delta_random_lut, new_delta);
 			for(int i = 0; i < delta.length; i++)
 			     new_delta[i] += delta_min;
@@ -340,22 +394,51 @@ public class DeltaTester
 		    delta_length = 0;
 		    
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
-		    //delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    
+		    ratio = delta_length;
+			ratio /= pixel_length;
+			System.out.println("The ratio of blue green delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    
+			delta_array_length = delta_length / 8;
+			if(delta_length % 8 != 0)
+				delta_array_length++;
+			
+	    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+	    	
+	    	ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			
 		    new_delta = new int[delta.length];
 		    compressed_delta_length = DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
-		    //compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
-			decompressed_delta_length = DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
-			//decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
-			
-			System.out.println("The length of the blue green delta string in bits is " + (delta_length + 8));
-			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
-			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
-			System.out.println();
 		    
-		    //number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+		    ratio = compressed_delta_length;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    
+	    	compressed_array_length = compressed_delta_length / 8;
+	    	if(compressed_delta_length % 8 != 0)
+	    		compressed_array_length++;
+			
+	    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	deflater.setInput(compressed_strings, 0, compressed_array_length);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+	    	
+	    	ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of zipped compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			
+	    	
+	    	decompressed_delta_length = DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
+
 			number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
-			//number_of_ints = DeltaMapper.unpackStrings2(decompressed_strings, delta_random_lut, new_delta);
+			
 		    for(int i = 0; i < delta.length; i++)
 		    {
 		    	new_delta[i] += delta_min;
@@ -366,7 +449,7 @@ public class DeltaTester
 		    		System.out.println("Unpacked value different from original value.");
 		    	}
 		    }
-		   
+		    
             int[] new_blue_green = DeltaMapper.getValuesFromDeltas(new_delta, xdim , ydim, init_value);
             
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -390,6 +473,8 @@ public class DeltaTester
 		    	}
 		    }
 		    
+		    System.out.println();
+		    
 	        int [] red_green = DeltaMapper.getDifference(shifted_red, new_green);
 	        int red_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -411,24 +496,50 @@ public class DeltaTester
 		    delta_length = 0;
 		    
 		    delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
-		    //delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+		    ratio = delta_length;
+			ratio /= pixel_length;
+			System.out.println("The ratio of red green delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    
+			delta_array_length = delta_length / 8;
+			if(delta_length % 8 != 0)
+				delta_array_length++;
+			deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+	    	
+	    	ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			
 		   
-		    
-		    //delta_length -= 8;
 		    compressed_delta_length = DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
-		    //compressed_delta_length = DeltaMapper.compressZeroBits(delta_strings, delta_length, compressed_strings);
+		    
+		    
+		    ratio = compressed_delta_length;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    
+		    
+	    	compressed_array_length = compressed_delta_length / 8;
+	    	if(compressed_delta_length % 8 != 0)
+	    		compressed_array_length++;
+			
+	    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	deflater.setInput(compressed_strings, 0, compressed_array_length);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+	    	
+	    	ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	System.out.println("The ratio of zipped compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+	    	
 			decompressed_delta_length = DeltaMapper.decompressStrings(compressed_strings, compressed_delta_length, decompressed_strings);
-			//decompressed_delta_length = DeltaMapper.decompressZeroBits(compressed_strings, compressed_delta_length, decompressed_strings);
-		    
-			System.out.println("The length of the red green delta string in bits is " + (delta_length + 8));
-			System.out.println("The length of the compressed delta string in bits is " + compressed_delta_length);
-			System.out.println("The length of the decompressed delta string in bits is " + decompressed_delta_length);
-			System.out.println();
-		    
-		    
 			
 			new_delta = new int[delta.length];
-		    //number_of_ints = DeltaMapper.unpackStrings(delta_strings, delta_random_lut, new_delta);
+		    
 		    number_of_ints = DeltaMapper.unpackStrings(decompressed_strings, delta_random_lut, new_delta);
 		    for(int i = 0; i < delta.length; i++)
 		    {
@@ -464,6 +575,7 @@ public class DeltaTester
 		    	}
 		    }
 		   
+		    System.out.println();
 		    // This code produces an image that should be exactly the same
 		    // as the processed image.  It also confirms that the <<= operator
 		    // pads with zeros, not with the right-most bit value, since 
@@ -515,8 +627,6 @@ public class DeltaTester
 			    	image.setRGB(i, j, new_pixel[j * xdim + i]);
 			    }	
 			} 
-		    System.out.println("Processed image.");
-		    System.out.println();
 		    image_canvas.repaint();
 		}
 	}
