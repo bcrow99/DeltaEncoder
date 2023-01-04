@@ -192,6 +192,57 @@ public class DeltaEncoder
 				
 				settings_menu.add(shift_item);
 				
+				
+				JCheckBoxMenuItem set_compress = new JCheckBoxMenuItem("Compress");
+				ActionListener compress_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(compress == true)
+						{
+		            		compress = false;
+							item.setState(false);
+						}
+						else
+						{
+							compress = true;
+							item.setState(true);	
+						}
+		            }   	
+				};
+				set_compress.addActionListener(compress_handler);
+				if(compress)
+					set_compress.setState(true);
+				else
+					set_compress.setState(false);
+				settings_menu.add(set_compress);
+				
+				JCheckBoxMenuItem set_huffman = new JCheckBoxMenuItem("Huffman Only");
+				ActionListener huffman_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(huffman_only == true)
+						{
+		            		huffman_only = false;
+							item.setState(false);
+						}
+						else
+						{
+							huffman_only = true;
+							item.setState(true);	
+						}
+		            }   	
+				};
+				set_huffman.addActionListener(huffman_handler);
+				if(huffman_only)
+					set_huffman.setState(true);
+				else
+					set_huffman.setState(false);
+				settings_menu.add(set_huffman);
+				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
 				
@@ -568,8 +619,6 @@ public class DeltaEncoder
 		    	System.out.println("The ratio of zipped compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 	    	}
 		    System.out.println();
-		    
-    
 		    
 	        int [] red_blue = DeltaMapper.getDifference(shifted_red, shifted_blue);
 	        int red_blue_min = 0;
