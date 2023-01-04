@@ -30,8 +30,9 @@ public class DeltaEncoder
 	
 	int     pixel_shift  = 3;
 	int     pixel_length = 0;
-	boolean huffman_only = false;
+	boolean huffman_only = true;
 	boolean compress     = false;
+	long    file_length  = 0;
 	
 	byte[] delta_strings;
 	
@@ -51,7 +52,7 @@ public class DeltaEncoder
 		//System.out.println("Current java version is " + java_version);
 		//System.out.println("Current os is " + os + " " + os_version + " on " + machine);
 		//System.out.println("Image file is " + filename);
-		DeltaEncoder processor = new DeltaEncoder(prefix + filename);
+		DeltaEncoder encoder = new DeltaEncoder(prefix + filename);
 	}
 
 	public DeltaEncoder(String _filename)
@@ -60,6 +61,8 @@ public class DeltaEncoder
 		try
 		{
 			File file = new File(filename);
+			file_length = file.length();
+			
 			original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
 			ColorModel color_model = original_image.getColorModel();
@@ -283,8 +286,14 @@ public class DeltaEncoder
 		    int [] shifted_red = new int[xdim * ydim];
 		    int [] new_pixel   = new int[xdim * ydim];
 		    
+		    double file_ratio = 0;
+		    
 		    int pixel_length = xdim * ydim * 8;
+		    file_ratio = file_length * 8;
+		    file_ratio /= pixel_length;
 		    System.out.println("Pixel shift is " + pixel_shift);
+		    System.out.println("Huffman only is " + huffman_only);
+		    System.out.println("File ratio is " + String.format("%.4f", file_ratio));
 		    System.out.println();
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
