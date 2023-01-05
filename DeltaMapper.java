@@ -643,6 +643,7 @@ public class DeltaMapper
         int value = init_value;
         for(int i = 0; i < ydim; i++)
         {
+        	// We know this is zero, and can use it to mark what type of deltas they are.
             int delta     = src[k] - value;
             value        += delta;
             dst[k++]      = delta;
@@ -677,6 +678,73 @@ public class DeltaMapper
         }
         return dst;
     }
+    
+    
+    
+    public static int[] getDeltasFromValues2(int src[], int xdim, int ydim, int init_value)
+    {
+        int[] dst = new int[xdim * ydim];
+    	
+        // Might want to set the first value to 1 mark the type of deltas.
+        int k     = 0;
+        int value = init_value;
+        int delta = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)
+            {
+            	if(i == 0)
+            	{
+            		delta     = src[k] - value;
+                    value     += delta;
+                    dst[k++]  = delta;	
+            	}
+            	else
+            	{
+                    delta          = src[k]  - src[k - xdim];
+                    dst[k++]       = delta;
+            	}
+            }
+        }
+        
+        return dst;
+    }
+
+    public static int[] getValuesFromDeltas2(int src[],int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+    	
+    	// We know the first value in the source data is 0.
+    	// Could use that to mark the type of deltas.
+        dst[0] = init_value;
+    	int k     = 1;
+        int value = init_value;
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[k++] = value;
+        }
+        
+        //System.out.println("k = " + k + ", xdim = " + xdim);
+   
+        // Now we can use values from the destination data. 
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)
+            {
+            	dst[k] = dst[k - xdim] + src[k];
+                k++;   
+            }
+        }
+        return dst;
+    }
+    
+    
+    
+    
+    
+    
     public static int[] getDeltasFromValues(int src[])
     {
     	int   length = src.length;
@@ -709,7 +777,6 @@ public class DeltaMapper
         }
         return dst;
     }
-    
 
     public static int packStrings(int src[], int table[], byte dst[])
     {
@@ -1257,7 +1324,7 @@ public class DeltaMapper
     
         if(current_size > 0)
         {
-            //System.out.println("The number of iterations was " + number_of_iterations);
+            System.out.println("The number of iterations was " + number_of_iterations);
             if(current_size % 8 == 0)
             {
                 byte_size      = current_size / 8;
@@ -1337,7 +1404,7 @@ public class DeltaMapper
            mask++;
         }
         
-        System.out.println("The number of iterations was " + number_of_iterations);
+        //System.out.println("The number of iterations was " + number_of_iterations);
         
         current_size = 0;
         if(number_of_iterations == 1)
