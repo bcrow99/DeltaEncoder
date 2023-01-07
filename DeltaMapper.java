@@ -178,6 +178,18 @@ public class DeltaMapper
 		return(total);
 	}
 	
+	public static int getSum(int src[])
+	{
+		int length = src.length;
+		int sum  = 0;
+		
+		for(int i = 0; i < length; i++)
+		{
+			sum += src[i];
+		}
+		return(sum);
+	}
+	
 	public static double getAbsoluteTotal(double src[])
 	{
 		int length = src.length;
@@ -589,53 +601,13 @@ public class DeltaMapper
 	    return dst;
 	}
 	
-	
-	 
-    public static int[] getDeltasFromValues(int src[], int xdim, int ydim)
+	public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
     {
-        int[] dst = new int[xdim * ydim];
-    	
-        int k     = 0;
-        int value = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-            int delta     = src[k] - value;
-            value        += delta;
-            dst[k++]      = delta;
-            int current_value = value; 
-            for(int j = 1; j < xdim; j++)
-            {
-                delta          = src[k]  - current_value;
-                current_value += delta;
-                dst[k++]       = delta;
-            }
-        }
-        
-        return dst;
-    }
-
-    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim)
-    {
-    	int[] dst = new int[xdim * ydim];
-    	
-        int k     = 0;
-        int value = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-            value            += src[k];
-            int current_value = value;
-            dst[k++]          = current_value;
-            for(int j = 1; j < xdim; j++)
-            {
-                current_value += src[k];
-                dst[k++]       = current_value;
-            }
-        }
-        
-        return dst;
+		int[] dst = new int[xdim * ydim];
+		return dst;
     }
     
-    public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
+    public static int[] getDeltasFromValues1(int src[], int xdim, int ydim, int init_value)
     {
         int[] dst = new int[xdim * ydim];
     	
@@ -643,15 +615,20 @@ public class DeltaMapper
         int value = init_value;
         for(int i = 0; i < ydim; i++)
         {
-        	// We know this is zero, and can use it to mark what type of deltas they are.
-            int delta     = src[k] - value;
-            value        += delta;
-            dst[k++]      = delta;
-            int current_value = value; 
+        	// We know this is zero, and use it to mark the type of deltas horizontal.
+            if(i == 0)
+        	    dst[k++] = 0;
+            else
+            {
+            	int delta   = src[k] - init_value;
+            	dst[k++]    = delta;
+            	init_value += delta;
+            	value = init_value;
+            }
             for(int j = 1; j < xdim; j++)
             {
-                delta          = src[k]  - current_value;
-                current_value += delta;
+                int delta      = src[k]  - value;
+                value += delta;
                 dst[k++]       = delta;
             }
         }
@@ -659,7 +636,7 @@ public class DeltaMapper
         return dst;
     }
 
-    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim, int init_value)
+    public static int[] getValuesFromDeltas1(int src[],int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
     	
@@ -678,14 +655,12 @@ public class DeltaMapper
         }
         return dst;
     }
-    
-    
     
     public static int[] getDeltasFromValues2(int src[], int xdim, int ydim, int init_value)
     {
         int[] dst = new int[xdim * ydim];
     	
-        // Might want to set the first value to 1 mark the type of deltas.
+        // Setting the first value to 1 mark the type of deltas vertical.
         int k     = 0;
         int value = init_value;
         int delta = 0;
@@ -695,9 +670,14 @@ public class DeltaMapper
             {
             	if(i == 0)
             	{
-            		delta     = src[k] - value;
-                    value     += delta;
-                    dst[k++]  = delta;	
+            		if(j == 0)
+            			dst[k++] = 1;
+            		else
+            		{
+            		    delta     = src[k] - value;
+                        value     += delta;
+                        dst[k++]  = delta;
+            		}
             	}
             	else
             	{
@@ -706,7 +686,6 @@ public class DeltaMapper
             	}
             }
         }
-        
         return dst;
     }
 
@@ -725,9 +704,6 @@ public class DeltaMapper
         	value   += src[i];
         	dst[k++] = value;
         }
-        
-        //System.out.println("k = " + k + ", xdim = " + xdim);
-   
         // Now we can use values from the destination data. 
         for(int i = 1; i < ydim; i++)
         {
@@ -739,11 +715,6 @@ public class DeltaMapper
         }
         return dst;
     }
-    
-    
-    
-    
-    
     
     public static int[] getDeltasFromValues(int src[])
     {
@@ -778,6 +749,7 @@ public class DeltaMapper
         return dst;
     }
 
+    
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
