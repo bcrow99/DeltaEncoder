@@ -190,6 +190,18 @@ public class DeltaMapper
 		return(sum);
 	}
 	
+	public static int getAbsoluteSum(int src[])
+	{
+		int length = src.length;
+		int sum  = 0;
+		
+		for(int i = 0; i < length; i++)
+		{
+			sum += Math.abs(src[i]);
+		}
+		return(sum);
+	}
+	
 	public static double getAbsoluteTotal(double src[])
 	{
 		int length = src.length;
@@ -601,12 +613,52 @@ public class DeltaMapper
 	    return dst;
 	}
 	
+	public static int getVerticalDeltaSum(int src[], int xdim, int ydim)
+	{
+		int sum = 0;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+			    int delta = src[i * xdim + j] - src[i * xdim + j - 1];
+			    sum += Math.abs(delta);
+			}
+		}
+		return sum;
+	}
+	
+	public static int getHorizontalDeltaSum(int src[], int xdim, int ydim)
+	{
+		int sum = 0;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				int delta = src[i * xdim + j] - src[(i - 1) * xdim + j - 1];
+			    sum += Math.abs(delta);	
+			}
+		}
+		return sum;
+	}
 	public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
     {
-		int[] dst = new int[xdim * ydim];
-		return dst;
+		int [] delta1     = getDeltasFromValues1(src, xdim, ydim, init_value);
+		int    delta_sum1 = getHorizontalDeltaSum(delta1, xdim, ydim);
+    	int [] delta2     = getDeltasFromValues2(src, xdim, ydim, init_value);
+		int    delta_sum2 = getVerticalDeltaSum(delta2, xdim, ydim);
+    	
+		if(delta_sum1 <= delta_sum2)
+		{
+			System.out.println("Using horizontal deltas.");
+			return delta1;
+		}
+		else
+		{
+			System.out.println("Using vertical deltas.");
+			return delta2;
+		}
     }
-    
+	
     public static int[] getDeltasFromValues1(int src[], int xdim, int ydim, int init_value)
     {
         int[] dst = new int[xdim * ydim];
@@ -615,7 +667,7 @@ public class DeltaMapper
         int value = init_value;
         for(int i = 0; i < ydim; i++)
         {
-        	// We know this is zero, and use it to mark the type of deltas horizontal.
+        	// We set the first value to zero to mark the type of deltas as horizontal.
             if(i == 0)
         	    dst[k++] = 0;
             else
@@ -636,6 +688,28 @@ public class DeltaMapper
         return dst;
     }
 
+    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim, int init_value)
+    {
+        if(src[0] == 0)
+        {
+        	int [] value = getValuesFromDeltas1(src, xdim, ydim, init_value);
+        	return value;
+        }
+        else if(src[0] == 1)
+        {
+        	int [] value = getValuesFromDeltas2(src, xdim, ydim, init_value);
+        	return value;   	
+        }
+        else
+        {
+        	// We could throw an exception here but will just return an 
+        	// uninitialized array.
+        	System.out.println("Type of delta undefined.");
+        	int [] value = new int[xdim * ydim];
+        	return value;
+        }
+        	
+    }
     public static int[] getValuesFromDeltas1(int src[],int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
@@ -1253,7 +1327,90 @@ public class DeltaMapper
         
         return(number_of_bits);
     }
+    
+    /*
+    public static int compressStrings(byte src[], int size, byte dst[])
+    {
+        byte[]  temp = new byte[src.length * 10];
+        
+        int number_of_iterations = 1;
+        int current_size         = compressZeroBits(src, size, dst);
+        System.out.println("Original size was " + size);
+        System.out.println("Size after single iteration of compression was " + current_size);
+        
+        // We'll return the first result even if we actually expanded the data.
+        if(current_size >= size)
+        {
+        	// We still need to append the number of iterations, which is 1.
+        	if(current_size % 8 == 0)
+            {
+                int byte_size      = current_size / 8;
+                dst[byte_size] = (byte) number_of_iterations;
+                dst[byte_size] &= 127;
+            }
+            else
+            {
+                int  remainder = current_size % 8;
+                int  byte_size = current_size / 8;
 
+                dst[byte_size] |= (byte) (number_of_iterations << remainder);
+                byte_size++;
+                dst[byte_size] = 0;
+                if(remainder > 1)
+                    dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+            }
+            return(current_size + 8);
+        }
+        
+        int previous_size = size;
+        while(current_size < previous_size)
+        {
+            previous_size = current_size;
+            if(number_of_iterations % 2 == 1)
+            {
+                current_size = compressZeroBits(dst, previous_size, temp);
+            }
+            else
+            {
+                current_size = compressZeroBits(temp, previous_size, dst);
+            }
+            number_of_iterations++;
+            System.out.println("Size after " + number_of_iterations + " iterations of compression was " + current_size);
+        }
+        number_of_iterations--;
+        current_size = previous_size;
+        if(number_of_iterations % 2 == 1) // The last source buffer was temp, and we need to copy the data to the dst buffer.
+        {
+            int byte_size = current_size / 8;
+            if(current_size % 8 != 0)
+                byte_size++; 
+            for(int i = 0; i < byte_size; i++)
+                dst[i] = temp[i];
+        }
+        System.out.println("The final number of iterations was " + number_of_iterations);
+        System.out.println("The final size was " + (current_size + 8));
+        
+        if(current_size % 8 == 0)
+        {
+            int byte_size      = current_size / 8;
+            dst[byte_size] = (byte) number_of_iterations;
+            dst[byte_size] &= 127;
+        }
+        else
+        {
+            int  remainder = current_size % 8;
+            int  byte_size = current_size / 8;
+
+            dst[byte_size] |= (byte) (number_of_iterations << remainder);
+            byte_size++;
+            dst[byte_size] = 0;
+            if(remainder > 1)
+                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+        }
+        return(current_size + 8);
+    }
+    */
+   
     public static int compressStrings(byte src[], int size, byte dst[])
     {
         int number_of_iterations, current_size, previous_size;
@@ -1280,7 +1437,7 @@ public class DeltaMapper
             }
             number_of_iterations++;
         }
-        if(current_size == -1 && number_of_iterations > 1)
+        if(number_of_iterations > 1)
         {
             current_size = previous_size;
             number_of_iterations--;
@@ -1294,30 +1451,27 @@ public class DeltaMapper
                 dst[i] = temp[i];
         }        
     
-        if(current_size > 0)
+        if(current_size % 8 == 0)
         {
-            System.out.println("The number of iterations was " + number_of_iterations);
-            if(current_size % 8 == 0)
-            {
-                byte_size      = current_size / 8;
-                dst[byte_size] = (byte) number_of_iterations;
-                dst[byte_size] &= 127;
-            }
-            else
-            {
-                int  remainder = current_size % 8;
-                byte_size = current_size / 8;
-
-                dst[byte_size] |= (byte) (number_of_iterations << remainder);
-                byte_size++;
-                dst[byte_size] = 0;
-                if(remainder > 1)
-                    dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
-            }
-            return(current_size + 8);
+            byte_size      = current_size / 8;
+            dst[byte_size] = (byte) number_of_iterations;
+            dst[byte_size] &= 127;
         }
-        return(current_size);
+        else
+        {
+            int  remainder = current_size % 8;
+            byte_size = current_size / 8;
+
+            dst[byte_size] |= (byte) (number_of_iterations << remainder);
+            byte_size++;
+            dst[byte_size] = 0;
+            if(remainder > 1)
+                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+        }
+        return(current_size + 8);
     }
+    
+   
     
     public static int decompressStrings(byte src[], int size, byte dst[])
     {

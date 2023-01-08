@@ -286,7 +286,15 @@ public class DeltaEncoder
 		    int [] shifted_red = new int[xdim * ydim];
 		    int [] new_pixel   = new int[xdim * ydim];
 		    
+		    byte [] delta_bytes = new byte[xdim * ydim];
+		    
+		    
+		    byte [] zipped_strings = new byte[xdim * ydim * 8];
+		    byte [] compressed_strings = new byte[xdim * ydim * 8];
+		    
 		    double file_ratio = 0;
+		    
+		    Deflater deflater;
 		    
 		    int pixel_length = xdim * ydim * 8;
 		    file_ratio = file_length * 8;
@@ -295,6 +303,7 @@ public class DeltaEncoder
 		    System.out.println("Huffman only is " + huffman_only);
 		    System.out.println("File ratio is " + String.format("%.4f", file_ratio));
 		    System.out.println();
+		    
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        shifted_blue[i]  = blue[i]  >> pixel_shift;
@@ -303,17 +312,51 @@ public class DeltaEncoder
 		    }
 		     
 		    int init_value           = shifted_green[0];
-			int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
-			ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+		    int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
+			
+		    int green_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The green delta sum is " + green_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The green delta sum is " + green_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
+		    
+		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			int delta_min            = (int)histogram_list.get(0);
 			int [] histogram         = (int[])histogram_list.get(1);
 			int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
+			{
 			    delta[i] -= delta_min;
+			    delta_bytes[i] = (byte)delta[i];
+			}
+			
+			if(huffman_only)
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+			else
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+	    	deflater.setInput(delta_bytes);
+	    	deflater.finish();
+	    	int zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+			
+	    	double ratio = zipped_length * 8;
+	    	ratio /= pixel_length;
+	    	
+	    	System.out.println("The ratio of zipped green delta bytes to pixel bits is " + String.format("%.4f", ratio));
+			
 			int delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
-			double ratio = delta_length;
+			ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of green delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			
@@ -321,29 +364,24 @@ public class DeltaEncoder
 			int delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
 				delta_array_length++;
-			
-			byte [] zipped_strings = new byte[xdim * ydim * 8];
-			Deflater deflater;
-			
+		
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 	    	deflater.setInput(delta_strings, 0, delta_array_length);
 	    	deflater.finish();
-	    	int zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
 	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
 	    	
-			
-			byte [] compressed_strings = new byte[xdim * ydim * 8];
-			
 			if(compress)
 			{
 				// Padding the input to enable recursion, which corrupts trailing bits in string.
+				// Double check to see if this is fixed now that we're returning the shortest string.
 				int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
@@ -368,13 +406,30 @@ public class DeltaEncoder
 			}
 			System.out.println();
 	          
-		    init_value       = shifted_blue[0];
+			
+			init_value       = shifted_blue[0];
 			delta            = DeltaMapper.getDeltasFromValues(shifted_blue, xdim, ydim, init_value);
+			
+			
+		    int blue_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	blue_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The blue delta sum is " + blue_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	blue_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The blue delta sum is " + blue_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
 			histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 			    delta[i] -= delta_min;
 			delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
@@ -428,13 +483,28 @@ public class DeltaEncoder
 			}
 			System.out.println();
 			
+			
 			init_value       = shifted_red[0];
 		    delta            = DeltaMapper.getDeltasFromValues(shifted_red, xdim, ydim, init_value);
+		    
+		    int red_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	red_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red delta sum is " + red_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	red_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red delta sum is " + red_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
 			histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= delta_min;
 			delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
@@ -500,11 +570,26 @@ public class DeltaEncoder
 	     
 		    init_value       = shifted_blue_green[0];
 		    delta            = DeltaMapper.getDeltasFromValues(shifted_blue_green, xdim, ydim, init_value);
+		    
+		    int blue_green_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	blue_green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The blue green delta sum is " + blue_green_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	blue_green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The blue green delta sum is " + blue_green_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
 		    delta_random_lut = DeltaMapper.getRandomTable(histogram); 
-		    for(int i = 0; i < delta.length; i++)
+		    for(int i = 1; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
 		    
@@ -572,11 +657,26 @@ public class DeltaEncoder
 	     
 		    init_value       = red_green[0];
 		    delta            = DeltaMapper.getDeltasFromValues(red_green, xdim, ydim, init_value);
+		    
+		    int red_green_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	red_green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red green delta sum is " + red_green_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	red_green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red green delta sum is " + red_green_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
 		    delta_random_lut = DeltaMapper.getRandomTable(histogram); 
-		    for(int i = 0; i < delta.length; i++)
+		    for(int i = 1; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
 		    
@@ -617,7 +717,7 @@ public class DeltaEncoder
 		    		deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 		    	else
 		    		deflater = new Deflater(Deflater.BEST_COMPRESSION);
-		    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	
 		    	deflater.setInput(compressed_strings, 0, compressed_array_length);
 		    	deflater.finish();
 		    	zipped_length = deflater.deflate(zipped_strings);
@@ -641,11 +741,26 @@ public class DeltaEncoder
 	     
 		    init_value       = red_blue[0];
 		    delta            = DeltaMapper.getDeltasFromValues(red_blue, xdim, ydim, init_value);
+		    
+		    int red_blue_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	red_blue_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red blue delta sum is " + red_blue_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	red_blue_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    	System.out.println("The red blue delta sum is " + red_blue_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
 		    delta_random_lut = DeltaMapper.getRandomTable(histogram); 
-		    for(int i = 0; i < delta.length; i++)
+		    for(int i = 1; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
 		    
@@ -670,7 +785,6 @@ public class DeltaEncoder
 	    	ratio /= pixel_length;
 	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			
-		    
 	    	if(compress)
 	    	{
 		        int compressed_delta_length = DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
@@ -686,7 +800,6 @@ public class DeltaEncoder
 		    		deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 		    	else
 		    		deflater = new Deflater(Deflater.BEST_COMPRESSION);
-		    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
 		    	deflater.setInput(compressed_strings, 0, compressed_array_length);
 		    	deflater.finish();
 		    	zipped_length = deflater.deflate(zipped_strings);
