@@ -957,19 +957,22 @@ public class DeltaMapper
     }
     
     
-    // These packing/unpacking functions fail on some inputs.
-    // Suspect it has something to do with an uneven distribution
-    // of negative/positive values but not sure.
-    // Works with simple binary images, which is the only time
-    // it offers significantly more compression than the functions
-    // above.  It also seems to work with data that originally consists 
-    // of  all positive values. Would like to understand this better, but
-    // probably not important.
+    // These packing/unpacking functions fail when the fixed length
+    // is a multiple of 8.
+    // Works with simple binary and low resolution images, 
+    // which is the only time it offers significantly more compression than 
+    // the variable length functions.
+    // The bug is probably in the packing function.
     public static int packStrings2(int src[], int table[], byte dst[])
     {
     	int size             = src.length;
     	int number_of_values = table.length;
-        
+    	
+    	int maximum_length = number_of_values - 1;
+    	
+    	if(maximum_length % 8 == 0)
+    		System.out.println("Maximum length is a multiple of 8.");
+    	
         int [] mask  = new int[8];
         
         mask[0] = 1;
@@ -1013,7 +1016,7 @@ public class DeltaMapper
                 
                 if(k <= 7)
                 {
-                    dst[p] |= (byte) (mask[k - 1] << start_bit);
+                	dst[p] |= (byte) (mask[k - 1] << start_bit);
                 	
                     if(stop_bit <= start_bit)
                     {
@@ -1031,12 +1034,16 @@ public class DeltaMapper
                     for(int n = 0; n < m; n++)
                         dst[++p] = (byte)(mask[7]);
                     dst[++p] = 0;
+                    
                     if(start_bit != 0)
                         dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
                     
+                    // Might need to check if k is the maximum length index
+                    // and do something else when the modulus is 0.
                     if(k % 8 != 0)
                     {
                         m = k % 8 - 1;
+                        
                         dst[p] |= (byte)(mask[m] << start_bit);
                         
                         if(stop_bit <= start_bit)
