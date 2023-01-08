@@ -1131,7 +1131,9 @@ public class DeltaMapper
     	// Not using this currently, but gives us a handle on the
     	// ratio of zero and one bits, which is a good predictor
     	// of whether or not the bit transform will increase or
-    	// decrease the length of the bit string.
+    	// decrease the length of the bit string, instead of just
+    	// going ahead and doing the transform and checking the 
+    	// result.
         int number_of_zero_bits = 0;
         
         for(int i = 0; i < dst.length; i++)
@@ -1327,104 +1329,15 @@ public class DeltaMapper
         
         return(number_of_bits);
     }
-    
-    /*
+   
     public static int compressStrings(byte src[], int size, byte dst[])
     {
         byte[]  temp = new byte[src.length * 10];
         
         int number_of_iterations = 1;
-        int current_size         = compressZeroBits(src, size, dst);
-        System.out.println("Original size was " + size);
-        System.out.println("Size after single iteration of compression was " + current_size);
-        
-        // We'll return the first result even if we actually expanded the data.
-        if(current_size >= size)
-        {
-        	// We still need to append the number of iterations, which is 1.
-        	if(current_size % 8 == 0)
-            {
-                int byte_size      = current_size / 8;
-                dst[byte_size] = (byte) number_of_iterations;
-                dst[byte_size] &= 127;
-            }
-            else
-            {
-                int  remainder = current_size % 8;
-                int  byte_size = current_size / 8;
-
-                dst[byte_size] |= (byte) (number_of_iterations << remainder);
-                byte_size++;
-                dst[byte_size] = 0;
-                if(remainder > 1)
-                    dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
-            }
-            return(current_size + 8);
-        }
-        
-        int previous_size = size;
+        int previous_size        = size;
+        int current_size         = compressZeroBits(src, previous_size, dst);
         while(current_size < previous_size)
-        {
-            previous_size = current_size;
-            if(number_of_iterations % 2 == 1)
-            {
-                current_size = compressZeroBits(dst, previous_size, temp);
-            }
-            else
-            {
-                current_size = compressZeroBits(temp, previous_size, dst);
-            }
-            number_of_iterations++;
-            System.out.println("Size after " + number_of_iterations + " iterations of compression was " + current_size);
-        }
-        number_of_iterations--;
-        current_size = previous_size;
-        if(number_of_iterations % 2 == 1) // The last source buffer was temp, and we need to copy the data to the dst buffer.
-        {
-            int byte_size = current_size / 8;
-            if(current_size % 8 != 0)
-                byte_size++; 
-            for(int i = 0; i < byte_size; i++)
-                dst[i] = temp[i];
-        }
-        System.out.println("The final number of iterations was " + number_of_iterations);
-        System.out.println("The final size was " + (current_size + 8));
-        
-        if(current_size % 8 == 0)
-        {
-            int byte_size      = current_size / 8;
-            dst[byte_size] = (byte) number_of_iterations;
-            dst[byte_size] &= 127;
-        }
-        else
-        {
-            int  remainder = current_size % 8;
-            int  byte_size = current_size / 8;
-
-            dst[byte_size] |= (byte) (number_of_iterations << remainder);
-            byte_size++;
-            dst[byte_size] = 0;
-            if(remainder > 1)
-                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
-        }
-        return(current_size + 8);
-    }
-    */
-   
-    public static int compressStrings(byte src[], int size, byte dst[])
-    {
-        int number_of_iterations, current_size, previous_size;
-        int byte_size, i;
-        byte mask;
-        byte[]  temp = new byte[src.length * 10];
-        
-        byte_size = size / 8;
-        if(size % 8 != 0)
-            byte_size++;
-        number_of_iterations = 1;
-        current_size = previous_size = size;
-        current_size = compressZeroBits(src, previous_size, dst);
-        while(current_size < previous_size && current_size > 1)
         {
             previous_size = current_size;
             if(number_of_iterations % 2 == 1)
@@ -1439,28 +1352,34 @@ public class DeltaMapper
         }
         if(number_of_iterations > 1)
         {
+        	// This means our first pass did not expand the data,
+        	// and we broke out of a loop when we finally did.
             current_size = previous_size;
             number_of_iterations--;
         }
-        if(number_of_iterations % 2 == 0)
+        if(number_of_iterations % 2 == 0) 
         {
-            byte_size = current_size / 8;
+        	// The last recursion used temp as a source,
+        	// which then produced a string longer than the previous one,
+        	// so we need to copy the data from temp to dst.
+            int byte_size = current_size / 8;
             if(current_size % 8 != 0)
                 byte_size++; 
-            for(i = 0; i < byte_size; i++)
+            for(int i = 0; i < byte_size; i++)
                 dst[i] = temp[i];
-        }        
+        }   
+        // else the result is already in dst.
     
         if(current_size % 8 == 0)
         {
-            byte_size      = current_size / 8;
+            int byte_size      = current_size / 8;
             dst[byte_size] = (byte) number_of_iterations;
             dst[byte_size] &= 127;
         }
         else
         {
             int  remainder = current_size % 8;
-            byte_size = current_size / 8;
+            int byte_size = current_size / 8;
 
             dst[byte_size] |= (byte) (number_of_iterations << remainder);
             byte_size++;
@@ -1483,6 +1402,8 @@ public class DeltaMapper
         int  previous_size, current_size, byte_size;
         byte[]  temp = new byte[dst.length];
         
+        // Getting the number of iterations appended to
+        // the end of the string.
         byte_index = size / 8 - 1;
         remainder  = size % 8;
         if(remainder != 0)
