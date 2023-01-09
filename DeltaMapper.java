@@ -640,6 +640,11 @@ public class DeltaMapper
 		}
 		return sum;
 	}
+	
+	// These functions use the sums of the vertical deltas and horizontal deltas 
+	// to decide which deltas to use in compression.
+	// Those values work better than the sum of the absolute values as a heuristic
+	// to decide which to use.
 	public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
     {
 		int [] delta1     = getDeltasFromValues1(src, xdim, ydim, init_value);
@@ -687,7 +692,7 @@ public class DeltaMapper
         
         return dst;
     }
-
+    
     public static int[] getValuesFromDeltas(int src[],int xdim, int ydim, int init_value)
     {
         if(src[0] == 0)
@@ -710,6 +715,8 @@ public class DeltaMapper
         }
         	
     }
+    
+    // These function use horizontal deltas.
     public static int[] getValuesFromDeltas1(int src[],int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
@@ -730,6 +737,8 @@ public class DeltaMapper
         return dst;
     }
     
+    
+    // These functions use vertical deltas.
     public static int[] getDeltasFromValues2(int src[], int xdim, int ydim, int init_value)
     {
         int[] dst = new int[xdim * ydim];
@@ -768,7 +777,7 @@ public class DeltaMapper
     	int[] dst = new int[xdim * ydim];
     	
     	// We know the first value in the source data is 0.
-    	// Could use that to mark the type of deltas.
+    	// We'll use that to mark the type of deltas.
         dst[0] = init_value;
     	int k     = 1;
         int value = init_value;
@@ -823,16 +832,13 @@ public class DeltaMapper
         return dst;
     }
 
-    
+    // These packing/unpacking functions represent int values
+    // as unary strings.
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
-        
         for(int i = 0; i < dst.length; i++)
         	dst[i] = 0;
-    	
-    	int number_of_values = table.length;
-        
         int [] mask  = new int[8];
         
         mask[0] = 1;
@@ -956,23 +962,17 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
-    
-    // These packing/unpacking functions fail when the fixed length
-    // is a multiple of 8.
-    // Works with simple binary and low resolution images, 
-    // which is the only time it offers significantly more compression than 
-    // the variable length functions.
-    // The bug is probably in the packing function.
+    // These packing/unpacking functions use the maximum length
+    // code to dispense with a stop bit.
+    // Not very significant until we are looking at binary and
+    // low resolution images.
     public static int packStrings2(int src[], int table[], byte dst[])
     {
     	int size             = src.length;
     	int number_of_values = table.length;
     	
     	int maximum_length = number_of_values - 1;
-    	
-    	if(maximum_length % 8 == 0)
-    		System.out.println("Maximum length is a multiple of 8.");
-    	
+    
         int [] mask  = new int[8];
         
         mask[0] = 1;
@@ -1007,7 +1007,7 @@ public class DeltaMapper
             else
             {
                 stop_bit = (start_bit + k + 1) % 8;
-                if(k == number_of_values - 1)
+                if(k == maximum_length)
                 {
                 	stop_bit--;
                 	if(stop_bit < 0)
@@ -1038,8 +1038,6 @@ public class DeltaMapper
                     if(start_bit != 0)
                         dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
                     
-                    // Might need to check if k is the maximum length index
-                    // and do something else when the modulus is 0.
                     if(k % 8 != 0)
                     {
                         m = k % 8 - 1;
@@ -1055,7 +1053,10 @@ public class DeltaMapper
                             }
                         }
                     }
-                    else if(stop_bit <= start_bit)
+                    // If this is the maximum_length index and it's a multiple of 8,
+                    // then we already incremeted the index and then reset the stop bit.
+                    // Don't want to do it twice.   Very tricky bug.
+                    else if(stop_bit <= start_bit && k != maximum_length)
                             dst[++p] = 0;
                 }
                 start_bit = stop_bit;
@@ -1069,6 +1070,7 @@ public class DeltaMapper
             number_of_bits -= 8 - start_bit;
         return(number_of_bits);
     }
+    
     
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {

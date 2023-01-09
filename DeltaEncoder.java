@@ -355,10 +355,14 @@ public class DeltaEncoder
 			
 			int delta_length = 0;
 			
+			/*
 			if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+			*/
+			
+			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
 			ratio = delta_length;
 			ratio /= pixel_length;
@@ -435,10 +439,13 @@ public class DeltaEncoder
 			for(int i = 1; i < delta.length; i++)
 			    delta[i] -= delta_min;
 			delta_length = 0;
+			/*
 			if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+			*/
+			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
 			ratio = delta_length;
 			ratio /= pixel_length;
@@ -513,11 +520,13 @@ public class DeltaEncoder
 			for(int i = 1; i < delta.length; i++)
 				delta[i] -= delta_min;
 			delta_length = 0;
+			/*
 			if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
-				
+			*/
+			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);	
 			ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of red delta string bits to pixel bits is " + String.format("%.4f", ratio));
@@ -602,11 +611,13 @@ public class DeltaEncoder
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
 		    
+		    /*
 		    if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
-		    
+			*/
+		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of blue green delta string bits to pixel bits is " + String.format("%.4f", ratio));
@@ -692,10 +703,13 @@ public class DeltaEncoder
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
 		    
+		    /*
 		    if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+			*/
+		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of red green delta string bits to pixel bits is " + String.format("%.4f", ratio));
@@ -778,11 +792,14 @@ public class DeltaEncoder
 		    for(int i = 1; i < delta.length; i++)
 		    	delta[i] -= delta_min;
 		    delta_length = 0;
-		    
+		   
+		    /*
 		    if(delta_random_lut.length < 9)
 			    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			else
 				delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
+			*/
+		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of red blue delta string bits to pixel bits is " + String.format("%.4f", ratio));
