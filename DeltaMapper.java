@@ -23,7 +23,6 @@ public class DeltaMapper
 		return dst;
 	}
 	
-	
 	public static int[] subsampleY(int src[], int xdim, int ydim, boolean even)
 	{
 		int size = ydim / 2;
@@ -61,18 +60,36 @@ public class DeltaMapper
 	}
 	
 	// Separating the average 4 function into 2 directions
-	// may offer a simpler approach to minimizing error.
-	/*
-	public static int[] shrinkX(int src[], int xdim, int ydim)
+	// may offer a simpler approach to minimizing error
+	// in inverse functions.
+	public static double[] shrinkX(double src[], int xdim, int ydim)
 	{
-		
+	    double[] dst = new double[xdim / 2 * ydim];
+	    int k = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	for(int j = 0; j < xdim; j += 2)
+	    	{
+	    		dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]);
+	    	}
+	    }
+	    return dst;
 	}
 	
-	public static int[] shrinkY(int src[], int xdim, int ydim)
+	public static double[] shrinkY(double src[], int xdim, int ydim)
 	{
-		
+	    double[] dst = new double[xdim * ydim / 2];
+	     
+	    for(int j = 0; j < xdim; j++)
+	    {
+	    	for(int i = 0; i < ydim; i += 2)
+	    	{
+	    		dst[i * xdim / 2 + j] = (src[i * xdim + j] + src[(i + 1) * xdim + j]);
+	    	}
+	    }
+	    
+	    return dst;
 	}
-	*/
 	
 	public static int[] shrink(int src[], int xdim, int ydim)
 	{
@@ -116,6 +133,18 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static double[] avg4(double src[], int xdim, int ydim)
+	{
+		// These shrink functions accumulate values without averaging them,
+		// so we can do the averaging just once.
+		double [] intermediate = shrinkX(src, xdim, ydim);
+		double [] dst          = shrinkY(intermediate, xdim / 2, ydim);
+		
+		for(int i = 0; i < dst.length; i++)
+			dst[i] *= 0.25;
+		return dst;
+	}
+	
 	public static int[] shrink4(int src[], int xdim, int ydim)
 	{
 		int _xdim = xdim / 2;
@@ -149,6 +178,7 @@ public class DeltaMapper
 		
 		int k = 0;
 		int m = 0;
+		
 		for(int i = 0; i < _ydim; i++)
 		{
 			int n = 0;
@@ -158,13 +188,15 @@ public class DeltaMapper
 				double x = src[m * xdim + n + 1];
 				double y = src[(m + 1) * xdim + n];
 				double z = src[(m + 1) * xdim + n + 1];
-			    dst[k++] = (w + x + y + z) / 4.;
+				
+			    dst[k++] = (w + x + y + z) * 0.25;
 			    n       += 2;
 			}
 			m += 2;
 		}
 		return(dst);
 	}
+	
 	
 	public static double getTotal(double src[])
 	{
@@ -511,6 +543,35 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	/*
+	public static double[] expandX(double src[], int xdim, int ydim)
+	{
+		int _xdim = (xdim - 1) * expand + xdim;
+		
+		int [] dst = new int[ydim * _xdim];
+		for(int i = 0; i < ydim; i++)
+		{
+			int k = 0;
+			int end_value = 0;
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				int start_value  = src[i * xdim + j];
+				end_value        = src[i * xdim + j + 1];
+				dst[k++]         = start_value;
+				double delta     = start_value - end_value;
+				double increment = delta / (expand + 1);
+				for(int m = 0; m < expand; m++)
+				{
+					start_value += increment;
+					dst[k++]     = start_value;
+				}
+			}
+			dst[k++] = end_value;
+		}
+		return(dst);
+	}
+	*/
+	
 	public static int[][] expandY(int src[][])
 	{
 		int ydim = src.length;
@@ -834,6 +895,8 @@ public class DeltaMapper
 
     // These packing/unpacking functions represent int values
     // as unary strings.
+    // This set of functions makes no assumptions about the 
+    // the maxiumum length of an individual string.
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
@@ -963,7 +1026,7 @@ public class DeltaMapper
     }
     
     // These packing/unpacking functions use the maximum length
-    // code to dispense with a stop bit.
+    // code to dispense with a stop bit in the longest string.
     // Not very significant until we are looking at binary and
     // low resolution images.
     public static int packStrings2(int src[], int table[], byte dst[])
