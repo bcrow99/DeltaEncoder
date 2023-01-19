@@ -543,6 +543,83 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static double[] adjustX(double src[],  int xdim, int ydim, double shrink[])
+	{
+	    double [] dst = new double[shrink.length];	 
+	    int _ydim     = shrink.length / (xdim /2);
+	    
+	    // Not sure if there's an advantage to using 2-d processing,
+	    // but might help when we try adjusting in y direction so we'll 
+	    // start off with it in this function for the sake of consistency.  
+	    for(int i = 0; i < _ydim; i++)
+	    {
+	    	for(int j = 0; j < xdim / 2 - 1; j++)
+	    	{
+	    		int shr_index = i * xdim / 2 + j;
+	    		int src_index = i * xdim + 2 * j;
+	    		double delta  = shrink[shr_index] - src[src_index];
+	    		double avg    = (shrink[shr_index] + shrink[shr_index + 1]) / 2;
+	    		/*
+	    		if((shrink[shr_index] < src[src_index] && avg < src[src_index + 1])||
+	    		   (shrink[shr_index] > src[src_index] && avg > src[src_index + 1]))
+	    		    shrink[shr_index] -= delta;
+	    		*/
+	    	}
+	    }
+	    return dst;
+	}
+	
+	public static double[] expandX(double src[], int xdim, int ydim)
+	{
+		double [] dst = new double[xdim * 2 * ydim];
+		 
+		int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{  
+			     dst[k++] = src[i * xdim + j];
+			     dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;
+			}
+			int m    = xdim - 1;
+			dst[k++] = src[i * xdim + m];
+			double delta = src[i * xdim + m] - src[i * xdim + m - 1];
+			dst[k++] = src[i * xdim + m] + delta;
+		}
+		return dst;
+	}
+	
+	public static double[] expandY(double src[], int xdim, int ydim)
+	{
+		double [] dst = new double[xdim * ydim * 2];
+		
+		System.out.println("dst length is " + dst.length);
+		System.out.println("src length is " + src.length);
+		System.out.println();
+		
+		for(int j = 0; j < xdim; j++)
+		{
+		     for(int i = 0; i < ydim - 1; i++)
+		     {
+		    	 
+		    	 int dst_index = i * 2 * xdim + j;
+		    	 int src_index = i * xdim + j;
+				 dst[dst_index] = src[src_index];
+				 dst[dst_index + xdim] = (src[src_index] + src[src_index + xdim]) / 2;
+			 }
+		     
+		     int i = ydim - 1;
+		     int dst_index = i * 2 * xdim + j;
+		     int src_index = i * xdim + j;
+		     dst[dst_index] = src[src_index];
+		     
+		     double delta = src[src_index] - src[src_index - xdim];
+		     dst_index += xdim;
+		     dst[dst_index] = src[src_index] + delta;
+		}
+		return(dst);
+	}
+	
 	/*
 	public static double[] expandX(double src[], int xdim, int ydim)
 	{

@@ -231,9 +231,12 @@ public class ExpandTester
 			    shifted_red[i]   = red[i]   >> pixel_shift; 
 		    }
 		    
-		    
+		    /*
 		    double [] shrunken_green  = DeltaMapper.avg4(shifted_green_d, xdim, ydim);
 		    double [] shrunken_green2 = DeltaMapper.shrink4(shifted_green_d, xdim, ydim);
+		    
+		    double [] expanded_green  = DeltaMapper.expandX(shrunken_green, xdim / 2, ydim / 2);
+		    double [] expanded_green2 = DeltaMapper.expandY(expanded_green, xdim, ydim / 2);
 		    
 		    
 		    int positive_difference = 0;
@@ -250,19 +253,10 @@ public class ExpandTester
 		    			if (shrunken_green2[i * _xdim + j] < shrunken_green[i * _xdim + j])
 		    			{
 		    			    positive_difference++;
-		    			    if(j == 0)
-		    			    {
-		    			        System.out.println("Shrink4 is " + shrunken_green2[i  * _xdim + j]);
-		    				    System.out.println("Avg4 is " + shrunken_green[i  * _xdim + j]);
-		    				    System.out.println();
-		    			    }
 		    			}
 		    			else
 		    			{
 		    				negative_difference++;
-		    				//System.out.println("Shrink4 is " + shrunken_green2[i  * _xdim + j]);
-		    				//System.out.println("Avg4 is " + shrunken_green[i  * _xdim + j]);
-		    				//System.out.println();
 		    			}
 		    		}
 		    	}
@@ -271,15 +265,21 @@ public class ExpandTester
 		    System.out.println("The number of positive different values was " + positive_difference);
 		    System.out.println("The number of negative different values was " + negative_difference);
 		    
+		    */
 		    
+		    double [] shrunken_green = DeltaMapper.avg4(shifted_green_d, xdim, ydim);
+		    //double [] adjusted_green = DeltaMapper.adjustX(shifted_green_d, xdim, ydim, shrunken_green);
 		    
-		    
+		    double [] expanded_green  = DeltaMapper.expandX(shrunken_green, xdim / 2, ydim / 2);
+		    double [] expanded_green2 = DeltaMapper.expandY(expanded_green, xdim, ydim / 2);
 		    
 		    
 		    int [] new_green = new int[xdim * ydim]; 
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
-		    	new_green[i] = shifted_green[i];
+		    	new_green[i] = (int)expanded_green2[i];
+		    
+		    //int [] error = DeltaMapper.getDifference(new_green, green);
 	        
 	        int [] shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
 	        int [] new_blue           = DeltaMapper.getSum(shifted_blue_green, shifted_green);
