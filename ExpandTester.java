@@ -18,6 +18,7 @@ public class ExpandTester
 	JDialog       shift_dialog;
 	JTextField    shift_value;
 	ImageCanvas   image_canvas;
+	boolean       adjust = true;
 	
 	int           xdim, ydim;
 	String        filename;
@@ -189,6 +190,31 @@ public class ExpandTester
 				
 				settings_menu.add(shift_item);
 				
+				JCheckBoxMenuItem set_adjust = new JCheckBoxMenuItem("Adjust");
+				ActionListener adjust_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(adjust == true)
+						{
+		            		adjust = false;
+							item.setState(false);
+						}
+						else
+						{
+							adjust = true;
+							item.setState(true);	
+						}
+		            }   	
+				};
+				set_adjust.addActionListener(adjust_handler);
+				if(adjust)
+					set_adjust.setState(true);
+				else
+					set_adjust.setState(false);
+				settings_menu.add(set_adjust);
+				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
 				
@@ -223,12 +249,21 @@ public class ExpandTester
 		    int [] shifted_red   = new int[xdim * ydim];
 		    double [] shifted_green_d = new double[xdim * ydim];
 		    
+		    double shifted_green_max = Double.MIN_VALUE;
+		    double shifted_green_min = Double.MAX_VALUE;
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        shifted_blue[i]  = blue[i]  >> pixel_shift;
 		        shifted_green[i] = green[i] >> pixel_shift;
 			    shifted_green_d[i] = shifted_green[i];
+			    
+			    if(shifted_green_max < shifted_green_d[i])
+			    	shifted_green_max = shifted_green_d[i];
+			    if(shifted_green_min > shifted_green_d[i])
+			    	shifted_green_min = shifted_green_d[i];
+			    
 			    shifted_red[i]   = red[i]   >> pixel_shift; 
+			    
 		    }
 		    
 		    /*
@@ -267,17 +302,54 @@ public class ExpandTester
 		    
 		    */
 		    
-		    double [] shrunken_green = DeltaMapper.avg4(shifted_green_d, xdim, ydim);
-		    //double [] adjusted_green = DeltaMapper.adjustX(shifted_green_d, xdim, ydim, shrunken_green);
+		    //double [] shrunken_green = DeltaMapper.avg4(shifted_green_d, xdim, ydim);
 		    
-		    double [] expanded_green  = DeltaMapper.expandX(shrunken_green, xdim / 2, ydim / 2);
-		    double [] expanded_green2 = DeltaMapper.expandY(expanded_green, xdim, ydim / 2);
+		    // This function accumulates values without averaging them.
+		    double [] shrunken_green = ExpandMapper.shrinkX(shifted_green_d, xdim, ydim); 
+		    for(int i = 0; i < shrunken_green.length; i++)
+		    	shrunken_green[i] /= 2;
+		    
+		    int max_value  = 255;
+		    max_value    >>= pixel_shift;
+		    double max_value_d = max_value;
+		    
+		    double [] expanded_green;
+		    if(adjust)
+		    {
+		        double [] adjusted_green  = ExpandMapper.adjustX(shifted_green_d, xdim, shrunken_green, max_value_d);
+		        double [] adjusted_green2 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green, max_value_d);
+		        double [] adjusted_green3 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green2, max_value_d);
+		        double [] adjusted_green4 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green3, max_value_d);
+		        double [] adjusted_green5 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green4, max_value_d);
+		        expanded_green  = ExpandMapper.expandX(adjusted_green5, xdim / 2, ydim);
+		        
+		        double expanded_green_min = Double.MAX_VALUE;
+		        double expanded_green_max = Double.MIN_VALUE;
+		        
+		        for(int i = 0; i < expanded_green.length; i++)
+		        {
+		        	if(expanded_green_min > expanded_green[i])
+		        		expanded_green_min = expanded_green[i];
+		        	if(expanded_green_max < expanded_green[i])
+		        		expanded_green_max = expanded_green[i];
+		        }
+		        System.out.println("Original min is " + String.format("%.4f", shifted_green_min));
+	        	System.out.println("Original max is " + String.format("%.4f", shifted_green_max));
+	        	System.out.println("Expanded min is " + String.format("%.4f", expanded_green_min));
+	        	System.out.println("Expanded max is " + String.format("%.4f", expanded_green_max));	
+		    }
+		    else
+		    {
+		    	expanded_green  = ExpandMapper.expandX(shrunken_green, xdim / 2, ydim);	
+		    }
+		    
+		   
 		    
 		    
 		    int [] new_green = new int[xdim * ydim]; 
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
-		    	new_green[i] = (int)expanded_green2[i];
+		    	new_green[i] = (int)(expanded_green[i] + .5);
 		    
 		    //int [] error = DeltaMapper.getDifference(new_green, green);
 	        
@@ -309,7 +381,7 @@ public class ExpandTester
 			} 
 		    image_canvas.repaint();
 		    
-		    System.out.println("Processed image");
+		    System.out.println();
 		}
 	}
 	
