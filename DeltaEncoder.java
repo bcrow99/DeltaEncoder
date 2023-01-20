@@ -296,9 +296,10 @@ public class DeltaEncoder
 		    
 		    Deflater deflater;
 		    
+		    int number_of_channels = 3;
 		    int pixel_length = xdim * ydim * 8;
 		    file_ratio = file_length * 8;
-		    file_ratio /= pixel_length;
+		    file_ratio /= pixel_length * number_of_channels;
 		    System.out.println("Pixel shift is " + pixel_shift);
 		    System.out.println("Huffman only is " + huffman_only);
 		    System.out.println("File ratio is " + String.format("%.4f", file_ratio));
@@ -327,7 +328,6 @@ public class DeltaEncoder
 		    }
 		    else
 		    	System.out.println("Undefined delta type.");
-		    
 		    
 		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			int delta_min            = (int)histogram_list.get(0);
