@@ -2,33 +2,245 @@ import java.util.*;
 import java.util.zip.*;
 import java.lang.Math.*;
 
-public class DeltaMapper
+public class ExpandMapper
 {
-	
-	
-	public static double getTotal(double src[])
+	// Separating the average 4 function into 2 directions
+	// may offer a simpler approach to minimizing error
+	// in inverse functions.
+	public static double[] shrinkX(double src[], int xdim, int ydim)
 	{
-		int length = src.length;
-		double total = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			total += src[i];
-		}
-		return(total);
+	    double[] dst = new double[xdim / 2 * ydim];
+	    int k = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	for(int j = 0; j < xdim; j += 2)
+	    	{
+	    		dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]);
+	    	}
+	    }
+	    return dst;
 	}
 	
-	public static int getSum(int src[])
+	public static double[] shrinkY(double src[], int xdim, int ydim)
 	{
-		int length = src.length;
-		int sum  = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			sum += src[i];
-		}
-		return(sum);
+	    double[] dst = new double[xdim * ydim / 2];
+	     
+	    for(int j = 0; j < xdim; j++)
+	    {
+	    	for(int i = 0; i < ydim; i += 2)
+	    	{
+	    		dst[i * xdim / 2 + j] = (src[i * xdim + j] + src[(i + 1) * xdim + j]);
+	    	}
+	    }
+	    
+	    return dst;
 	}
+	
+	public static double[] avg4(double src[], int xdim, int ydim)
+	{
+		// These shrink functions accumulate values without averaging them,
+		// so we can do the averaging just once.
+		double [] intermediate = shrinkX(src, xdim, ydim);
+		double [] dst          = shrinkY(intermediate, xdim / 2, ydim);
+		
+		for(int i = 0; i < dst.length; i++)
+			dst[i] *= 0.25;
+		return dst;
+	}
+	
+	
+	public static double[] adjustX(double src[],  int src_xdim, double shrink[], double max_value)
+	{
+		double [] dst = new double[shrink.length];
+		int xdim      = src_xdim / 2;
+		int ydim      = shrink.length / xdim;
+		
+		int number_of_adjustments = 0;
+		double total_delta = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim; j++)
+			{
+				int k  = i * xdim + j;
+				dst[k] = shrink[k];
+				int m  = i * 2 * xdim + 2 * j;
+				
+				if(j < xdim - 1)
+				{
+				    double avg    = (shrink[k] + shrink[k + 1]) / 2;
+				    if((shrink[k] < src[m] && avg < src[m + 1]) ||
+				       (shrink[k] > src[m] && avg > src[m + 1]))
+				    {
+				    	 double delta1 = shrink[k] - src[m];
+						 double delta2 = avg - src[m + 1];	
+						 if(Math.abs(delta1) < Math.abs(delta2))
+						 {
+							 dst[k] -= delta1;
+							 total_delta += (Math.abs(delta1));
+						 }
+						 else
+						 {
+							 dst[k] -= delta2;
+							 total_delta += (Math.abs(delta1));
+						 }
+						 if(dst[k] < 0)
+							 System.out.println("Value less than 0.");
+						 else if(dst[k] > max_value)
+							 System.out.println("Value greater than max value");
+						 number_of_adjustments++;
+						 
+				    }
+				}
+				else
+				{
+					/*
+				    double delta = shrink[k] - shrink[k - 1];
+				    double end   = shrink[k] + delta;
+				    if((shrink[k] < src[m] && end < src[m + 1]) ||
+				    	(shrink[k] > src[m] && end > src[m + 1]))
+				    {
+				    	double delta1 = shrink[k] - src[m];
+				    	double delta2 = end - src[m + 1];
+				    	if(Math.abs(delta1) < Math.abs(delta2))
+							 dst[k] -= delta1;
+						 else
+							 dst[k] -= delta2;
+				    }
+				    */
+				}
+			}
+		}
+		System.out.println("Number of adjustments was " + number_of_adjustments);
+		double average_delta = total_delta / number_of_adjustments;
+		System.out.println("The average delta was " + String.format("%.4f", average_delta));
+		return dst;
+	}
+	
+	/*
+	public static double[] adjustX(double src[],  int xdim, int ydim, double shrink[], double max_value)
+	{
+	    double [] dst    = new double[shrink.length];	
+	    int shrink_xdim  = xdim / 2;
+	    int shrink_ydim  = shrink.length / (xdim /2);
+	    
+	    System.out.println("Max value is " + max_value);
+	    int number_of_zero_values = 0;
+	    
+	    // Not sure if there's an advantage to using 2-d processing,
+	    // but might help when we try adjusting in y direction so we'll 
+	    // start off with it in this function for the sake of consistency.  
+	    for(int i = 0; i < shrink_ydim; i++)
+	    {
+	    	for(int j = 0; j < shrink_xdim - 1; j++)
+	    	{
+	    		int shrink_index = i * shrink_xdim + j;
+	    		int src_index    = i * xdim + j;
+	    		double delta1    = shrink[shrink_index] - src[src_index];
+	    		double avg       = (shrink[shrink_index] + shrink[shrink_index + 1]) / 2;
+	    		double delta2    = avg - src[src_index + 1];
+	    	
+	    		int index = i * shrink_xdim + j;
+	    		
+	    		dst[index] = shrink[index];
+	    		
+	    		if(j == shrink_xdim - 2)
+	    		{
+	    			index++;
+	    			dst[index] = shrink[index];
+	    		}
+	    		
+	    		if((shrink[shr_index] < src[src_index] && avg < src[src_index + 1])||
+	    		   (shrink[shr_index] > src[src_index] && avg > src[src_index + 1]))
+	    		{
+	    			if(Math.abs(delta1) < Math.abs(delta2))
+	    		        shrink[shr_index] -= delta1;
+	    			else
+	    				shrink[shr_index] -= delta2;
+	    			if(shrink[shr_index] < 0)
+	    			{
+	    				shrink[shr_index] = 0;
+	    				number_of_zero_values++;
+	    			}
+	    		    if(shrink[shr_index] > max_value)
+	    		    	shrink[shr_index] = max_value;	
+	    		}
+	    	
+	    	}
+	    }
+	    
+	    
+	    
+	    System.out.println("Number of zero values is " + number_of_zero_values);
+	    return dst;
+	}
+	*/
+	
+	public static double[] expandX(double src[], int xdim, int ydim)
+	{
+		double [] dst = new double[xdim * 2 * ydim];
+		 
+		int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim - 1; j++)
+			{  
+			     dst[k++] = src[i * xdim + j];
+			     dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;
+			}
+			int m    = xdim - 1;
+			dst[k++] = src[i * xdim + m];
+			double delta = src[i * xdim + m] - src[i * xdim + m - 1];
+			//dst[k++] = src[i * xdim + m] + delta;
+			dst[k++] = src[i * xdim + m];
+		}
+		return dst;
+	}
+	
+	public static double[] expandY(double src[], int xdim, int ydim)
+	{
+		double [] dst = new double[xdim * ydim * 2];
+		
+		for(int j = 0; j < xdim; j++)
+		{
+		     for(int i = 0; i < ydim - 1; i++)
+		     {
+		    	 
+		    	 int dst_index = i * 2 * xdim + j;
+		    	 int src_index = i * xdim + j;
+				 dst[dst_index] = src[src_index];
+				 dst[dst_index + xdim] = (src[src_index] + src[src_index + xdim]) / 2;
+			 }
+		     
+		     int i = ydim - 1;
+		     int dst_index = i * 2 * xdim + j;
+		     int src_index = i * xdim + j;
+		     dst[dst_index] = src[src_index];
+		     
+		     double delta = src[src_index] - src[src_index - xdim];
+		     dst_index += xdim;
+		     dst[dst_index] = src[src_index] + delta;
+		}
+		return(dst);
+	}
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	public static int getAbsoluteSum(int src[])
 	{
@@ -167,414 +379,6 @@ public class DeltaMapper
 	    return random_lut;
 	}
 	
-	public static int[] getModalTable(int histogram[])
-	{
-		int max_value = histogram[0];
-		int mode      = 0;
-		for(int i = 1; i < histogram.length; i++)
-		{
-			if(histogram[i] > max_value)
-			{
-				max_value = histogram[i];
-				mode      = i;
-			}
-		}
-		
-		int[] modal_lut = new int[histogram.length];
-		
-		
-		int lower_value = mode;
-	    int upper_value = mode + 1;
-	    
-	    int index = 0;
-	    modal_lut[lower_value] = index++;
-	    if(upper_value < histogram.length)
-	    	modal_lut[upper_value] = index++;
-	    else
-	    {
-	    	lower_value--;
-	    	modal_lut[lower_value] = index++;
-	    }
-	    
-	    for(int i = 2; i < histogram.length; i += 2)
-	    {
-	        if(lower_value > 0)	
-	        {
-	        	lower_value--;
-	        	modal_lut[lower_value] = index++;
-	        	upper_value++;
-	        	if(upper_value < histogram.length)
-	        		modal_lut[upper_value] = index++;
-	        	else
-	        	{
-	        		if(lower_value > 0)
-	        		{
-	        		    lower_value--;
-	        		    modal_lut[lower_value] = index++;   
-	        		}
-	        	}
-	        }
-	        else
-	        {
-	        	upper_value++;
-	        	modal_lut[upper_value] = index++;
-	        	if(upper_value < histogram.length - 1)
-	        	{
-	        		upper_value++;
-	                modal_lut[upper_value] = index++;
-	        	}
-	        }
-	    }
-	    
-	    if(histogram.length % 2 == 1)
-	    {
-	    	if(lower_value > 0)
-	    		modal_lut[0] = 0;	
-	    	else
-	    		modal_lut[histogram.length - 1] = histogram.length - 1;
-	    }
-		return modal_lut;
-	}
-	
-	
-	
-	public static int[] getSymmetricTable(int size)
-	{
-		int[] symmetric_lut = new int[size];
-		
-		int i = 0;
-	    int j = 0;
-	        
-	    if(size % 2 == 1)
-	        j = size / 2;
-	    else
-	        j = size / 2 - 1;
-	        
-	    symmetric_lut[j--] = i;
-	    i += 2;
-	    while(j >= 0)
-	    {
-	        symmetric_lut[j--] = i;
-	        i += 2;
-	    }
-	        
-	    if(size % 2 == 1)
-	        j = size / 2 + 1;
-	    else
-	        j = size / 2;
-	        
-	    i = 1;
-	    symmetric_lut[j++] = i;
-	    i += 2;
-	    while(j < size)
-	    {
-	        symmetric_lut[j++] = i;
-	        i += 2;
-	    }
-	    return symmetric_lut;
-	}
-
-	public static int[][] expandX(int src[][])
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		
-		int _xdim = 2 * xdim - 1;
-		
-		int [][] dst = new int[ydim][_xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				dst[i][j * 2]     = src[i][j];
-				dst[i][j * 2 + 1] = (src[i][j] + src[i][j + 1]) / 2;
-			}
-			dst[i][_xdim - 1] = src[i][xdim - 1];
-		}
-		return(dst);
-	}
-	
-	public static int[][] expandX(int src[][], int expand)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		
-		int _xdim = (xdim - 1) * expand + xdim;
-		
-		int [][] dst = new int[ydim][_xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			int end_value = 0;
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				int start_value  = src[i][j];
-				end_value        = src[i][j + 1];
-				dst[i][k++]      = start_value;
-				double delta     = start_value - end_value;
-				double increment = delta / (expand + 1);
-				for(int m = 0; m < expand; m++)
-				{
-					start_value += increment;
-					dst[i][k++]  = start_value;
-				}
-			}
-			dst[i][k] = end_value;
-		}
-		return(dst);
-	}
-	
-	public static int[] expandX(int src[], int xdim, int ydim, int expand)
-	{
-		int _xdim = (xdim - 1) * expand + xdim;
-		
-		int [] dst = new int[ydim * _xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			int end_value = 0;
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				int start_value  = src[i * xdim + j];
-				end_value        = src[i * xdim + j + 1];
-				dst[k++]         = start_value;
-				double delta     = start_value - end_value;
-				double increment = delta / (expand + 1);
-				for(int m = 0; m < expand; m++)
-				{
-					start_value += increment;
-					dst[k++]     = start_value;
-				}
-			}
-			dst[k++] = end_value;
-		}
-		return(dst);
-	}
-	
-
-	public static double[] adjustX(double src[],  int xdim, int ydim, double shrink[], double max_value)
-	{
-	    double [] dst = new double[shrink.length];	 
-	    int _ydim     = shrink.length / (xdim /2);
-	    
-	    System.out.println("Max value is " + max_value);
-	    int number_of_zero_values = 0;
-	    
-	    // Not sure if there's an advantage to using 2-d processing,
-	    // but might help when we try adjusting in y direction so we'll 
-	    // start off with it in this function for the sake of consistency.  
-	    for(int i = 0; i < _ydim; i++)
-	    {
-	    	for(int j = 0; j < xdim / 2 - 1; j++)
-	    	{
-	    		int shr_index = i * xdim / 2 + j;
-	    		int src_index = i * xdim + 2 * j;
-	    		double delta1  = shrink[shr_index] - src[src_index];
-	    		double avg    = (shrink[shr_index] + shrink[shr_index + 1]) / 2;
-	    		double delta2 = avg - src[src_index + 1];
-	    		if((shrink[shr_index] < src[src_index] && avg < src[src_index + 1])||
-	    		   (shrink[shr_index] > src[src_index] && avg > src[src_index + 1]))
-	    		{
-	    			if(Math.abs(delta1) < Math.abs(delta2))
-	    		        shrink[shr_index] -= delta1;
-	    			else
-	    				shrink[shr_index] -= delta2;
-	    			if(shrink[shr_index] < 0)
-	    			{
-	    				shrink[shr_index] = 0;
-	    				number_of_zero_values++;
-	    			}
-	    		    if(shrink[shr_index] > max_value)
-	    		    	shrink[shr_index] = max_value;	
-	    		}
-	    	}
-	    }
-	    
-	    System.out.println("Number of zero values is " + number_of_zero_values);
-	    return dst;
-	}
-	
-	public static double[] expandX(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[xdim * 2 * ydim];
-		 
-		int k = 0;
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{  
-			     dst[k++] = src[i * xdim + j];
-			     dst[k++] = (src[i * xdim + j] + src[i * xdim + j + 1]) / 2;
-			}
-			int m    = xdim - 1;
-			dst[k++] = src[i * xdim + m];
-			double delta = src[i * xdim + m] - src[i * xdim + m - 1];
-			dst[k++] = src[i * xdim + m] + delta;
-		}
-		return dst;
-	}
-	
-	public static double[] expandY(double src[], int xdim, int ydim)
-	{
-		double [] dst = new double[xdim * ydim * 2];
-		
-		System.out.println("dst length is " + dst.length);
-		System.out.println("src length is " + src.length);
-		System.out.println();
-		
-		for(int j = 0; j < xdim; j++)
-		{
-		     for(int i = 0; i < ydim - 1; i++)
-		     {
-		    	 
-		    	 int dst_index = i * 2 * xdim + j;
-		    	 int src_index = i * xdim + j;
-				 dst[dst_index] = src[src_index];
-				 dst[dst_index + xdim] = (src[src_index] + src[src_index + xdim]) / 2;
-			 }
-		     
-		     int i = ydim - 1;
-		     int dst_index = i * 2 * xdim + j;
-		     int src_index = i * xdim + j;
-		     dst[dst_index] = src[src_index];
-		     
-		     double delta = src[src_index] - src[src_index - xdim];
-		     dst_index += xdim;
-		     dst[dst_index] = src[src_index] + delta;
-		}
-		return(dst);
-	}
-	
-	/*
-	public static double[] expandX(double src[], int xdim, int ydim)
-	{
-		int _xdim = (xdim - 1) * expand + xdim;
-		
-		int [] dst = new int[ydim * _xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			int end_value = 0;
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				int start_value  = src[i * xdim + j];
-				end_value        = src[i * xdim + j + 1];
-				dst[k++]         = start_value;
-				double delta     = start_value - end_value;
-				double increment = delta / (expand + 1);
-				for(int m = 0; m < expand; m++)
-				{
-					start_value += increment;
-					dst[k++]     = start_value;
-				}
-			}
-			dst[k++] = end_value;
-		}
-		return(dst);
-	}
-	*/
-	
-	public static int[][] expandY(int src[][])
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		
-		int _ydim = 2 * ydim - 1;
-		
-		int [][] dst = new int[_ydim][xdim];
-		
-		for(int j = 0; j < xdim; j++)
-		{
-		     for(int i = 0; i < ydim - 1; i++)
-		     {
-				 dst[i * 2][j]     = src[i][j];
-				 dst[i * 2 + 1][j] = (src[i][j] + src[i + 1][j]) / 2;
-			 }
-		     int i = _ydim - 1;
-		     dst[i][j] = src[ydim - 1][j];
-		}
-		return(dst);
-	}
-	
-	public static int[] expand(int src[], int xdim, int ydim)
-	{
-		int[][] _src = new int[ydim][xdim];
-		int k = 0;
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim; j++)
-			{
-				_src[i][j] = src[k++];
-			}
-		}
-	    int[][] intermediate = expandX(_src);
-	    int[][] _dst         = expandY(intermediate);
-	    
-	    int [] dst = new int[(2 * xdim - 1)*(2 * ydim - 1)];
-	    k = 0;
-	    for(int i = 0; i < ydim * 2 - 1; i++)
-		{
-			for(int j = 0; j < xdim * 2 - 1; j++)
-			{
-				dst[k++] = _dst[i][j];
-			}
-		}
-	    return dst;
-	}
-	
-	public static int[] dilateX(int src[], int xdim, int ydim)
-	{
-		int [] dst = new int[(xdim + 1) * ydim];
-		
-		int k = 0;
-		
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim; j++)	
-			{
-				dst[k++] = src[i * xdim + j];
-				
-				/*
-				if(j == xdim - 1)
-					dst[k++] = src[i * xdim + j];
-				*/
-				if(j == xdim / 2)
-					dst[k++] = src[i * xdim + j];	
-			}
-		}
-		return dst;
-	}
-	
-	public static int[] dilateY(int src[], int xdim, int ydim)
-	{
-		int [] dst = new int[(ydim + 1) * xdim];
-		
-		
-		for(int j = 0; j < xdim; j++)
-		{
-			int k = j;
-			for(int i = 0; i < ydim; i++)	
-			{
-                dst[k] = src[i * xdim + j];	
-                k      += xdim;
-                if(i == ydim / 2)
-                {
-                	dst[k] = src[i * xdim + j];	
-                    k      += xdim;	
-                }
-			}
-		}
-		
-		return(dst);
-	}
-	
-	
-	public static int[] dilate(int src[], int xdim, int ydim)
-	{
-	    int[] intermediate = dilateX(src, xdim, ydim);
-	    int[] dst          = dilateY(intermediate, xdim + 1, ydim);
-	    return dst;
-	}
 	
 	public static int getVerticalDeltaSum(int src[], int xdim, int ydim)
 	{
