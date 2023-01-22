@@ -316,7 +316,14 @@ public class ExpandTester
 		    double [] expanded_green;
 		    if(adjust)
 		    {
-		        double [] adjusted_green  = ExpandMapper.adjustX(shifted_green_d, xdim, shrunken_green, max_value_d, 15);
+		    	ArrayList result = ExpandMapper.adjustX(shifted_green_d, xdim, shrunken_green, max_value_d, true);
+		    	
+		    	double final_delta = (double)result.get(1);
+		    	int    iterations  = (int)result.get(3);
+		    	System.out.println();
+		    	System.out.println("The final delta was " + String.format("%.4f", final_delta));
+		    	System.out.println("The number of iterations was " + iterations);
+		        double [] adjusted_green  = (double []) result.get(0);
 		        expanded_green  = ExpandMapper.expandX(adjusted_green, xdim / 2, ydim);
 		        
 		        double expanded_green_min = Double.MAX_VALUE;

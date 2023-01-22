@@ -47,8 +47,151 @@ public class ExpandMapper
 			dst[i] *= 0.25;
 		return dst;
 	}
-	public static double[] adjustX(double src[],  int src_xdim, double shrink[], double max_value, int iterations)
+	
+	public static ArrayList adjustX(double src[],  int src_xdim, double shrink[], double max_value)
 	{
+		ArrayList result = new ArrayList();
+		double [] dst    = new double[shrink.length];
+		int xdim         = src_xdim / 2;
+		int ydim         = shrink.length / xdim;
+		
+		int number_of_adjustments = 0;
+		double total_delta = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim; j++)
+			{
+				int k  = i * xdim + j;
+				dst[k] = shrink[k];
+				int m  = i * 2 * xdim + 2 * j;
+				
+				if(j < xdim - 1)
+				{
+				    double avg    = (shrink[k] + shrink[k + 1]) / 2;
+				    double delta1 = shrink[k] - src[m];
+					double delta2 = avg - src[m + 1];
+				    if((shrink[k] < src[m] && avg < src[m + 1]) ||
+				       (shrink[k] > src[m] && avg > src[m + 1]))
+				    {	
+						 if(Math.abs(delta1) < Math.abs(delta2))
+						 {
+							 dst[k] -= delta1;
+							 total_delta += (Math.abs(delta1));
+						 }
+						 else
+						 {
+							 dst[k] -= delta2;
+							 total_delta += (Math.abs(delta1));
+						 }
+						 if(dst[k] < 0)
+						 {
+							 //System.out.println("Value less than 0.");
+							 dst[k] = 0;
+						 }
+						 else if(dst[k] > max_value)
+						 {
+							 //System.out.println("Value greater than max value");
+							 dst[k] = max_value;
+						 }
+						 number_of_adjustments++;
+						 
+				    }
+				    else
+				    {
+				    	
+				        //double delta3 = delta1 + delta2;
+				        //dst[k]       -= delta3 / 2;
+				        //total_delta  += (Math.abs(delta3));
+				        //number_of_adjustments++;
+				        //if(dst[k] < 0)
+				        //{
+						//	 System.out.println("Value less than 0.");
+						//	 dst[k] = 0;
+				        //}
+						//else if(dst[k] > max_value)
+						//{
+						//	 System.out.println("Value greater than max value");
+						//}
+				    }
+				}
+				else
+				{
+					
+				    //double delta = shrink[k] - shrink[k - 1];
+				    //double end   = shrink[k] + delta;
+				    //if((shrink[k] < src[m] && end < src[m + 1]) ||
+				    //	(shrink[k] > src[m] && end > src[m + 1]))
+				    //{
+				    //	double delta1 = shrink[k] - src[m];
+				    //	double delta2 = end - src[m + 1];
+				    //	if(Math.abs(delta1) < Math.abs(delta2))
+					//		 dst[k] -= delta1;
+					//	 else
+					//		 dst[k] -= delta2;
+				    //}
+				}
+			}
+		}
+		
+		
+		System.out.println("Number of adjustments was " + number_of_adjustments);
+		double average_delta = total_delta / number_of_adjustments;
+		System.out.println("The average delta was " + String.format("%.4f", average_delta));
+		
+		result.add(dst);
+		result.add(average_delta);
+		result.add(number_of_adjustments);
+		
+		return result;
+		
+	}
+	
+	public static ArrayList adjustX(double src[],  int src_xdim, double shrink[], double max_value, boolean recursion)
+	{
+	    ArrayList result = adjustX(src,  src_xdim, shrink, max_value);
+	    
+	    if(!recursion)
+	    	return result;
+	    
+	    double [] odd         = new double[shrink.length];
+	    double [] even        = (double [])result.get(0);
+	    int previous_adjust = (int)result.get(2);
+		int current_adjust  = previous_adjust - 1;
+		
+		boolean isEven        = true;
+		int iterations        = 0;
+		while(current_adjust < previous_adjust)
+		{
+			if(isEven)
+			{
+			    result         = adjustX(src,  src_xdim, even, max_value);
+			    previous_adjust  = current_adjust;
+			    current_adjust  = (int)result.get(2);
+			    odd            = (double []) result.get(0);
+			    isEven         = false;
+			}
+			else
+			{
+			    result         = adjustX(src,  src_xdim, odd, max_value);
+			    previous_adjust = current_adjust;
+			    current_adjust  = (int)result.get(2);
+				even           = (double []) result.get(0);
+			    isEven         = true;
+			}
+			iterations++;
+		}
+		
+		result.add(iterations);
+		return result;
+	}
+	
+	
+	
+	public static ArrayList adjustX(double src[],  int src_xdim, double shrink[], double max_value, int iterations)
+	{
+	    ArrayList result = new ArrayList();
+	    
+	    
 		double [] even = new double[shrink.length];
 		double [] odd  = new double[shrink.length];
 		for(int i = 0; i < shrink.length; i++)
@@ -60,25 +203,33 @@ public class ExpandMapper
 		{
 			if(isEven)
 			{
-			    odd = adjustX(src,  src_xdim, even, max_value);
+			    result = adjustX(src,  src_xdim, even, max_value);
+			    odd    = (double []) result.get(0);
 			    isEven = false;
 			}
 			else
 			{
-				even = adjustX(src,  src_xdim, odd, max_value);
+			    result = adjustX(src,  src_xdim, odd, max_value);
+				even   = (double []) result.get(0);
 			    isEven = true;
 			}
 			number_of_iterations++;
 		}
 		
+		/*
 		double [] dst;
 		if(isEven)
 		    dst = even;
 		else
 			dst = odd;
-		return dst;
+		*/
+		
+		
+		return result;
 	}
 	
+	
+	/*
 	public static double[] adjustX(double src[],  int src_xdim, double shrink[], double max_value)
 	{
 		double [] dst = new double[shrink.length];
@@ -128,39 +279,37 @@ public class ExpandMapper
 				    }
 				    else
 				    {
-				    	/*
-				        double delta3 = delta1 + delta2;
-				        dst[k]       -= delta3 / 2;
-				        total_delta  += (Math.abs(delta3));
-				        number_of_adjustments++;
-				        if(dst[k] < 0)
-				        {
-							 System.out.println("Value less than 0.");
-							 dst[k] = 0;
-				        }
-						else if(dst[k] > max_value)
-						{
-							 System.out.println("Value greater than max value");
-						}
-						*/
+				    	
+				        //double delta3 = delta1 + delta2;
+				        //dst[k]       -= delta3 / 2;
+				        //total_delta  += (Math.abs(delta3));
+				        //number_of_adjustments++;
+				        //if(dst[k] < 0)
+				        //{
+						//	 System.out.println("Value less than 0.");
+						//	 dst[k] = 0;
+				        //}
+						//else if(dst[k] > max_value)
+						//{
+						//	 System.out.println("Value greater than max value");
+						//}
 				    }
 				}
 				else
 				{
-					/*
-				    double delta = shrink[k] - shrink[k - 1];
-				    double end   = shrink[k] + delta;
-				    if((shrink[k] < src[m] && end < src[m + 1]) ||
-				    	(shrink[k] > src[m] && end > src[m + 1]))
-				    {
-				    	double delta1 = shrink[k] - src[m];
-				    	double delta2 = end - src[m + 1];
-				    	if(Math.abs(delta1) < Math.abs(delta2))
-							 dst[k] -= delta1;
-						 else
-							 dst[k] -= delta2;
-				    }
-				    */
+					
+				    //double delta = shrink[k] - shrink[k - 1];
+				    //double end   = shrink[k] + delta;
+				    //if((shrink[k] < src[m] && end < src[m + 1]) ||
+				    //	(shrink[k] > src[m] && end > src[m + 1]))
+				    //{
+				    //	double delta1 = shrink[k] - src[m];
+				    //	double delta2 = end - src[m + 1];
+				    //	if(Math.abs(delta1) < Math.abs(delta2))
+					//		 dst[k] -= delta1;
+					//	 else
+					//		 dst[k] -= delta2;
+				    //}
 				}
 			}
 		}
@@ -169,7 +318,7 @@ public class ExpandMapper
 		System.out.println("The average delta was " + String.format("%.4f", average_delta));
 		return dst;
 	}
-	
+	*/
 
 	public static double[] expandX(double src[], int xdim, int ydim)
 	{
@@ -218,7 +367,6 @@ public class ExpandMapper
 		}
 		return(dst);
 	}
-	
 
 	
 	
