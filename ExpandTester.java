@@ -316,12 +316,8 @@ public class ExpandTester
 		    double [] expanded_green;
 		    if(adjust)
 		    {
-		        double [] adjusted_green  = ExpandMapper.adjustX(shifted_green_d, xdim, shrunken_green, max_value_d);
-		        double [] adjusted_green2 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green, max_value_d);
-		        double [] adjusted_green3 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green2, max_value_d);
-		        double [] adjusted_green4 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green3, max_value_d);
-		        double [] adjusted_green5 = ExpandMapper.adjustX(shifted_green_d, xdim, adjusted_green4, max_value_d);
-		        expanded_green  = ExpandMapper.expandX(adjusted_green5, xdim / 2, ydim);
+		        double [] adjusted_green  = ExpandMapper.adjustX(shifted_green_d, xdim, shrunken_green, max_value_d, 15);
+		        expanded_green  = ExpandMapper.expandX(adjusted_green, xdim / 2, ydim);
 		        
 		        double expanded_green_min = Double.MAX_VALUE;
 		        double expanded_green_max = Double.MIN_VALUE;
@@ -333,6 +329,8 @@ public class ExpandTester
 		        	if(expanded_green_max < expanded_green[i])
 		        		expanded_green_max = expanded_green[i];
 		        }
+		        
+		        System.out.println();
 		        System.out.println("Original min is " + String.format("%.4f", shifted_green_min));
 	        	System.out.println("Original max is " + String.format("%.4f", shifted_green_max));
 	        	System.out.println("Expanded min is " + String.format("%.4f", expanded_green_min));

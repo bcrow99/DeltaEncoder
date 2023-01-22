@@ -47,7 +47,37 @@ public class ExpandMapper
 			dst[i] *= 0.25;
 		return dst;
 	}
-	
+	public static double[] adjustX(double src[],  int src_xdim, double shrink[], double max_value, int iterations)
+	{
+		double [] even = new double[shrink.length];
+		double [] odd  = new double[shrink.length];
+		for(int i = 0; i < shrink.length; i++)
+			even[i] = shrink[i];
+		
+		boolean isEven = true;
+		int number_of_iterations = 0;
+		while(number_of_iterations < iterations)
+		{
+			if(isEven)
+			{
+			    odd = adjustX(src,  src_xdim, even, max_value);
+			    isEven = false;
+			}
+			else
+			{
+				even = adjustX(src,  src_xdim, odd, max_value);
+			    isEven = true;
+			}
+			number_of_iterations++;
+		}
+		
+		double [] dst;
+		if(isEven)
+		    dst = even;
+		else
+			dst = odd;
+		return dst;
+	}
 	
 	public static double[] adjustX(double src[],  int src_xdim, double shrink[], double max_value)
 	{
@@ -68,11 +98,11 @@ public class ExpandMapper
 				if(j < xdim - 1)
 				{
 				    double avg    = (shrink[k] + shrink[k + 1]) / 2;
+				    double delta1 = shrink[k] - src[m];
+					double delta2 = avg - src[m + 1];
 				    if((shrink[k] < src[m] && avg < src[m + 1]) ||
 				       (shrink[k] > src[m] && avg > src[m + 1]))
-				    {
-				    	 double delta1 = shrink[k] - src[m];
-						 double delta2 = avg - src[m + 1];	
+				    {	
 						 if(Math.abs(delta1) < Math.abs(delta2))
 						 {
 							 dst[k] -= delta1;
@@ -84,11 +114,35 @@ public class ExpandMapper
 							 total_delta += (Math.abs(delta1));
 						 }
 						 if(dst[k] < 0)
-							 System.out.println("Value less than 0.");
+						 {
+							 //System.out.println("Value less than 0.");
+							 dst[k] = 0;
+						 }
 						 else if(dst[k] > max_value)
-							 System.out.println("Value greater than max value");
+						 {
+							 //System.out.println("Value greater than max value");
+							 dst[k] = max_value;
+						 }
 						 number_of_adjustments++;
 						 
+				    }
+				    else
+				    {
+				    	/*
+				        double delta3 = delta1 + delta2;
+				        dst[k]       -= delta3 / 2;
+				        total_delta  += (Math.abs(delta3));
+				        number_of_adjustments++;
+				        if(dst[k] < 0)
+				        {
+							 System.out.println("Value less than 0.");
+							 dst[k] = 0;
+				        }
+						else if(dst[k] > max_value)
+						{
+							 System.out.println("Value greater than max value");
+						}
+						*/
 				    }
 				}
 				else
@@ -116,65 +170,7 @@ public class ExpandMapper
 		return dst;
 	}
 	
-	/*
-	public static double[] adjustX(double src[],  int xdim, int ydim, double shrink[], double max_value)
-	{
-	    double [] dst    = new double[shrink.length];	
-	    int shrink_xdim  = xdim / 2;
-	    int shrink_ydim  = shrink.length / (xdim /2);
-	    
-	    System.out.println("Max value is " + max_value);
-	    int number_of_zero_values = 0;
-	    
-	    // Not sure if there's an advantage to using 2-d processing,
-	    // but might help when we try adjusting in y direction so we'll 
-	    // start off with it in this function for the sake of consistency.  
-	    for(int i = 0; i < shrink_ydim; i++)
-	    {
-	    	for(int j = 0; j < shrink_xdim - 1; j++)
-	    	{
-	    		int shrink_index = i * shrink_xdim + j;
-	    		int src_index    = i * xdim + j;
-	    		double delta1    = shrink[shrink_index] - src[src_index];
-	    		double avg       = (shrink[shrink_index] + shrink[shrink_index + 1]) / 2;
-	    		double delta2    = avg - src[src_index + 1];
-	    	
-	    		int index = i * shrink_xdim + j;
-	    		
-	    		dst[index] = shrink[index];
-	    		
-	    		if(j == shrink_xdim - 2)
-	    		{
-	    			index++;
-	    			dst[index] = shrink[index];
-	    		}
-	    		
-	    		if((shrink[shr_index] < src[src_index] && avg < src[src_index + 1])||
-	    		   (shrink[shr_index] > src[src_index] && avg > src[src_index + 1]))
-	    		{
-	    			if(Math.abs(delta1) < Math.abs(delta2))
-	    		        shrink[shr_index] -= delta1;
-	    			else
-	    				shrink[shr_index] -= delta2;
-	    			if(shrink[shr_index] < 0)
-	    			{
-	    				shrink[shr_index] = 0;
-	    				number_of_zero_values++;
-	    			}
-	    		    if(shrink[shr_index] > max_value)
-	    		    	shrink[shr_index] = max_value;	
-	    		}
-	    	
-	    	}
-	    }
-	    
-	    
-	    
-	    System.out.println("Number of zero values is " + number_of_zero_values);
-	    return dst;
-	}
-	*/
-	
+
 	public static double[] expandX(double src[], int xdim, int ydim)
 	{
 		double [] dst = new double[xdim * 2 * ydim];
