@@ -406,6 +406,7 @@ public class BlockTester
 		    
 		    int block_xdim = xdim / 4;
 		    int block_ydim = ydim / 4;
+		    int block_pixel_length = pixel_length / 16;
 		    int [] block = DeltaMapper.extract(shifted_green, xdim, 0, 0, block_xdim, block_ydim);
 		     
 		    init_value         = block[0];
@@ -445,7 +446,7 @@ public class BlockTester
 	    	deflater.end();
 			
 	    	ratio = zipped_length * 8;
-	    	ratio /= pixel_length;
+	    	ratio /= block_pixel_length;
 	    	
 	    	System.out.println("The ratio of zipped green block delta ints to pixel bits is " + String.format("%.4f", ratio));
 			
@@ -453,7 +454,7 @@ public class BlockTester
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
 			ratio = delta_length;
-			ratio /= pixel_length;
+			ratio /= block_pixel_length;
 			System.out.println("The ratio of green block packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			
 			// Getting the number of bytes from the number of bits.
@@ -471,7 +472,7 @@ public class BlockTester
 	    	deflater.end();
 	    	
 	    	ratio = zipped_length * 8;
-	    	ratio /= pixel_length;
+	    	ratio /= block_pixel_length;
 	    	System.out.println("The ratio of zipped packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 	    	
 			if(compress)
@@ -479,7 +480,7 @@ public class BlockTester
 				// Padding the input to enable recursion, which corrupts trailing bits in string.
 				int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
 				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
+				ratio /= block_pixel_length;
 				System.out.println("The ratio of compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
@@ -496,7 +497,7 @@ public class BlockTester
 			    deflater.end();
 			    
 			    ratio = zipped_length * 8;
-			    ratio /= pixel_length;
+			    ratio /= block_pixel_length;
 			    System.out.println("The ratio of zipped compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			}
 			System.out.println();
