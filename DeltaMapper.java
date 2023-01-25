@@ -324,6 +324,11 @@ public class DeltaMapper
 		return(dst);
 	}
 	
+	public static void insert(int[] src, int src_xdim, int xoffset, int yoffset)
+	{
+	   
+	}
+	
 	public static int[] extract(int[] src, int src_xdim, int xoffset, int yoffset, int xdim, int ydim)
 	{
 	    int src_ydim = src.length / src_xdim;
