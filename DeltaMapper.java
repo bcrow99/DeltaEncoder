@@ -870,6 +870,13 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
+    
+    
+    
+    
+    
+    
+    
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
     	// Not using this currently, but gives us a handle on the
@@ -932,7 +939,7 @@ public class DeltaMapper
                    }
                }
             }
-            else if(i == size -1) // We're at the end of the string and we have an odd 0.
+            else if((src[k] & (mask << j)) == 0 && (i == size -1)) // We're at the end of the string and we have an odd 0.
             {
                 // Put a 1 down to signal that there is an odd 0.
             	// This works for single iterations but fails in the recursive case.
@@ -1074,7 +1081,7 @@ public class DeltaMapper
         return(number_of_bits);
     }
    
-    public static int compressStrings(byte src[], int size, byte dst[])
+    public static int compressZeroStrings(byte src[], int size, byte dst[])
     {
         byte[]  temp = new byte[src.length * 10];
         
@@ -1136,7 +1143,7 @@ public class DeltaMapper
     
    
     
-    public static int decompressStrings(byte src[], int size, byte dst[])
+    public static int decompressZeroStrings(byte src[], int size, byte dst[])
     {
         int  byte_index;
         int  number_of_iterations;
@@ -1233,4 +1240,364 @@ public class DeltaMapper
         }
         return(current_size);
     }
+    
+    /*
+    public static int compressOneBits(byte src[], int size, byte dst[])
+    {
+        
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+        int current_byte        = 0;
+        int current_bit         = 0;
+        byte mask               = 0x01;
+        dst[0]                  = 0;
+        
+        int i = 0;
+        int j = 0;
+        int k = 0;
+        for(i = 0; i < size; i++)
+        {
+            // Current bit is a 1.  Check the next bit.
+            if((src[k] & (mask << j)) != 0 && i < size - 1)
+            {
+               i++;
+               j++;
+                
+               if(j == 8)
+               {
+                   j = 0;
+                   k++;
+               }
+               if((src[k] & (mask << j)) != 0)
+               {
+                   // Current bit is a 1.
+                   // We parsed two 1 bits in a row, put down a 1 bit.
+                   dst[current_byte] |= (byte)mask << current_bit;
+                   
+                   // Move to the start of the next code.
+                   current_bit++;
+                   if(current_bit == 8)
+                   {
+                       current_byte++;
+                       current_bit = dst[current_byte] = 0;
+                   }
+               }
+               else
+               {
+                   // Current bit is a 0.
+                   // We want 10 -> 01.
+                   
+                   // Increment and leave a 0 bit.
+                   current_bit++;
+                   // Put down a 1 bit.
+                   dst[current_byte] |= (byte)mask << current_bit;
+                   // Move to the start of the next code.
+                   current_bit++;
+                   if(current_bit == 8)
+                   {
+                       current_byte++;
+                       current_bit = dst[current_byte] = 0;
+                   }
+               }
+            }
+            else if((src[k] & (mask << j)) != 0 && (i == size - 1)) // We're at the end of the string and we have an odd 1.
+            {
+                // Put a 0 down to signal that there is an odd 1.
+            	// This works for single iterations but fails in the recursive case.
+            	// Padding the input makes recursion work since the only values that
+            	// get corrupted in the recursion are at the end of the string.
+            	// There might be another way to preserve the values at the end of the
+            	// string but it gets pretty complicated.  Adding a byte to the
+            	// input is easy.
+            	
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            else
+            {
+            	// Current first bit is a 0.
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }
+            }
+            j++;
+            if(j == 8)
+            {
+                j = 0;
+                k++;
+            }
+        }    
+        int number_of_bits = current_byte * 8;
+        number_of_bits    += current_bit;
+        
+        return(number_of_bits);
+    }
+
+    public static int decompressOneBits(byte src[], int size, byte dst[])
+    {
+    	for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+    	
+        int  current_byte = 0;
+        int  current_bit  = 0;
+        byte mask         = 0x01;
+        dst[0]            = 0;
+        
+        int j = 0;
+        int k = 0;
+      
+        for(int i = 0; i < size; i++)
+        {
+            if(((src[k] & (mask << j)) != 0) && i < size - 1)
+            {
+                i++;
+                j++;
+                if(j == 8)
+                {
+                    j = 0;
+                    k++;
+                }
+                if((src[k] & (mask << j)) != 0)
+                {
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+                else
+                {
+                    dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
+                }
+            }
+            else if(((src[k] & (mask << j)) != 0) && i == size - 1)
+            {
+            	// Append an odd 0.
+            	current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    current_bit = dst[current_byte] = 0;
+                }	
+            }
+            
+            else if((src[k] & (mask << j)) == 0)
+            {
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    if(current_byte < dst.length)
+                        current_bit = dst[current_byte] = 0;
+                }
+                current_bit++;
+                if(current_bit == 8)
+                {
+                    current_byte++;
+                    if(current_byte < dst.length)
+                        current_bit = dst[current_byte] = 0;
+                }
+            }
+            
+            j++;
+            if(j == 8)
+            {
+                j = 0;
+                k++;
+            }
+        }    
+       
+        int number_of_bits = current_byte * 8;
+        number_of_bits += current_bit;
+        
+        return(number_of_bits);
+    }
+   
+    public static int compressZeroStrings(byte src[], int size, byte dst[])
+    {
+        byte[]  temp = new byte[src.length * 10];
+        
+        int number_of_iterations = 1;
+        int previous_size        = size;
+        int current_size         = compressOneBits(src, previous_size, dst);
+        while(current_size < previous_size)
+        {
+            previous_size = current_size;
+            if(number_of_iterations % 2 == 1)
+            {
+                current_size = compressOneBits(dst, previous_size, temp);
+            }
+            else
+            {
+                current_size = compressOneBits(temp, previous_size, dst);
+            }
+            number_of_iterations++;
+        }
+        if(number_of_iterations > 1)
+        {
+        	// This means our first pass did not expand the data,
+        	// and we broke out of a loop when we finally did.
+            current_size = previous_size;
+            number_of_iterations--;
+        }
+        if(number_of_iterations % 2 == 0) 
+        {
+        	// The last recursion used temp as a source,
+        	// which then produced a string longer than the previous one,
+        	// so we need to copy the data from temp to dst.
+            int byte_size = current_size / 8;
+            if(current_size % 8 != 0)
+                byte_size++; 
+            for(int i = 0; i < byte_size; i++)
+                dst[i] = temp[i];
+        }   
+        // else the result is already in dst.
+    
+        if(current_size % 8 == 0)
+        {
+            int byte_size      = current_size / 8;
+            dst[byte_size] = (byte) number_of_iterations;
+            dst[byte_size] &= 127;
+        }
+        else
+        {
+            int  remainder = current_size % 8;
+            int byte_size = current_size / 8;
+
+            dst[byte_size] |= (byte) (number_of_iterations << remainder);
+            byte_size++;
+            dst[byte_size] = 0;
+            if(remainder > 1)
+                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+        }
+        return(current_size + 8);
+    }
+    
+   
+    
+    public static int decompressOneStrings(byte src[], int size, byte dst[])
+    {
+        int  byte_index;
+        int  number_of_iterations;
+        int  addend;
+        int  mask;
+        int  remainder, i;
+        int  previous_size, current_size, byte_size;
+        byte[]  temp = new byte[dst.length];
+        
+        // Getting the number of iterations appended to
+        // the end of the string.
+        byte_index = size / 8 - 1;
+        remainder  = size % 8;
+        if(remainder != 0)
+        {
+            int value = 254;
+            addend = 2;
+            for(i = 1; i < remainder; i++)
+            {
+                value -= addend;
+                addend <<= 1;
+            } 
+            mask = value;
+            number_of_iterations = src[byte_index];
+            if(number_of_iterations < 0)
+                number_of_iterations += 256;
+            number_of_iterations &= mask;
+            number_of_iterations >>= remainder;
+            byte_index++;
+            if(remainder > 1)
+            {
+                mask = 1;
+                for(i = 2; i < remainder; i++)
+                {
+                    mask <<= 1;
+                    mask++;
+                }
+                addend = src[byte_index]; 
+                if(addend < 0)
+                    addend += 256;
+                addend &= mask;
+                addend <<= 8 - remainder;
+                number_of_iterations += addend;
+                mask++;
+            }
+            else
+                mask = 1;
+        }
+        else
+        {
+           mask = 127;
+           number_of_iterations = src[byte_index];
+           if(number_of_iterations < 0)
+               number_of_iterations += 256; 
+           number_of_iterations &= mask;
+           mask++;
+        }
+        
+        //System.out.println("The number of iterations was " + number_of_iterations);
+        
+        current_size = 0;
+        if(number_of_iterations == 1)
+        {
+            current_size = decompressOneBits(src, size - 8, dst);
+            number_of_iterations--;
+        }
+        else if(number_of_iterations % 2 == 0)
+        {
+            current_size = decompressOneBits(src, size - 8, temp);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressOneBits(dst, previous_size, temp);
+                else
+                    current_size = decompressOneBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        else
+        {
+            current_size = decompressOneBits(src, size - 8, dst);
+            number_of_iterations--;
+            while(number_of_iterations > 0)
+            {
+                previous_size = current_size;
+                if(number_of_iterations % 2 == 0)
+                    current_size = decompressOneBits(dst, previous_size, temp);
+                else
+                    current_size = decompressOneBits(temp, previous_size, dst);
+                number_of_iterations--;
+            }
+        }
+        return(current_size);
+    } 
+     */
 }
