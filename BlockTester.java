@@ -308,8 +308,6 @@ public class BlockTester
 		    }
 		    
 		    
-		
-		    
 		    int init_value           = shifted_green[0];
 		    int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
 			
@@ -331,6 +329,7 @@ public class BlockTester
 			int delta_min            = (int)histogram_list.get(0);
 			int [] histogram         = (int[])histogram_list.get(1);
 			int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
+			delta_bytes[0]           = 0;
 			for(int i = 1; i < delta.length; i++)
 			{
 			    delta[i] -= delta_min;
@@ -341,7 +340,7 @@ public class BlockTester
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
-	    	deflater.setInput(delta_bytes);
+	    	deflater.setInput(delta_bytes, 0, xdim * ydim);
 	    	deflater.finish();
 	    	int zipped_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
@@ -351,9 +350,13 @@ public class BlockTester
 	    	
 	    	System.out.println("The ratio of zipped green delta ints to pixel bits is " + String.format("%.4f", ratio));
 			
+		    
+		    
+		    
+		    
 			int delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			
+			//delta_length  = DeltaMapper.packStrings(delta, delta_random_lut, delta_strings);
 			ratio = delta_length;
 			ratio /= pixel_length;
 			System.out.println("The ratio of green delta packed string bits to pixel bits is " + String.format("%.4f", ratio));
@@ -374,7 +377,7 @@ public class BlockTester
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The ratio of zipped green delta packed string bits to pixel bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped green delta packed string bits is " + String.format("%.4f", ratio));
 	    	
 			if(compress)
 			{
@@ -382,7 +385,7 @@ public class BlockTester
 				int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
-				System.out.println("The ratio of compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));	
+				System.out.println("The compression rate for compressed packed delta string bits is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -399,14 +402,14 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= pixel_length;
-			    System.out.println("The ratio of zipped compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			    System.out.println("The compression rate for zipped compressed packed delta string bits is " + String.format("%.4f", ratio));
 			}
 			System.out.println();
 	          
 		    
-		    int block_xdim = xdim / 4;
+			int block_xdim = xdim / 4;
 		    int block_ydim = ydim / 4;
-		    int block_pixel_length = pixel_length / 16;
+		    int block_pixel_length = block_xdim * block_ydim * 8;
 		    int [] block = DeltaMapper.extract(shifted_green, xdim, 0, 0, block_xdim, block_ydim);
 		     
 		    init_value         = block[0];
@@ -430,17 +433,18 @@ public class BlockTester
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
+			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
 			{
 			    delta[i]      -= delta_min;
 			    delta_bytes[i] = (byte)delta[i];
 			}
-			
 			if(huffman_only)
-				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 			else
-				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
-	    	deflater.setInput(delta_bytes);
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+			
+			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
 	    	zipped_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
@@ -448,32 +452,32 @@ public class BlockTester
 	    	ratio = zipped_length * 8;
 	    	ratio /= block_pixel_length;
 	    	
-	    	System.out.println("The ratio of zipped green block delta ints to pixel bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped green block delta ints is " + String.format("%.4f", ratio));
 			
 			delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			
 			ratio = delta_length;
 			ratio /= block_pixel_length;
-			System.out.println("The ratio of green block packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for green block packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
 			
 			// Getting the number of bytes from the number of bits.
 			delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
 				delta_array_length++;
-		
+			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+			
 	    	deflater.setInput(delta_strings, 0, delta_array_length);
 	    	deflater.finish();
 	    	zipped_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-	    	
+			
 	    	ratio = zipped_length * 8;
 	    	ratio /= block_pixel_length;
-	    	System.out.println("The ratio of zipped packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped green block packed delta strings is " + String.format("%.4f", ratio));
 	    	
 			if(compress)
 			{
@@ -481,7 +485,7 @@ public class BlockTester
 				int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
 				ratio  = compressed_delta_length;
 				ratio /= block_pixel_length;
-				System.out.println("The ratio of compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));	
+				System.out.println("The compression rate for compressed packed delta string bits is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -498,7 +502,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The ratio of zipped compressed packed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			    System.out.println("The compression rate for zipped compressed packed delta string bits is " + String.format("%.4f", ratio));
 			}
 			System.out.println();
 		    

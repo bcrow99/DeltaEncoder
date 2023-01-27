@@ -340,7 +340,7 @@ public class DeltaMapper
 	    {
 	    	for(int j = 0; j < xdim; j++)
 	    	{
-	    	    dst[i * xdim + j] = src[(i + yoffset) * xdim + j + xoffset];	
+	    	    dst[i * xdim + j] = src[(i + yoffset) * src_xdim + j + xoffset];	
 	    	}
 	    }
 	    return(dst); 
