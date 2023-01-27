@@ -14,8 +14,13 @@ public class BlockTester
 	BufferedImage original_image;
 	BufferedImage image;
 	JMenuItem     apply_item;
+	
 	JDialog       shift_dialog;
 	JTextField    shift_value;
+	
+	JDialog       block_dialog;
+	JTextField    block_value;
+	
 	ImageCanvas   image_canvas;
 	
 	int           xdim, ydim;
@@ -35,6 +40,7 @@ public class BlockTester
 
 	int     block_xdim   = 16;
 	int     block_ydim   = 16;
+	int     block_dim    = 16;
 	int     x_offset      = 0;
 	int     y_offset      = 0;
 	
@@ -194,6 +200,59 @@ public class BlockTester
 				shift_dialog.add(shift_panel);
 				
 				settings_menu.add(shift_item);
+				
+				
+				 
+				JMenuItem block_item = new JMenuItem("Block Size");
+				ActionListener block_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						x += xdim;
+
+						block_dialog.setLocation(x, y);
+						block_dialog.pack();
+						block_dialog.setVisible(true);
+					}
+				};
+				block_item.addActionListener(block_handler);
+				block_dialog = new JDialog(frame, "Block Size");
+				JPanel block_panel = new JPanel(new BorderLayout());
+				JSlider block_slider = new JSlider();
+				block_slider.setMinimum(2);
+				if(xdim < ydim)
+				    block_slider.setMaximum(xdim);
+				else
+				    block_slider.setMaximum(ydim);
+				block_slider.setValue(block_dim);
+				block_value = new JTextField(3);
+				block_value.setText(" " + block_dim + " ");
+				ChangeListener block_slider_handler = new ChangeListener()
+				{
+					public void stateChanged(ChangeEvent e)
+					{
+						JSlider slider = (JSlider) e.getSource();
+						block_dim = slider.getValue();
+						block_xdim = block_dim;
+						block_ydim = block_dim;
+						block_value.setText(" " + block_dim + " ");
+						if(slider.getValueIsAdjusting() == false)
+						{
+							apply_item.doClick();
+						}
+					}
+				};
+				block_slider.addChangeListener(block_slider_handler);
+				block_panel.add(block_slider, BorderLayout.CENTER);
+				block_panel.add(block_value, BorderLayout.EAST);
+				block_dialog.add(block_panel);
+				
+				settings_menu.add(block_item);
+				
 				
 				
 				JCheckBoxMenuItem set_compress = new JCheckBoxMenuItem("Compress");
@@ -593,6 +652,112 @@ public class BlockTester
 	    	ratio = zipped_length * 8;
 	    	ratio /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped blue green block packed delta strings is " + String.format("%.4f", ratio));
+	    	
+			if(compress)
+			{
+				// Padding the input to enable recursion, which corrupts trailing bits in string.
+				int compressed_delta_length =  DeltaMapper.compressStrings(delta_strings, delta_length + 8, compressed_strings);
+				ratio  = compressed_delta_length;
+				ratio /= block_pixel_length;
+				System.out.println("The compression rate for compressed packed delta string bits is " + String.format("%.4f", ratio));	
+				
+				int compressed_array_length = compressed_delta_length / 8;
+				if(compressed_delta_length %8 != 0)
+					compressed_array_length++;
+				
+				if(huffman_only)
+					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+				else
+					deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				deflater.setInput(compressed_strings, 0, compressed_array_length);
+			    deflater.finish();
+			    zipped_length = deflater.deflate(zipped_strings);
+			    deflater.end();
+			    
+			    ratio = zipped_length * 8;
+			    ratio /= block_pixel_length;
+			    System.out.println("The compression rate for zipped compressed packed delta string bits is " + String.format("%.4f", ratio));
+			}
+			System.out.println();
+		    
+			int [] shifted_red_green = DeltaMapper.getDifference(shifted_red, shifted_green);
+	        int red_green_min = 0;
+		    for(int i = 0; i < xdim * ydim; i++)
+		    	if(shifted_red_green[i] < red_green_min)
+		    		red_green_min = shifted_red_green[i];
+		    for(int i = 0; i < xdim * ydim; i++)
+		    {
+		    	shifted_red_green[i] -= red_green_min;
+		    }
+		    
+		    block = DeltaMapper.extract(shifted_red_green, xdim, x_offset, y_offset, block_xdim, block_ydim);
+		     
+		    init_value         = block[0];
+		    delta              = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value);
+			
+		    block_delta_sum = 0;
+		    if(delta[0] == 0)
+		    {
+		    	block_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
+		    	//System.out.println("The block delta sum is " + block_delta_sum);
+		    }
+		    else if(delta[0] == 1)
+		    {
+		    	block_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
+		    	//System.out.println("The block delta sum is " + block_delta_sum);
+		    }
+		    else
+		    	System.out.println("Undefined delta type.");
+		    
+		    histogram_list   = DeltaMapper.getHistogram(delta);
+			delta_min        = (int)histogram_list.get(0);
+			histogram        = (int[])histogram_list.get(1);
+			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
+			delta_bytes[0]   = 0;
+			for(int i = 1; i < delta.length; i++)
+			{
+			    delta[i]      -= delta_min;
+			    delta_bytes[i] = (byte)delta[i];
+			}
+			if(huffman_only)
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+			else
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+			
+			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+			
+	    	ratio = zipped_length * 8;
+	    	ratio /= block_pixel_length;
+	    	
+	    	System.out.println("The compression rate for zipped red green block delta ints is " + String.format("%.4f", ratio));
+			
+			delta_length = 0;
+			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = delta_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for red green block packed delta string bits is " + String.format("%.4f", ratio));
+			
+			// Getting the number of bytes from the number of bits.
+			delta_array_length = delta_length / 8;
+			if(delta_length % 8 != 0)
+				delta_array_length++;
+			
+			if(huffman_only)
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+			else
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+			
+	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.finish();
+	    	zipped_length = deflater.deflate(zipped_strings);
+	    	deflater.end();
+			
+	    	ratio = zipped_length * 8;
+	    	ratio /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped red green block packed delta strings is " + String.format("%.4f", ratio));
 	    	
 			if(compress)
 			{
