@@ -28,13 +28,12 @@ public class DeltaEncoder
 	int [] green;
 	int [] blue;
 	
-	int     pixel_shift  = 3;
-	int     pixel_length = 0;
-	boolean huffman_only = true;
-	boolean compress     = false;
-	long    file_length  = 0;
-	
-	byte[] delta_strings;
+	int     pixel_shift   = 3;
+	int     pixel_length  = 0;
+	boolean huffman_only  = true;
+	boolean compress      = false;
+	long    file_length   = 0;
+	boolean green_channel_only = true;
 	
 	public static void main(String[] args)
 	{
@@ -79,11 +78,8 @@ public class DeltaEncoder
 		    green          = new int[xdim * ydim];
 		    red            = new int[xdim * ydim];
 		    
-		    delta_strings  = new byte[xdim * ydim * 2];
-		    
-			
-			System.out.println();
-			
+		    //delta_strings  = new byte[xdim * ydim * 2];
+		 
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				int[]          pixel = new int[xdim * ydim];
@@ -288,6 +284,7 @@ public class DeltaEncoder
 		    int [] new_pixel   = new int[xdim * ydim];
 		    
 		    byte [] delta_bytes = new byte[xdim * ydim];
+		    byte [] delta_strings = new byte[xdim * ydim * 2];
 		    
 		    
 		    byte [] zipped_strings = new byte[xdim * ydim * 8];
@@ -303,7 +300,7 @@ public class DeltaEncoder
 		    file_ratio /= pixel_length * number_of_channels;
 		    System.out.println("Pixel shift is " + pixel_shift);
 		    System.out.println("Huffman only is " + huffman_only);
-		    System.out.println("File ratio is " + String.format("%.4f", file_ratio));
+		    System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
 		    System.out.println();
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -340,14 +337,21 @@ public class DeltaEncoder
 	    	double ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
 	    	
-	    	System.out.println("The compression rate for zipped green delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("Green:");
+	    	System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
 			
-			int delta_length = 0;
+	    	int compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_bytes, delta_bytes.length * 8, compressed_strings);
+	    	ratio =compressed_delta_length;
+	    	ratio /= pixel_length;
+	    	System.out.println("The compression rate for compressed delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println();
+			
+	    	int delta_length = 0;
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			
 			ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for green delta packed string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 			
 			// Getting the number of bytes from the number of bits.
 			int delta_array_length = delta_length / 8;
@@ -365,7 +369,8 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The compression rate for zipped packed string bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped packed delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println();
 	    	
 			if(compress)
 			{
@@ -385,7 +390,7 @@ public class DeltaEncoder
 				zero_one_ratio  /= delta_length;
 				
 				// This is a precise number, but it's also important how the numbers are arranged.
-				int compressed_delta_length = 0;
+				compressed_delta_length = 0;
 				
 				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
 				// Will keep an eye on this.
@@ -409,7 +414,7 @@ public class DeltaEncoder
 				}
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
-				System.out.println("The compression rate for compressed packed delta string bits is " + String.format("%.4f", ratio));	
+				System.out.println("The compression rate for compressed packed delta strings is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -426,15 +431,15 @@ public class DeltaEncoder
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= pixel_length;
-			    System.out.println("The compression rate for zipped compressed packed delta string bits is " + String.format("%.4f", ratio));
+			    System.out.println("The compression rate for zipped compressed packed delta strings is " + String.format("%.4f", ratio));
+			    System.out.println();
 			}
-			System.out.println();
-	          
-			/*
+			 
+			if(!green_channel_only)
+			{
+			System.out.println("Blue:");
 			init_value       = shifted_blue[0];
 			delta            = DeltaMapper.getDeltasFromValues(shifted_blue, xdim, ydim, init_value);
-			
-			
 			histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
@@ -446,7 +451,7 @@ public class DeltaEncoder
 			
 			ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for blue delta string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 			
 			// Getting the number of bytes from the number of bits.
 			delta_array_length = delta_length / 8;
@@ -464,27 +469,40 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The compression rate for zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println();
 	    	
 			if(compress)
 			{
 				double zero_one_ratio = xdim * ydim;
-				zero_one_ratio        /= (delta_length - xdim * ydim);
-				System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				int compressed_delta_length = 0;
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				zero_one_ratio /= delta_length;
+				compressed_delta_length = 0;
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zero strings.");
 				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				else
 				{
-					System.out.println("Compressing one strings.");
 				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
-				System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));	
+				System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -501,11 +519,12 @@ public class DeltaEncoder
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta string bits is " + String.format("%.4f", ratio));
+			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    System.out.println();
 			}
-			System.out.println();
 			
 			
+            System.out.println("Red:");
 			init_value       = shifted_red[0];
 		    delta            = DeltaMapper.getDeltasFromValues(shifted_red, xdim, ydim, init_value);
 		  
@@ -519,7 +538,7 @@ public class DeltaEncoder
 			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);	
 			ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for red delta string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 				
 			// Getting the number of bytes from the number of bits.
 			delta_array_length = delta_length / 8;
@@ -537,25 +556,42 @@ public class DeltaEncoder
 		    	
 		    ratio = zipped_length * 8;
 		    ratio /= pixel_length;
-		    System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+		    System.out.println();
 		    	
 			if(compress)
 			{
 				double zero_one_ratio = xdim * ydim;
-				zero_one_ratio        /= (delta_length - xdim * ydim);
-				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				int compressed_delta_length = 0;
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				zero_one_ratio        /= delta_length;
+				compressed_delta_length = 0;
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zero strings.");
 				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				else
 				{
-					System.out.println("Compressing one strings.");
 				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
-					
+				ratio  = compressed_delta_length;
+				ratio /= pixel_length;
+				System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
+				
+				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
 				compressed_array_length++;
@@ -571,10 +607,16 @@ public class DeltaEncoder
 				    
 				ratio = zipped_length * 8;
 				ratio /= pixel_length;
-				System.out.println("The compression rate for zipped compressed delta string bits is " + String.format("%.4f", ratio));
+				System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+				System.out.println();
 		    }
-		    System.out.println();
+			}
 		    
+		    
+		    
+		    
+		    
+		    System.out.println("Blue-green:");
 	        int [] shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
 	        int blue_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -599,7 +641,7 @@ public class DeltaEncoder
 		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for blue green delta string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 		    
 			delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
@@ -616,24 +658,40 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The compression rate for zipped delta string bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println();
 			
 		    if(compress)
 		    {
 		    	double zero_one_ratio = xdim * ydim;
-				zero_one_ratio        /= (delta_length - xdim * ydim);
-				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				int compressed_delta_length = 0;
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				zero_one_ratio        /= delta_length;
+				compressed_delta_length = 0;
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zero strings.");
 				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				else
 				{
-					System.out.println("Compressing one strings.");
 				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
+				ratio  = compressed_delta_length;
+				ratio /= pixel_length;
+				System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 		    	
 		    	int compressed_array_length = compressed_delta_length / 8;
 		    	if(compressed_delta_length % 8 != 0)
@@ -650,12 +708,13 @@ public class DeltaEncoder
 		    	
 		    	ratio = zipped_length * 8;
 		    	ratio /= pixel_length;
-		    	System.out.println("The ratio of zipped compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));
+		    	System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+		    	System.out.println();
 		    }
-		    System.out.println();
 		    
 		    
 		    
+		    System.out.println("Red-green:");
 	        int [] red_green = DeltaMapper.getDifference(shifted_red, shifted_green);
 	        int red_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -680,7 +739,7 @@ public class DeltaEncoder
 		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for red green delta string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 		    
 			delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
@@ -696,33 +755,40 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The compression rate for zipped delta string bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println();
 			   
 	    	if(compress)
 	    	{
-
-				double zero_one_ratio = xdim * ydim;
-				zero_one_ratio        /= (delta_length - xdim * ydim);
-				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				
-			
-				int compressed_delta_length = 0;
-				
-				
+	    		double zero_one_ratio = xdim * ydim;
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				zero_one_ratio /= delta_length;
+				compressed_delta_length = 0;
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zero strings.");
 				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				else
 				{
-					System.out.println("Compressing one strings.");
 				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
-				
-		        ratio = compressed_delta_length;
-		    	ratio /= pixel_length;
-		    	System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));
+				ratio  = compressed_delta_length;
+				ratio /= pixel_length;
+				System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 		    	
 		    	int compressed_array_length = compressed_delta_length / 8;
 		    	if(compressed_delta_length % 8 != 0)
@@ -740,10 +806,13 @@ public class DeltaEncoder
 		    	
 		    	ratio = zipped_length * 8;
 		    	ratio /= pixel_length;
-		    	System.out.println("The compression rate for zipped compressed delta string bits is " + String.format("%.4f", ratio));
+		    	System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+		    	System.out.println();
 	    	}
-		    System.out.println();
 		    
+	    	if(!green_channel_only)
+	    	{
+		    System.out.println("Red-blue:");
 	        int [] red_blue = DeltaMapper.getDifference(shifted_red, shifted_blue);
 	        int red_blue_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -768,7 +837,7 @@ public class DeltaEncoder
 		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The compression rate for red blue delta string bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for packed delta strings is " + String.format("%.4f", ratio));
 		    
 			delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
@@ -784,29 +853,40 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The compression rate for zipped delta string bits is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println();
 			
 	    	if(compress)
 	    	{
-				double zero_one_ratio = xdim * ydim;
-				zero_one_ratio        /= (delta_length - xdim * ydim);
-				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				int compressed_delta_length = 0;
-				
-				
+	    		double zero_one_ratio = xdim * ydim;
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				zero_one_ratio /= delta_length;
+				compressed_delta_length = 0;
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zero strings.");
 				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
 				else
 				{
-					System.out.println("Compressing one strings.");
 				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
 				}
-		        ratio = compressed_delta_length;
-		    	ratio /= pixel_length;
-		    	System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));
+				ratio  = compressed_delta_length;
+				ratio /= pixel_length;
+				System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 		    	
 		    	int compressed_array_length = compressed_delta_length / 8;
 		    	if(compressed_delta_length % 8 != 0)
@@ -823,10 +903,11 @@ public class DeltaEncoder
 		    	
 		    	ratio = zipped_length * 8;
 		    	ratio /= pixel_length;
-		    	System.out.println("The compression rate for zipped compressed delta string bits is " + String.format("%.4f", ratio));
+		    	System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+		    	System.out.println();
 	    	}
-		    System.out.println();
-		    */
+	    	}
+		  
 		    
 		    // This code produces an image that should be exactly the same
 		    // as the processed image.  
