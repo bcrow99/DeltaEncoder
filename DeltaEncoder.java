@@ -43,8 +43,8 @@ public class DeltaEncoder
 			System.out.println("Usage: java DeltaEncoder <filename>");
 			System.exit(0);
 		}
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
-		String prefix       = new String("");
+		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix       = new String("");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
 		String os           = System.getProperty("os.name");
@@ -316,23 +316,11 @@ public class DeltaEncoder
 		    int init_value           = shifted_green[0];
 		    int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
 			
-		    int green_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The green delta sum is " + green_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The green delta sum is " + green_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
-		    
 		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			int delta_min            = (int)histogram_list.get(0);
 			int [] histogram         = (int[])histogram_list.get(1);
+			
+			int number_of_max_codes = histogram[histogram.length - 1];
 			int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
 			for(int i = 1; i < delta.length; i++)
 			{
@@ -381,8 +369,44 @@ public class DeltaEncoder
 	    	
 			if(compress)
 			{
-				// Padding the input to enable recursion, which corrupts trailing bits in string.
-				int compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);
+				// Padding the input enables recursion, which appeared to corrupt trailing bits in string.
+				// Not sure if we have to do this anymore--may have fixed bug.
+				// Using zero one ratio to decide whether to compress zero or one strings.
+				// Not sure where the ideal cutoff is.
+				double zero_one_ratio = xdim * ydim;
+				
+				// Subtract the missing stop bits from the max codes.
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+				
+				zero_one_ratio  /= delta_length;
+				
+				// This is a precise number, but it's also important how the numbers are arranged.
+				int compressed_delta_length = 0;
+				
+				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
+				// Will keep an eye on this.
+				if(zero_one_ratio > .5)
+				{
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("Zero strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
+				}
+				else
+				{
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				    if(compressed_delta_length > delta_length)
+				    {
+				    	System.out.println("One strings did not compress.");
+				    	System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				    }
+				}
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
 				System.out.println("The compression rate for compressed packed delta string bits is " + String.format("%.4f", ratio));	
@@ -406,25 +430,11 @@ public class DeltaEncoder
 			}
 			System.out.println();
 	          
-			
+			/*
 			init_value       = shifted_blue[0];
 			delta            = DeltaMapper.getDeltasFromValues(shifted_blue, xdim, ydim, init_value);
 			
 			
-		    int blue_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	blue_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The blue delta sum is " + blue_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	blue_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The blue delta sum is " + blue_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
-		    
 			histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
@@ -458,8 +468,20 @@ public class DeltaEncoder
 	    	
 			if(compress)
 			{
-				// Padding the input to enable recursion, which corrupts trailing bits in string.
-				int compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);
+				double zero_one_ratio = xdim * ydim;
+				zero_one_ratio        /= (delta_length - xdim * ydim);
+				System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				int compressed_delta_length = 0;
+				if(zero_one_ratio > .5)
+				{
+					System.out.println("Compressing zero strings.");
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				}
+				else
+				{
+					System.out.println("Compressing one strings.");
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				}
 				ratio  = compressed_delta_length;
 				ratio /= pixel_length;
 				System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));	
@@ -486,20 +508,7 @@ public class DeltaEncoder
 			
 			init_value       = shifted_red[0];
 		    delta            = DeltaMapper.getDeltasFromValues(shifted_red, xdim, ydim, init_value);
-		    
-		    int red_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	red_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red delta sum is " + red_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	red_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red delta sum is " + red_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
+		  
 			histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
@@ -532,11 +541,20 @@ public class DeltaEncoder
 		    	
 			if(compress)
 			{
-				// Padding the input to enable recursion, which corrupts trailing bits in string.
-				int compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);
-				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
-				System.out.println("The ratio of compressed delta string bits to pixel bits is " + String.format("%.4f", ratio));	
+				double zero_one_ratio = xdim * ydim;
+				zero_one_ratio        /= (delta_length - xdim * ydim);
+				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				int compressed_delta_length = 0;
+				if(zero_one_ratio > .5)
+				{
+					System.out.println("Compressing zero strings.");
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				}
+				else
+				{
+					System.out.println("Compressing one strings.");
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				}
 					
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -570,20 +588,6 @@ public class DeltaEncoder
 		    init_value       = shifted_blue_green[0];
 		    delta            = DeltaMapper.getDeltasFromValues(shifted_blue_green, xdim, ydim, init_value);
 		    
-		    int blue_green_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	blue_green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The blue green delta sum is " + blue_green_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	blue_green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The blue green delta sum is " + blue_green_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
-		    
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
@@ -616,11 +620,20 @@ public class DeltaEncoder
 			
 		    if(compress)
 		    {
-		    	// Padding the input to enable recursion.
-		    	int compressed_delta_length = DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);	
-		    	ratio = compressed_delta_length;
-		    	ratio /= pixel_length;
-		    	System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));
+		    	double zero_one_ratio = xdim * ydim;
+				zero_one_ratio        /= (delta_length - xdim * ydim);
+				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				int compressed_delta_length = 0;
+				if(zero_one_ratio > .5)
+				{
+					System.out.println("Compressing zero strings.");
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				}
+				else
+				{
+					System.out.println("Compressing one strings.");
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				}
 		    	
 		    	int compressed_array_length = compressed_delta_length / 8;
 		    	if(compressed_delta_length % 8 != 0)
@@ -655,21 +668,7 @@ public class DeltaEncoder
 	     
 		    init_value       = red_green[0];
 		    delta            = DeltaMapper.getDeltasFromValues(red_green, xdim, ydim, init_value);
-		    
-		    int red_green_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	red_green_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red green delta sum is " + red_green_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	red_green_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red green delta sum is " + red_green_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
-		    
+		   
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
@@ -697,12 +696,30 @@ public class DeltaEncoder
 	    	
 	    	ratio = zipped_length * 8;
 	    	ratio /= pixel_length;
-	    	System.out.println("The ratio of zipped delta string bits to pixel bits is " + String.format("%.4f", ratio));
-			
-		    
+	    	System.out.println("The compression rate for zipped delta string bits is " + String.format("%.4f", ratio));
+			   
 	    	if(compress)
 	    	{
-		        int compressed_delta_length = DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);
+
+				double zero_one_ratio = xdim * ydim;
+				zero_one_ratio        /= (delta_length - xdim * ydim);
+				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				
+			
+				int compressed_delta_length = 0;
+				
+				
+				if(zero_one_ratio > .5)
+				{
+					System.out.println("Compressing zero strings.");
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				}
+				else
+				{
+					System.out.println("Compressing one strings.");
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				}
+				
 		        ratio = compressed_delta_length;
 		    	ratio /= pixel_length;
 		    	System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));
@@ -740,20 +757,6 @@ public class DeltaEncoder
 		    init_value       = red_blue[0];
 		    delta            = DeltaMapper.getDeltasFromValues(red_blue, xdim, ydim, init_value);
 		    
-		    int red_blue_delta_sum = 0;
-		    if(delta[0] == 0)
-		    {
-		    	red_blue_delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red blue delta sum is " + red_blue_delta_sum);
-		    }
-		    else if(delta[0] == 1)
-		    {
-		    	red_blue_delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-		    	System.out.println("The red blue delta sum is " + red_blue_delta_sum);
-		    }
-		    else
-		    	System.out.println("Undefined delta type.");
-		    
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 		    delta_min        = (int)histogram_list.get(0);
 		    histogram        = (int[])histogram_list.get(1);
@@ -765,7 +768,7 @@ public class DeltaEncoder
 		    delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		    ratio = delta_length;
 			ratio /= pixel_length;
-			System.out.println("The ratio of red blue delta string bits to pixel bits is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for red blue delta string bits is " + String.format("%.4f", ratio));
 		    
 			delta_array_length = delta_length / 8;
 			if(delta_length % 8 != 0)
@@ -785,7 +788,22 @@ public class DeltaEncoder
 			
 	    	if(compress)
 	    	{
-		        int compressed_delta_length = DeltaMapper.compressZeroStrings(delta_strings, delta_length + 8, compressed_strings);
+				double zero_one_ratio = xdim * ydim;
+				zero_one_ratio        /= (delta_length - xdim * ydim);
+				//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+				int compressed_delta_length = 0;
+				
+				
+				if(zero_one_ratio > .5)
+				{
+					System.out.println("Compressing zero strings.");
+				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
+				}
+				else
+				{
+					System.out.println("Compressing one strings.");
+				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
+				}
 		        ratio = compressed_delta_length;
 		    	ratio /= pixel_length;
 		    	System.out.println("The compression rate for compressed delta string bits is " + String.format("%.4f", ratio));
@@ -808,7 +826,7 @@ public class DeltaEncoder
 		    	System.out.println("The compression rate for zipped compressed delta string bits is " + String.format("%.4f", ratio));
 	    	}
 		    System.out.println();
-		    
+		    */
 		    
 		    // This code produces an image that should be exactly the same
 		    // as the processed image.  

@@ -4,8 +4,6 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
-	
-	
 	public static double getTotal(double src[])
 	{
 		int length = src.length;
@@ -387,12 +385,12 @@ public class DeltaMapper
     	
 		if(delta_sum1 <= delta_sum2)
 		{
-			System.out.println("Using horizontal deltas.");
+			//System.out.println("Using horizontal deltas.");
 			return delta1;
 		}
 		else
 		{
-			System.out.println("Using vertical deltas.");
+			//System.out.println("Using vertical deltas.");
 			return delta2;
 		}
     }
@@ -1241,10 +1239,10 @@ public class DeltaMapper
         return(current_size);
     }
     
-    /*
+    
+    
     public static int compressOneBits(byte src[], int size, byte dst[])
     {
-        
         for(int i = 0; i < dst.length; i++)
         	dst[i] = 0;
         int current_byte        = 0;
@@ -1289,8 +1287,15 @@ public class DeltaMapper
                    
                    // Increment and leave a 0 bit.
                    current_bit++;
+                   if(current_bit == 8)
+                   {
+                       current_byte++;
+                       current_bit = dst[current_byte] = 0;
+                   }
+                   
                    // Put down a 1 bit.
                    dst[current_byte] |= (byte)mask << current_bit;
+                   
                    // Move to the start of the next code.
                    current_bit++;
                    if(current_bit == 8)
@@ -1320,6 +1325,7 @@ public class DeltaMapper
             else
             {
             	// Current first bit is a 0.
+            	// 0->00
                 current_bit++;
                 if(current_bit == 8)
                 {
@@ -1361,7 +1367,8 @@ public class DeltaMapper
       
         for(int i = 0; i < size; i++)
         {
-            if(((src[k] & (mask << j)) != 0) && i < size - 1)
+            // First bit is a 0, get next bit.
+            if(((src[k] & (mask << j)) == 0) && i < size - 1)
             {
                 i++;
                 j++;
@@ -1370,15 +1377,9 @@ public class DeltaMapper
                     j = 0;
                     k++;
                 }
-                if((src[k] & (mask << j)) != 0)
+                if((src[k] & (mask << j)) == 0)
                 {
-                    current_bit++;
-                    if(current_bit == 8)
-                    {
-                        current_byte++;
-                        current_bit = dst[current_byte] = 0;
-                    }
-                    dst[current_byte] |= (byte)mask << current_bit;
+                    // Another zero bit.  Leave a zero bit in the output.
                     current_bit++;
                     if(current_bit == 8)
                     {
@@ -1388,7 +1389,14 @@ public class DeltaMapper
                 }
                 else
                 {
+                    // We have 01->10.
                     dst[current_byte] |= (byte)mask << current_bit;
+                    current_bit++;
+                    if(current_bit == 8)
+                    {
+                        current_byte++;
+                        current_bit = dst[current_byte] = 0;
+                    }
                     current_bit++;
                     if(current_bit == 8)
                     {
@@ -1397,9 +1405,10 @@ public class DeltaMapper
                     }
                 }
             }
-            else if(((src[k] & (mask << j)) != 0) && i == size - 1)
+            else if(((src[k] & (mask << j)) == 0) && i == size - 1)
             {
-            	// Append an odd 0.
+            	// Append an odd 1.
+            	dst[current_byte] |= (byte)mask << current_bit;
             	current_bit++;
                 if(current_bit == 8)
                 {
@@ -1407,9 +1416,10 @@ public class DeltaMapper
                     current_bit = dst[current_byte] = 0;
                 }	
             }
-            
-            else if((src[k] & (mask << j)) == 0)
+            else if((src[k] & (mask << j)) != 0)
             {
+                // We have a 1 bit, put down two 1 bits in the output.
+                dst[current_byte] |= (byte)mask << current_bit;
                 current_bit++;
                 if(current_bit == 8)
                 {
@@ -1417,6 +1427,7 @@ public class DeltaMapper
                     if(current_byte < dst.length)
                         current_bit = dst[current_byte] = 0;
                 }
+                dst[current_byte] |= (byte)mask << current_bit;
                 current_bit++;
                 if(current_bit == 8)
                 {
@@ -1425,7 +1436,6 @@ public class DeltaMapper
                         current_bit = dst[current_byte] = 0;
                 }
             }
-            
             j++;
             if(j == 8)
             {
@@ -1436,11 +1446,10 @@ public class DeltaMapper
        
         int number_of_bits = current_byte * 8;
         number_of_bits += current_bit;
-        
         return(number_of_bits);
     }
    
-    public static int compressZeroStrings(byte src[], int size, byte dst[])
+    public static int compressOneStrings(byte src[], int size, byte dst[])
     {
         byte[]  temp = new byte[src.length * 10];
         
@@ -1599,5 +1608,4 @@ public class DeltaMapper
         }
         return(current_size);
     } 
-     */
 }
