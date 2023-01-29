@@ -32,8 +32,9 @@ public class DeltaEncoder
 	int     pixel_length  = 0;
 	boolean huffman_only  = true;
 	boolean compress      = false;
+	boolean green_only = true;
 	long    file_length   = 0;
-	boolean green_channel_only = true;
+	
 	
 	public static void main(String[] args)
 	{
@@ -78,8 +79,6 @@ public class DeltaEncoder
 		    green          = new int[xdim * ydim];
 		    red            = new int[xdim * ydim];
 		    
-		    //delta_strings  = new byte[xdim * ydim * 2];
-		 
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				int[]          pixel = new int[xdim * ydim];
@@ -217,6 +216,32 @@ public class DeltaEncoder
 				else
 					set_compress.setState(false);
 				settings_menu.add(set_compress);
+				
+				JCheckBoxMenuItem set_green_only = new JCheckBoxMenuItem("Green Only");
+				ActionListener green_only_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(green_only == true)
+						{
+		            		green_only = false;
+							item.setState(false);
+						}
+						else
+						{
+							green_only = true;
+							item.setState(true);	
+						}
+		            }   	
+				};
+				set_green_only.addActionListener(green_only_handler);
+				if(green_only)
+					set_green_only.setState(true);
+				else
+					set_green_only.setState(false);
+				settings_menu.add(set_green_only);
+				settings_menu.add(set_green_only);
 				
 				JCheckBoxMenuItem set_huffman = new JCheckBoxMenuItem("Huffman Only");
 				ActionListener huffman_handler = new ActionListener()
@@ -435,7 +460,7 @@ public class DeltaEncoder
 			    System.out.println();
 			}
 			 
-			if(!green_channel_only)
+			if(!green_only)
 			{
 			System.out.println("Blue:");
 			init_value       = shifted_blue[0];
@@ -810,7 +835,7 @@ public class DeltaEncoder
 		    	System.out.println();
 	    	}
 		    
-	    	if(!green_channel_only)
+	    	if(!green_only)
 	    	{
 		    System.out.println("Red-blue:");
 	        int [] red_blue = DeltaMapper.getDifference(shifted_red, shifted_blue);
