@@ -578,7 +578,7 @@ public class BlockTester
 				}
 				System.out.println("Compressed delta length is " + compressed_delta_length);
 				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
+				ratio /= block_pixel_length;
 				System.out.println("The compression rate for compressed packed delta strings is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
@@ -700,7 +700,7 @@ public class BlockTester
 				    }
 				}
 				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
+				ratio /= block_pixel_length;
 				System.out.println("The compression rate for compressed packed delta strings is " + String.format("%.4f", ratio));	
 				
 				
@@ -820,7 +820,7 @@ public class BlockTester
 				    }
 				}
 				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
+				ratio /= block_pixel_length;
 				System.out.println("The compression rate for compressed packed delta strings is " + String.format("%.4f", ratio));	
 					
 				
