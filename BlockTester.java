@@ -480,7 +480,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    System.out.println();
 			}
 			
@@ -610,7 +610,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
@@ -738,7 +738,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
@@ -865,7 +865,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
@@ -1001,7 +1001,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
@@ -1133,7 +1133,7 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
@@ -1265,30 +1265,40 @@ public class BlockTester
 			    
 			    ratio = zipped_length * 8;
 			    ratio /= block_pixel_length;
-			    System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
+			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			    //System.out.println();
 			}
 			System.out.println();
 			
 			int [] delta_sum = new int[11];
+			String [] delta_string = new String[11];
 			
-			delta_sum[0] = blue_delta_sum + green_delta_sum      + red_delta_sum;
-			delta_sum[1] = blue_delta_sum + red_green_delta_sum  + red_delta_sum;
-			delta_sum[2] = blue_delta_sum + blue_green_delta_sum + red_delta_sum;
-			delta_sum[3] = blue_delta_sum + green_delta_sum      + red_green_delta_sum;
-			delta_sum[4] = blue_delta_sum + blue_green_delta_sum + red_blue_delta_sum;
-			delta_sum[5] = blue_green_delta_sum + green_delta_sum + red_delta_sum;
-			delta_sum[6] = blue_green_delta_sum + red_green_delta_sum + red_delta_sum;
-			delta_sum[7] = blue_green_delta_sum + green_delta_sum + red_green_delta_sum;
-			delta_sum[8] = blue_green_delta_sum + red_green_delta_sum + red_delta_sum;
-			delta_sum[9] = red_blue_delta_sum + green_delta_sum + red_green_delta_sum;
-			delta_sum[10] = red_blue_delta_sum + red_green_delta_sum + red_delta_sum;
+			
+			delta_sum[0] = blue_delta_sum       + green_delta_sum      + red_delta_sum;
+			delta_sum[1] = blue_delta_sum       + red_green_delta_sum  + red_delta_sum;
+			delta_sum[2] = blue_delta_sum       + blue_green_delta_sum + red_delta_sum;
+			delta_sum[3] = blue_delta_sum       + green_delta_sum      + red_green_delta_sum;
+			delta_sum[4] = blue_delta_sum       + blue_green_delta_sum + red_blue_delta_sum;
+			delta_sum[5] = blue_green_delta_sum + green_delta_sum      + red_delta_sum;
+			delta_sum[6] = blue_green_delta_sum + red_green_delta_sum  + red_delta_sum;
+			delta_sum[7] = blue_green_delta_sum + green_delta_sum      + red_green_delta_sum;
+			delta_sum[8] = red_blue_delta_sum   + green_delta_sum      + red_green_delta_sum;
+			delta_sum[9] = red_blue_delta_sum   + red_green_delta_sum  + red_delta_sum;
+			
+			delta_string[0] = new String("blue, green, and red.");
+			delta_string[1] = new String("blue, red-green, and red.");
+			delta_string[2] = new String("blue, blue-green, and red.");
+			delta_string[3] = new String("blue, blue-green, and red-green.");
+			delta_string[4] = new String("blue, blue-green, and red-blue.");
+			delta_string[5] = new String("blue-green, green, and red.");
+			delta_string[6] = new String("blue-green, red-green, and red.");
+			delta_string[7] = new String("blue-green, green, and red-green.");
+			delta_string[8] = new String("red-blue, green, and red-green.");
+			delta_string[9] = new String("red-blue, red-green, and red.");
 			
 			int min_index = 0;
 			int min_value = Integer.MAX_VALUE;
-			
-			
-			for(int i = 0; i < 11; i++)
+			for(int i = 0; i < 10; i++)
 			{
 				if(delta_sum[i] < min_value)
 				{
@@ -1296,8 +1306,7 @@ public class BlockTester
 				    min_index = i;
 				}
 			}
-			
-			System.out.println("The set of channels with the lowest delta sum is " + (min_index + 1));
+			System.out.println("A set of channels with the lowest delta sum is " + delta_string[min_index]);
 			
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
