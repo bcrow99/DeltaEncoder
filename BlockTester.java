@@ -597,6 +597,9 @@ public class BlockTester
 				ratio  = compressed_delta_length;
 				ratio /= block_pixel_length;
 				compressed_green_string_rate = ratio;
+				
+				if(compressed_green_string_rate > green_string_rate)
+					compressed_green_string_rate = green_string_rate;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				
 				int compressed_array_length = compressed_delta_length / 8;
@@ -729,6 +732,8 @@ public class BlockTester
 				ratio /= block_pixel_length;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				compressed_blue_string_rate = ratio;
+				if(compressed_blue_string_rate > blue_string_rate)
+					compressed_blue_string_rate =  blue_string_rate;
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -860,6 +865,8 @@ public class BlockTester
 				ratio /= block_pixel_length;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				compressed_red_string_rate = ratio;
+				if(compressed_red_string_rate > red_string_rate)
+					compressed_red_string_rate = red_string_rate;
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -998,6 +1005,8 @@ public class BlockTester
 				ratio /= block_pixel_length;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				compressed_blue_green_string_rate = ratio;
+				if(compressed_blue_green_string_rate > blue_green_string_rate)
+					compressed_blue_green_string_rate = blue_green_string_rate;
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
@@ -1131,6 +1140,9 @@ public class BlockTester
 				}
 				ratio  = compressed_delta_length;
 				ratio /= block_pixel_length;
+				compressed_red_green_string_rate = ratio;
+				if(compressed_red_green_string_rate > red_green_string_rate)
+					compressed_red_green_string_rate = red_green_string_rate;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 					
 				
@@ -1267,6 +1279,8 @@ public class BlockTester
 				ratio /= block_pixel_length;
 				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				compressed_red_blue_string_rate = ratio;	
+				if(compressed_red_blue_string_rate > red_blue_string_rate)
+					compressed_red_blue_string_rate = red_blue_string_rate;
 				
 				int compressed_array_length = compressed_delta_length / 8;
 				if(compressed_delta_length %8 != 0)
