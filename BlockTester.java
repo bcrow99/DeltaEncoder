@@ -55,7 +55,8 @@ public class BlockTester
 			System.out.println("Usage: java BlockTester <filename>");
 			System.exit(0);
 		}
-		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+	    String prefix      = new String("");
+	    //String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
 		String os           = System.getProperty("os.name");
@@ -74,7 +75,6 @@ public class BlockTester
 		{
 			File file = new File(filename);
 			file_length = file.length();
-			
 			original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
 			ColorModel color_model = original_image.getColorModel();
@@ -361,6 +361,7 @@ public class BlockTester
 		    int pixel_length = xdim * ydim * 8;
 		    file_ratio = file_length * 8;
 		    file_ratio /= pixel_length * number_of_channels;
+		    
 		    System.out.println("Pixel shift is " + pixel_shift);
 		    System.out.println("Huffman only is " + huffman_only);
 		    System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
@@ -373,10 +374,9 @@ public class BlockTester
 			    shifted_red[i]   = red[i]   >> pixel_shift; 
 		    }
 		    
-		    //System.out.println("Green:");
+		    System.out.println("Green:");
 		    int init_value           = shifted_green[0];
 		    int[] delta              = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, init_value);
-			
 		    ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			int delta_min            = (int)histogram_list.get(0);
 			int [] histogram         = (int[])histogram_list.get(1);
@@ -384,7 +384,7 @@ public class BlockTester
 			delta_bytes[0]           = 0;
 			for(int i = 1; i < delta.length; i++)
 			{
-			    delta[i] -= delta_min;
+			    delta[i]      -= delta_min;
 			    delta_bytes[i] = (byte)delta[i];
 			}
 			
@@ -394,101 +394,99 @@ public class BlockTester
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 	    	deflater.setInput(delta_bytes, 0, xdim * ydim);
 	    	deflater.finish();
-	    	int zipped_length = deflater.deflate(zipped_strings);
+	    	int zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	double ratio = zipped_length * 8;
+	    	zipped_byte_length *= 8;
+	    	double ratio = zipped_byte_length;
 	    	ratio /= pixel_length;
-	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 
-			int delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			int string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			
-			int delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			int string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 		
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	int zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
+	    	zipped_string_length *= 8;
 	    	
-	    	ratio = zipped_length * 8;
+	    	
+	    	ratio = zipped_string_length * 8;
 	    	ratio /= pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
 	    	
-			if(compress)
-			{
-                double zero_one_ratio = xdim * ydim;
+            double zero_one_ratio = xdim * ydim;
+            if(histogram.length > 1)
+            {
 				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
-					if(histogram[i] < min_value)
+					 if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
+            }	
+		    zero_one_ratio  /= string_length;
 				
-				zero_one_ratio  /= delta_length;
-				
-				// This is a precise number, but it's also important how the numbers are arranged.
-				int compressed_delta_length = 0;
-				
-				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
-				// Will keep an eye on this.
-				if(zero_one_ratio > .5)
+			int compressed_string_length = 0;
+			if(zero_one_ratio > .5)
+			{
+				compressed_string_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
 				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				ratio  = compressed_delta_length;
-				ratio /= pixel_length;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings did not compress.");
+				    System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+		        }
 			}
-			
-			System.out.println("Block xdim is " + block_xdim + ", ydim is " + block_ydim );  
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				{
+				    System.out.println("One strings did not compress.");
+				    System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
+		        }
+			}
+			ratio  = compressed_string_length;
+			ratio /= pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
+				
+			int compressed_array_length = compressed_string_length / 8;
+			if(compressed_string_length %8 != 0)
+				compressed_array_length++;
+				
+			if(huffman_only)
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+			else
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    deflater.setInput(compressed_strings, 0, compressed_array_length);
+			deflater.finish();
+			int zipped_compressed_length = deflater.deflate(zipped_strings);
+			deflater.end();
+			zipped_compressed_length *= 8;   
+			ratio = zipped_compressed_length;
+			ratio /= pixel_length;
+			System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
 			System.out.println();
-
-		    //System.out.println("Green:");
-		    int block_pixel_length = block_xdim * block_ydim * 8;
+			
+			
+			System.out.println("Block xdim is " + block_xdim + ", ydim is " + block_ydim ); 
+			System.out.println();
+			
+			int block_pixel_length = block_xdim * block_ydim * 8;
+		    
+			System.out.println("Green:");
+		    
 		    int [] block = DeltaMapper.extract(shifted_green, xdim, x_offset, y_offset, block_xdim, block_ydim);
 		     
 		    init_value       = block[0];
@@ -497,17 +495,19 @@ public class BlockTester
 		    int green_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	green_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	green_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -521,109 +521,115 @@ public class BlockTester
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	zipped_byte_length *= 8;
+	    	ratio               = zipped_byte_length;
+	    	ratio              /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			
 			double green_string_rate = ratio;
 			double compressed_green_string_rate = 0;
 			
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
-				
+	    	zipped_string_length *= 8;
+	    	ratio                 = zipped_string_length;
+	    	ratio                /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    
+			zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
 				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				
-				zero_one_ratio  /= delta_length;
-				
-				// This is a precise number, but it's also important how the numbers are arranged.
-				int compressed_delta_length = 0;
-				
-				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
-				// Will keep an eye on this.
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				//System.out.println("Compressed delta length is " + compressed_delta_length);
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				compressed_green_string_rate = ratio;
-				
-				if(compressed_green_string_rate > green_string_rate)
-					compressed_green_string_rate = green_string_rate;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
+			
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_green_string_rate = compressed_string_length;
+				    compressed_green_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_green_string_rate = zipped_byte_length;
+				    compressed_green_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				compressed_green_string_rate = zipped_string_length;
+				compressed_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped unary strings.");
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_green_string_rate  = zipped_byte_length;
+				compressed_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_green_string_rate  = string_length;
+				compressed_green_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+		
+			System.out.println();
 			
 			
-		    //System.out.println("Blue:");
+			
+		    System.out.println("Blue:");
 		    block = DeltaMapper.extract(shifted_blue, xdim, x_offset, y_offset, block_xdim, block_ydim);
 		     
 		    init_value       = block[0];
@@ -632,17 +638,18 @@ public class BlockTester
 		    int blue_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	blue_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	blue_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -656,106 +663,116 @@ public class BlockTester
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			
-	    	ratio = zipped_length * 8;
+	    	zipped_byte_length *= 8;
+	    	ratio = zipped_byte_length;
 	    	ratio /= block_pixel_length;
 	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			double blue_string_rate = ratio;
 			double compressed_blue_string_rate = 0;
 			
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
+	    	zipped_string_length *= 8;
 			
-	    	ratio = zipped_length * 8;
+	    	ratio = zipped_string_length;
 	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
 	    	//System.out.println();
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
-				
+	    	zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
 				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				
-				zero_one_ratio  /= delta_length;
-				
-				// This is a precise number, but it's also important how the numbers are arranged.
-				int compressed_delta_length = 0;
-				
-				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
-				// Will keep an eye on this.
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				//System.out.println("Compressed delta length is " + compressed_delta_length);
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				compressed_blue_string_rate = ratio;
-				if(compressed_blue_string_rate > blue_string_rate)
-					compressed_blue_string_rate =  blue_string_rate;
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
 			
-		    //System.out.println("Red:");
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_blue_string_rate = compressed_string_length;
+				    compressed_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_blue_string_rate = zipped_byte_length;
+				    compressed_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				compressed_blue_string_rate = zipped_string_length;
+				compressed_blue_string_rate /= block_pixel_length;
+				System.out.println("Using zipped unary strings.");
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_blue_string_rate  = zipped_byte_length;
+				compressed_blue_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_blue_string_rate  = string_length;
+				compressed_blue_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+		
+			System.out.println();
+			
+			
+			
+		    System.out.println("Red:");
 		    block = DeltaMapper.extract(shifted_red, xdim, x_offset, y_offset, block_xdim, block_ydim);
 		     
 		    init_value       = block[0];
@@ -764,17 +781,18 @@ public class BlockTester
 		    int red_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	red_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	red_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -788,108 +806,115 @@ public class BlockTester
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	zipped_byte_length *= 8;
+	    	ratio               = zipped_byte_length;
+	    	ratio              /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
-			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			string_length = 0;
+			string_length = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio         = string_length;
+			ratio        /= block_pixel_length;
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			
 			double red_string_rate = ratio;
 			double compressed_red_string_rate = 0;
 			
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
+	    	zipped_string_length *= 8;
+	    	ratio = zipped_string_length;
 	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
-				
+	    	
+	    	zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
 				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				
-				zero_one_ratio  /= delta_length;
-				
-				// This is a precise number, but it's also important how the numbers are arranged.
-				int compressed_delta_length = 0;
-				
-				// No clear cut off point where compressing zero strings will work, but it definitely won't work with less than half.
-				// Will keep an eye on this.
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				//System.out.println("Compressed delta length is " + compressed_delta_length);
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				compressed_red_string_rate = ratio;
-				if(compressed_red_string_rate > red_string_rate)
-					compressed_red_string_rate = red_string_rate;
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
+			
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_red_string_rate = compressed_string_length;
+				    compressed_red_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_red_string_rate = zipped_byte_length;
+				    compressed_red_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				compressed_red_string_rate = zipped_string_length;
+				compressed_red_string_rate /= block_pixel_length;
+				System.out.println("Using zipped unary strings.");
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_red_string_rate  = zipped_byte_length;
+				compressed_red_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_red_string_rate  = string_length;
+				compressed_red_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+		
+			System.out.println();
 			
 			
-			//System.out.println("Blue-green:");
+			
+			System.out.println("Blue-green:");
 			int [] shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
 	        int blue_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -908,17 +933,18 @@ public class BlockTester
 		    int blue_green_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	blue_green_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	blue_green_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -933,102 +959,114 @@ public class BlockTester
 			
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
+	    	zipped_byte_length *= 8;
+	    	ratio = zipped_byte_length;
 	    	ratio /= block_pixel_length;
 	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			double blue_green_string_rate = ratio;
 			double compressed_blue_green_string_rate = 0;
 			
 			// Getting the number of bytes from the number of bits.
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0,string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
-				
+	    	zipped_string_length *= 8;
+	    	
+	    	ratio = zipped_string_length;
+	    	ratio /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
+	    	zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
+				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				
-				zero_one_ratio  /= delta_length;
-				
-				
-				int compressed_delta_length = 0;
-				
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				compressed_blue_green_string_rate = ratio;
-				if(compressed_blue_green_string_rate > blue_green_string_rate)
-					compressed_blue_green_string_rate = blue_green_string_rate;
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length >string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
+			
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_blue_green_string_rate = compressed_string_length;
+				    compressed_blue_green_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_blue_green_string_rate = zipped_byte_length;
+				    compressed_blue_green_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				compressed_blue_green_string_rate = zipped_string_length;
+				compressed_blue_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped unary strings.");
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_blue_green_string_rate  = zipped_byte_length;
+				compressed_blue_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_blue_green_string_rate  = string_length;
+				compressed_blue_green_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+		
+			System.out.println();
+			
 		    
-			//System.out.println("Red-green:");
+			System.out.println("Red-green:");
 			int [] shifted_red_green = DeltaMapper.getDifference(shifted_red, shifted_green);
 	        int red_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -1047,18 +1085,19 @@ public class BlockTester
 		    int red_green_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	red_green_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	red_green_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 			
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -1073,100 +1112,111 @@ public class BlockTester
 			
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			
-	    	ratio = zipped_length * 8;
+	    	zipped_byte_length *= 8;
+	    	ratio = zipped_byte_length;
 	    	ratio /= block_pixel_length;
 	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			double red_green_string_rate = ratio;
 			double compressed_red_green_string_rate = 0;
 			
-			
 			// Getting the number of bytes from the number of bits.
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
+			zipped_string_length *= 8;
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
+	    	ratio /= block_pixel_length;
+	    	zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
+				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				zero_one_ratio  /= delta_length;
-		        int compressed_delta_length =  0;
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				compressed_red_green_string_rate = ratio;
-				if(compressed_red_green_string_rate > red_green_string_rate)
-					compressed_red_green_string_rate = red_green_string_rate;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-					
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
+			
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_red_green_string_rate = compressed_string_length;
+				    compressed_red_green_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_red_green_string_rate = zipped_byte_length;
+				    compressed_red_green_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				compressed_red_green_string_rate = zipped_string_length;
+				compressed_red_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped unary strings.");
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_red_green_string_rate  = zipped_byte_length;
+				compressed_red_green_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_red_green_string_rate  = string_length;
+				compressed_red_green_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+			System.out.println();
+			
 		    
-			//System.out.println("Red-blue:");
+			System.out.println("Red-blue:");
 			int [] shifted_red_blue = DeltaMapper.getDifference(shifted_red, shifted_blue);
 	        int red_blue_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -1185,18 +1235,19 @@ public class BlockTester
 		    int red_blue_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	//System.out.println("Delta type is horizontal.");
+		    	System.out.println("Delta type is horizontal.");
 		    	red_blue_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	//System.out.println("Delta type is vertical.");
+		    	System.out.println("Delta type is vertical.");
 		    	red_blue_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 			
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
+			System.out.println("The number of different values is " + histogram.length);
 			delta_random_lut = DeltaMapper.getRandomTable(histogram); 
 			delta_bytes[0]   = 0;
 			for(int i = 1; i < delta.length; i++)
@@ -1211,96 +1262,121 @@ public class BlockTester
 			
 			deflater.setInput(delta_bytes, 0, block_xdim * block_ydim);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
+			zipped_byte_length *= 8;
+	    	ratio = zipped_byte_length;
 	    	ratio /= block_pixel_length;
 	    	
-	    	//System.out.println("The compression rate for zipped delta ints is " + String.format("%.4f", ratio));
+	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 			
-			delta_length = 0;
-			delta_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = delta_length;
+			string_length = 0;
+			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			ratio = string_length;
 			ratio /= block_pixel_length;
-			//System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
+			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			double red_blue_string_rate = ratio;
 			double compressed_red_blue_string_rate = 0;
 			
 			// Getting the number of bytes from the number of bits.
-			delta_array_length = delta_length / 8;
-			if(delta_length % 8 != 0)
-				delta_array_length++;
+			string_array_length = string_length / 8;
+			if(string_length % 8 != 0)
+				string_array_length++;
 			
 			if(huffman_only)
 				deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 			else
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 			
-	    	deflater.setInput(delta_strings, 0, delta_array_length);
+	    	deflater.setInput(delta_strings, 0, string_array_length);
 	    	deflater.finish();
-	    	zipped_length = deflater.deflate(zipped_strings);
+	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
-			
-	    	ratio = zipped_length * 8;
-	    	ratio /= block_pixel_length;
-	    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
-	    	//System.out.println();
+	    	zipped_string_length *= 8;
+	    	ratio                 = zipped_string_length;
+	    	ratio                 /= block_pixel_length;
+	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", ratio));
 	    	
-			if(compress)
-			{
-				double zero_one_ratio = xdim * ydim;
+	    	zero_one_ratio = block_xdim * block_ydim;
+			if(histogram.length > 1)
+            {
+				// Subtract the missing stop bits from the max codes.
 				int min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
 				zero_one_ratio -= min_value;
-				zero_one_ratio  /= delta_length;
-		        int compressed_delta_length =  0;
-				if(zero_one_ratio > .5)
-				{
-				    compressed_delta_length =  DeltaMapper.compressZeroStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("Zero strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
+            }
+			zero_one_ratio  /= string_length;
+			compressed_string_length = 0;
+			System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));	
+            if(zero_one_ratio > .5)
+			{
+				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("Zero strings did not compress.");
 				else
-				{
-				    compressed_delta_length =  DeltaMapper.compressOneStrings(delta_strings, delta_length, compressed_strings);
-				    if(compressed_delta_length > delta_length)
-				    {
-				    	//System.out.println("One strings did not compress.");
-				    	//System.out.println("The zero one ratio in the bit string is " + String.format("%.4f", zero_one_ratio));
-				    }
-				}
-				ratio  = compressed_delta_length;
-				ratio /= block_pixel_length;
-				//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
-				compressed_red_blue_string_rate = ratio;	
-				if(compressed_red_blue_string_rate > red_blue_string_rate)
-					compressed_red_blue_string_rate = red_blue_string_rate;
-				
-				int compressed_array_length = compressed_delta_length / 8;
-				if(compressed_delta_length %8 != 0)
-					compressed_array_length++;
-				
-				if(huffman_only)
-					deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				else
-					deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(compressed_strings, 0, compressed_array_length);
-			    deflater.finish();
-			    zipped_length = deflater.deflate(zipped_strings);
-			    deflater.end();
-			    
-			    ratio = zipped_length * 8;
-			    ratio /= block_pixel_length;
-			    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
-			    //System.out.println();
+				    System.out.println("Zero strings compressed.");
 			}
-			//System.out.println();
+			else
+			{
+			    compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+				if(compressed_string_length > string_length)
+				    System.out.println("One strings did not compress.");
+				else
+				    System.out.println("One strings compressed.");
+			}
+            
+            ratio  = compressed_string_length;
+			ratio /= block_pixel_length;
+			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));
+			
+			if(compressed_string_length < string_length)
+			{
+				if(compressed_string_length < zipped_byte_length)
+				{
+				    compressed_red_blue_string_rate = compressed_string_length;
+				    compressed_red_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using compressed unary strings.");
+				}
+				else
+				{
+					compressed_red_blue_string_rate = zipped_byte_length;
+				    compressed_red_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");
+				}
+			}
+			else if(zipped_string_length < string_length)
+			{
+				if(zipped_string_length < zipped_byte_length)
+				{
+				    compressed_red_blue_string_rate = zipped_string_length;
+				    compressed_red_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped unary strings.");
+				}
+				else
+				{
+					compressed_red_blue_string_rate = zipped_byte_length;
+				    compressed_red_blue_string_rate /= block_pixel_length;
+				    System.out.println("Using zipped bytes.");	
+				}
+			}
+			else if(zipped_byte_length < string_length)
+			{
+				compressed_red_blue_string_rate  = zipped_byte_length;
+				compressed_red_blue_string_rate /= block_pixel_length;
+				System.out.println("Using zipped_bytes.");	
+			}
+			else
+			{
+				compressed_red_blue_string_rate  = string_length;
+				compressed_red_blue_string_rate /= block_pixel_length;
+				System.out.println("Using uncompressed unary strings.");	
+			}
+		
+		
+			System.out.println();
+			
 			
 			int []    delta_sum =    new int[10];
 			String [] delta_string = new String[10];
@@ -1339,18 +1415,40 @@ public class BlockTester
 			delta_rate[8] = (compressed_red_blue_string_rate + compressed_green_string_rate + compressed_red_green_string_rate) / 3;
 			delta_rate[9] = (compressed_red_blue_string_rate + compressed_red_green_string_rate + compressed_red_string_rate) / 3;
 			
+			System.out.println("The green compression rate is " + String.format("%.4f", compressed_green_string_rate));
+			System.out.println("The blue compression rate is " + String.format("%.4f", compressed_blue_string_rate));
+			System.out.println("The red compression rate is " + String.format("%.4f", compressed_red_string_rate));
+			System.out.println("The red green compression rate is " + String.format("%.4f", compressed_red_green_string_rate));
+			System.out.println("The blue green compression rate is " + String.format("%.4f", compressed_blue_green_string_rate));
+			System.out.println("The red blue compression rate is " + String.format("%.4f", compressed_red_blue_string_rate));
+			System.out.println();
+			
 			int min_index = 0;
 			int min_value = Integer.MAX_VALUE;
 			for(int i = 0; i < 10; i++)
 			{
 				if(delta_sum[i] < min_value)
 				{
-				    min_value = delta_sum[0];
+				    min_value = delta_sum[i];
 				    min_index = i;
 				}
 			}
 			System.out.println("A set of channels with the lowest delta sum is " + delta_string[min_index]);
 			System.out.println("The compression rate is " + String.format("%.4f", delta_rate[min_index]));
+			
+			int max_index = 0;
+			int max_value = 0;
+			for(int i = 0; i < 10; i++)
+			{
+				if(delta_sum[i] > max_value)
+				{
+				    max_value = delta_sum[i];
+				    max_index = i;
+				}
+			}
+			System.out.println("A set of channels with the highest delta sum is " + delta_string[max_index]);
+			System.out.println("The compression rate is " + String.format("%.4f", delta_rate[max_index]));
+			
 			
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
