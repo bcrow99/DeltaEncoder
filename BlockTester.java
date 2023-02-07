@@ -395,69 +395,84 @@ public class BlockTester
 			    shifted_red[i]   = red[i]   >> pixel_shift; 
 		    }
 		    
-		    int min_value, min_index;
-		    /*
-		    int [] blue_sum_value, green_sum_value, red_sum_value;
-		    if(xdim < ydim)
+		    int min_value, min_index, max_value, max_index;
+		    
+		    
+		    ArrayList xdim_list = new ArrayList();
+		    ArrayList ydim_list = new ArrayList();
+		    int dim = xdim / 2;
+		    while(dim > 1)
 		    {
-		    	blue_sum_value  = new int[xdim - 2];
-		    	green_sum_value = new int[xdim - 2];
-		    	red_sum_value   = new int[xdim - 2];
-		        for(int i = 2; i < xdim; i++)
-		        {
-		        	int _xdim = i;
-		        	int _ydim = i;
-		        	int blue_block_delta_sum  = DeltaMapper.getBlockDeltaSum(shifted_blue,  xdim, ydim, _xdim, _ydim);
-					int green_block_delta_sum = DeltaMapper.getBlockDeltaSum(shifted_green, xdim, ydim, _xdim, _ydim);
-					int red_block_delta_sum   = DeltaMapper.getBlockDeltaSum(shifted_red,   xdim, ydim, _xdim, _ydim);
-				    
-					int number_of_blocks = (xdim / _xdim) * (ydim / _ydim);
-					number_of_blocks *= 24;
-					blue_sum_value[i - 2]  = blue_block_delta_sum  + number_of_blocks;
-					green_sum_value[i - 2] = green_block_delta_sum + number_of_blocks;
-					red_sum_value[i - 2]   = red_block_delta_sum   + number_of_blocks;
-		        }
+		    	xdim_list.add(dim);
+		    	dim /= 2;
 		    }
+		    dim = ydim / 2;
+		    while(dim > 1)
+		    {
+		    	ydim_list.add(dim);
+		    	dim /= 2;
+		    }
+		    int xdim_list_size = xdim_list.size();
+		    int ydim_list_size = ydim_list.size();
+		    System.out.println("xdim list has length " + xdim_list_size);
+		    System.out.println("ydim list has length " + ydim_list_size);
+		    
+		    int min_list_size = 0;
+		    if(xdim_list_size < ydim_list_size)
+		    	min_list_size = xdim_list_size;
 		    else
-		    {
-		    	blue_sum_value  = new int[ydim - 2];
-		    	green_sum_value = new int[ydim - 2];
-		    	red_sum_value   = new int[ydim - 2];
-		        for(int i = 2; i < ydim; i++)
-		        {
-		        	int _xdim = i;
-		        	int _ydim = i;
-		        	int blue_block_delta_sum  = DeltaMapper.getBlockDeltaSum(shifted_blue,  xdim, ydim, _xdim, _ydim);
-					int green_block_delta_sum = DeltaMapper.getBlockDeltaSum(shifted_green, xdim, ydim, _xdim, _ydim);
-					int red_block_delta_sum   = DeltaMapper.getBlockDeltaSum(shifted_red,   xdim, ydim, _xdim,_ydim);
-				    
-					blue_sum_value[i - 2]  = blue_block_delta_sum;
-					green_sum_value[i - 2] = green_block_delta_sum;
-					red_sum_value[i - 2]   = red_block_delta_sum;  
-					
-					int number_of_blocks = (xdim / _xdim) * (ydim / _ydim);
-					blue_sum_value[i - 2]  = blue_block_delta_sum  + number_of_blocks * 24;
-					green_sum_value[i - 2] = green_block_delta_sum + number_of_blocks * 24;
-					red_sum_value[i - 2]   = red_block_delta_sum   + number_of_blocks * 24;
-		        }	
-		    }
+		    	min_list_size = ydim_list_size;
 		    
-		    
-		    int min_index = 0;
-		    int min_value = Integer.MAX_VALUE;
+		    int [] blue_sum_value, green_sum_value, red_sum_value;
+		    blue_sum_value  = new int[min_list_size];
+	    	green_sum_value = new int[min_list_size];
+	    	red_sum_value   = new int[min_list_size];
+	    	int _xdim       = 0;
+	    	int _ydim       = 0;
+	    	for(int i = 0; i < min_list_size; i++)
+	        {
+	        	_xdim = (int)xdim_list.get(i);
+	        	_ydim = (int)ydim_list.get(i);
+	        	int blue_block_delta_sum  = DeltaMapper.getBlockDeltaSum(shifted_blue,  xdim, ydim, _xdim, _ydim);
+				int green_block_delta_sum = DeltaMapper.getBlockDeltaSum(shifted_green, xdim, ydim, _xdim, _ydim);
+				int red_block_delta_sum   = DeltaMapper.getBlockDeltaSum(shifted_red,   xdim, ydim, _xdim, _ydim);
+				int number_of_blocks      = (xdim / _xdim) * (ydim / _ydim);
+				blue_sum_value[i]         = blue_block_delta_sum  + number_of_blocks * 16;
+				green_sum_value[i]        = green_block_delta_sum + number_of_blocks * 16;
+		        red_sum_value[i]          = red_block_delta_sum   + number_of_blocks * 16;		
+	        }
+	    
+		    min_index = 0;
+		    min_value = Integer.MAX_VALUE;
 		    for(int i = 0; i < blue_sum_value.length; i++)
 		    {
-		    	System.out.println("Blue delta sum " + i + " = " + blue_sum_value[i]);
 		    	if(blue_sum_value[i] < min_value)
 		    	{
 		    		min_value = blue_sum_value[i];
 		    		min_index = i;
 		    	}
 		    }
-		    System.out.println("Minimum block size for blue channel is " + (min_index + 2));
 		    
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+		    System.out.println("Minimum sampled block size for blue channel is " + _xdim + "x" + _ydim);
 		    
-
+		    if(min_index > 0)
+		    {
+		        min_index--;
+		        max_index = min_index + 2;
+		    }
+		    else
+		    	max_index = min_index + 1;
+		    
+		    _xdim = (int)xdim_list.get(max_index);
+		    _ydim = (int)ydim_list.get(max_index);
+		    System.out.println("Lower bound for block is " + _xdim + "x" + _ydim);
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+		    System.out.println("Upper bound for block is " + _xdim + "x" + _ydim);
+		    System.out.println();
+		    
 		    min_index = 0;
 		    min_value = green_sum_value[0];
 		    for(int i = 1; i < green_sum_value.length; i++)
@@ -468,21 +483,55 @@ public class BlockTester
 		    		min_index = i;
 		    	}
 		    }
-		    //System.out.println("Minimum block size for green channel is " + min_index);
-		    
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+            System.out.println("Minimum sampled block size for green channel is " + _xdim + "x" + _ydim); 
+		    if(min_index > 0)
+		    {
+		        min_index--;
+		        max_index = min_index + 2;
+		    }
+		    else
+		    	max_index = min_index + 1;
+		    _xdim = (int)xdim_list.get(max_index);
+		    _ydim = (int)ydim_list.get(max_index);
+		    System.out.println("Lower bound for block is " + _xdim + "x" + _ydim);
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+		    System.out.println("Upper bound for block is " + _xdim + "x" + _ydim);
+		    System.out.println();
 		    
 		    min_index = 0;
-		    min_value = green_sum_value[0];
-		    for(int i = 1; i < green_sum_value.length; i++)
+		    min_value = red_sum_value[0];
+		    for(int i = 1; i < red_sum_value.length; i++)
 		    {
-		    	if(green_sum_value[i] < min_value)
+		    	if(red_sum_value[i] < min_value)
 		    	{
-		    		min_value = green_sum_value[i];
+		    		min_value = red_sum_value[i];
 		    		min_index = i;
 		    	}
 		    }
-		    //System.out.println("Minimum block size for red channel is " + min_index);
-		    */ 
+		    
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+            System.out.println("Minimum sampled block size for red channel is " + _xdim + "x" + _ydim);
+		    
+		    if(min_index > 0)
+		    {
+		        min_index--;
+		        max_index = min_index + 2;
+		    }
+		    else
+		    	max_index = min_index + 1;
+		    
+		    _xdim = (int)xdim_list.get(max_index);
+		    _ydim = (int)ydim_list.get(max_index);
+		    System.out.println("Lower bound for block is " + _xdim + "x" + _ydim);
+		    _xdim = (int)xdim_list.get(min_index);
+		    _ydim = (int)ydim_list.get(min_index);
+		    System.out.println("Upper bound for block is " + _xdim + "x" + _ydim);
+		    System.out.println();
+		    
 		    
 		    System.out.println("Green:");
 		    int init_value           = shifted_green[0];
@@ -508,14 +557,16 @@ public class BlockTester
 	    	int zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_byte_length *= 8;
+	    	zipped_byte_length += 16;
 	    	double ratio = zipped_byte_length;
 	    	ratio /= pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", ratio));
 
 			int string_length = 0;
-			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			ratio = string_length;
-			ratio /= pixel_length;
+			string_length     = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+			string_length    += 16;
+			ratio             = string_length;
+			ratio            /= pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", ratio));
 			
 			int string_array_length = string_length / 8;
@@ -531,6 +582,7 @@ public class BlockTester
 	    	int zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_string_length *= 8;
+	    	zipped_string_length += 16;
 	    	
 	    	
 	    	ratio = zipped_string_length * 8;
@@ -568,6 +620,7 @@ public class BlockTester
 		        }
 			}
 			ratio  = compressed_string_length;
+			ratio += 16;
 			ratio /= pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", ratio));	
 				
@@ -583,7 +636,8 @@ public class BlockTester
 			deflater.finish();
 			int zipped_compressed_length = deflater.deflate(zipped_strings);
 			deflater.end();
-			zipped_compressed_length *= 8;   
+			zipped_compressed_length *= 8;
+			zipped_compressed_length += 16;
 			ratio = zipped_compressed_length;
 			ratio /= pixel_length;
 			System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", ratio));
@@ -633,13 +687,13 @@ public class BlockTester
 	    	deflater.end();
 			
 	    	zipped_byte_length *= 8;
-	    	rate[0]  = zipped_byte_length;
+	    	rate[0]  = zipped_byte_length + 16;
 	    	rate[0] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length = 0;
 			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			rate[1]  = string_length;
+			rate[1]  = string_length + 16;
 			rate[1] /= block_pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			
@@ -656,15 +710,13 @@ public class BlockTester
 	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_string_length *= 8;
-			
-	    	rate[2] = zipped_string_length;
+	    	rate[2] = zipped_string_length + 16;
 	    	rate[2] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				// Subtract the missing stop bits from the max codes.
 				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
@@ -682,7 +734,7 @@ public class BlockTester
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -702,8 +754,6 @@ public class BlockTester
 			String compression_type = type_string[min_index];
 			System.out.println("Minimum rate is " + String.format("%.4f", min_rate_value) + " using " + compression_type);
 			System.out.println();
-			
-			
 			
 			System.out.println("Green:");
 		    block = DeltaMapper.extract(shifted_green, xdim, x_offset, y_offset, block_xdim, block_ydim);
@@ -739,12 +789,12 @@ public class BlockTester
 	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_byte_length *= 8;
-	    	rate[0]               = zipped_byte_length;
+	    	rate[0]               = zipped_byte_length + 16;
 	    	rate[0]              /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			rate[1]         = string_length;
+			rate[1]         = string_length + 16;
 			rate[1]        /= block_pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			
@@ -761,7 +811,7 @@ public class BlockTester
 	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_string_length *= 8;
-	    	rate[2] = zipped_string_length;
+	    	rate[2] = zipped_string_length + 16;
 	    	rate[2] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	
@@ -786,7 +836,7 @@ public class BlockTester
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -847,7 +897,7 @@ public class BlockTester
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			rate[1]         = string_length;
+			rate[1]         = string_length + 16;
 			rate[1]        /= block_pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			
@@ -864,7 +914,7 @@ public class BlockTester
 	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_string_length *= 8;
-	    	rate[2] = zipped_string_length;
+	    	rate[2] = zipped_string_length = 16;
 	    	rate[2] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	
@@ -889,7 +939,7 @@ public class BlockTester
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -956,13 +1006,13 @@ public class BlockTester
 	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_byte_length *= 8;
-	    	rate[0] = zipped_byte_length;
+	    	rate[0] = zipped_byte_length + 16;
 	    	rate[0] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length = 0;
 			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			rate[1] = string_length;
+			rate[1] = string_length + 16;
 			rate[1] /= block_pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			
@@ -985,7 +1035,7 @@ public class BlockTester
 	    	zipped_string_length *= 8;
 	    	
 	    	rate[2] = zipped_string_length;
-	    	rate[2] /= block_pixel_length;
+	    	rate[2] /= block_pixel_length + 16;
 	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
@@ -1007,7 +1057,7 @@ public class BlockTester
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -1077,13 +1127,13 @@ public class BlockTester
 	    	deflater.end();
 			
 	    	zipped_byte_length *= 8;
-	    	rate[0] = zipped_byte_length;
+	    	rate[0] = zipped_byte_length + 16;
 	    	rate[0] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length = 0;
 			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-			rate[1] = string_length;
+			rate[1] = string_length + 16;
 			rate[1] /= block_pixel_length;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			
@@ -1100,7 +1150,7 @@ public class BlockTester
 	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			zipped_string_length *= 8;
-			rate[2]  = zipped_string_length;
+			rate[2]  = zipped_string_length + 16;
 			rate[2] /= block_pixel_length;
 			System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	zero_one_ratio = block_xdim * block_ydim;
@@ -1123,7 +1173,7 @@ public class BlockTester
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -1192,13 +1242,13 @@ public class BlockTester
 	    	zipped_byte_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 			zipped_byte_length *= 8;
-			rate[0] = zipped_byte_length;
+			rate[0] = zipped_byte_length + 16;
 			rate[0] /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
 			
 			string_length  = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 			rate[1] = string_length;
-			rate[1] /= block_pixel_length;
+			rate[1] /= block_pixel_length + 16;
 			System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
 			string_array_length = string_length / 8;
 			if(string_length % 8 != 0)
@@ -1214,7 +1264,7 @@ public class BlockTester
 	    	zipped_string_length = deflater.deflate(zipped_strings);
 	    	deflater.end();
 	    	zipped_string_length *= 8;
-	    	rate[2]               = zipped_string_length;
+	    	rate[2]               = zipped_string_length + 16;
 	    	rate[2]              /= block_pixel_length;
 	    	System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
 	    	
@@ -1238,7 +1288,7 @@ public class BlockTester
 			    compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 			}
             
-            rate[3]  = compressed_string_length;
+            rate[3]  = compressed_string_length + 16;
             rate[3] /= block_pixel_length;
 			System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));
 			
@@ -1303,8 +1353,8 @@ public class BlockTester
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
 			System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
 			
-			int max_index = 0;
-			int max_value = 0;
+			max_index = 0;
+			max_value = 0;
 			for(int i = 0; i < 10; i++)
 			{
 				if(set_sum[i] > max_value)
