@@ -4,67 +4,6 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
-	public static double getTotal(double src[])
-	{
-		int length = src.length;
-		double total = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			total += src[i];
-		}
-		return(total);
-	}
-	
-	public static int getSum(int src[])
-	{
-		int length = src.length;
-		int sum  = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			sum += src[i];
-		}
-		return(sum);
-	}
-	
-	public static int getAbsoluteSum(int src[])
-	{
-		int length = src.length;
-		int sum  = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			sum += Math.abs(src[i]);
-		}
-		return(sum);
-	}
-	
-	public static double getAbsoluteTotal(double src[])
-	{
-		int length = src.length;
-		double total = 0;
-		
-		for(int i = 0; i < length; i++)
-		{
-			total += Math.abs(src[i]);
-		}
-		return(total);
-	}
-	
-	
-	public static double[] getDifference(double src[], double src2[])
-	{
-		int length = src.length;
-		double [] difference = new double[length];
-		
-		for(int i = 0; i < length; i++)
-		{
-			difference[i] = src[i] - src2[i];
-		}
-		return(difference);
-	}
-	
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -164,169 +103,6 @@ public class DeltaMapper
 	    }	
 	    return random_lut;
 	}
-	
-	public static int[] getModalTable(int histogram[])
-	{
-		int max_value = histogram[0];
-		int mode      = 0;
-		for(int i = 1; i < histogram.length; i++)
-		{
-			if(histogram[i] > max_value)
-			{
-				max_value = histogram[i];
-				mode      = i;
-			}
-		}
-		
-		int[] modal_lut = new int[histogram.length];
-		
-		
-		int lower_value = mode;
-	    int upper_value = mode + 1;
-	    
-	    int index = 0;
-	    modal_lut[lower_value] = index++;
-	    if(upper_value < histogram.length)
-	    	modal_lut[upper_value] = index++;
-	    else
-	    {
-	    	lower_value--;
-	    	modal_lut[lower_value] = index++;
-	    }
-	    
-	    for(int i = 2; i < histogram.length; i += 2)
-	    {
-	        if(lower_value > 0)	
-	        {
-	        	lower_value--;
-	        	modal_lut[lower_value] = index++;
-	        	upper_value++;
-	        	if(upper_value < histogram.length)
-	        		modal_lut[upper_value] = index++;
-	        	else
-	        	{
-	        		if(lower_value > 0)
-	        		{
-	        		    lower_value--;
-	        		    modal_lut[lower_value] = index++;   
-	        		}
-	        	}
-	        }
-	        else
-	        {
-	        	upper_value++;
-	        	modal_lut[upper_value] = index++;
-	        	if(upper_value < histogram.length - 1)
-	        	{
-	        		upper_value++;
-	                modal_lut[upper_value] = index++;
-	        	}
-	        }
-	    }
-	    
-	    if(histogram.length % 2 == 1)
-	    {
-	    	if(lower_value > 0)
-	    		modal_lut[0] = 0;	
-	    	else
-	    		modal_lut[histogram.length - 1] = histogram.length - 1;
-	    }
-		return modal_lut;
-	}
-	
-	
-	
-	public static int[] getSymmetricTable(int size)
-	{
-		int[] symmetric_lut = new int[size];
-		
-		int i = 0;
-	    int j = 0;
-	        
-	    if(size % 2 == 1)
-	        j = size / 2;
-	    else
-	        j = size / 2 - 1;
-	        
-	    symmetric_lut[j--] = i;
-	    i += 2;
-	    while(j >= 0)
-	    {
-	        symmetric_lut[j--] = i;
-	        i += 2;
-	    }
-	        
-	    if(size % 2 == 1)
-	        j = size / 2 + 1;
-	    else
-	        j = size / 2;
-	        
-	    i = 1;
-	    symmetric_lut[j++] = i;
-	    i += 2;
-	    while(j < size)
-	    {
-	        symmetric_lut[j++] = i;
-	        i += 2;
-	    }
-	    return symmetric_lut;
-	}
-
-	public static int[][] expandX(int src[][])
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		
-		int _xdim = 2 * xdim - 1;
-		
-		int [][] dst = new int[ydim][_xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				dst[i][j * 2]     = src[i][j];
-				dst[i][j * 2 + 1] = (src[i][j] + src[i][j + 1]) / 2;
-			}
-			dst[i][_xdim - 1] = src[i][xdim - 1];
-		}
-		return(dst);
-	}
-	
-	public static int[][] expandX(int src[][], int expand)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		
-		int _xdim = (xdim - 1) * expand + xdim;
-		
-		int [][] dst = new int[ydim][_xdim];
-		for(int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			int end_value = 0;
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				int start_value  = src[i][j];
-				end_value        = src[i][j + 1];
-				dst[i][k++]      = start_value;
-				double delta     = start_value - end_value;
-				double increment = delta / (expand + 1);
-				for(int m = 0; m < expand; m++)
-				{
-					start_value += increment;
-					dst[i][k++]  = start_value;
-				}
-			}
-			dst[i][k] = end_value;
-		}
-		return(dst);
-	}
-	
-	public static void insert(int[] src, int src_xdim, int xoffset, int yoffset)
-	{
-	   
-	}
-	
 	public static int[] extract(int[] src, int src_xdim, int xoffset, int yoffset, int xdim, int ydim)
 	{
 	    int src_ydim = src.length / src_xdim;
@@ -342,6 +118,42 @@ public class DeltaMapper
 	    	}
 	    }
 	    return(dst); 
+	}
+	
+	
+	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
+	{
+		int xdim = src_xdim / block_xdim;
+	    int ydim = src_ydim / block_ydim;
+	    
+	    int delta_sum = 0;
+	    int yoffset   = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	int xoffset = 0;
+	    	for(int j = 0; j < xdim; j++)
+	    	{
+	    		int [] block      = DeltaMapper.extract(src, src_xdim, xoffset, yoffset, block_xdim, block_ydim);
+	  		    int    init_value = block[0];
+	  		    int [] delta      = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value); 
+	  		    if(delta[0] == 0)
+	  		    {
+	  		    	//System.out.println("Delta type is horizontal.");
+	  		    	int h_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
+	  		    	delta_sum += h_sum;
+	  		    }
+	  		    else
+	  		    {
+	  		    	//System.out.println("Delta type is vertical.");
+	  		    	int v_sum = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
+	  		    	delta_sum += v_sum;
+	  		    } 	
+	  		    xoffset += block_xdim;
+	    	}
+	    	yoffset += block_ydim;
+	    }
+	    
+	    return delta_sum;
 	}
 	
 	public static int getVerticalDeltaSum(int src[], int xdim, int ydim)
@@ -868,13 +680,6 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
-    
-    
-    
-    
-    
-    
-    
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
     	// Not using this currently, but gives us a handle on the
@@ -1136,6 +941,9 @@ public class DeltaMapper
             if(remainder > 1)
                 dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
         }
+        //System.out.println("Number of iterations is " + number_of_iterations);
+        
+        // Bitstring plus # of iterations.
         return(current_size + 8);
     }
     
@@ -1508,8 +1316,6 @@ public class DeltaMapper
         }
         return(current_size + 8);
     }
-    
-   
     
     public static int decompressOneStrings(byte src[], int size, byte dst[])
     {

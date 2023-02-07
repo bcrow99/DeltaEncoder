@@ -339,8 +339,8 @@ public class BlockTester
 		    compressed_strings = new byte[xdim * ydim * 8];
 		    
 		    // The 4 different kinds of compressions per channel.
-		    rate = new double[4];
-		    type_string = new String[4];
+		    rate           = new double[4];
+		    type_string    = new String[4];
 			type_string[0] = new String("zipped bytes");
 			type_string[1] = new String("strings");
 			type_string[2] = new String("zipped strings");
@@ -378,7 +378,7 @@ public class BlockTester
 		    
 		    pixel_length = xdim * ydim * 8;
 		    file_ratio   = file_length * 8;
-		    file_ratio /= pixel_length * 3;
+		    file_ratio  /= pixel_length * 3;
 		}
 		
 		public void actionPerformed(ActionEvent event)
@@ -394,6 +394,95 @@ public class BlockTester
 		        shifted_green[i] = green[i] >> pixel_shift;
 			    shifted_red[i]   = red[i]   >> pixel_shift; 
 		    }
+		    
+		    int min_value, min_index;
+		    /*
+		    int [] blue_sum_value, green_sum_value, red_sum_value;
+		    if(xdim < ydim)
+		    {
+		    	blue_sum_value  = new int[xdim - 2];
+		    	green_sum_value = new int[xdim - 2];
+		    	red_sum_value   = new int[xdim - 2];
+		        for(int i = 2; i < xdim; i++)
+		        {
+		        	int _xdim = i;
+		        	int _ydim = i;
+		        	int blue_block_delta_sum  = DeltaMapper.getBlockDeltaSum(shifted_blue,  xdim, ydim, _xdim, _ydim);
+					int green_block_delta_sum = DeltaMapper.getBlockDeltaSum(shifted_green, xdim, ydim, _xdim, _ydim);
+					int red_block_delta_sum   = DeltaMapper.getBlockDeltaSum(shifted_red,   xdim, ydim, _xdim, _ydim);
+				    
+					int number_of_blocks = (xdim / _xdim) * (ydim / _ydim);
+					number_of_blocks *= 24;
+					blue_sum_value[i - 2]  = blue_block_delta_sum  + number_of_blocks;
+					green_sum_value[i - 2] = green_block_delta_sum + number_of_blocks;
+					red_sum_value[i - 2]   = red_block_delta_sum   + number_of_blocks;
+		        }
+		    }
+		    else
+		    {
+		    	blue_sum_value  = new int[ydim - 2];
+		    	green_sum_value = new int[ydim - 2];
+		    	red_sum_value   = new int[ydim - 2];
+		        for(int i = 2; i < ydim; i++)
+		        {
+		        	int _xdim = i;
+		        	int _ydim = i;
+		        	int blue_block_delta_sum  = DeltaMapper.getBlockDeltaSum(shifted_blue,  xdim, ydim, _xdim, _ydim);
+					int green_block_delta_sum = DeltaMapper.getBlockDeltaSum(shifted_green, xdim, ydim, _xdim, _ydim);
+					int red_block_delta_sum   = DeltaMapper.getBlockDeltaSum(shifted_red,   xdim, ydim, _xdim,_ydim);
+				    
+					blue_sum_value[i - 2]  = blue_block_delta_sum;
+					green_sum_value[i - 2] = green_block_delta_sum;
+					red_sum_value[i - 2]   = red_block_delta_sum;  
+					
+					int number_of_blocks = (xdim / _xdim) * (ydim / _ydim);
+					blue_sum_value[i - 2]  = blue_block_delta_sum  + number_of_blocks * 24;
+					green_sum_value[i - 2] = green_block_delta_sum + number_of_blocks * 24;
+					red_sum_value[i - 2]   = red_block_delta_sum   + number_of_blocks * 24;
+		        }	
+		    }
+		    
+		    
+		    int min_index = 0;
+		    int min_value = Integer.MAX_VALUE;
+		    for(int i = 0; i < blue_sum_value.length; i++)
+		    {
+		    	System.out.println("Blue delta sum " + i + " = " + blue_sum_value[i]);
+		    	if(blue_sum_value[i] < min_value)
+		    	{
+		    		min_value = blue_sum_value[i];
+		    		min_index = i;
+		    	}
+		    }
+		    System.out.println("Minimum block size for blue channel is " + (min_index + 2));
+		    
+		    
+
+		    min_index = 0;
+		    min_value = green_sum_value[0];
+		    for(int i = 1; i < green_sum_value.length; i++)
+		    {
+		    	if(green_sum_value[i] < min_value)
+		    	{
+		    		min_value = green_sum_value[i];
+		    		min_index = i;
+		    	}
+		    }
+		    //System.out.println("Minimum block size for green channel is " + min_index);
+		    
+		    
+		    min_index = 0;
+		    min_value = green_sum_value[0];
+		    for(int i = 1; i < green_sum_value.length; i++)
+		    {
+		    	if(green_sum_value[i] < min_value)
+		    	{
+		    		min_value = green_sum_value[i];
+		    		min_index = i;
+		    	}
+		    }
+		    //System.out.println("Minimum block size for red channel is " + min_index);
+		    */ 
 		    
 		    System.out.println("Green:");
 		    int init_value           = shifted_green[0];
@@ -451,8 +540,7 @@ public class BlockTester
             double zero_one_ratio = xdim * ydim;
             if(histogram.length > 1)
             {
-				// Subtract the missing stop bits from the max codes.
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					 if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -506,6 +594,7 @@ public class BlockTester
 			System.out.println();
 			
 			int block_pixel_length = block_xdim * block_ydim * 8;
+			
 		
 		    System.out.println("Blue:");
 		    int [] block = DeltaMapper.extract(shifted_blue, xdim, x_offset, y_offset, block_xdim, block_ydim);
@@ -515,12 +604,12 @@ public class BlockTester
 		    
 		    if(delta[0] == 0)
 		    {
-		    	System.out.println("Delta type is horizontal.");
+		    	//System.out.println("Delta type is horizontal.");
 		    	channel_sum[0] =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	System.out.println("Delta type is vertical.");
+		    	//System.out.println("Delta type is vertical.");
 		    	channel_sum[0] =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
@@ -576,7 +665,7 @@ public class BlockTester
 			if(histogram.length > 1)
             {
 				// Subtract the missing stop bits from the max codes.
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -587,18 +676,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -607,7 +688,7 @@ public class BlockTester
 			
 			
 			double min_rate_value = rate[0];
-			int    min_index      = 0;
+			min_index      = 0;
 			for(int i = 1; i < 4; i++)
 			{
 				if(rate[i] < min_rate_value)
@@ -619,8 +700,10 @@ public class BlockTester
 			channel_rate[0]  = min_rate_value;
 			channel_type[0]  = min_index;
 			String compression_type = type_string[min_index];
-			System.out.println("Minimum rate is " + String.format("%.4f", channel_rate[0]) + " using " + compression_type);
+			System.out.println("Minimum rate is " + String.format("%.4f", min_rate_value) + " using " + compression_type);
 			System.out.println();
+			
+			
 			
 			System.out.println("Green:");
 		    block = DeltaMapper.extract(shifted_green, xdim, x_offset, y_offset, block_xdim, block_ydim);
@@ -635,8 +718,7 @@ public class BlockTester
 		    {
 		    	System.out.println("Delta type is vertical.");
 		    	channel_sum[1] = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
-		    }
-		    
+		    } 
 		    histogram_list   = DeltaMapper.getHistogram(delta);
 			delta_min        = (int)histogram_list.get(0);
 			histogram        = (int[])histogram_list.get(1);
@@ -687,7 +769,7 @@ public class BlockTester
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -698,18 +780,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -739,12 +813,12 @@ public class BlockTester
 		    delta            = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value); 
 		    if(delta[0] == 0)
 		    {
-		    	System.out.println("Delta type is horizontal.");
+		    	//System.out.println("Delta type is horizontal.");
 		    	channel_sum[2] =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	System.out.println("Delta type is vertical.");
+		    	//System.out.println("Delta type is vertical.");
 		    	channel_sum[2] = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    
@@ -798,7 +872,7 @@ public class BlockTester
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -809,18 +883,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -862,12 +928,12 @@ public class BlockTester
 		    delta              = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value);
 		    if(delta[0] == 0)
 		    {
-		    	System.out.println("Delta type is horizontal.");
+		    	//System.out.println("Delta type is horizontal.");
 		    	channel_sum[3] =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	System.out.println("Delta type is vertical.");
+		    	//System.out.println("Delta type is vertical.");
 		    	channel_sum[3] =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    histogram_list   = DeltaMapper.getHistogram(delta);
@@ -924,7 +990,7 @@ public class BlockTester
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -935,18 +1001,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -963,7 +1021,7 @@ public class BlockTester
 					min_index = i;
 				}
 			}
-			double compressed_blue_green_string_rate = min_rate_value;
+			
 			channel_rate[3] = min_rate_value;
 			channel_type[3] = min_index;
 			compression_type = type_string[min_index];
@@ -989,12 +1047,12 @@ public class BlockTester
 		    
 		    if(delta[0] == 0)
 		    {
-		    	System.out.println("Delta type is horizontal.");
+		    	//System.out.println("Delta type is horizontal.");
 		    	channel_sum[4] =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	System.out.println("Delta type is vertical.");
+		    	//System.out.println("Delta type is vertical.");
 		    	channel_sum[4] =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 			
@@ -1048,7 +1106,7 @@ public class BlockTester
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -1059,18 +1117,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 				compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -1112,12 +1162,12 @@ public class BlockTester
 		    int red_blue_delta_sum = 0;
 		    if(delta[0] == 0)
 		    {
-		    	System.out.println("Delta type is horizontal.");
+		    	//System.out.println("Delta type is horizontal.");
 		    	red_blue_delta_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    else
 		    {
-		    	System.out.println("Delta type is vertical.");
+		    	//System.out.println("Delta type is vertical.");
 		    	red_blue_delta_sum =  DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
 		    }
 		    channel_sum[5] = red_blue_delta_sum;
@@ -1171,8 +1221,7 @@ public class BlockTester
 	    	zero_one_ratio = block_xdim * block_ydim;
 			if(histogram.length > 1)
             {
-				// Subtract the missing stop bits from the max codes.
-				int min_value = Integer.MAX_VALUE;
+				min_value = Integer.MAX_VALUE;
 				for(int i = 0; i < histogram.length; i++)
 					if(histogram[i] < min_value)
 						min_value = histogram[i];
@@ -1183,18 +1232,10 @@ public class BlockTester
             if(zero_one_ratio > .5)
 			{
 				compressed_string_length =  DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("Zero strings did not compress.");
-				else
-				    System.out.println("Zero strings compressed.");
 			}
 			else
 			{
 			    compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-				if(compressed_string_length > string_length)
-				    System.out.println("One strings did not compress.");
-				else
-				    System.out.println("One strings compressed.");
 			}
             
             rate[3]  = compressed_string_length;
@@ -1218,8 +1259,7 @@ public class BlockTester
 			System.out.println("Minimum rate is " + String.format("%.4f", channel_rate[5]) + " using " + compression_type);
 			System.out.println();
 			
-			
-			
+
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 			set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
 			set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
@@ -1251,7 +1291,7 @@ public class BlockTester
 			System.out.println();
 			
 			min_index = 0;
-			int min_value = Integer.MAX_VALUE;
+			min_value = Integer.MAX_VALUE;
 			for(int i = 0; i < 10; i++)
 			{
 				if(set_sum[i] < min_value)
