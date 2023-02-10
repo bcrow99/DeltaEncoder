@@ -1414,4 +1414,207 @@ public class DeltaMapper
         }
         return(current_size);
     } 
+    
+    public static double [] getCompressionRates(int [] src, int xdim, int ydim) 
+    {
+    	int pixel_length = xdim * ydim * 8;
+    	double [] rate   = new double[5];
+    	
+    	int init_value           = src[0];
+	    int[] delta              = getDeltasFromValues(src, xdim, ydim, init_value);
+	    ArrayList histogram_list = getHistogram(delta);
+		int delta_min            = (int)histogram_list.get(0);
+		int [] histogram         = (int[])histogram_list.get(1);
+		int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
+		byte [] delta_bytes      = new byte[xdim * ydim];
+		delta_bytes[0]           = (byte)delta[0];
+		for(int i = 1; i < delta.length; i++)
+		{
+		    delta[i]      -= delta_min;
+		    delta_bytes[i] = (byte)delta[i];
+		}
+		Deflater deflater =  new Deflater(Deflater.HUFFMAN_ONLY);	
+		byte [] zipped_strings = new byte[xdim * ydim * 2];
+		deflater.setInput(delta_bytes, 0, xdim * ydim);
+    	deflater.finish();
+    	int zipped_byte_length = deflater.deflate(zipped_strings);
+    	deflater.end();
+    	zipped_byte_length *= 8;
+    	zipped_byte_length += 16;
+    	rate[0] = zipped_byte_length;
+    	rate[0] /= pixel_length;
+    	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
+    	
+    	byte [] delta_strings = new byte[xdim * ydim * 2];
+    	int string_length = 0;
+		string_length     = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+		string_length    += 16;
+		rate[1]             = string_length;
+		rate[1]            /= pixel_length;
+		//System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
+		
+		int string_array_length = string_length / 8;
+		if(string_length % 8 != 0)
+			string_array_length++;
+	    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+    	deflater.setInput(delta_strings, 0, string_array_length);
+    	deflater.finish();
+    	int zipped_string_length = deflater.deflate(zipped_strings);
+    	deflater.end();
+    	zipped_string_length *= 8;
+    	zipped_string_length += 16;
+    	rate[2] = zipped_string_length;
+    	rate[2] /= pixel_length;
+    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
+    	
+    	double zero_one_ratio = xdim * ydim;
+        if(histogram.length > 1)
+        {
+			int min_value = Integer.MAX_VALUE;
+			for(int i = 0; i < histogram.length; i++)
+				 if(histogram[i] < min_value)
+					min_value = histogram[i];
+			zero_one_ratio -= min_value;
+        }	
+	    zero_one_ratio  /= string_length;
+		byte [] compressed_strings = new byte[xdim * ydim * 4];	
+		int compressed_string_length = 0;
+		if(zero_one_ratio > .5)
+			compressed_string_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+		else
+			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+		
+		rate[3]  = compressed_string_length;
+		rate[3] += 16;
+		rate[3] /= pixel_length;
+		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
+			
+    	
+		int compressed_array_length = compressed_string_length / 8;
+		if(compressed_string_length %8 != 0)
+			compressed_array_length++;
+		// This seem to be the only case where LZW helps, and not much.
+		deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    deflater.setInput(compressed_strings, 0, compressed_array_length);
+		deflater.finish();
+		int zipped_compressed_length = deflater.deflate(zipped_strings);
+		deflater.end();
+		zipped_compressed_length *= 8;
+		zipped_compressed_length += 16;
+		rate[4] = zipped_compressed_length;
+		rate[4] /= pixel_length;
+		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
+		
+    	return rate;
+    }
+    
+    public static ArrayList getCompressionData(int [] src, int xdim, int ydim) 
+    {
+    	int pixel_length = xdim * ydim * 8;
+    	double [] rate   = new double[5];
+    	
+    	int init_value           = src[0];
+	    int[] delta              = getDeltasFromValues(src, xdim, ydim, init_value);
+	    
+	    int    delta_sum = 0;
+	    if(delta[0] == 0)
+	    {
+	    	//System.out.println("Delta type is horizontal.");
+	    	delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+	    }
+	    else
+	    {
+	    	//System.out.println("Delta type is vertical.");
+	    	delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+	    }
+	    
+	    
+	    ArrayList histogram_list = getHistogram(delta);
+		int delta_min            = (int)histogram_list.get(0);
+		int [] histogram         = (int[])histogram_list.get(1);
+		int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
+		byte [] delta_bytes      = new byte[xdim * ydim];
+		delta_bytes[0]           = (byte)delta[0];
+		for(int i = 1; i < delta.length; i++)
+		{
+		    delta[i]      -= delta_min;
+		    delta_bytes[i] = (byte)delta[i];
+		}
+		Deflater deflater =  new Deflater(Deflater.HUFFMAN_ONLY);	
+		byte [] zipped_strings = new byte[xdim * ydim * 2];
+		deflater.setInput(delta_bytes, 0, xdim * ydim);
+    	deflater.finish();
+    	int zipped_byte_length = deflater.deflate(zipped_strings);
+    	deflater.end();
+    	zipped_byte_length *= 8;
+    	zipped_byte_length += 16;
+    	rate[0] = zipped_byte_length;
+    	rate[0] /= pixel_length;
+    	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
+    	
+    	byte [] delta_strings = new byte[xdim * ydim * 2];
+    	int string_length = 0;
+		string_length     = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+		string_length    += 16;
+		rate[1]             = string_length;
+		rate[1]            /= pixel_length;
+		//System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
+		
+		int string_array_length = string_length / 8;
+		if(string_length % 8 != 0)
+			string_array_length++;
+	    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+    	deflater.setInput(delta_strings, 0, string_array_length);
+    	deflater.finish();
+    	int zipped_string_length = deflater.deflate(zipped_strings);
+    	deflater.end();
+    	zipped_string_length *= 8;
+    	zipped_string_length += 16;
+    	rate[2] = zipped_string_length;
+    	rate[2] /= pixel_length;
+    	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
+    	
+    	double zero_one_ratio = xdim * ydim;
+        if(histogram.length > 1)
+        {
+			int min_value = Integer.MAX_VALUE;
+			for(int i = 0; i < histogram.length; i++)
+				 if(histogram[i] < min_value)
+					min_value = histogram[i];
+			zero_one_ratio -= min_value;
+        }	
+	    zero_one_ratio  /= string_length;
+		byte [] compressed_strings = new byte[xdim * ydim * 4];	
+		int compressed_string_length = 0;
+		if(zero_one_ratio > .5)
+			compressed_string_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+		else
+			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+		
+		rate[3]  = compressed_string_length;
+		rate[3] += 16;
+		rate[3] /= pixel_length;
+		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
+			
+    	
+		int compressed_array_length = compressed_string_length / 8;
+		if(compressed_string_length %8 != 0)
+			compressed_array_length++;
+		// This seem to be the only case where LZW helps, and not much.
+		deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    deflater.setInput(compressed_strings, 0, compressed_array_length);
+		deflater.finish();
+		int zipped_compressed_length = deflater.deflate(zipped_strings);
+		deflater.end();
+		zipped_compressed_length *= 8;
+		zipped_compressed_length += 16;
+		rate[4] = zipped_compressed_length;
+		rate[4] /= pixel_length;
+		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
+		ArrayList data_list = new ArrayList();
+		data_list.add(histogram_list);
+		data_list.add(rate);
+		data_list.add(delta_sum);
+    	return data_list;
+    }
 }
