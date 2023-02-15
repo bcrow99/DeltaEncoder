@@ -121,41 +121,6 @@ public class DeltaMapper
 	}
 	
 	
-	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
-	{
-		int xdim = src_xdim / block_xdim;
-	    int ydim = src_ydim / block_ydim;
-	    
-	    int delta_sum = 0;
-	    int yoffset   = 0;
-	    for(int i = 0; i < ydim; i++)
-	    {
-	    	int xoffset = 0;
-	    	for(int j = 0; j < xdim; j++)
-	    	{
-	    		int [] block      = DeltaMapper.extract(src, src_xdim, xoffset, yoffset, block_xdim, block_ydim);
-	  		    int    init_value = block[0];
-	  		    int [] delta      = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value); 
-	  		    if(delta[0] == 0)
-	  		    {
-	  		    	//System.out.println("Delta type is horizontal.");
-	  		    	int h_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
-	  		    	delta_sum += h_sum;
-	  		    }
-	  		    else
-	  		    {
-	  		    	//System.out.println("Delta type is vertical.");
-	  		    	int v_sum = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
-	  		    	delta_sum += v_sum;
-	  		    } 	
-	  		    xoffset += block_xdim;
-	    	}
-	    	yoffset += block_ydim;
-	    }
-	    
-	    return delta_sum;
-	}
-	
 	public static int getVerticalDeltaSum(int src[], int xdim, int ydim)
 	{
 		int sum = 0;
@@ -1517,15 +1482,18 @@ public class DeltaMapper
 	    int[] delta              = getDeltasFromValues(src, xdim, ydim, init_value);
 	    
 	    int    delta_sum = 0;
+	    int    type      = -1;
 	    if(delta[0] == 0)
 	    {
 	    	//System.out.println("Delta type is horizontal.");
 	    	delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+	    	type = 0;
 	    }
 	    else
 	    {
 	    	//System.out.println("Delta type is vertical.");
 	    	delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+	    	type = 1;
 	    }
 	    
 	    
@@ -1547,7 +1515,7 @@ public class DeltaMapper
     	int zipped_byte_length = deflater.deflate(zipped_strings);
     	deflater.end();
     	zipped_byte_length *= 8;
-    	zipped_byte_length += 16;
+    	//zipped_byte_length += 16;
     	rate[0] = zipped_byte_length;
     	rate[0] /= pixel_length;
     	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
@@ -1555,7 +1523,7 @@ public class DeltaMapper
     	byte [] delta_strings = new byte[xdim * ydim * 2];
     	int string_length = 0;
 		string_length     = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-		string_length    += 16;
+		//string_length    += 16;
 		rate[1]             = string_length;
 		rate[1]            /= pixel_length;
 		//System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
@@ -1569,7 +1537,7 @@ public class DeltaMapper
     	int zipped_string_length = deflater.deflate(zipped_strings);
     	deflater.end();
     	zipped_string_length *= 8;
-    	zipped_string_length += 16;
+    	//zipped_string_length += 16;
     	rate[2] = zipped_string_length;
     	rate[2] /= pixel_length;
     	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
@@ -1592,11 +1560,10 @@ public class DeltaMapper
 			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 		
 		rate[3]  = compressed_string_length;
-		rate[3] += 16;
+		//rate[3] += 16;
 		rate[3] /= pixel_length;
 		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
-			
-    	
+		
 		int compressed_array_length = compressed_string_length / 8;
 		if(compressed_string_length %8 != 0)
 			compressed_array_length++;
@@ -1607,7 +1574,7 @@ public class DeltaMapper
 		int zipped_compressed_length = deflater.deflate(zipped_strings);
 		deflater.end();
 		zipped_compressed_length *= 8;
-		zipped_compressed_length += 16;
+		//zipped_compressed_length += 16;
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
 		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
@@ -1615,6 +1582,110 @@ public class DeltaMapper
 		data_list.add(histogram_list);
 		data_list.add(rate);
 		data_list.add(delta_sum);
+		data_list.add(type);
     	return data_list;
     }
+    
+
+	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
+	{
+		int xdim = src_xdim / block_xdim;
+	    int ydim = src_ydim / block_ydim;
+	    
+	    int delta_sum = 0;
+	    int yoffset   = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	int xoffset = 0;
+	    	for(int j = 0; j < xdim; j++)
+	    	{
+	    		int [] block      = DeltaMapper.extract(src, src_xdim, xoffset, yoffset, block_xdim, block_ydim);
+	  		    int    init_value = block[0];
+	  		    int [] delta      = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value); 
+	  		    if(delta[0] == 0)
+	  		    {
+	  		    	//System.out.println("Delta type is horizontal.");
+	  		    	int h_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
+	  		    	delta_sum += h_sum;
+	  		    }
+	  		    else
+	  		    {
+	  		    	//System.out.println("Delta type is vertical.");
+	  		    	int v_sum = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
+	  		    	delta_sum += v_sum;
+	  		    } 	
+	  		    xoffset += block_xdim;
+	    	}
+	    	yoffset += block_ydim;
+	    }
+	    return delta_sum;
+	}
+	
+	// This does not process the entire image if the block dimensions do not divide the image dimensions evenly.
+	// For now using block dimensions that are a power of two so that we are always processing the same amount
+	// of the image for block size comparison purposes.
+	public static ArrayList getBlockCompressionData(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
+	{
+		int xdim             = src_xdim / block_xdim;
+	    int ydim             = src_ydim / block_ydim;
+	    int number_of_blocks = xdim * ydim;
+	    
+	    
+	    int number_of_values     = 0;
+	    int cumulative_delta_sum = 0;
+	    
+	    
+	    double [] cumulative_rate = new double[6];
+	    double [] average_rate    = new double[6];
+	    for(int i = 0; i < 6; i++)
+	    {
+	    	cumulative_rate[i] = 0;
+	    	average_rate[i]    = 0;
+	    }
+	    
+	    int yoffset   = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	int xoffset = 0;
+	    	for(int j = 0; j < xdim; j++)
+	    	{
+	    		int []    block      = DeltaMapper.extract(src, src_xdim, xoffset, yoffset, block_xdim, block_ydim);
+	    		ArrayList block_list = DeltaMapper.getCompressionData(block, block_xdim, block_ydim);
+	    		ArrayList histogram_list = (ArrayList)block_list.get(0);
+	 		    int [] histogram = (int [])histogram_list.get(1);
+	 		    
+	 		    number_of_values += histogram.length;
+	 		    
+	 		    double [] rate = (double [])block_list.get(1);
+	 		    
+	 		    for(int k = 0; k < 5; k++)
+	 		    {
+	 		    	cumulative_rate[k] += rate[k];
+	 		    }
+	 		    
+	 		    double min_rate_value = rate[0];
+				for(int k = 1; i < 5; i++)
+				{
+					if(rate[i] < min_rate_value)
+						min_rate_value = rate[i];
+				}
+				cumulative_rate[5] = min_rate_value;
+	 		    int delta_sum = (int)block_list.get(2);
+	 		    cumulative_delta_sum += delta_sum;
+	  		    
+	  		    xoffset += block_xdim;
+	    	}
+	    	yoffset += block_ydim;
+	    }
+	    
+	    int average_number_of_values = number_of_values / number_of_blocks;
+	    for(int i = 0; i < 6; i++)
+	    	average_rate[i] = cumulative_rate[i] / number_of_blocks;
+	    int average_delta_sum = cumulative_delta_sum / number_of_blocks;
+	    ArrayList data_list = new ArrayList();
+	    data_list.add(average_number_of_values);
+	    data_list.add(average_rate);
+	    data_list.add(average_delta_sum);		
+	    return data_list;
+	}
 }
