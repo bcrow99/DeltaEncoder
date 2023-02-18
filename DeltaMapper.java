@@ -1340,7 +1340,6 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        
         //System.out.println("The number of iterations was " + number_of_iterations);
         
         current_size = 0;
@@ -1450,11 +1449,10 @@ public class DeltaMapper
 			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 		
 		rate[3]  = compressed_string_length;
-		rate[3] += 16;
 		rate[3] /= pixel_length;
 		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
 			
-    	
+		byte [] zipped_compressed_strings = new byte[xdim * ydim * 4];
 		int compressed_array_length = compressed_string_length / 8;
 		if(compressed_string_length %8 != 0)
 			compressed_array_length++;
@@ -1462,10 +1460,9 @@ public class DeltaMapper
 		deflater = new Deflater(Deflater.BEST_COMPRESSION);
 	    deflater.setInput(compressed_strings, 0, compressed_array_length);
 		deflater.finish();
-		int zipped_compressed_length = deflater.deflate(zipped_strings);
+		int zipped_compressed_length = deflater.deflate(zipped_compressed_strings);
 		deflater.end();
 		zipped_compressed_length *= 8;
-		zipped_compressed_length += 16;
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
 		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
@@ -1473,10 +1470,93 @@ public class DeltaMapper
     	return rate;
     }
     
+    /*
+    set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
+	set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
+	set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
+	set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
+	set_sum[4] = channel_sum[0] + channel_sum[3] + channel_sum[5];
+	set_sum[5] = channel_sum[3] + channel_sum[1] + channel_sum[2];
+	set_sum[6] = channel_sum[3] + channel_sum[4] + channel_sum[2];
+	set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
+	set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
+	set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+	*/
+    
+    
+    public static int[] getChannels(int set_id)
+    {
+    	int [] channel = new int[3];
+    	
+    	if(set_id == 0)
+    	{
+    	    channel[0] = 0;
+    	    channel[1] = 1;
+    	    channel[2] = 2;
+    	}
+    	else if(set_id == 1)
+    	{
+    		channel[0] = 0;
+    	    channel[1] = 2;
+    	    channel[2] = 4;	
+    	}
+    	else if(set_id == 2)
+    	{
+    		channel[0] = 0;
+    	    channel[1] = 2;
+    	    channel[2] = 3;	
+    	}
+    	else if(set_id == 3)
+    	{
+    		channel[0] = 0;
+    	    channel[1] = 1;
+    	    channel[2] = 4;	
+    	}
+    	else if(set_id == 4)
+    	{
+    		channel[0] = 0;
+    	    channel[1] = 3;
+    	    channel[2] = 5;	
+    	}
+    	else if(set_id == 5)
+    	{
+    		channel[0] = 1;
+    	    channel[1] = 2;
+    	    channel[2] = 3;	
+    	}
+    	else if(set_id == 6)
+    	{
+    		channel[0] = 2;
+    	    channel[1] = 3;
+    	    channel[2] = 4;	
+    	}
+    	else if(set_id == 7)
+    	{
+    		channel[0] = 1;
+    	    channel[1] = 3;
+    	    channel[2] = 4;	
+    	}
+    	else if(set_id == 8)
+    	{
+    		channel[0] = 1;
+    	    channel[1] = 4;
+    	    channel[2] = 5;	
+    	}
+    	else if(set_id == 9)
+    	{
+    		channel[0] = 2;
+    	    channel[1] = 4;
+    	    channel[2] = 5;	
+    	}
+    	return channel;
+    }
+    
     public static ArrayList getCompressionData(int [] src, int xdim, int ydim) 
     {
     	int pixel_length = xdim * ydim * 8;
     	double [] rate   = new double[5];
+    	
+    	ArrayList compressed_data_list = new ArrayList();
     	
     	int init_value           = src[0];
 	    int[] delta              = getDeltasFromValues(src, xdim, ydim, init_value);
@@ -1496,11 +1576,10 @@ public class DeltaMapper
 	    	type = 1;
 	    }
 	    
-	    
 	    ArrayList histogram_list = getHistogram(delta);
 		int delta_min            = (int)histogram_list.get(0);
 		int [] histogram         = (int[])histogram_list.get(1);
-		int delta_random_lut[]   = DeltaMapper.getRandomTable(histogram); 
+		int [] delta_random_lut  = DeltaMapper.getRandomTable(histogram); 
 		byte [] delta_bytes      = new byte[xdim * ydim];
 		delta_bytes[0]           = (byte)delta[0];
 		for(int i = 1; i < delta.length; i++)
@@ -1508,38 +1587,58 @@ public class DeltaMapper
 		    delta[i]      -= delta_min;
 		    delta_bytes[i] = (byte)delta[i];
 		}
-		Deflater deflater =  new Deflater(Deflater.HUFFMAN_ONLY);	
-		byte [] zipped_strings = new byte[xdim * ydim * 2];
+		compressed_data_list.add(delta_bytes);
+		
+		Deflater deflater    =  new Deflater(Deflater.HUFFMAN_ONLY);	
+		byte [] zipped_bytes = new byte[xdim * ydim * 2];
 		deflater.setInput(delta_bytes, 0, xdim * ydim);
     	deflater.finish();
-    	int zipped_byte_length = deflater.deflate(zipped_strings);
+    	int zipped_byte_length = deflater.deflate(zipped_bytes);
     	deflater.end();
+    	
+    	byte [] clipped_zipped_bytes = new byte[zipped_byte_length];
+    	for(int i = 0; i < zipped_byte_length; i++)
+    		clipped_zipped_bytes[i] = zipped_bytes[i];
+    	
+    	
+    	// Not incorporating the overhead into the compression rate since 
+    	// the aggregated inputs might be compressible.
     	zipped_byte_length *= 8;
-    	//zipped_byte_length += 16;
-    	rate[0] = zipped_byte_length;
-    	rate[0] /= pixel_length;
+    	rate[0]             = zipped_byte_length;
+    	rate[0]            /= pixel_length;
+    	compressed_data_list.add(clipped_zipped_bytes);
+    	
     	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
     	
     	byte [] delta_strings = new byte[xdim * ydim * 2];
-    	int string_length = 0;
-		string_length     = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
-		//string_length    += 16;
-		rate[1]             = string_length;
-		rate[1]            /= pixel_length;
-		//System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
-		
+    	int string_length     = 0;
+		string_length         = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
+		rate[1]               = string_length;
+		rate[1]              /= pixel_length;
 		int string_array_length = string_length / 8;
 		if(string_length % 8 != 0)
 			string_array_length++;
+		byte [] clipped_delta_strings = new byte[string_array_length];
+		for(int i = 0; i < string_array_length; i++)
+			clipped_delta_strings[i] = delta_strings[i];
+		compressed_data_list.add(clipped_delta_strings);
+		//System.out.println("The compression rate for delta strings is " + String.format("%.4f", rate[1]));
+		
+		byte [] zipped_strings = new byte[xdim * ydim * 2];
+		
 	    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
     	deflater.setInput(delta_strings, 0, string_array_length);
     	deflater.finish();
     	int zipped_string_length = deflater.deflate(zipped_strings);
     	deflater.end();
+    	
+    	byte [] clipped_zipped_strings = new byte[zipped_string_length];
+    	for(int i = 0; i < zipped_string_length; i++)
+			clipped_zipped_strings[i] = zipped_strings[i];
     	zipped_string_length *= 8;
-    	//zipped_string_length += 16;
     	rate[2] = zipped_string_length;
     	rate[2] /= pixel_length;
+    	compressed_data_list.add(clipped_zipped_strings);
     	//System.out.println("The compression rate for zipped delta strings is " + String.format("%.4f", rate[2]));
     	
     	double zero_one_ratio = xdim * ydim;
@@ -1558,12 +1657,18 @@ public class DeltaMapper
 			compressed_string_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
 		else
 			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
-		
+		string_array_length = compressed_string_length / 8;
+		if(string_length % 8 != 0)
+			string_array_length++;
+		byte [] clipped_compressed_strings = new byte[string_array_length];
+		for(int i = 0; i < string_array_length; i++)
+			clipped_compressed_strings[i] = compressed_strings[i];
 		rate[3]  = compressed_string_length;
-		//rate[3] += 16;
 		rate[3] /= pixel_length;
+		compressed_data_list.add(clipped_compressed_strings);
 		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
 		
+		byte [] zipped_compressed_strings = new byte[xdim * ydim * 4];	
 		int compressed_array_length = compressed_string_length / 8;
 		if(compressed_string_length %8 != 0)
 			compressed_array_length++;
@@ -1571,18 +1676,24 @@ public class DeltaMapper
 		deflater = new Deflater(Deflater.BEST_COMPRESSION);
 	    deflater.setInput(compressed_strings, 0, compressed_array_length);
 		deflater.finish();
-		int zipped_compressed_length = deflater.deflate(zipped_strings);
+		int zipped_compressed_length = deflater.deflate(zipped_compressed_strings);
 		deflater.end();
+		
+		byte [] clipped_zipped_compressed_strings = new byte[zipped_compressed_length];
+		for(int i = 0; i < zipped_compressed_length; i++)
+			clipped_zipped_compressed_strings[i] = zipped_compressed_strings[i];
 		zipped_compressed_length *= 8;
-		//zipped_compressed_length += 16;
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
-		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
+		compressed_data_list.add(clipped_zipped_compressed_strings);
+		
+	    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
 		ArrayList data_list = new ArrayList();
 		data_list.add(histogram_list);
 		data_list.add(rate);
 		data_list.add(delta_sum);
 		data_list.add(type);
+		data_list.add(compressed_data_list);
     	return data_list;
     }
     
