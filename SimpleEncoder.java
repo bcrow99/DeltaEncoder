@@ -588,7 +588,6 @@ public class SimpleEncoder
 			set_rate[8] = (channel_rate[5] + channel_rate[1] + channel_rate[4]) / 3;
 			set_rate[9] = (channel_rate[5] + channel_rate[4] + channel_rate[2]) / 3;
 			
-			
 			min_index     = 0;
 			min_delta_sum = Integer.MAX_VALUE;
 			for(int i = 0; i < 10; i++)
@@ -718,12 +717,60 @@ public class SimpleEncoder
 					src = shifted_red_green;
 				else if(j == 5)
 					src = shifted_red_blue;
-				ArrayList data_list            = (ArrayList)DeltaMapper.getCompressionData(src, xdim, ydim);
+				ArrayList data_list      = (ArrayList)DeltaMapper.getCompressionData(src, xdim, ydim);
+				ArrayList histogram_list = (ArrayList)data_list.get(0);
+				int delta_min            = (int)histogram_list.get(0);
+				int [] histogram         = (int[])histogram_list.get(1);
+				int [] delta_random_lut  = DeltaMapper.getRandomTable(histogram); 
+			    double [] rate                 = (double [])data_list.get(1);
+			    int delta_sum                  = (int)data_list.get(2);
+			    int compression_type           = (int)data_list.get(3);
+			    if(k != compression_type)
+			    {
+			        System.out.println("Compression types do not agree.");
+			        System.out.println("Channel list type is " + k);
+			        System.out.println("Data list type is " + compression_type);
+			    }
 				ArrayList compressed_data_list = (ArrayList)data_list.get(4);
-				byte [] compressed_data         = (byte [])compressed_data_list.get(k);
+				byte [] compressed_data        = (byte [])compressed_data_list.get(k);
+				
+				
 				System.out.println(channel_string[j] + " has " + String.format("%.4f", channel_rate[j]) + " compression with " + type_string[k]);
 				System.out.println("Compressed data array has length " + compressed_data.length);
+				
 				System.out.println();
+				
+				if(i == 1)
+				{
+				    File file = new File("foo");
+				    try
+				    {
+				        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+				        
+				        // Dimensions of frame.
+				        out.writeShort(xdim);
+				        out.writeShort(ydim);
+				        
+				        // Channel 0-5.
+				        out.writeByte(j);
+				     
+				        // Init value for deltas.
+				        out.writeShort(src[0]);
+				        
+				        // Minimum_value for deltas.
+				        out.writeShort(delta_min);
+				       
+				        // Compression type 0-4.
+				        out.writeByte(k);
+				        
+				        
+				        out.close();
+				    }
+				    catch(Exception e)
+				    {
+					    System.out.println(e.toString());
+				    }
+				}
 			}
 		}
 	}

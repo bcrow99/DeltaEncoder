@@ -1561,19 +1561,19 @@ public class DeltaMapper
     	int init_value           = src[0];
 	    int[] delta              = getDeltasFromValues(src, xdim, ydim, init_value);
 	    
-	    int    delta_sum = 0;
-	    int    type      = -1;
+	    int    delta_sum  = 0;
+	    int    delta_type = -1;
 	    if(delta[0] == 0)
 	    {
 	    	//System.out.println("Delta type is horizontal.");
 	    	delta_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-	    	type = 0;
+	    	delta_type = 0;
 	    }
 	    else
 	    {
 	    	//System.out.println("Delta type is vertical.");
 	    	delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-	    	type = 1;
+	    	delta_type = 1;
 	    }
 	    
 	    ArrayList histogram_list = getHistogram(delta);
@@ -1607,7 +1607,6 @@ public class DeltaMapper
     	rate[0]             = zipped_byte_length;
     	rate[0]            /= pixel_length;
     	compressed_data_list.add(clipped_zipped_bytes);
-    	
     	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
     	
     	byte [] delta_strings = new byte[xdim * ydim * 2];
@@ -1686,13 +1685,25 @@ public class DeltaMapper
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
 		compressed_data_list.add(clipped_zipped_compressed_strings);
+		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
 		
-	    //System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
+		double min_rate         = rate[0];
+		int    compression_type = 0;
+		 
+		for(int i = 1; i < 5; i++)
+		{
+			if(rate[i] < min_rate)
+			{
+				min_rate = rate[i];
+				compression_type = i;
+			}
+		}
+		
 		ArrayList data_list = new ArrayList();
 		data_list.add(histogram_list);
 		data_list.add(rate);
 		data_list.add(delta_sum);
-		data_list.add(type);
+		data_list.add(compression_type);
 		data_list.add(compressed_data_list);
     	return data_list;
     }
