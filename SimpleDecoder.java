@@ -108,6 +108,110 @@ public class SimpleDecoder
 			    int compression = in.readByte();
 			    System.out.println("Compression type is " + compression_string[compression]);
 			    
+			    int table_length = in.readByte();
+			    System.out.println("String table length is " +  table_length);
+			    
+			    byte [] table = new byte[table_length];
+			    in.read(table, 0, table_length);
+			    
+			    int [] string_table = new int[table.length];
+			    for(int i = 0; i < table.length; i++)
+			    	string_table[i] = table[i];
+			    System.out.println("Read table.");
+			    
+			    int data_length = in.readInt();
+			    System.out.println("Data length is " +  data_length);
+			    
+			    byte [] data = new byte[data_length];
+			    in.read(data, 0, data_length);
+			    
+			    System.out.println("Read data.");
+			    in.close();
+			    
+			    if(compression == 2)
+			    {
+			    	System.out.println("Decompressing zipped packed strings.");
+			    	Inflater inflater = new Inflater();
+				    inflater.setInput(data, 0, data_length);
+				    byte [] strings   = new byte[data_length * 5];
+				    
+				    try
+				    {
+				        int string_length = inflater.inflate(strings);
+				        System.out.println("String length of unzipped strings is " + string_length);
+				    }
+				    catch(Exception e)
+				    {
+				    	System.out.println(e.toString());
+				    }
+				    
+				    int [] delta = new int[xdim * ydim];
+					int number_of_ints = DeltaMapper.unpackStrings2(strings, string_table, delta);
+					for(int i = 1; i < delta.length; i++)
+					     delta[i] += delta_min;
+					
+					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+					
+					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+					
+					System.out.println("Buffer size is " + dst.length);
+					System.out.println("Dimension product is " + (xdim * ydim));
+					   
+					for(int i = 0; i < ydim; i++)
+					{
+					    for(int j = 0; j < xdim; j++)
+					    {
+					    	int value = dst[i * xdim + j]; 
+					    	value <<= pixel_shift;
+					    	
+					    	
+					    	int pixel = 0;
+					    	
+					    	pixel |= value << 16;
+			                pixel |= value << 8;    
+			                pixel |= value;	
+			                
+					    	image.setRGB(j, i, pixel);
+					    }
+					}
+			    }
+			    else if(compression == 4)
+			    {
+			    	System.out.println("Decompressing zipped compressed strings.");
+			    	Inflater inflater = new Inflater();
+				    inflater.setInput(data, 0, data_length);
+				    byte [] strings            = new byte[data_length * 5];
+				    byte [] compressed_strings = new byte[data_length * 5];
+				    
+				    try
+				    {
+				        int byte_length = inflater.inflate(compressed_strings);
+				        System.out.println("Byte length of unzipped strings is " + byte_length);
+				        
+				    }
+				    catch(Exception e)
+				    {
+				    	System.out.println(e.toString());
+				    }	
+			    }
+			    else
+			    {
+			    	image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+					   
+					for(int i = 0; i < xdim; i++)
+					{
+					    for(int j = 0; j < ydim; j++)
+					    {
+					    	int pixel = 0;
+					    	
+					    	pixel |= 128 << 16;
+			                pixel |= 128 << 8;    
+			                pixel |= 128;	
+					    	image.setRGB(j, i, pixel);
+					    }
+					}
+			    }
+			    
 			    
 			}
 			catch(Exception e)
@@ -116,20 +220,7 @@ public class SimpleDecoder
 			}
 			
 			
-			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			   
-			for(int i = 0; i < xdim; i++)
-			{
-			    for(int j = 0; j < ydim; j++)
-			    {
-			    	int pixel = 0;
-			    	
-			    	pixel |= 128 << 16;
-	                pixel |= 128 << 8;    
-	                pixel |= 128;	
-			    	image.setRGB(i, j, pixel);
-			    }
-			}
+			
                
 			JFrame frame = new JFrame("Simple Decoder");
 		    WindowAdapter window_handler = new WindowAdapter()

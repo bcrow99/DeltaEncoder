@@ -260,9 +260,9 @@ public class SimpleEncoder
 		    
 		    // The 5 different kinds of compressions per channel.
 		    type_string    = new String[6];
-			type_string[0] = new String("zipped bytes");
-			type_string[1] = new String("strings");
-			type_string[2] = new String("zipped strings");
+			type_string[0] = new String("zipped delta bytes");
+			type_string[1] = new String("packed strings");
+			type_string[2] = new String("zipped packed strings");
 			type_string[3] = new String("compressed strings");
 			type_string[4] = new String("zipped compressed strings");
 			
@@ -735,12 +735,15 @@ public class SimpleEncoder
 				byte [] compressed_data        = (byte [])compressed_data_list.get(k);
 				
 				
+				
+				
+				
 				System.out.println(channel_string[j] + " has " + String.format("%.4f", channel_rate[j]) + " compression with " + type_string[k]);
 				System.out.println("Compressed data array has length " + compressed_data.length);
 				
 				System.out.println();
 				
-				if(i == 1)
+				if(i == 0)
 				{
 				    File file = new File("foo");
 				    try
@@ -762,6 +765,91 @@ public class SimpleEncoder
 				       
 				        // Compression type 0-4.
 				        out.writeByte(k);
+				        
+				        /*
+				        Inflater inflater;
+				        
+				        
+				        byte [] zipped_bytes   = (byte[])compressed_data_list.get(0);
+				        
+				        System.out.println("Zipped bytes have length " + zipped_bytes.length);
+				        byte [] unzipped_bytes = new byte[xdim * ydim * 8];
+				        inflater               = new Inflater();
+					    inflater.setInput(zipped_bytes);
+					    try
+					    {
+					        int byte_length = inflater.inflate(unzipped_bytes);
+					        inflater.end();
+					        System.out.println("Byte length of unzipped bytes is " + byte_length);
+					        System.out.println();
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    	inflater.end();
+					    }
+					    
+                        byte [] zipped_strings   = (byte[])compressed_data_list.get(2);
+				        
+				        System.out.println("Zipped strings have length " + zipped_strings.length);
+				        byte [] unzipped_strings = new byte[xdim * ydim * 8];
+				        inflater                 = new Inflater();
+					    inflater.setInput(zipped_strings);
+					    try
+					    {
+					        int string_length = inflater.inflate(unzipped_strings);
+					        inflater.end();
+					        System.out.println("String length of unzipped strings is " + string_length);
+					        System.out.println();
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    	inflater.end();
+					    }
+				        
+				        if(k == 2)
+				        {
+				        	System.out.println("Compression type is zipped strings.");
+				        	System.out.println("Data size is " + compressed_data.length);
+				        	byte [] unzipped_strings = new byte[xdim * ydim * 8];
+				        	Inflater inflater = new Inflater();
+						    inflater.setInput(compressed_data, 0, compressed_data.length);
+						    
+						    try
+						    {
+						        int string_length = inflater.inflate(unzipped_strings);
+						        System.out.println("String length of unzipped strings is " + string_length);
+						        System.out.println();
+						    }
+						    catch(Exception e)
+						    {
+						    	System.out.println(e.toString());
+						    }
+				        }
+				        */
+				        
+				        // The length of the table used for
+				        // string packing/unpacking.
+				        int table_length = delta_random_lut.length;
+				        out.writeByte(table_length);
+				        System.out.println("String table length is " + table_length);
+				        
+				        // The table itself.
+				        byte [] table    = new byte[table_length];
+				        for(int m = 0; m < table_length; m++)
+				        	table[m] = (byte)delta_random_lut[m];
+				        out.write(table, 0, table_length);
+				        
+				        // The length of the data.
+				        out.writeInt(compressed_data.length);
+				        System.out.println("Data length is " + compressed_data.length);
+				        
+				        // The data itself.
+				        out.write(compressed_data, 0, compressed_data.length);
+				        
+				        
+				        
 				        
 				        
 				        out.close();
