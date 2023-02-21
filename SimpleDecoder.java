@@ -100,6 +100,9 @@ public class SimpleDecoder
 			    int channel = in.readByte();
 			    System.out.println("Channel is " + channel_string[channel]);
 			    
+			    pixel_shift = in.readByte();
+			    System.out.println("Pixel shift is " + pixel_shift);
+			    
 			    int init_value = in.readShort();
 			    int delta_min  = in.readShort();
 			    System.out.println("Init value is " + init_value + ", delta minimum is " + delta_min);
@@ -108,16 +111,30 @@ public class SimpleDecoder
 			    int compression = in.readByte();
 			    System.out.println("Compression type is " + compression_string[compression]);
 			    
-			    int table_length = in.readByte();
-			    System.out.println("String table length is " +  table_length);
+			    int table_length = 0;
+			    byte [] table = new byte[1];
+			    int  [] string_table = new int[1];
 			    
-			    byte [] table = new byte[table_length];
-			    in.read(table, 0, table_length);
+			    if(compression != 0)
+			    {
+			        table_length = in.readShort();
+			        System.out.println("String table length is " +  table_length);
 			    
-			    int [] string_table = new int[table.length];
-			    for(int i = 0; i < table.length; i++)
-			    	string_table[i] = table[i];
-			    System.out.println("Read table.");
+			        table = new byte[table_length];
+			        in.read(table, 0, table_length);
+			    
+			        string_table = new int[table.length];
+			        for(int i = 0; i < table.length; i++)
+			    	    string_table[i] = table[i];
+			        System.out.println("Read string table.");
+			    }
+			  
+			    int  bitstring_length = 0;
+			    if(compression > 2)
+			    {
+			    	bitstring_length = in.readInt();
+			    	System.out.println("Bitstring length is " + bitstring_length);
+			    }
 			    
 			    int data_length = in.readInt();
 			    System.out.println("Data length is " +  data_length);
@@ -128,7 +145,68 @@ public class SimpleDecoder
 			    System.out.println("Read data.");
 			    in.close();
 			    
-			    if(compression == 2)
+			    if(compression == 0)
+			    {
+			    	System.out.println("Decompressing zipped delta_bytes.");
+			    	Inflater inflater = new Inflater();
+				    inflater.setInput(data, 0, data_length);
+				    byte [] delta_bytes = new byte[xdim * ydim];
+				    int [] delta = new int[xdim * ydim];
+				    try
+				    {
+				        int number_of_bytes = inflater.inflate(delta_bytes);
+				        System.out.println("Byte length of unzipped delta bytes is " + number_of_bytes);
+				        if(number_of_bytes != xdim * ydim)
+				        	System.out.println("Wrong number of bytes.");
+				        delta[0] = delta_bytes[0];
+				        for(int i = 1; i < delta_bytes.length; i++)
+				        {
+				        	delta[i] = delta_bytes[i];
+				        	if(delta[i] < 0)
+				        		delta[i] += 127;
+				        	delta[i] += delta_min;
+				        }
+				      
+				        int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+				        
+				        int max_value = 0;
+				        int min_value = Integer.MAX_VALUE;
+				        
+				        for(int i = 0; i < dst.length; i++)
+				        {
+				        	if(max_value < dst[i])
+				        		max_value = dst[i];
+				        	if(min_value > dst[i])
+				        		min_value = dst[i];
+				        }
+				        System.out.println("Min value in frame is " + min_value);
+				        System.out.println("Max value in frame is " + max_value);
+				        System.out.println("Delta min is " + delta_min);
+						image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+						//System.out.println("Buffer size is " + dst.length);
+						//System.out.println("Dimension product is " + (xdim * ydim));
+						   
+						for(int i = 0; i < ydim; i++)
+						{
+						    for(int j = 0; j < xdim; j++)
+						    {
+						    	int value = dst[i * xdim + j]; 
+						    	//value <<= pixel_shift;
+						    
+						    	int pixel = 0;
+						    	pixel |= value << 16;
+				                pixel |= value << 8;    
+				                pixel |= value;	
+						    	image.setRGB(j, i, pixel);
+						    }
+						}
+				    }
+				    catch(Exception e)
+				    {
+				    	System.out.println(e.toString());
+				    }
+			    }
+			    else if(compression == 2)
 			    {
 			    	System.out.println("Decompressing zipped packed strings.");
 			    	Inflater inflater = new Inflater();
@@ -154,8 +232,6 @@ public class SimpleDecoder
 					
 					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 					
-					System.out.println("Buffer size is " + dst.length);
-					System.out.println("Dimension product is " + (xdim * ydim));
 					   
 					for(int i = 0; i < ydim; i++)
 					{
@@ -177,9 +253,10 @@ public class SimpleDecoder
 			    }
 			    else if(compression == 4)
 			    {
-			    	System.out.println("Decompressing zipped compressed strings.");
+			    	System.out.println("Unzipping compressed strings.");
 			    	Inflater inflater = new Inflater();
 				    inflater.setInput(data, 0, data_length);
+				
 				    byte [] strings            = new byte[data_length * 5];
 				    byte [] compressed_strings = new byte[data_length * 5];
 				    
@@ -187,12 +264,32 @@ public class SimpleDecoder
 				    {
 				        int byte_length = inflater.inflate(compressed_strings);
 				        System.out.println("Byte length of unzipped strings is " + byte_length);
+				        inflater.end();
+				        
+				        byte bit_type = DeltaMapper.checkStringType(compressed_strings, bitstring_length);
 				        
 				    }
 				    catch(Exception e)
 				    {
 				    	System.out.println(e.toString());
 				    }	
+				    
+				    
+				    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+					   
+					for(int i = 0; i < ydim; i++)
+					{
+					    for(int j = 0; j < xdim; j++)
+					    {
+					    	int pixel = 0;
+					    	
+					    	pixel |= 128 << 16;
+			                pixel |= 128 << 8;    
+			                pixel |= 128;	
+					    	image.setRGB(j, i, pixel);
+					    }
+					}
+				    
 			    }
 			    else
 			    {
@@ -211,17 +308,13 @@ public class SimpleDecoder
 					    }
 					}
 			    }
-			    
-			    
 			}
 			catch(Exception e)
 			{
 				System.out.println(e.toString());
 			}
 			
-			
-			
-               
+
 			JFrame frame = new JFrame("Simple Decoder");
 		    WindowAdapter window_handler = new WindowAdapter()
 			{

@@ -426,8 +426,8 @@ public class SimpleEncoder
 			channel_sum[0]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Blue minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
-		    
+			//System.out.println("The number of different delta values is " + histogram.length);
+			System.out.println();
 		    
             // Get the green channel data.
 		    data_list      = DeltaMapper.getCompressionData(shifted_green, xdim, ydim);
@@ -454,7 +454,8 @@ public class SimpleEncoder
 			channel_sum[1]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Green minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
+			//System.out.println("The number of different delta values is " + histogram.length);
+			System.out.println();
 			
 			// Get the red channel data.
 		    data_list      = DeltaMapper.getCompressionData(shifted_red, xdim, ydim);
@@ -481,7 +482,8 @@ public class SimpleEncoder
 			channel_sum[2]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Red minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
+			//System.out.println("The number of different delta values is " + histogram.length);
+			System.out.println();
 			
 			// Get the blue-green channel data.
 		    data_list      = DeltaMapper.getCompressionData(shifted_blue_green, xdim, ydim);
@@ -508,7 +510,8 @@ public class SimpleEncoder
 			channel_sum[3]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Blue-green minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
+			//System.out.println("The number of different delta values is " + histogram.length);
+			System.out.println();
 			
 			// Get the red-green channel data.
 		    data_list      = DeltaMapper.getCompressionData(shifted_red_green, xdim, ydim);
@@ -535,7 +538,8 @@ public class SimpleEncoder
 			channel_sum[4]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Red-green minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
+			//System.out.println("The number of different delta values is " + histogram.length);
+			System.out.println();
 		  
 			// Get the red-blue channel data.
 		    data_list      = DeltaMapper.getCompressionData(shifted_red_blue, xdim, ydim);
@@ -563,8 +567,10 @@ public class SimpleEncoder
 			channel_sum[5]  = delta_sum;
 			compression_type = type_string[min_index];
 			System.out.println("Red-blue minimum rate is " + String.format("%.4f", min_rate) + " using " + compression_type);
-			System.out.println("The number of different delta values is " + histogram.length);
+			//System.out.println("The number of different delta values is " + histogram.length);
 			System.out.println();
+			
+			//System.out.println("************************************************************************");
 		  
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 			set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
@@ -695,14 +701,17 @@ public class SimpleEncoder
 				    min_index = i;
 				}
 			}
+			System.out.println("Saving:");
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
 			System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
 			
 			int [] channel = DeltaMapper.getChannels(min_index);
 			for(int i = 0; i < 3; i++)
 			{
+				// Index for channel, 0-5.
 				int j = channel[i];
-				int k = channel_type[i];
+				// Index for compression type, 0-4.
+				int k = channel_type[j];
 				
 				int [] src = new int[1];
 				if(j == 0)
@@ -722,24 +731,22 @@ public class SimpleEncoder
 				int delta_min            = (int)histogram_list.get(0);
 				int [] histogram         = (int[])histogram_list.get(1);
 				int [] delta_random_lut  = DeltaMapper.getRandomTable(histogram); 
-			    double [] rate                 = (double [])data_list.get(1);
-			    int delta_sum                  = (int)data_list.get(2);
-			    int compression_type           = (int)data_list.get(3);
+			    double [] rate           = (double [])data_list.get(1);
+			    int delta_sum            = (int)data_list.get(2);
+			    int compression_type     = (int)data_list.get(3);
+			    int bitstring_length     = (int)data_list.get(4);
 			    if(k != compression_type)
 			    {
-			        System.out.println("Compression types do not agree.");
+			    	System.out.println("Channel is " + channel_string[j]);
 			        System.out.println("Channel list type is " + k);
 			        System.out.println("Data list type is " + compression_type);
 			    }
-				ArrayList compressed_data_list = (ArrayList)data_list.get(4);
+			    
+				ArrayList compressed_data_list = (ArrayList)data_list.get(5);
 				byte [] compressed_data        = (byte [])compressed_data_list.get(k);
 				
-				
-				
-				
-				
 				System.out.println(channel_string[j] + " has " + String.format("%.4f", channel_rate[j]) + " compression with " + type_string[k]);
-				System.out.println("Compressed data array has length " + compressed_data.length);
+				//System.out.println("Compressed data array has length " + compressed_data.length);
 				
 				System.out.println();
 				
@@ -756,6 +763,9 @@ public class SimpleEncoder
 				        
 				        // Channel 0-5.
 				        out.writeByte(j);
+				        
+				        // Pixel shift
+				        out.writeByte(pixel_shift);
 				     
 				        // Init value for deltas.
 				        out.writeShort(src[0]);
@@ -766,91 +776,31 @@ public class SimpleEncoder
 				        // Compression type 0-4.
 				        out.writeByte(k);
 				        
-				        /*
-				        Inflater inflater;
-				        
-				        
-				        byte [] zipped_bytes   = (byte[])compressed_data_list.get(0);
-				        
-				        System.out.println("Zipped bytes have length " + zipped_bytes.length);
-				        byte [] unzipped_bytes = new byte[xdim * ydim * 8];
-				        inflater               = new Inflater();
-					    inflater.setInput(zipped_bytes);
-					    try
-					    {
-					        int byte_length = inflater.inflate(unzipped_bytes);
-					        inflater.end();
-					        System.out.println("Byte length of unzipped bytes is " + byte_length);
-					        System.out.println();
-					    }
-					    catch(Exception e)
-					    {
-					    	System.out.println(e.toString());
-					    	inflater.end();
-					    }
-					    
-                        byte [] zipped_strings   = (byte[])compressed_data_list.get(2);
-				        
-				        System.out.println("Zipped strings have length " + zipped_strings.length);
-				        byte [] unzipped_strings = new byte[xdim * ydim * 8];
-				        inflater                 = new Inflater();
-					    inflater.setInput(zipped_strings);
-					    try
-					    {
-					        int string_length = inflater.inflate(unzipped_strings);
-					        inflater.end();
-					        System.out.println("String length of unzipped strings is " + string_length);
-					        System.out.println();
-					    }
-					    catch(Exception e)
-					    {
-					    	System.out.println(e.toString());
-					    	inflater.end();
-					    }
-				        
-				        if(k == 2)
-				        {
-				        	System.out.println("Compression type is zipped strings.");
-				        	System.out.println("Data size is " + compressed_data.length);
-				        	byte [] unzipped_strings = new byte[xdim * ydim * 8];
-				        	Inflater inflater = new Inflater();
-						    inflater.setInput(compressed_data, 0, compressed_data.length);
-						    
-						    try
-						    {
-						        int string_length = inflater.inflate(unzipped_strings);
-						        System.out.println("String length of unzipped strings is " + string_length);
-						        System.out.println();
-						    }
-						    catch(Exception e)
-						    {
-						    	System.out.println(e.toString());
-						    }
-				        }
-				        */
-				        
-				        // The length of the table used for
-				        // string packing/unpacking.
 				        int table_length = delta_random_lut.length;
-				        out.writeByte(table_length);
-				        System.out.println("String table length is " + table_length);
-				        
-				        // The table itself.
 				        byte [] table    = new byte[table_length];
-				        for(int m = 0; m < table_length; m++)
-				        	table[m] = (byte)delta_random_lut[m];
-				        out.write(table, 0, table_length);
+			            for(int m = 0; m < table_length; m++)
+			        	    table[m] = (byte)delta_random_lut[m];
+				        if(compression_type != 0)
+				        {
+				            // The length of the table used for
+				            // string packing/unpacking.
+				            
+				            out.writeShort(table_length);
+				            System.out.println("String table length is " + table_length);
 				        
+				            // The table itself.
+				            
+				            out.write(table, 0, table_length);
+				        }
+				        
+				        if(compression_type > 2)
+				        	out.writeInt(bitstring_length);
 				        // The length of the data.
 				        out.writeInt(compressed_data.length);
 				        System.out.println("Data length is " + compressed_data.length);
 				        
 				        // The data itself.
 				        out.write(compressed_data, 0, compressed_data.length);
-				        
-				        
-				        
-				        
 				        
 				        out.close();
 				    }

@@ -822,7 +822,6 @@ public class DeltaMapper
                     current_bit = dst[current_byte] = 0;
                 }	
             }
-            
             else if((src[k] & (mask << j)) == 0)
             {
                 current_bit++;
@@ -851,7 +850,6 @@ public class DeltaMapper
        
         int number_of_bits = current_byte * 8;
         number_of_bits += current_bit;
-        
         return(number_of_bits);
     }
    
@@ -918,8 +916,6 @@ public class DeltaMapper
         //return(current_size + 8);
         return(current_size + 9);
     }
-    
-   
     
     public static int decompressZeroStrings(byte src[], int size, byte dst[])
     {
@@ -1144,7 +1140,6 @@ public class DeltaMapper
         }    
         int number_of_bits = current_byte * 8;
         number_of_bits    += current_bit;
-        
         return(number_of_bits);
     }
 
@@ -1586,25 +1581,102 @@ public class DeltaMapper
         }
         return(current_size);
     } 
+    public static byte checkStringType(byte src[], int size)
+    {
+        int  byte_index;
+        int  number_of_iterations;
+        int  addend;
+        int  mask;
+        int  remainder, i;
+        int  previous_size, current_size, byte_size;
+ 
+         
+        int last_byte = size / 8;
+        int last_bit  = size % 8;
+        byte string_type   = 1;
+        string_type <<= last_bit;
+        string_type &= src[last_byte];
+        if(string_type != 0)
+        {
+        	System.out.println("String type is 1.");
+        }
+        else
+        {
+        	System.out.println("String type is 0.");
+        }
+        size--;
+        
+        // Getting the number of iterations appended to
+        // the end of the string.
+        byte_index = size / 8 - 1;
+        remainder  = size % 8;
+        if(remainder != 0)
+        {
+            int value = 254;
+            addend = 2;
+            for(i = 1; i < remainder; i++)
+            {
+                value -= addend;
+                addend <<= 1;
+            } 
+            mask = value;
+            number_of_iterations = src[byte_index];
+            if(number_of_iterations < 0)
+                number_of_iterations += 256;
+            number_of_iterations &= mask;
+            number_of_iterations >>= remainder;
+            byte_index++;
+            if(remainder > 1)
+            {
+                mask = 1;
+                for(i = 2; i < remainder; i++)
+                {
+                    mask <<= 1;
+                    mask++;
+                }
+                addend = src[byte_index]; 
+                if(addend < 0)
+                    addend += 256;
+                addend &= mask;
+                addend <<= 8 - remainder;
+                number_of_iterations += addend;
+                mask++;
+            }
+            else
+                mask = 1;
+        }
+        else
+        {
+           mask = 127;
+           number_of_iterations = src[byte_index];
+           if(number_of_iterations < 0)
+               number_of_iterations += 256; 
+           number_of_iterations &= mask;
+           mask++;
+        }
+        System.out.println("The number of iterations is " + number_of_iterations);
+        return(string_type);
+    }
     
-    
-    public static void compressStrings(byte src[], int size, double ratio, byte dst[])
+    public static int compressStrings(byte src[], int size, double ratio, byte dst[])
     {
     	int length = 0;
-    	
+    	System.out.println("Got here.");
     	byte [] temp = new byte[src.length * 2];
-    	if(ratio > .5) // More zeros.
+    	if(ratio > .5) 
 		{
 			System.out.println("Compressing zeros.");
-			length = DeltaMapper.compressZeroStrings(src, size, temp);
+			length = compressZeroStrings(src, size, temp);
+			
 		}
 		else
 		{
 			System.out.println("Compressing ones.");
 			length =  DeltaMapper.compressOneStrings(src, size, temp);
 		}
+    	System.out.println("Length of compressed string is " + length);
     	
-    	int lower_byte = length &= 0x00FF;
+    	int lower_byte = length & 0x00FF;
     	int upper_byte = length >> 8;
         byte value     = (byte) lower_byte;
         dst[0]         = value;
@@ -1617,11 +1689,11 @@ public class DeltaMapper
         
         for(int i = 0; i < array_length; i++)
         	dst[i + 2] = temp[i];
-        
+        System.out.println("Length of compressed string is " + length);
+        return(length + 16);
     }
     
-    
-    public static int decompressStrings(byte src[], int size, byte dst[])
+    public static int decompressStrings(byte src[], byte dst[])
     {
     	 int lower_byte = (int)src[0];
     	 if(lower_byte < 0)
@@ -1631,7 +1703,9 @@ public class DeltaMapper
     		 upper_byte += 127;
     	 upper_byte <<= 8;
     	 
+    	 int size = lower_byte + upper_byte;
     	 
+    	 System.out.println("Length of string is " + size);
     	
     	 int last_byte = size / 8;
          int last_bit  = size % 8;
@@ -1643,12 +1717,12 @@ public class DeltaMapper
          if(string_type != 0)
          {
          	System.out.println("String type is 1.");
-         	bit_length = decompressOneStrings(src, size, dst);
+         	//bit_length = decompressOneStrings(src, size, dst);
          }
          else
          {
          	System.out.println("String type is 0.");
-         	bit_length = decompressZeroStrings(src, size, dst);
+         	//bit_length = decompressZeroStrings(src, size, dst);
          }	
          return(bit_length);
     }
@@ -1732,6 +1806,7 @@ public class DeltaMapper
 	    
 	    int    delta_sum  = 0;
 	    int    delta_type = -1;
+	    int    bitstring_length = 0;
 	    if(delta[0] == 0)
 	    {
 	    	//System.out.println("Delta type is horizontal.");
@@ -1744,37 +1819,51 @@ public class DeltaMapper
 	    	delta_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
 	    	delta_type = 1;
 	    }
-	    
+	    Deflater deflater;
 	    ArrayList histogram_list = getHistogram(delta);
 		int delta_min            = (int)histogram_list.get(0);
 		int [] histogram         = (int[])histogram_list.get(1);
 		int [] delta_random_lut  = DeltaMapper.getRandomTable(histogram); 
-		byte [] delta_bytes      = new byte[xdim * ydim];
-		delta_bytes[0]           = (byte)delta[0];
-		for(int i = 1; i < delta.length; i++)
+		System.out.println("Number of different value is " + histogram.length);
+		if(histogram.length > 256)
 		{
-		    delta[i]      -= delta_min;
-		    delta_bytes[i] = (byte)delta[i];
+			//System.out.println("Data will not fit in bytes.");
+			rate[0] = 1;
+			for(int i = 1; i < delta.length; i++)
+				delta[i] -= delta_min;
+			compressed_data_list.add(delta);
 		}
-		Deflater deflater    =  new Deflater(Deflater.HUFFMAN_ONLY);	
-		byte [] zipped_bytes = new byte[xdim * ydim * 2];
-		deflater.setInput(delta_bytes, 0, xdim * ydim);
-    	deflater.finish();
-    	int zipped_byte_length = deflater.deflate(zipped_bytes);
-    	deflater.end();
+		else
+		{
+		   
+		    byte [] delta_bytes      = new byte[xdim * ydim];
+		    delta_bytes[0]           = (byte)delta[0];
+		    for(int i = 1; i < delta.length; i++)
+		    {
+		        delta[i]      -= delta_min;
+		        delta_bytes[i] = (byte)delta[i];
+		    }
+		    deflater    =  new Deflater(Deflater.HUFFMAN_ONLY);	
+		    byte [] zipped_bytes = new byte[xdim * ydim * 2];
+		    deflater.setInput(delta_bytes, 0, xdim * ydim);
+    	    deflater.finish();
+    	    int zipped_byte_length = deflater.deflate(zipped_bytes);
+    	    deflater.end();
     	
-    	byte [] clipped_zipped_bytes = new byte[zipped_byte_length];
-    	for(int i = 0; i < zipped_byte_length; i++)
-    		clipped_zipped_bytes[i] = zipped_bytes[i];
-    	compressed_data_list.add(clipped_zipped_bytes);
+    	    byte [] clipped_zipped_bytes = new byte[zipped_byte_length];
+    	    for(int i = 0; i < zipped_byte_length; i++)
+    		    clipped_zipped_bytes[i] = zipped_bytes[i];
+    	    compressed_data_list.add(clipped_zipped_bytes);
     	
-    	zipped_byte_length *= 8;
-    	rate[0]             = zipped_byte_length;
-    	rate[0]            /= pixel_length;
+    	    zipped_byte_length *= 8;
+    	    rate[0]             = zipped_byte_length;
+    	    rate[0]            /= pixel_length;
+		}
     	//System.out.println("The compression rate for zipped delta bytes is " + String.format("%.4f", rate[0]));
     	
     	byte [] delta_strings = new byte[xdim * ydim * 2];
     	int string_length     = 0;
+    	
 		string_length         = DeltaMapper.packStrings2(delta, delta_random_lut, delta_strings);
 		rate[1]               = string_length;
 		rate[1]              /= pixel_length;
@@ -1818,31 +1907,34 @@ public class DeltaMapper
         }	
 	    zero_one_ratio  /= string_length;
 		byte [] compressed_strings = new byte[xdim * ydim * 4];	
-		int compressed_string_length = 0;
+		
+		
+		//compressed_string_length = compressStrings(delta_strings, string_length, zero_one_ratio, compressed_strings);
+
 		if(zero_one_ratio > .5)
 		{
-			System.out.println("Compressing zeros.");
-			compressed_string_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
+			//System.out.println("Compressing zeros.");
+			bitstring_length = DeltaMapper.compressZeroStrings(delta_strings, string_length, compressed_strings);
 		}
 		else
 		{
-			System.out.println("Compressing ones.");
-			compressed_string_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
+			//System.out.println("Compressing ones.");
+			bitstring_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 		}
-		string_array_length = compressed_string_length / 8;
+		string_array_length = bitstring_length / 8;
 		if(string_length % 8 != 0)
 			string_array_length++;
 		byte [] clipped_compressed_strings = new byte[string_array_length];
 		for(int i = 0; i < string_array_length; i++)
 			clipped_compressed_strings[i] = compressed_strings[i];
-		rate[3]  = compressed_string_length;
+		rate[3]  = bitstring_length;
 		rate[3] /= pixel_length;
 		compressed_data_list.add(clipped_compressed_strings);
-		System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
+		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
 		
 		byte [] zipped_compressed_strings = new byte[xdim * ydim * 4];	
-		int compressed_array_length = compressed_string_length / 8;
-		if(compressed_string_length %8 != 0)
+		int compressed_array_length = bitstring_length / 8;
+		if(bitstring_length %8 != 0)
 			compressed_array_length++;
 		// This seem to be the only case where LZW helps, and not much.
 		deflater = new Deflater(Deflater.BEST_COMPRESSION);
@@ -1858,7 +1950,7 @@ public class DeltaMapper
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
 		compressed_data_list.add(clipped_zipped_compressed_strings);
-		System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
+		//System.out.println("The compression rate for zipped compressed delta strings is " + String.format("%.4f", rate[4]));
 		
 		double min_rate         = rate[0];
 		int    compression_type = 0;
@@ -1877,11 +1969,11 @@ public class DeltaMapper
 		data_list.add(rate);
 		data_list.add(delta_sum);
 		data_list.add(compression_type);
+		data_list.add(bitstring_length);
 		data_list.add(compressed_data_list);
     	return data_list;
     }
     
-
 	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
 	{
 		int xdim = src_xdim / block_xdim;
