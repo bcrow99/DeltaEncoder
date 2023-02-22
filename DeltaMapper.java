@@ -1913,9 +1913,6 @@ public class DeltaMapper
 	    zero_one_ratio  /= string_length;
 		byte [] compressed_strings = new byte[xdim * ydim * 4];	
 		
-		
-		//compressed_string_length = compressStrings(delta_strings, string_length, zero_one_ratio, compressed_strings);
-
 		if(zero_one_ratio > .5)
 		{
 			//System.out.println("Compressing zeros.");
@@ -1926,24 +1923,30 @@ public class DeltaMapper
 			//System.out.println("Compressing ones.");
 			bitstring_length =  DeltaMapper.compressOneStrings(delta_strings, string_length, compressed_strings);
 		}
+		System.out.println("Bitstring length is " + bitstring_length);
 		string_array_length = bitstring_length / 8;
-		if(string_length % 8 != 0)
+		if(bitstring_length % 8 != 0)
 			string_array_length++;
-		byte [] clipped_compressed_strings = new byte[string_array_length];
+		System.out.println("String array length without remainder is " + string_array_length);
+		byte [] clipped_compressed_strings = new byte[string_array_length + 1];
 		for(int i = 0; i < string_array_length; i++)
 			clipped_compressed_strings[i] = compressed_strings[i];
+		byte remainder = (byte)(bitstring_length % 8);
+		
+	    byte bits = 8;
+		if(remainder != 0)
+			remainder = (byte) (bits - remainder);
+		clipped_compressed_strings[string_array_length] = remainder;
+		System.out.println("Remainder is " + remainder);
 		rate[3]  = bitstring_length;
 		rate[3] /= pixel_length;
 		compressed_data_list.add(clipped_compressed_strings);
 		//System.out.println("The compression rate for compressed delta strings is " + String.format("%.4f", rate[3]));	
 		
 		byte [] zipped_compressed_strings = new byte[xdim * ydim * 4];	
-		int compressed_array_length = bitstring_length / 8;
-		if(bitstring_length %8 != 0)
-			compressed_array_length++;
 		// This seem to be the only case where LZW helps, and not much.
 		deflater = new Deflater(Deflater.BEST_COMPRESSION);
-	    deflater.setInput(compressed_strings, 0, compressed_array_length);
+	    deflater.setInput(clipped_compressed_strings);
 		deflater.finish();
 		int zipped_compressed_length = deflater.deflate(zipped_compressed_strings);
 		deflater.end();
@@ -1951,9 +1954,6 @@ public class DeltaMapper
 		byte [] clipped_zipped_compressed_strings = new byte[zipped_compressed_length];
 		for(int i = 0; i < zipped_compressed_length; i++)
 			clipped_zipped_compressed_strings[i] = zipped_compressed_strings[i];
-		int remainder = bitstring_length % 8;
-		if(remainder != 0)
-		    remainder = 8 - remainder;
 		zipped_compressed_length *= 8;
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;

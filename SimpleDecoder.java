@@ -203,6 +203,37 @@ public class SimpleDecoder
 				    	System.out.println(e.toString());
 				    }
 			    }
+			    else if(compression == 1)
+			    {
+			    	System.out.println("Decompressing packed strings.");	
+			    	int [] delta = new int[xdim * ydim];
+					int number_of_ints = DeltaMapper.unpackStrings2(data, string_table, delta);
+					for(int i = 1; i < delta.length; i++)
+					     delta[i] += delta_min;
+					
+					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+					
+					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+					
+					   
+					for(int i = 0; i < ydim; i++)
+					{
+					    for(int j = 0; j < xdim; j++)
+					    {
+					    	int value = dst[i * xdim + j]; 
+					    	value <<= pixel_shift;
+					    	
+					    	
+					    	int pixel = 0;
+					    	
+					    	pixel |= value << 16;
+			                pixel |= value << 8;    
+			                pixel |= value;	
+			                
+					    	image.setRGB(j, i, pixel);
+					    }
+					}
+			    }
 			    else if(compression == 2)
 			    {
 			    	System.out.println("Decompressing zipped packed strings.");
@@ -248,9 +279,61 @@ public class SimpleDecoder
 					    }
 					}
 			    }
+			    else if(compression == 3)
+			    {
+			        System.out.println("Decompressing compressed strings.");
+			        
+			        System.out.println("Length of data array is " + data.length);
+			        byte remainder = data[data.length - 1];
+			        System.out.println("Remainder is " + remainder);
+			        int  calculated_bitstring_length = (data.length - 1) * 8 - remainder;
+			        
+			        System.out.println("Bitstring length = " + bitstring_length);
+			        System.out.println("Calculated bitstring length is " + calculated_bitstring_length);
+			        
+			        byte [] strings = new byte[xdim * ydim * 4];
+			        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
+			        int string_length = 0;
+			        if(bit_type == 0)
+			        {
+			        	string_length = DeltaMapper.decompressZeroStrings(data, bitstring_length - 1, strings);	
+			        }
+			        else
+			        {
+			        	string_length = DeltaMapper.decompressOneStrings(data, bitstring_length - 1, strings);
+			        }
+			        int [] delta = new int[xdim * ydim];
+					int number_of_ints = DeltaMapper.unpackStrings2(strings, string_table, delta);
+					
+					for(int i = 1; i < delta.length; i++)
+					     delta[i] += delta_min;
+					
+					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+					
+					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+					
+					   
+					for(int i = 0; i < ydim; i++)
+					{
+					    for(int j = 0; j < xdim; j++)
+					    {
+					    	int value = dst[i * xdim + j]; 
+					    	value <<= pixel_shift;
+					    	
+					    	
+					    	int pixel = 0;
+					    	
+					    	pixel |= value << 16;
+			                pixel |= value << 8;    
+			                pixel |= value;	
+			                
+					    	image.setRGB(j, i, pixel);
+					    }
+					}
+			    }
 			    else if(compression == 4)
 			    {
-			    	System.out.println("Unzipping compressed strings.");
+			    	System.out.println("Unzipping and decompressing compressed strings.");
 			    	Inflater inflater = new Inflater();
 				    inflater.setInput(data, 0, data_length);
 				
@@ -263,6 +346,13 @@ public class SimpleDecoder
 				        int byte_length = inflater.inflate(compressed_strings);
 				        System.out.println("Byte length of unzipped strings is " + byte_length);
 				        inflater.end();
+				        
+				        byte remainder = compressed_strings[byte_length - 1];
+				        System.out.println("Remainder is " + remainder);
+				        int  calculated_bitstring_length = (byte_length - 1) * 8 - remainder;
+				        
+				        System.out.println("Bitstring length = " + bitstring_length);
+				        System.out.println("Calculated bitstring length is " + calculated_bitstring_length);
 				        
 				        byte bit_type = DeltaMapper.checkStringType(compressed_strings, bitstring_length);
 				        if(bit_type == 0)
@@ -312,11 +402,12 @@ public class SimpleDecoder
 			    }
 			    else
 			    {
+			    	System.out.println("Undefined compression type.");
 			    	image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 					   
-					for(int i = 0; i < xdim; i++)
+					for(int i = 0; i < ydim; i++)
 					{
-					    for(int j = 0; j < ydim; j++)
+					    for(int j = 0; j < xdim; j++)
 					    {
 					    	int pixel = 0;
 					    	

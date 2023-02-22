@@ -620,6 +620,11 @@ public class SimpleEncoder
 			System.out.println("A set of channels with the highest delta sum is " + set_string[max_index]);
 			System.out.println("The compression rate is " + String.format("%.4f", set_rate[max_index]));
 			System.out.println();
+			
+			for(int i = 0; i < 6; i++)
+			{
+				System.out.println("Channel " + i + " has delta sum " + channel_sum[i]);
+			}
 			System.out.println("**********************************************************************");
 			System.out.println();
 			
@@ -750,7 +755,7 @@ public class SimpleEncoder
 				
 				System.out.println();
 				
-				if(i == 0)
+				if(i == 1)
 				{
 				    File file = new File("foo");
 				    try
