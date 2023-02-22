@@ -112,7 +112,6 @@ public class SimpleDecoder
 			    System.out.println("Compression type is " + compression_string[compression]);
 			    
 			    int table_length = 0;
-			    byte [] table = new byte[1];
 			    int  [] string_table = new int[1];
 			    
 			    if(compression != 0)
@@ -120,12 +119,12 @@ public class SimpleDecoder
 			        table_length = in.readShort();
 			        System.out.println("String table length is " +  table_length);
 			    
-			        table = new byte[table_length];
-			        in.read(table, 0, table_length);
-			    
-			        string_table = new int[table.length];
-			        for(int i = 0; i < table.length; i++)
-			    	    string_table[i] = table[i];
+			       
+			        string_table = new int[table_length];
+			        for(int i = 0; i < table_length; i++)
+			        {
+			    	    string_table[i] = in.readInt();
+			        }
 			        System.out.println("Read string table.");
 			    }
 			  
@@ -183,15 +182,13 @@ public class SimpleDecoder
 				        System.out.println("Max value in frame is " + max_value);
 				        System.out.println("Delta min is " + delta_min);
 						image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-						//System.out.println("Buffer size is " + dst.length);
-						//System.out.println("Dimension product is " + (xdim * ydim));
 						   
 						for(int i = 0; i < ydim; i++)
 						{
 						    for(int j = 0; j < xdim; j++)
 						    {
 						    	int value = dst[i * xdim + j]; 
-						    	//value <<= pixel_shift;
+						    	value <<= pixel_shift;
 						    
 						    	int pixel = 0;
 						    	pixel |= value << 16;
@@ -260,6 +257,7 @@ public class SimpleDecoder
 				    byte [] strings            = new byte[data_length * 5];
 				    byte [] compressed_strings = new byte[data_length * 5];
 				    
+				    int packed_delta_bitlength = 0;
 				    try
 				    {
 				        int byte_length = inflater.inflate(compressed_strings);
@@ -267,29 +265,50 @@ public class SimpleDecoder
 				        inflater.end();
 				        
 				        byte bit_type = DeltaMapper.checkStringType(compressed_strings, bitstring_length);
+				        if(bit_type == 0)
+				        {
+				        	packed_delta_bitlength = DeltaMapper.decompressZeroStrings(compressed_strings, bitstring_length - 1, strings);	
+				        }
+				        else
+				        {
+				        	packed_delta_bitlength = DeltaMapper.decompressOneStrings(compressed_strings, bitstring_length - 1, strings);
+				        }
+				        System.out.println("Packed delta string length is " + packed_delta_bitlength);
 				        
+				        
+				        int [] delta = new int[xdim * ydim];
+						int number_of_ints = DeltaMapper.unpackStrings2(strings, string_table, delta);
+						
+						for(int i = 1; i < delta.length; i++)
+						     delta[i] += delta_min;
+						
+						int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						
+						image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+						
+						   
+						for(int i = 0; i < ydim; i++)
+						{
+						    for(int j = 0; j < xdim; j++)
+						    {
+						    	int value = dst[i * xdim + j]; 
+						    	value <<= pixel_shift;
+						    	
+						    	
+						    	int pixel = 0;
+						    	
+						    	pixel |= value << 16;
+				                pixel |= value << 8;    
+				                pixel |= value;	
+				                
+						    	image.setRGB(j, i, pixel);
+						    }
+						}
 				    }
 				    catch(Exception e)
 				    {
 				    	System.out.println(e.toString());
 				    }	
-				    
-				    
-				    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-					   
-					for(int i = 0; i < ydim; i++)
-					{
-					    for(int j = 0; j < xdim; j++)
-					    {
-					    	int pixel = 0;
-					    	
-					    	pixel |= 128 << 16;
-			                pixel |= 128 << 8;    
-			                pixel |= 128;	
-					    	image.setRGB(j, i, pixel);
-					    }
-					}
-				    
 			    }
 			    else
 			    {

@@ -777,9 +777,7 @@ public class SimpleEncoder
 				        out.writeByte(k);
 				        
 				        int table_length = delta_random_lut.length;
-				        byte [] table    = new byte[table_length];
-			            for(int m = 0; m < table_length; m++)
-			        	    table[m] = (byte)delta_random_lut[m];
+				        
 				        if(compression_type != 0)
 				        {
 				            // The length of the table used for
@@ -789,10 +787,11 @@ public class SimpleEncoder
 				            System.out.println("String table length is " + table_length);
 				        
 				            // The table itself.
-				            
-				            out.write(table, 0, table_length);
+				            for(int m = 0; m < table_length; m++)
+				                out.writeInt(delta_random_lut[m]);
 				        }
 				        
+				        System.out.println("Bitstring length is " + bitstring_length);
 				        if(compression_type > 2)
 				        	out.writeInt(bitstring_length);
 				        // The length of the data.

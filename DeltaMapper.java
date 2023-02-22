@@ -927,6 +927,7 @@ public class DeltaMapper
         int  previous_size, current_size, byte_size;
         byte[]  temp = new byte[dst.length];
         
+        /*
         int last_byte = size / 8;
         int last_bit  = size % 8;
         byte string_type   = 1;
@@ -941,6 +942,7 @@ public class DeltaMapper
         	System.out.println("String type is 0.");
         }
         size--;
+        */
         
         // Getting the number of iterations appended to
         // the end of the string.
@@ -1399,6 +1401,7 @@ public class DeltaMapper
     } 
     */
     
+    
     public static int compressOneStrings(byte src[], int size, byte dst[])
     {
         byte[]  temp = new byte[src.length * 10];
@@ -1468,6 +1471,8 @@ public class DeltaMapper
         return(current_size);
     }
     
+    
+    // Returns string length of packed strings.
     public static int decompressOneStrings(byte src[], int size, byte dst[])
     {
         int  byte_index;
@@ -1478,23 +1483,24 @@ public class DeltaMapper
         int  previous_size, current_size, byte_size;
         byte[]  temp = new byte[dst.length];
         
-        
+        /*
         int last_byte = size / 8;
         int last_bit  = size % 8;
         byte string_type   = 1;
         string_type <<= last_bit;
         string_type &= src[last_byte];
+        
         if(string_type != 0)
         {
-        	System.out.println("String type is 1.");
+        	//System.out.println("String type is 1.");
         }
         else
         {
-        	System.out.println("String type is 0.");
+        	//System.out.println("String type is 0.");
         }
         size--;
-        
-        
+        */
+
         // Getting the number of iterations appended to
         // the end of the string.
         byte_index = size / 8 - 1;
@@ -1543,7 +1549,7 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        System.out.println("The number of iterations is " + number_of_iterations);
+        //System.out.println("The number of iterations is " + number_of_iterations);
         
         current_size = 0;
         if(number_of_iterations == 1)
@@ -1598,11 +1604,11 @@ public class DeltaMapper
         string_type &= src[last_byte];
         if(string_type != 0)
         {
-        	System.out.println("String type is 1.");
+        	//System.out.println("String type is 1.");
         }
         else
         {
-        	System.out.println("String type is 0.");
+        	//System.out.println("String type is 0.");
         }
         size--;
         
@@ -1654,14 +1660,13 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        System.out.println("The number of iterations is " + number_of_iterations);
+        //System.out.println("The number of iterations is " + number_of_iterations);
         return(string_type);
     }
     
     public static int compressStrings(byte src[], int size, double ratio, byte dst[])
     {
     	int length = 0;
-    	System.out.println("Got here.");
     	byte [] temp = new byte[src.length * 2];
     	if(ratio > .5) 
 		{
@@ -1946,6 +1951,9 @@ public class DeltaMapper
 		byte [] clipped_zipped_compressed_strings = new byte[zipped_compressed_length];
 		for(int i = 0; i < zipped_compressed_length; i++)
 			clipped_zipped_compressed_strings[i] = zipped_compressed_strings[i];
+		int remainder = bitstring_length % 8;
+		if(remainder != 0)
+		    remainder = 8 - remainder;
 		zipped_compressed_length *= 8;
 		rate[4] = zipped_compressed_length;
 		rate[4] /= pixel_length;
