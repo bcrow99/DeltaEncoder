@@ -22,16 +22,20 @@ public class Decoder
 	int    xdim, ydim;
 	String filename;
 	
-	int [] original_pixel;
-	int [] alpha;
-	int [] red;
-	int [] green;
-	int [] blue;
+	//int [] original_pixel;
+	//int [] alpha;
+	//int [] red;
+	//int [] green;
+	//int [] blue;
+	//int [] blue_green;
+	//int [] red_green;
+	//int [] red_blue;
 	
 	byte   [] delta_bytes, delta_strings, zipped_strings; 
 	byte   [] compressed_strings, zipped_compressed_strings;
 	short  [] init, delta_min;
 	int    [] channel_type, set_sum, channel_sum;
+	int    [] channel_min;
 	double [] channel_rate, set_rate;
 	String [] type_string;
 	String [] set_string;
@@ -39,7 +43,6 @@ public class Decoder
 	int    [] shifted_blue, shifted_green, shifted_red;
 	int    [] shifted_blue_green, shifted_red_green, shifted_red_blue;
 	
-	ArrayList lut_list;
 	
 	
 	int    pixel_shift = 3;
@@ -86,6 +89,15 @@ public class Decoder
 		compression_string[2] = new String("compressed_strings");
 		compression_string[3] = new String("zipped compressed strings");
 		
+		Hashtable <Integer, int[]> image_table = new Hashtable<Integer, int[]>();
+	
+		int [] blue, green, red, blue_green, red_green, red_blue;
+		blue       = new int[1];
+	    green      = new int[1];
+	    red        = new int[1];
+        blue_green = new int[1];
+        red_green  = new int[1]; 
+        red_blue   = new int[1];
 		try
 		{
 			File file              = new File(filename);
@@ -96,259 +108,345 @@ public class Decoder
 			    ydim = in.readShort();
 			    System.out.println("Xdim from file is " + xdim + ", ydim is " + ydim);
 			    
-			    int channel = in.readByte();
-			    System.out.println("Channel is " + channel_string[channel]);
+			    blue       = new int[xdim * ydim];
+			    green      = new int[xdim * ydim];
+			    red        = new int[xdim * ydim];
+		        blue_green = new int[xdim * ydim];
+		        red_green  = new int[xdim * ydim]; 
+		        red_blue   = new int[xdim * ydim];
+			    
+			    
 			    
 			    pixel_shift = in.readByte();
 			    System.out.println("Pixel shift is " + pixel_shift);
 			    
-			    int init_value = in.readInt();
-			    int delta_min  = in.readInt();
-			    System.out.println("Init value is " + init_value + ", delta minimum is " + delta_min);
-			    
-			   
-			    int compression = in.readByte();
-			    System.out.println("Compression type is " + compression_string[compression]);
-			    
-			    int table_length = 0;
-			    int  [] string_table = new int[1];
-			    
-			    table_length = in.readShort();
-			    System.out.println("String table length is " +  table_length);
-			    
-			       
-			    string_table = new int[table_length];
-			    for(int i = 0; i < table_length; i++)
+			    for(int i = 0; i < 3; i++)
 			    {
-			    	string_table[i] = in.readInt();
+			        int channel = in.readByte();
+			        System.out.println("Channel is " + channel_string[channel]);
+			  
+			        int channel_min = in.readInt();
+			        int init_value = in.readInt();
+			        int delta_min  = in.readInt();
+			        //System.out.println("Init value is " + init_value + ", delta minimum is " + delta_min);
+			    
+			        int compression = in.readByte();
+			        //System.out.println("Compression type is " + compression_string[compression]);
+			    
+			        int table_length = 0;
+			        int  [] string_table = new int[1];
+			    
+			        table_length = in.readShort();
+			        //System.out.println("String table length is " +  table_length);
+			    
+			        string_table = new int[table_length];
+			        for(int j = 0; j < table_length; j++)
+			        {
+			    	    string_table[j] = in.readInt();
+			        }
+			        //System.out.println("Read string table.");
+			   
+			        int bitstring_length = 0;
+			        bitstring_length = in.readInt();
+			        //System.out.println("Bitstring length is " + bitstring_length);
+			   
+			        int data_length = in.readInt();
+			        //System.out.println("Data length is " +  data_length);
+			    
+			        byte [] data = new byte[data_length];
+			        in.read(data, 0, data_length);
+			    
+			        System.out.println("Read data.");
+			        
+			        if(compression == 0)
+				    {
+				        byte remainder = data[data.length - 1];
+				        int remainder_length = (data.length - 1) * 8 - remainder;
+				       
+				    	System.out.println("Decompressing packed strings.");
+				    	
+				    	// We don't need to know the bitstring length to unpack delta strings
+				    	// if we know the image dimensions.  Still good way to check if data
+				    	// has been corrupted.
+				    	
+				    	//System.out.println("The bitstring length in header was " + bitstring_length);
+				    	//System.out.println("The bitstring length in remainder was " + remainder_length);
+				    	
+				    	
+				    	
+					    int [] delta = new int[xdim * ydim];
+					    int number_of_ints = DeltaMapper.unpackStrings2(data, string_table, delta);
+						for(int j = 1; j < delta.length; j++)
+						     delta[j] += delta_min;
+						
+						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						if(channel > 2)
+							for(int j = 0; j < result.length; j++)
+								result[j] += channel_min;
+						
+						image_table.put(channel, result);
+						System.out.println("Putting data for " + channel_string[channel] + " in image table.");
+						/*
+						image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+						
+						   
+						for(int i = 0; i < ydim; i++)
+						{
+						    for(int j = 0; j < xdim; j++)
+						    {
+						    	int value = dst[i * xdim + j]; 
+						    	value <<= pixel_shift;
+						    	
+						    	
+						    	int pixel = 0;
+						    	
+						    	pixel |= value << 16;
+				                pixel |= value << 8;    
+				                pixel |= value;	
+				                
+						    	image.setRGB(j, i, pixel);
+						    }
+						}
+						*/
+				    }
+			        else if(compression == 1)
+				    {
+				    	System.out.println("Decompressing zipped strings.");
+				    	Inflater inflater = new Inflater();
+					    inflater.setInput(data, 0, data_length);
+					    byte [] string   = new byte[xdim * ydim * 4];
+					    int string_length = 0;
+					    try
+					    {
+					        string_length = inflater.inflate(string);
+					        //System.out.println("String length of unzipped strings is " + string_length);
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    }
+					    inflater.end();
+					    
+					    //System.out.println("Length of data array is " + data.length);
+				        byte remainder = string[string_length - 1];
+				        //System.out.println("Remainder is " + remainder);
+				        int remainder_length = (string_length - 1) * 8 - remainder;
+				        
+				        //System.out.println("The bitstring length in header was " + bitstring_length);
+				    	//System.out.println("The bitstring length in remainder was " + remainder_length);
+					    
+					    int [] delta = new int[xdim * ydim];
+						int number_of_ints = DeltaMapper.unpackStrings2(string, string_table, delta);
+						for(int j = 1; j < delta.length; j++)
+						     delta[j] += delta_min;
+						
+						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						
+						if(channel > 2)
+							for(int j = 0; j < result.length; j++)
+								result[j] += channel_min;
+						
+						image_table.put(channel, result);
+						System.out.println("Putting data for " + channel_string[channel] + " in image table.");
+				    }
+			        else if(compression == 2)
+				    {
+				    	System.out.println("Decompressing compressed strings.");
+				    	//System.out.println("Length of data array is " + data.length);
+				        byte remainder = data[data.length - 1];
+				        //System.out.println("Null bits is " + remainder);
+				        int remainder_length = (data.length - 1) * 8 - remainder;
+				       
+				    	//System.out.println("The bitstring length in header was " + bitstring_length);
+				    	//System.out.println("The bitstring length in remainder was " + remainder_length);
+				        
+				        byte [] string = new byte[xdim * ydim * 4];
+				        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
+				        int string_length = 0;
+				        if(bit_type == 0)
+				        {
+				        	//System.out.println("Decompressing zeros.");
+				        	string_length = DeltaMapper.decompressZeroStrings(data, bitstring_length - 1, string);	
+				        }
+				        else
+				        {
+				        	//System.out.println("Decompressing ones.");
+				        	string_length = DeltaMapper.decompressOneStrings(data, bitstring_length - 1, string);
+				        }
+				        int [] delta = new int[xdim * ydim];
+						int number_of_ints = DeltaMapper.unpackStrings2(string, string_table, delta);
+						
+						for(int j = 1; j < delta.length; j++)
+						     delta[j] += delta_min;
+						
+						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						
+						if(channel > 2)
+							for(int j = 0; j < result.length; j++)
+								result[j] += channel_min;
+						
+						image_table.put(channel, result);
+						System.out.println("Putting data for " + channel_string[channel] + " in image table.");
+			        
+			        }
+			        else if(compression == 3)
+				    {
+			        	// Running into a bug unzipping data--not same length as input.
+				    	System.out.println("Byte length of zipped data is " + data.length);
+				    	Inflater inflater = new Inflater();
+					    
+				    	inflater.setInput(data);
+					    byte [] string   = new byte[xdim * ydim * 4];
+					    int string_length = 0;
+					    try
+					    {
+					        string_length = inflater.inflate(string);
+					        System.out.println("Byte length of unzipped compressed string is " + string_length);
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    }
+					    inflater.end();
+				    }
 			    }
-			    System.out.println("Read string table.");
-			   
-			    int bitstring_length = 0;
-			    bitstring_length = in.readInt();
-			    System.out.println("Bitstring length is " + bitstring_length);
-			   
-			    int data_length = in.readInt();
-			    System.out.println("Data length is " +  data_length);
-			    
-			    byte [] data = new byte[data_length];
-			    in.read(data, 0, data_length);
-			    
-			    System.out.println("Read data.");
 			    in.close();
 			    
-			    if(compression == 0)
+			    
+			    if(image_table.containsKey(0))
 			    {
-			    	//System.out.println("Length of data array is " + data.length);
-			        byte remainder = data[data.length - 1];
-			        //System.out.println("Remainder is " + remainder);
-			        int remainder_length = (data.length - 1) * 8 - remainder;
-			       
-			    	System.out.println("Decompressing packed strings.");
-			    	
-			    	// We don't need to know the bitstring length to unpack delta strings
-			    	// if we know the image dimensions.  Still good way to check if data
-			    	// has been corrupted.
-			    	
-			    	System.out.println("The bitstring length in header was " + bitstring_length);
-			    	System.out.println("The bitstring length in remainder was " + remainder_length);
-			    	
-			    	
-			    	
-				    int [] delta = new int[xdim * ydim];
-				    int number_of_ints = DeltaMapper.unpackStrings2(data, string_table, delta);
-					for(int i = 1; i < delta.length; i++)
-					     delta[i] += delta_min;
-					
-					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-					
-					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-					
-					   
-					for(int i = 0; i < ydim; i++)
-					{
-					    for(int j = 0; j < xdim; j++)
-					    {
-					    	int value = dst[i * xdim + j]; 
-					    	value <<= pixel_shift;
-					    	
-					    	
-					    	int pixel = 0;
-					    	
-					    	pixel |= value << 16;
-			                pixel |= value << 8;    
-			                pixel |= value;	
-			                
-					    	image.setRGB(j, i, pixel);
-					    }
-					}
-			    }
-			    else if(compression == 1)
-			    {
-			    	System.out.println("Decompressing zipped strings.");
-			    	Inflater inflater = new Inflater();
-				    inflater.setInput(data, 0, data_length);
-				    byte [] string   = new byte[xdim * ydim * 4];
-				    int string_length = 0;
-				    try
-				    {
-				        string_length = inflater.inflate(string);
-				        System.out.println("String length of unzipped strings is " + string_length);
-				    }
-				    catch(Exception e)
-				    {
-				    	System.out.println(e.toString());
-				    }
-				    inflater.end();
-				    
-				    //System.out.println("Length of data array is " + data.length);
-			        byte remainder = string[string_length - 1];
-			        System.out.println("Remainder is " + remainder);
-			        int remainder_length = (string_length - 1) * 8 - remainder;
+			        blue = image_table.get(0);	
 			        
-			        System.out.println("The bitstring length in header was " + bitstring_length);
-			    	System.out.println("The bitstring length in remainder was " + remainder_length);
-				    
-				    int [] delta = new int[xdim * ydim];
-					int number_of_ints = DeltaMapper.unpackStrings2(string, string_table, delta);
-					for(int i = 1; i < delta.length; i++)
-					     delta[i] += delta_min;
-					
-					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-					
-					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-					  
-					for(int i = 0; i < ydim; i++)
-					{
-					    for(int j = 0; j < xdim; j++)
-					    {
-					    	int value = dst[i * xdim + j]; 
-					    	value <<= pixel_shift;
-					    	
-					    	
-					    	int pixel = 0;
-					    	
-					    	pixel |= value << 16;
-			                pixel |= value << 8;    
-			                pixel |= value;	
-			                
-					    	image.setRGB(j, i, pixel);
-					    }
-					}
-			    }
-			    else if(compression == 2)
-			    {
-			    	System.out.println("Decompressing compressed strings.");
-			    	//System.out.println("Length of data array is " + data.length);
-			        byte remainder = data[data.length - 1];
-			        System.out.println("Null bits is " + remainder);
-			        int remainder_length = (data.length - 1) * 8 - remainder;
-			       
-			    	System.out.println("The bitstring length in header was " + bitstring_length);
-			    	System.out.println("The bitstring length in remainder was " + remainder_length);
-			        
-			        byte [] string = new byte[xdim * ydim * 4];
-			        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
-			        int string_length = 0;
-			        if(bit_type == 0)
+			        if(image_table.containsKey(1))
 			        {
-			        	System.out.println("Decompressing zeros.");
-			        	string_length = DeltaMapper.decompressZeroStrings(data, bitstring_length - 1, string);	
+			        	green = image_table.get(1);
+			        	if(image_table.containsKey(2))
+			        	{
+			        		// Have all the channels we need.
+			        		red = image_table.get(2);
+			        	}
+			        	else
+			        	{
+			        	    if(image_table.contains(4))
+			        	    {
+			        	        red_green = image_table.get(4);	
+			        	        red       = DeltaMapper.getSum(red_green, green);
+			        	    }
+			        	    else if(image_table.contains(5))
+			        	    {
+			        	    	red_blue = image_table.get(4);	
+			        	        red      = DeltaMapper.getSum(red_blue, blue);	
+			        	    }
+			        	    else
+			        	        System.out.println("Table does not contain complete set.");
+			        	}	
+			        }
+			    }
+			    else if(image_table.containsKey(1))
+			    {
+			    	// We have the green channel but not the blue channel.
+			        green = image_table.get(1);
+			        if(image_table.containsKey(2))
+			        {
+			        	red = image_table.get(2);	
+			        	
+			        	if(image_table.containsKey(3))
+			        	{
+			        		
+			        	    blue_green = image_table.get(3);
+			        	    blue       = DeltaMapper.getSum(blue_green, green);
+			        	  
+			        	}
+			        	else if(image_table.containsKey(5))
+			        	{
+			        		red_blue = image_table.get(5);
+			        	    blue       = DeltaMapper.getSum(red_blue, red);  
+			        	}
+			        	else
+		        	        System.out.println("Table does not contain complete set.");
 			        }
 			        else
 			        {
-			        	System.out.println("Decompressing ones.");
-			        	string_length = DeltaMapper.decompressOneStrings(data, bitstring_length - 1, string);
+			        	// We have the green channel, but not blue or red.
+			        	if(image_table.containsKey(3) && image_table.containsKey(4))
+			        	{
+			        	    blue_green = image_table.get(3);
+			        	    blue       = DeltaMapper.getSum(blue_green, green);
+			        	    red_green = image_table.get(4);
+			        	    red       = DeltaMapper.getSum(red_green, green);
+			        	}
+			        	else if(image_table.containsKey(3) && image_table.containsKey(5))
+			        	{
+			        	    blue_green = image_table.get(3);
+			        	    blue       = DeltaMapper.getSum(blue_green, green);
+			        	    red_blue   = image_table.get(5);
+			        	    red        = DeltaMapper.getSum(red_blue, blue);
+			        	}
+			        	else
+			        		System.out.println("Table does not contain complete set.");	
 			        }
-			        int [] delta = new int[xdim * ydim];
-					int number_of_ints = DeltaMapper.unpackStrings2(string, string_table, delta);
-					
-					for(int i = 1; i < delta.length; i++)
-					     delta[i] += delta_min;
-					
-					int [] dst = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-					
-					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-					
-					   
-					for(int i = 0; i < ydim; i++)
-					{
-					    for(int j = 0; j < xdim; j++)
-					    {
-					    	int value = dst[i * xdim + j]; 
-					    	value <<= pixel_shift;
-					    	
-					    	
-					    	int pixel = 0;
-					    	
-					    	pixel |= value << 16;
-			                pixel |= value << 8;    
-			                pixel |= value;	
-			                
-					    	image.setRGB(j, i, pixel);
-					    }
-					}
 			    }
-			    else if(compression == 3)
+			    else if(image_table.containsKey(2))
 			    {
-			    	System.out.println("Byte length of zipped data is " + data.length);
-			    	Inflater inflater = new Inflater();
-				    //inflater.setInput(data, 0, data_length);
-			    	inflater.setInput(data);
-				    byte [] string   = new byte[xdim * ydim * 4];
-				    int string_length = 0;
-				    try
-				    {
-				        string_length = inflater.inflate(string);
-				        System.out.println("Byte length of unzipped compressed string is " + string_length);
-				    }
-				    catch(Exception e)
-				    {
-				    	System.out.println(e.toString());
-				    }
-				    inflater.end();
-				    
-						
-					image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-						
-					int value = 128;   
-					for(int i = 0; i < ydim; i++)
-					{
-						for(int j = 0; j < xdim; j++)
-						{	
-						    int pixel = 0;
-						    	
-						    pixel |= value << 16;
-				            pixel |= value << 8;    
-				            pixel |= value;	
-				                
-						    image.setRGB(j, i, pixel);
-						}
-				    }
+			        // We have the red channel but not blue or green.
+			        red = image_table.get(2);	
+			        if(image_table.containsKey(4))
+			        {
+			            red_green = image_table.get(4);
+			            green     = DeltaMapper.getSum(red_green, red);
+			            if(image_table.containsKey(3))
+			            {
+			                blue_green = 	image_table.get(3);
+			                blue       = DeltaMapper.getSum(blue_green, green);
+			            }
+			            else
+		        	        System.out.println("Table does not contain complete set.");
+			        }
+			        else if(image_table.containsKey(5))
+			        {
+			            red_blue = image_table.get(5);	
+			            blue     = DeltaMapper.getSum(red_blue, red);
+			            if(image_table.containsKey(3))
+			            {
+			                blue_green = image_table.get(3);
+			                green      = DeltaMapper.getSum(blue_green, blue);
+			            }
+			            else if(image_table.containsKey(4))
+			            {
+			                red_green = image_table.get(4);
+			                green      = DeltaMapper.getSum(red_green, red); 
+			            }
+			            else
+		        	        System.out.println("Table does not contain complete set.");
+			        }
 			    }
-			    else
-			    {
-			    	image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-					   
-					for(int i = 0; i < xdim; i++)
-					{
-					    for(int j = 0; j < ydim; j++)
-					    {
-					    	int pixel = 0;
-					    	
-					    	pixel |= 128 << 16;
-			                pixel |= 128 << 8;    
-			                pixel |= 128;	
-					    	image.setRGB(j, i, pixel);
-					    }
-					}
-			    }
+			   
 			}
 			catch(Exception e)
 			{
 				System.out.println(e.toString());
 			}
 			
+			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+			for(int i = 0; i < ydim; i++)
+			{
+			    for(int j = 0; j < xdim; j++)
+			    {
+			    	int _blue = blue[i * xdim + j];
+			    	_blue <<= pixel_shift;
+			    	int _green = green[i * xdim + j];
+			    	_green <<= pixel_shift;
+			    	int _red   = red[i * xdim + j]; 
+			    	_red <<= pixel_shift;
+			    	
+			    	int pixel = 0;
+			    	pixel |= _blue << 16;
+	                pixel |= _green << 8;    
+	                pixel |= _red;	
+	                
+			    	image.setRGB(j, i, pixel);
+			    }
+			}
 
 			JFrame frame = new JFrame("Decoder");
 		    WindowAdapter window_handler = new WindowAdapter()

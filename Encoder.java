@@ -43,18 +43,10 @@ public class Encoder
 	
 	ArrayList channel_table, channel_data, channel_src;
 	
-	int green_init;
-	int green_sum;
-	int green_delta_min;
-	int [] green_table;
-
-	int    green_string_length;
-	int    green_compressed_string_length;
-	ArrayList green_data;
-	byte   green_type;
 	
-	int    pixel_shift = 3;
-	long   file_length = 0;
+	int     min_set_id = 0;
+	int     pixel_shift = 3;
+	long    file_length = 0;
 	boolean initialized = false;
 	
 	public static void main(String[] args)
@@ -255,16 +247,12 @@ public class Encoder
 		    shifted_red = new int[xdim * ydim];
 		    new_pixel   = new int[xdim * ydim];
 		    
-		    // Allocate extra memory to allow for expansion as well as compression.
-		    delta_strings             = new byte[xdim * ydim * 2];
-		    zipped_strings            = new byte[xdim * ydim * 8];
-		    compressed_strings        = new byte[xdim * ydim * 8];
-		    zipped_compressed_strings = new byte[xdim * ydim * 8];
-		    
-		    // The 4 different kinds of compressions we evaluate per channel.
+		   
+		    // The 4 different kinds of compressions we intend to evaluate per channel.
 		    // Huffman encoding usually offers some amount of compression unless
 		    // the blocks are so small the extra overhead becomes significant.
 		    // We're using png files to get a ratio for simple zip encoding, another alternative.
+		    // Running into a bug zipping compressed strings, and leaving it alone for now.
 		    type_string    = new String[5];
 			type_string[0] = new String("packed strings");
 			type_string[1] = new String("zipped packed strings");
@@ -297,9 +285,6 @@ public class Encoder
 		    
 		    channel_src  = new ArrayList();
 		   
-		    
-		    green_data = new ArrayList();
-		    
 		    for(int i = 0; i < 6; i++)
 		    {
 		    	ArrayList data_list = new ArrayList();
@@ -316,7 +301,6 @@ public class Encoder
 		    // The value we subtract from deltas so the
 		    // least value is 0.
 		    channel_delta_min = new int[6];
-		    
 		    
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
@@ -385,6 +369,9 @@ public class Encoder
 		    channel_min[2]  = (short)red_min;
 		    channel_init[2] = (short)shifted_red[0];
 		    
+		    
+		    // The difference frames usually contain negative numbers,
+		    // so we'll subtract the minimum to make them all positive.
 		    shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
 	        int blue_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -451,6 +438,7 @@ public class Encoder
 				channel_table.add(string_table);
 				
 				ArrayList data_list = (ArrayList)channel_data.get(i);
+				data_list.clear();
 				
 				for(int j = 1; j < delta.length; j++)
 					delta[j] -= channel_delta_min[i];
@@ -503,12 +491,12 @@ public class Encoder
 				
 				if(zero_one_ratio > .5)
 				{
-					System.out.println("Compressing zeros.");
+					//System.out.println("Compressing zeros.");
 					channel_compressed_length[i] = DeltaMapper.compressZeroStrings(string, channel_length[i], compressed_string);
 				}
 				else
 				{
-					System.out.println("Compressing ones.");
+					//System.out.println("Compressing ones.");
 					channel_compressed_length[i] =  DeltaMapper.compressOneStrings(string, channel_length[i], compressed_string);
 				}
 				string_array_length = channel_compressed_length[i] / 8;
@@ -522,50 +510,41 @@ public class Encoder
 				if(remainder == 0)
 				{
 					clipped_compressed_string[string_array_length] = 0;	
-					System.out.println("Null bits is 0.");
+					//System.out.println("Null bits is 0.");
 				}
 				else
 				{
 					 byte bits                           = 8;
 					 int null_bits                       = bits - remainder;
 					 clipped_compressed_string[string_array_length] = (byte)null_bits;
-					 System.out.println("Null bits is " + null_bits);
+					 //System.out.println("Null bits is " + null_bits);
 				}
 				
 				data_list.add(clipped_compressed_string);	
 				
 				if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i])
-				    channel_type[i]	= 0;
-				else if(channel_zipped_length[i] < channel_length[i])
+				{
+				    channel_type[i]	 = 0;
+				    channel_rate[i]  = channel_length[i];
+				    channel_rate[i] /= pixel_length;
+				}
+				else if(channel_zipped_length[i] < channel_compressed_length[i])
+				{
 					channel_type[i] = 1;
+					channel_rate[i]  = channel_zipped_length[i];
+				    channel_rate[i] /= pixel_length;
+				}
 				else
+				{
 					channel_type[i] = 2;
+					channel_rate[i]  = channel_compressed_length[i];
+				    channel_rate[i] /= pixel_length;
+				}
 		    }
 		    
 		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
 			//System.out.println("************************************************************************");
-		    /*
+		   
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 			set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
 			set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
@@ -591,18 +570,20 @@ public class Encoder
 			
 			int min_index     = 0;
 			int min_delta_sum = Integer.MAX_VALUE;
-			for(int i = 0; i < 6; i++)
+			for(int i = 0; i < 10; i++)
 			{
-				if(channel_sum[i] < min_delta_sum)
+				if(set_sum[i] < min_delta_sum)
 				{
-				    min_delta_sum = channel_sum[i];
+				    min_delta_sum = set_sum[i];
 				    min_index = i;
 				}
 			}
-			System.out.println("A channel with the lowest delta sum is " + channel_string[min_index]);
-			System.out.println("The compression rate is " + String.format("%.4f", channel_rate[min_index]));
+			
+			min_set_id = min_index;
+			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
+			System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
 			System.out.println();
-			*/
+			
 	    	
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
@@ -672,6 +653,10 @@ public class Encoder
 		{
 			if(!initialized)
 				apply_item.doClick();
+			
+			System.out.println("Min set id is " + min_set_id);
+			int channel[] = DeltaMapper.getChannels(min_set_id);
+			
 			File file = new File("foo");
 		    try
 		    {
@@ -681,56 +666,63 @@ public class Encoder
 		        out.writeShort(xdim);
 		        out.writeShort(ydim);
 		        
-		        // Channel 0-5.
-		        out.writeByte(1);
-		        
 		        // Pixel shift
 		        out.writeByte(pixel_shift);
-		     
-		        // Init value for deltas.
-		        out.writeInt(channel_init[1]);
-		        System.out.println("Init value for deltas is " + channel_init[1]);
 		        
-		        // Minimum_value for deltas.
-		        out.writeInt(channel_delta_min[1]);
-		        System.out.println("Minimum value for deltas is " + channel_delta_min[1]);
-		        
-		        // Compression type 0-4.
-		        out.writeByte(channel_type[1]);
-		        
-		        // The length of the table used for
-		        // string packing/unpacking.
-		        int [] string_table = (int[])channel_table.get(1);
-		        out.writeShort(string_table.length);
-		        System.out.println("String table length is " + string_table.length);
-		        
-		        // The table itself.
-		        for(int k = 0; k < string_table.length; k++)
-		            out.writeInt(string_table[k]);
-		       
-		        // The length of the bitstring
-		        
-		        if(channel_type[1] < 2)
+		        for(int i = 0; i < 3; i++)
 		        {
-		            out.writeInt(channel_length[1]);
-		            System.out.println("Bit length is " + channel_length[1]);
-		        }
-		        else
-		        {
-		        	out.writeInt(channel_compressed_length[1]);
-		            System.out.println("Bit length is " + channel_compressed_length[1]);	
-		        }
+		        	int j = channel[i];
+		            
+		        	System.out.println("Saving " + channel_string[j] + " channel.");
+		        	System.out.println();
+		        	
+		        	// Channel 0-5.
+		            out.writeByte(j);
+		        
+		            out.writeInt(channel_min[j]);
+		            
+		            // Init value for deltas.
+		            out.writeInt(channel_init[j]);
+		            //System.out.println("Init value for deltas is " + channel_init[j]);
+		        
+		            // Minimum_value for deltas.
+		            out.writeInt(channel_delta_min[j]);
+		            System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
+		        
+		            // Compression type 0-4.
+		            out.writeByte(channel_type[j]);
+		        
+		            // The length of the table used for
+		            // string packing/unpacking.
+		            int [] string_table = (int[])channel_table.get(j);
+		            out.writeShort(string_table.length);
+		            //System.out.println("String table length is " + string_table.length);
+		        
+		            // The table itself.
+		            for(int k = 0; k < string_table.length; k++)
+		                out.writeInt(string_table[k]);
 		       
-		        ArrayList data_list = (ArrayList)channel_data.get(1);
-		        byte[] data = (byte[])data_list.get(channel_type[1]);
-		        System.out.println("Length of data is " + data.length);
+		            // The length of the bitstring
+		            if(channel_type[j] < 2)
+		            {
+		                out.writeInt(channel_length[j]);
+		                System.out.println("Bit length is " + channel_length[1]);
+		            }
+		            else
+		            {
+		        	    out.writeInt(channel_compressed_length[j]);
+		                System.out.println("Bit length is " + channel_compressed_length[1]);	
+		            }
+		       
+		            ArrayList data_list = (ArrayList)channel_data.get(j);
+		            byte[] data = (byte[])data_list.get(channel_type[j]);
 		        
-		        // The length of the data.
-		        out.writeInt(data.length);
-		        System.out.println("Data length is " + data.length);
+		            // The length of the data.
+		            out.writeInt(data.length);
 		        
-		        // The data itself.
-		        out.write(data, 0, data.length);
+		            // The data itself.
+		            out.write(data, 0, data.length);
+		        }
 		        
 		        out.close();
 		    }
