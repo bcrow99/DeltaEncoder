@@ -32,7 +32,7 @@ public class Encoder
 	byte   [] delta_bytes, delta_strings, zipped_strings; 
 	byte   [] compressed_strings, zipped_compressed_strings;
 	byte   [] channel_type;
-	short  [] channel_init, channel_min;
+	int    [] channel_init, channel_min;
 	int    [] set_sum, channel_sum, channel_length, channel_delta_min;
 	double [] set_rate, channel_rate;
 	String [] type_string;
@@ -43,6 +43,15 @@ public class Encoder
 	
 	ArrayList channel_table, channel_data;
 	
+	int green_init;
+	int green_sum;
+	int green_delta_min;
+	int [] green_table;
+
+	int    green_string_length;
+	int    green_compressed_string_length;
+	ArrayList green_data;
+	byte   green_type;
 	
 	int    pixel_shift = 3;
 	long   file_length = 0;
@@ -230,10 +239,6 @@ public class Encoder
 	class ApplyHandler implements ActionListener
 	{
 		int    [] new_alpha, new_blue, new_green, new_red, new_pixel;
-		
-		
-		
-		
 		int       pixel_length;
 		double    file_ratio;
 		
@@ -288,13 +293,20 @@ public class Encoder
 		    // Actual data.
 		    channel_data = new ArrayList();
 		    
+		    green_data = new ArrayList();
+		    
+		    for(int i = 0; i < 6; i++)
+		    {
+		    	ArrayList data_list = new ArrayList();
+		    	channel_data.add(data_list);
+		    }
+		    
 		    // The input for the delta values.
-		    channel_init = new short[6];
+		    channel_init = new int[6];
 		    
 		    // The value we subtract from frame values so the
 		    // least value is 0.
-		    channel_min = new short[6];
-		    
+		    channel_min = new int[6];
 		    
 		    // The value we subtract from deltas so the
 		    // least value is 0.
@@ -368,8 +380,6 @@ public class Encoder
 		    channel_min[2]  = (short)red_min;
 		    channel_init[2] = (short)shifted_red[0];
 		    
-		    
-		    
 		    int [] delta, string_table, histogram;
 		    ArrayList histogram_list;
 		    byte [] string, clipped_string;
@@ -377,6 +387,7 @@ public class Encoder
 		    
 		    //*************************************************************************
 		    
+		    /*
 		    delta = DeltaMapper.getDeltasFromValues(shifted_blue, xdim, ydim, channel_init[0]);
 		    if(delta[0] == 0)
 		    {
@@ -394,7 +405,7 @@ public class Encoder
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
 			
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[0];
 			string             = new byte[xdim * ydim * 2];
 	    	string_length      = 0;
@@ -404,15 +415,228 @@ public class Encoder
 			channel_rate[0]   /= pixel_length;
 			channel_type[0]    = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			byte remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
 			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+			ArrayList data_list = (ArrayList)channel_data.get(0);
+			
+			// Add packed string.
+			data_list.add(clipped_string);
+			
+			byte [] zipped_string = new byte[xdim * ydim * 2];
+		    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	int zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	byte [] clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
+	    	
+	    	
+	    	double zero_one_ratio = xdim * ydim;
+	        if(histogram.length > 1)
+	        {
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					 if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+	        }	
+		    zero_one_ratio  /= string_length;
+			byte [] compressed_string = new byte[xdim * ydim * 4];	
+			
+			if(zero_one_ratio > .5)
+			{
+				System.out.println("Compressing zeros.");
+				channel_length[0] = DeltaMapper.compressZeroStrings(string, string_length, compressed_string);
+			}
+			else
+			{
+				System.out.println("Compressing ones.");
+				channel_length[0] =  DeltaMapper.compressOneStrings(string, string_length, compressed_string);
+			}
+			string_array_length = channel_length[0] / 8;
+			if(channel_length[0] % 8 != 0)
+				string_array_length++;
+			byte [] clipped_compressed_string = new byte[string_array_length + 1];
+			for(int i = 0; i < string_array_length; i++)
+				clipped_compressed_string[i] = compressed_string[i];
+			remainder = (byte)(channel_length[0] % 8);
+			if(remainder == 0)
+				clipped_compressed_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_compressed_string[string_array_length] = (byte)null_bits;
+			}
+			
+			//3
+			data_list.add(clipped_compressed_string);
+	    	
+			channel_type[0] = 2;
+	    	*/
+			
+		    green_init = shifted_green[0];
+		    delta = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, channel_init[1]);
+		    if(delta[0] == 0)
+		    {
+		    	System.out.println("Delta type is horizontal.");
+		    	green_sum = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
+		    }
+		    else
+		    {
+		        System.out.println("Delta type is vertical.");
+		    	green_sum = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+		    }
+		    histogram_list       = DeltaMapper.getHistogram(delta);
+		    //channel_delta_min[1] = (int)histogram_list.get(0);
+		    green_delta_min = (int)histogram_list.get(0);
+		    System.out.println("Minimum value for green deltas is " + green_delta_min);
+			histogram            = (int[])histogram_list.get(1);
+			green_table = DeltaMapper.getRandomTable(histogram);
+			//string_table         = DeltaMapper.getRandomTable(histogram);
+			//channel_table.add(string_table);
+			for(int i = 1; i < delta.length; i++)
+				//delta[i] -= channel_delta_min[1];
+				delta[i] -= green_delta_min;
+			string              = new byte[xdim * ydim * 2];
+	    	string_length       = 0;
+			string_length       = DeltaMapper.packStrings2(delta, green_table, string);
+			
+			/*
+			channel_length[1]   = string_length;
+			channel_rate[1]     = string_length;
+			channel_rate[1]    /= pixel_length;
+			channel_type[1]     = 0;
+			*/
+			
+			green_string_length = string_length;
+			string_array_length = string_length / 8;
+			byte remainder = (byte)(string_length % 8);
+			if(remainder != 0)
+				string_array_length++;
+			clipped_string = new byte[string_array_length + 1];
+			for(int i = 0; i < string_array_length; i++)
+				clipped_string[i] = string[i];
+			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            //data_list = (ArrayList)channel_data.get(1);
+			
+			// Add packed string.
+			//data_list.add(clipped_string);
+			
+			green_data.add(clipped_string);
+			
+			byte [] zipped_string = new byte[xdim * ydim * 2];
+		    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	int zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	byte [] clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	// Add zipped string;
+	    	//data_list.add(clipped_zipped_string);
+	    	green_data.add(clipped_zipped_string);
+	    	System.out.println("Byte length of clipped zipped string is " + clipped_zipped_string.length);
+	    	System.out.println("Remainder was " + remainder);
+	    	
+	    	
+	    	double zero_one_ratio = xdim * ydim;
+	        if(histogram.length > 1)
+	        {
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					 if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+	        }	
+		    zero_one_ratio  /= string_length;
+			byte[] compressed_string = new byte[xdim * ydim * 4];	
+			
+			if(zero_one_ratio > .5)
+			{
+				System.out.println("Compressing zeros.");
+				green_compressed_string_length = DeltaMapper.compressZeroStrings(string, string_length, compressed_string);
+			}
+			else
+			{
+				System.out.println("Compressing ones.");
+				green_compressed_string_length =  DeltaMapper.compressOneStrings(string, string_length, compressed_string);
+			}
+			string_array_length = green_compressed_string_length / 8;
+			if(green_compressed_string_length % 8 != 0)
+				string_array_length++;
+			byte [] clipped_compressed_string = new byte[string_array_length + 1];
+			for(int i = 0; i < string_array_length; i++)
+				clipped_compressed_string[i] = compressed_string[i];
+			remainder = (byte)(green_compressed_string_length % 8);
+			if(remainder == 0)
+			{
+				clipped_compressed_string[string_array_length] = 0;	
+				System.out.println("Null bits is 0.");
+			}
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_compressed_string[string_array_length] = (byte)null_bits;
+				 System.out.println("Null bits is " + null_bits);
+			}
+			
+			//data_list.add(clipped_compressed_string);
+			green_data.add(clipped_compressed_string);
+			System.out.println("Byte length of green compressed string is " + clipped_compressed_string.length);
+	    	
+			byte [] zipped_compressed_string = new byte[xdim * ydim * 4];	
+			// This seem to be the only case where LZW helps, and not much.
+			deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+			
+		    deflater.setInput(clipped_compressed_string);
+			int zipped_compressed_length = deflater.deflate(zipped_compressed_string);
+			deflater.end();
+			System.out.println("Byte length of zipped compressed string is " + zipped_compressed_length);
+			
+			byte [] clipped_zipped_compressed_string = new byte[zipped_compressed_length];
+			for(int i = 0; i < zipped_compressed_length; i++)
+				clipped_zipped_compressed_string[i] = zipped_compressed_string[i];
+			green_data.add(clipped_zipped_compressed_string);
+			
+			green_type = 3;
+			//channel_type[1] = 2;
+		    
+		    
+		    
+		    
 			//*******************************************************************************
-			
+			/*
 			delta = DeltaMapper.getDeltasFromValues(shifted_green, xdim, ydim, channel_init[1]);
 		    if(delta[0] == 0)
 		    {
@@ -425,11 +649,13 @@ public class Encoder
 		    	channel_sum[1] = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
 		    }
 		    histogram_list       = DeltaMapper.getHistogram(delta);
-		    channel_delta_min[1] = (int)histogram_list.get(0);
+		    //channel_delta_min[1] = (int)histogram_list.get(0);
+		    green_delta_min = (int)histogram_list.get(0);
+		    System.out.println("Minimum value for green deltas is " + channel_delta_min[1]);
 			histogram            = (int[])histogram_list.get(1);
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[1];
 			string              = new byte[xdim * ydim * 2];
 	    	string_length       = 0;
@@ -439,12 +665,88 @@ public class Encoder
 			channel_rate[1]    /= pixel_length;
 			channel_type[1]     = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
+			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            data_list = (ArrayList)channel_data.get(1);
+			
+			// Add packed string.
+			data_list.add(clipped_string);
+			
+			zipped_string = new byte[xdim * ydim * 2];
+		    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
+	    	System.out.println("Byte length of clipped zipped string is " + clipped_zipped_string.length);
+	    	System.out.println("Remainder was " + remainder);
+	    	
+	    	
+	    	zero_one_ratio = xdim * ydim;
+	        if(histogram.length > 1)
+	        {
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					 if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+	        }	
+		    zero_one_ratio  /= string_length;
+			compressed_string = new byte[xdim * ydim * 4];	
+			
+			if(zero_one_ratio > .5)
+			{
+				System.out.println("Compressing zeros.");
+				channel_length[1] = DeltaMapper.compressZeroStrings(string, string_length, compressed_string);
+			}
+			else
+			{
+				System.out.println("Compressing ones.");
+				channel_length[1] =  DeltaMapper.compressOneStrings(string, string_length, compressed_string);
+			}
+			string_array_length = channel_length[1] / 8;
+			if(channel_length[1] % 8 != 0)
+				string_array_length++;
+			clipped_compressed_string = new byte[string_array_length + 1];
+			for(int i = 0; i < string_array_length; i++)
+				clipped_compressed_string[i] = compressed_string[i];
+			remainder = (byte)(channel_length[1] % 8);
+			if(remainder == 0)
+			{
+				clipped_compressed_string[string_array_length] = 0;	
+				System.out.println("Null bits is 0.");
+			}
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_compressed_string[string_array_length] = (byte)null_bits;
+				 System.out.println("Null bits is " + null_bits);
+			}
+			
+			data_list.add(clipped_compressed_string);
+	    	
+			System.out.println("Green channel length is " + channel_length[1]);
+			channel_type[1] = 2;
 			
 			//**********************************************************************************
 			
@@ -465,7 +767,7 @@ public class Encoder
 			histogram            = (int[])histogram_list.get(1);
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[2];
 			 
 			string            = new byte[xdim * ydim * 2];
@@ -476,24 +778,89 @@ public class Encoder
 			channel_rate[2]  /= pixel_length;
 			channel_type[2]   = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
 			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            data_list = (ArrayList)channel_data.get(2);
 			
+			// Add packed string.
+			data_list.add(clipped_string);
 			
+			zipped_string = new byte[xdim * ydim * 2];
+		    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
 			
+	    	zero_one_ratio = xdim * ydim;
+	        if(histogram.length > 1)
+	        {
+				int min_value = Integer.MAX_VALUE;
+				for(int i = 0; i < histogram.length; i++)
+					 if(histogram[i] < min_value)
+						min_value = histogram[i];
+				zero_one_ratio -= min_value;
+	        }	
+		    zero_one_ratio  /= string_length;
+			compressed_string = new byte[xdim * ydim * 4];	
 			
-			
+			if(zero_one_ratio > .5)
+			{
+				System.out.println("Compressing zeros.");
+				channel_length[2] = DeltaMapper.compressZeroStrings(string, string_length, compressed_string);
+			}
+			else
+			{
+				System.out.println("Compressing ones.");
+				channel_length[2] =  DeltaMapper.compressOneStrings(string, string_length, compressed_string);
+			}
+			string_array_length = channel_length[2] / 8;
+			if(channel_length[2] % 8 != 0)
+				string_array_length++;
+			clipped_compressed_string = new byte[string_array_length + 1];
+			for(int i = 0; i < string_array_length; i++)
+				clipped_compressed_string[i] = compressed_string[i];
+			remainder = (byte)(channel_length[1] % 8);
+			if(remainder == 0)
+				clipped_compressed_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_compressed_string[string_array_length] = (byte)null_bits;
+			}
+			data_list.add(clipped_compressed_string);
+	    	
 			
 			
 			// The difference frames will usually contain negative numbers,
 			// unless they are perfectly correlated with the other frame.
 			// We'll go ahead and set the least values to 0. Worth checking if it
 			// works anyway.
+			
+			
+			
+			
+			/*
 		    shifted_blue_green = DeltaMapper.getDifference(shifted_blue, shifted_green);
 	        int blue_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -531,7 +898,7 @@ public class Encoder
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
 			
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[3];
 			string             = new byte[xdim * ydim * 2];
 	    	string_length      = 0;
@@ -541,16 +908,39 @@ public class Encoder
 			channel_rate[3]   /= pixel_length;
 			channel_type[3]    = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
 			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            data_list = (ArrayList)channel_data.get(3);
 			
+			// Add packed string.
+			data_list.add(clipped_string);
 			
-		    
+			zipped_string = new byte[xdim * ydim * 2];
+		    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
+			
 		    shifted_red_green = DeltaMapper.getDifference(shifted_red, shifted_green);
 	        int red_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -579,7 +969,7 @@ public class Encoder
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
 			
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[4];
 			string             = new byte[xdim * ydim * 2];
 	    	string_length      = 0;
@@ -589,12 +979,38 @@ public class Encoder
 			channel_rate[4]   /= pixel_length;
 			channel_type[4]    = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
+			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            data_list = (ArrayList)channel_data.get(4);
+			
+			// Add packed string.
+			data_list.add(clipped_string);
+			
+			zipped_string = new byte[xdim * ydim * 2];
+		    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
 		    
 		    shifted_red_blue = DeltaMapper.getDifference(shifted_red, shifted_blue);
 	        int red_blue_min = 0;
@@ -604,8 +1020,8 @@ public class Encoder
 		    if(red_blue_min != 0)
 		        for(int i = 0; i < xdim * ydim; i++)
 		    	    shifted_red_blue[i] -= red_blue_min;
-		    channel_min[5]  = (short)red_blue_min;
-		    channel_init[5] = (short)shifted_red_blue[0];
+		    channel_min[5]  = red_blue_min;
+		    channel_init[5] = shifted_red_blue[0];
 		    delta = DeltaMapper.getDeltasFromValues(shifted_red_blue, xdim, ydim, channel_init[5]);
 		    if(delta[0] == 0)
 		    {
@@ -623,7 +1039,7 @@ public class Encoder
 			string_table         = DeltaMapper.getRandomTable(histogram);
 			channel_table.add(string_table);
 			
-			for(int i = 0; i < delta.length; i++)
+			for(int i = 1; i < delta.length; i++)
 				delta[i] -= channel_delta_min[5];
 			string             = new byte[xdim * ydim * 2];
 	    	string_length      = 0;
@@ -633,15 +1049,46 @@ public class Encoder
 			channel_rate[5]   /= pixel_length;
 			channel_type[5]    = 0;
 			string_array_length = string_length / 8;
-			if(string_length % 8 != 0)
+			remainder = (byte)(string_length % 8);
+			if(remainder != 0)
 				string_array_length++;
-			clipped_string = new byte[string_array_length];
+			clipped_string = new byte[string_array_length + 1];
 			for(int i = 0; i < string_array_length; i++)
 				clipped_string[i] = string[i];
-			channel_data.add(clipped_string);
+			
+			if(remainder == 0)
+				clipped_string[string_array_length] = 0;	
+			else
+			{
+				 byte bits                           = 8;
+				 int null_bits                       = bits - remainder;
+				 clipped_string[string_array_length] = (byte)null_bits;
+			}
+            data_list = (ArrayList)channel_data.get(5);
+			
+			// Add packed string.
+			data_list.add(clipped_string);
+			
+			zipped_string = new byte[xdim * ydim * 2];
+		    deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+	    	deflater.setInput(clipped_string);
+	    	deflater.finish();
+	    	zipped_string_length = deflater.deflate(zipped_string);
+	    	deflater.end();
+	    	clipped_zipped_string = new byte[zipped_string_length];
+	    	for(int i = 0; i < zipped_string_length; i++)
+	    		clipped_zipped_string[i] = zipped_string[i];
+	    	
+	    	
+	    	
+	    	// Add zipped string;
+	    	data_list.add(clipped_zipped_string);
+	    	*/
+	    	
+	    	
 		    
 			//System.out.println("************************************************************************");
-		  
+		    /*
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 			set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
 			set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
@@ -678,7 +1125,8 @@ public class Encoder
 			System.out.println("A channel with the lowest delta sum is " + channel_string[min_index]);
 			System.out.println("The compression rate is " + String.format("%.4f", channel_rate[min_index]));
 			System.out.println();
-			
+			*/
+	    	
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -747,6 +1195,72 @@ public class Encoder
 		{
 			if(!initialized)
 				apply_item.doClick();
+			File file = new File("foo");
+		    try
+		    {
+		        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+		        
+		        // Dimensions of frame.
+		        out.writeShort(xdim);
+		        out.writeShort(ydim);
+		        
+		        // Channel 0-5.
+		        out.writeByte(1);
+		        
+		        // Pixel shift
+		        out.writeByte(pixel_shift);
+		     
+		        // Init value for deltas.
+		        out.writeInt(green_init);
+		        System.out.println("Init value for deltas is " + green_init);
+		        
+		        // Minimum_value for deltas.
+		        out.writeInt(green_delta_min);
+		        System.out.println("Minimum value for deltas is " + green_delta_min);
+		        
+		        // Compression type 0-4.
+		        out.writeByte(green_type);
+		        
+		        // The length of the table used for
+		        // string packing/unpacking.
+		        out.writeShort(green_table.length);
+		        System.out.println("String table length is " + green_table.length);
+		        
+		        // The table itself.
+		        for(int k = 0; k < green_table.length; k++)
+		            out.writeInt(green_table[k]);
+		       
+		        // The length of the bitstring
+		        
+		        if(green_type < 2)
+		        {
+		            out.writeInt(green_string_length);
+		            System.out.println("Bit length is " + green_string_length);
+		        }
+		        else
+		        {
+		        	out.writeInt(green_compressed_string_length);
+		            System.out.println("Bit length is " + green_compressed_string_length);	
+		        }
+		       
+		        byte[] data = (byte[])green_data.get(green_type);
+		        System.out.println("Length of data is " + data.length);
+		        
+		        // The length of the data.
+		        out.writeInt(data.length);
+		        System.out.println("Data length is " + data.length);
+		        
+		        // The data itself.
+		        out.write(data, 0, data.length);
+		        
+		        out.close();
+		    }
+		    catch(Exception e)
+		    {
+			    System.out.println(e.toString());
+		    }
+		    
+			/*
 			int min_index     = 0;
 			int min_delta_sum = Integer.MAX_VALUE;
 			for(int i = 0; i < 10; i++)
@@ -762,51 +1276,36 @@ public class Encoder
 			System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
 			
 			int [] channel = DeltaMapper.getChannels(min_index);
+			*/
+			
+		    /*
 			for(int i = 0; i < 3; i++)
 			{
 				// Index for channel, 0-5.
 				int j = channel[i];
+				
 				// Index for compression type, 0-4.
-				int k = channel_type[j];
+				//byte type = channel_type[j];
+				byte type = 2;
 				
-				int [] src = new int[1];
-				if(j == 0)
-				    src = shifted_blue;
-				else if(j == 1)
-					src = shifted_green;
-				else if(j == 2)
-					src = shifted_red;
-				else if(j == 3)
-					src = shifted_blue_green;
-				else if(j == 4)
-					src = shifted_red_green;
-				else if(j == 5)
-					src = shifted_red_blue;
-				ArrayList data_list      = (ArrayList)DeltaMapper.getCompressionData(src, xdim, ydim);
-				ArrayList histogram_list = (ArrayList)data_list.get(0);
-				int delta_min            = (int)histogram_list.get(0);
-				int [] histogram         = (int[])histogram_list.get(1);
-				int [] delta_random_lut  = DeltaMapper.getRandomTable(histogram); 
-			    double [] rate           = (double [])data_list.get(1);
-			    int delta_sum            = (int)data_list.get(2);
-			    int compression_type     = (int)data_list.get(3);
-			    int bitstring_length     = (int)data_list.get(4);
-			    if(k != compression_type)
-			    {
-			    	System.out.println("Channel is " + channel_string[j]);
-			        System.out.println("Channel list type is " + k);
-			        System.out.println("Data list type is " + compression_type);
-			    }
-				ArrayList compressed_data_list = (ArrayList)data_list.get(5);
-				byte [] compressed_data        = (byte [])compressed_data_list.get(k);
+				int delta_min = channel_delta_min[j];
 				
-				System.out.println(channel_string[j] + " has " + String.format("%.4f", channel_rate[j]) + " compression with " + type_string[k]);
-				//System.out.println("Compressed data array has length " + compressed_data.length);
+				int init      = channel_init[j];
+			
+				int length    = channel_length[j];
+				
+				int []  string_table = (int [])channel_table.get(j);
+				
+				ArrayList data_list = (ArrayList)channel_data.get(j);
+				byte [] data         = (byte [])data_list.get(2);
 				
 				System.out.println();
 				
-				if(i == 1)
+				if(i == 0)
 				{
+					System.out.println(channel_string[j] + " has " + String.format("%.4f", channel_rate[j]) + " compression with " + type_string[type]);
+					System.out.println("Data array has length " + data.length + " and bitlength " + length);
+					System.out.println("The minimum delta value is " + delta_min);
 				    File file = new File("foo");
 				    try
 				    {
@@ -823,34 +1322,35 @@ public class Encoder
 				        out.writeByte(pixel_shift);
 				     
 				        // Init value for deltas.
-				        out.writeShort(src[0]);
+				        out.writeInt(channel_init[j]);
+				        System.out.println("Init value for deltas is " + channel_init[j]);
 				        
 				        // Minimum_value for deltas.
-				        out.writeShort(delta_min);
-				       
-				        // Compression type 0-4.
-				        out.writeByte(k);
+				        out.writeInt(channel_delta_min[j]);
+				        System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
 				        
-				        int table_length = delta_random_lut.length;
+				        // Compression type 0-4.
+				        out.writeByte(type);
 				        
 				        // The length of the table used for
 				        // string packing/unpacking.
-				            
-				        out.writeShort(table_length);
-				        System.out.println("String table length is " + table_length);
+				        out.writeShort(string_table.length);
+				        System.out.println("String table length is " + string_table.length);
 				        
 				        // The table itself.
-				        for(int m = 0; m < table_length; m++)
-				            out.writeInt(delta_random_lut[m]);
-				        if(k > 2)
-				            out.writeInt(bitstring_length);
-				        
+				        for(int k = 0; k < string_table.length; k++)
+				            out.writeInt(string_table[k]);
+				       
+				        // The length of the bitstring
+				        out.writeInt(channel_length[j]);
+				        System.out.println("Bit length is " + channel_length[j]);
+				       
 				        // The length of the data.
-				        out.writeInt(compressed_data.length);
-				        System.out.println("Data length is " + compressed_data.length);
+				        out.writeInt(data.length);
+				        System.out.println("Data length is " + data.length);
 				        
 				        // The data itself.
-				        out.write(compressed_data, 0, compressed_data.length);
+				        out.write(data, 0, data.length);
 				        
 				        out.close();
 				    }
@@ -860,6 +1360,7 @@ public class Encoder
 				    }
 				}
 			}
+			*/
 		}
 	}
 }
