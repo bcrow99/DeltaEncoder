@@ -423,15 +423,9 @@ public class Encoder
 		    	int [] delta = new int[xdim * ydim];
 			    delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
 			    if(delta[0] == 0)
-			    {
-			    	//System.out.println("Delta type is horizontal.");
 			    	channel_sum[i] = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-			    }
 			    else
-			    {
-			        //System.out.println("Delta type is vertical.");
 			    	channel_sum[i] = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-			    }
 			    ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[i] = (int)histogram_list.get(0);
 		
@@ -491,15 +485,9 @@ public class Encoder
 				byte[] compressed_string = new byte[xdim * ydim * 4];	
 				
 				if(zero_one_ratio > .5)
-				{
-					//System.out.println("Compressing zeros.");
 					channel_compressed_length[i] = DeltaMapper.compressZeroStrings(string, channel_length[i], compressed_string);
-				}
 				else
-				{
-					//System.out.println("Compressing ones.");
 					channel_compressed_length[i] =  DeltaMapper.compressOneStrings(string, channel_length[i], compressed_string);
-				}
 				string_array_length = channel_compressed_length[i] / 8;
 				remainder = (byte)(channel_compressed_length[i] % 8);
 				if(remainder != 0)
@@ -596,18 +584,37 @@ public class Encoder
 			
 			min_set_id = min_index;
 			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			//System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
-			//System.out.println();
+			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
+			System.out.println();
 			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
+			
+			double rate = 1;
 			for(int i = 0; i < 3; i++)
 			{
 				int channel_id = channel[i];
 				System.out.println(channel_string[channel_id] + ":");
-				System.out.println("Packed byte length is " + (channel_length[channel_id] / 8));
-				System.out.println("Zipped byte length is " + (channel_zipped_length[channel_id] / 8));
-				System.out.println("Compressed byte length is " + (channel_compressed_length[channel_id] / 8));
-				System.out.println("Zipped compressed byte length is " + (channel_zipped_compressed_length[channel_id] / 8));
+				
+				rate  = channel_length[channel_id];
+				rate /= pixel_length;
+				//System.out.println("Packed byte length is " + (channel_length[channel_id] / 8));
+				System.out.println("Packed string rate is " + String.format("%.4f", rate));
+				
+				rate  = channel_zipped_length[channel_id];
+				rate /= pixel_length;
+				//System.out.println("Zipped byte length is " + (channel_zipped_length[channel_id] / 8));
+				System.out.println("Zipped string rate is " + String.format("%.4f", rate));
+				
+				rate  = channel_compressed_length[channel_id];
+				rate /= pixel_length;
+				//System.out.println("Compressed byte length is " + (channel_compressed_length[channel_id] / 8));
+				System.out.println("Zipped string rate is " + String.format("%.4f", rate));
+				
+				rate  = channel_zipped_compressed_length[channel_id];
+				rate /= pixel_length;
+				//System.out.println("Zipped compressed byte length is " + (channel_zipped_compressed_length[channel_id] / 8));
+				System.out.println("Zipped compressed string rate is " + String.format("%.4f", rate));
+				
 				System.out.println();
 			}
 			

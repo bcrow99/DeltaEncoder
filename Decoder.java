@@ -21,29 +21,12 @@ public class Decoder
 	
 	int    xdim, ydim;
 	String filename;
-	
-	//int [] original_pixel;
-	//int [] alpha;
-	//int [] red;
-	//int [] green;
-	//int [] blue;
-	//int [] blue_green;
-	//int [] red_green;
-	//int [] red_blue;
-	
-	byte   [] delta_bytes, delta_strings, zipped_strings; 
-	byte   [] compressed_strings, zipped_compressed_strings;
-	short  [] init, delta_min;
 	int    [] channel_type, set_sum, channel_sum;
 	int    [] channel_min;
 	double [] channel_rate, set_rate;
 	String [] type_string;
 	String [] set_string;
 	String [] channel_string;
-	int    [] shifted_blue, shifted_green, shifted_red;
-	int    [] shifted_blue_green, shifted_red_green, shifted_red_blue;
-	
-	
 	
 	int    pixel_shift = 3;
 	long   file_length = 0;
@@ -92,6 +75,8 @@ public class Decoder
 		Hashtable <Integer, int[]> image_table = new Hashtable<Integer, int[]>();
 	
 		int [] blue, green, red, blue_green, red_green, red_blue;
+		
+		// So the compiler doesn't complain about possible null assignments.
 		blue       = new int[1];
 	    green      = new int[1];
 	    red        = new int[1];
@@ -108,6 +93,7 @@ public class Decoder
 			    ydim = in.readShort();
 			    System.out.println("Xdim from file is " + xdim + ", ydim is " + ydim);
 			    
+			    // Now we initialize them.
 			    blue       = new int[xdim * ydim];
 			    green      = new int[xdim * ydim];
 			    red        = new int[xdim * ydim];
@@ -122,6 +108,7 @@ public class Decoder
 			    
 			    pixel_shift = in.readByte();
 			    System.out.println("Pixel shift is " + pixel_shift);
+			    System.out.println();
 			    
 			    for(int i = 0; i < 3; i++)
 			    {
@@ -153,13 +140,10 @@ public class Decoder
 			        //System.out.println("Bitstring length is " + bitstring_length);
 			   
 			        int data_length = in.readInt();
-			        //System.out.println("Data length is " +  data_length);
 			    
 			        byte [] data = new byte[data_length];
 			        in.read(data, 0, data_length);
 			    
-			        System.out.println("Read data.");
-			        
 			        if(compression == 0)
 				    {
 				        byte remainder = data[data.length - 1];
@@ -198,7 +182,6 @@ public class Decoder
 					    try
 					    {
 					        string_length = inflater.inflate(string);
-					        //System.out.println("String length of unzipped strings is " + string_length);
 					    }
 					    catch(Exception e)
 					    {
@@ -224,8 +207,10 @@ public class Decoder
 						if(channel > 2)
 							for(int j = 0; j < result.length; j++)
 								result[j] += channel_min;
-						image_table.put(channel, result);
 						System.out.println("Putting data for " + channel_string[channel] + " in image table.");
+						image_table.put(channel, result);
+						System.out.println();
+						
 				    }
 			        else if(compression == 2)
 				    {
@@ -238,15 +223,9 @@ public class Decoder
 				        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
 				        int string_length = 0;
 				        if(bit_type == 0)
-				        {
-				        	//System.out.println("Decompressing zeros.");
 				        	string_length = DeltaMapper.decompressZeroStrings(data, bitstring_length - 1, string);	
-				        }
 				        else
-				        {
-				        	//System.out.println("Decompressing ones.");
 				        	string_length = DeltaMapper.decompressOneStrings(data, bitstring_length - 1, string);
-				        }
 						int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
 						if(number_unpacked != xdim * ydim)
 					    	System.out.println("Number of values unpacked does not agree with image dimensions.");
@@ -260,14 +239,13 @@ public class Decoder
 							for(int j = 0; j < result.length; j++)
 								result[j] += channel_min;
 						
-						image_table.put(channel, result);
 						System.out.println("Putting data for " + channel_string[channel] + " in image table.");
-			        
+						image_table.put(channel, result);
+						System.out.println();
 			        }
 			        else if(compression == 3)
 				    {
-			        	// Running into a bug unzipping data--not same length as input.
-				    	//System.out.println("Byte length of zipped data is " + data.length);
+			        	System.out.println("Decompressing zipped compressed strings.");
 				    	Inflater inflater = new Inflater();
 				    	inflater.setInput(data);
 					    byte [] string   = new byte[xdim * ydim * 4];
@@ -276,40 +254,29 @@ public class Decoder
 					    try
 					    {
 					        string_length = inflater.inflate(string);
-					        //System.out.println("Byte length of unzipped compressed string is " + string_length);
 					        byte remainder = string[string_length - 1];
 					        int remainder_length = (string_length - 1) * 8 - remainder;
 					        if(bitstring_length != remainder_length)
 					    		System.out.println("Length in header and remainder disagree.");
-					        else
-					        	System.out.println("Length in header and remainder agree.");
 					        
 					        // This should be 1, since zip doesn't work well on 0-compressed strings.
 					        byte bit_type = DeltaMapper.checkStringType(string, bitstring_length);
 					        if(bit_type == 0)
-					        {
-					        	System.out.println("Decompressing zeros.");
 					        	string_length = DeltaMapper.decompressZeroStrings(string, bitstring_length - 1, decompressed_string);	
-					        }
 					        else
-					        {
-					        	System.out.println("Decompressing ones.");
 					        	string_length = DeltaMapper.decompressOneStrings(string, bitstring_length - 1, decompressed_string);
-					        }
 					        int number_unpacked = DeltaMapper.unpackStrings2(decompressed_string, string_table, delta);
 							if(number_unpacked != xdim * ydim)
 						    	System.out.println("Number of values unpacked does not agree with image dimensions.");
 							for(int j = 1; j < delta.length; j++)
 							     delta[j] += delta_min;
-							
 							int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-							
 							if(channel > 2)
 								for(int j = 0; j < result.length; j++)
 									result[j] += channel_min;
 							
-							image_table.put(channel, result);
 							System.out.println("Putting data for " + channel_string[channel] + " in image table.");
+							image_table.put(channel, result);
 							System.out.println();
 					    }
 					    catch(Exception e)
