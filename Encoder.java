@@ -32,7 +32,8 @@ public class Encoder
 	byte   [] delta_bytes, delta_strings, zipped_strings; 
 	byte   [] compressed_strings, zipped_compressed_strings;
 	byte   [] channel_type;
-	int    [] channel_init, channel_min, channel_length, channel_compressed_length, channel_zipped_length;
+	int    [] channel_init, channel_min, channel_length, channel_zipped_length;
+	int    [] channel_compressed_length, channel_zipped_compressed_length;
 	int    [] set_sum, channel_sum,channel_delta_min;
 	double [] set_rate, channel_rate;
 	String [] type_string;
@@ -274,8 +275,9 @@ public class Encoder
 		    
 		    // The length of the bit string produced.
 		    channel_length = new int[6];
-		    channel_compressed_length = new int[6];
 		    channel_zipped_length = new int[6];
+		    channel_compressed_length = new int[6];
+		    channel_zipped_compressed_length = new int[6];
 		    
 		    // The look up tables used to pack/unpack strings.
 		    channel_table = new ArrayList();
@@ -460,9 +462,8 @@ public class Encoder
 					 int null_bits                       = bits - remainder;
 					 clipped_string[string_array_length] = (byte)null_bits;
 				}
-				// Add packed string.
 				data_list.add(clipped_string);
-				
+				//*********************************************************************
 				
 				byte [] zipped_string = new byte[xdim * ydim * 2];
 			    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
@@ -470,12 +471,12 @@ public class Encoder
 		    	deflater.finish();
 		    	int zipped_string_length = deflater.deflate(zipped_string);
 		    	deflater.end();
-		    	byte [] clipped_zipped_string = new byte[zipped_string_length];
+		    	clipped_string = new byte[zipped_string_length];
 		    	for(int j = 0; j < zipped_string_length; j++)
-		    		clipped_zipped_string[j] = zipped_string[j];
+		    		clipped_string[j] = zipped_string[j];
 		    	channel_zipped_length[i] = zipped_string_length * 8;
-		    	data_list.add(clipped_zipped_string);
-		    	
+		    	data_list.add(clipped_string);
+		    	//*********************************************************************
 		    	
 		    	double zero_one_ratio = xdim * ydim;
 		        if(histogram.length > 1)
@@ -503,42 +504,57 @@ public class Encoder
 				remainder = (byte)(channel_compressed_length[i] % 8);
 				if(remainder != 0)
 					string_array_length++;
-				byte [] clipped_compressed_string = new byte[string_array_length + 1];
+				clipped_string = new byte[string_array_length + 1];
 				for(int j = 0; j < string_array_length; j++)
-					clipped_compressed_string[j] = compressed_string[j];
-				
+					clipped_string[j] = compressed_string[j];
 				if(remainder == 0)
-				{
-					clipped_compressed_string[string_array_length] = 0;	
-					//System.out.println("Null bits is 0.");
-				}
+					clipped_string[string_array_length] = 0;	
 				else
 				{
 					 byte bits                           = 8;
 					 int null_bits                       = bits - remainder;
-					 clipped_compressed_string[string_array_length] = (byte)null_bits;
-					 //System.out.println("Null bits is " + null_bits);
+					 clipped_string[string_array_length] = (byte)null_bits;
 				}
+				data_list.add(clipped_string);	
+				//*********************************************************************
 				
-				data_list.add(clipped_compressed_string);	
+				zipped_string = new byte[xdim * ydim * 8];
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				deflater.setInput(clipped_string);
+		    	deflater.finish();
+		    	zipped_string_length = deflater.deflate(zipped_string);
+		    	deflater.end();
+		    	clipped_string = new byte[zipped_string_length];
+		    	for(int j = 0; j < zipped_string_length; j++)
+		    		clipped_string[j] = zipped_string[j];
+		    	channel_zipped_compressed_length[i] = zipped_string_length * 8;
+		    	data_list.add(clipped_string);
+		    	//*********************************************************************
 				
-				if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i])
+				if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i]  
+				   && channel_length[i] < channel_zipped_compressed_length[i])
 				{
 				    channel_type[i]	 = 0;
 				    channel_rate[i]  = channel_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else if(channel_zipped_length[i] < channel_compressed_length[i])
+				else if(channel_zipped_length[i] < channel_compressed_length[i] && channel_zipped_length[i] < channel_zipped_compressed_length[i])
 				{
 					channel_type[i] = 1;
 					channel_rate[i]  = channel_zipped_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else
+				else if(channel_compressed_length[i] < channel_zipped_compressed_length[i])
 				{
 					channel_type[i] = 2;
 					channel_rate[i]  = channel_compressed_length[i];
 				    channel_rate[i] /= pixel_length;
+				}
+				else
+				{
+					channel_type[i] = 3;
+					channel_rate[i]  = channel_zipped_compressed_length[i];
+				    channel_rate[i] /= pixel_length;	
 				}
 		    }
 		    
@@ -567,7 +583,6 @@ public class Encoder
 			set_rate[8] = (channel_rate[5] + channel_rate[1] + channel_rate[4]) / 3;
 			set_rate[9] = (channel_rate[5] + channel_rate[4] + channel_rate[2]) / 3;
 			
-			
 			int min_index     = 0;
 			int min_delta_sum = Integer.MAX_VALUE;
 			for(int i = 0; i < 10; i++)
@@ -581,8 +596,20 @@ public class Encoder
 			
 			min_set_id = min_index;
 			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
-			System.out.println();
+			//System.out.println("The compression rate is " + String.format("%.4f", set_rate[min_index]));
+			//System.out.println();
+			
+			int [] channel = DeltaMapper.getChannels(min_set_id);
+			for(int i = 0; i < 3; i++)
+			{
+				int channel_id = channel[i];
+				System.out.println(channel_string[channel_id] + ":");
+				System.out.println("Packed byte length is " + (channel_length[channel_id] / 8));
+				System.out.println("Zipped byte length is " + (channel_zipped_length[channel_id] / 8));
+				System.out.println("Compressed byte length is " + (channel_compressed_length[channel_id] / 8));
+				System.out.println("Zipped compressed byte length is " + (channel_zipped_compressed_length[channel_id] / 8));
+				System.out.println();
+			}
 			
 	    	
 			// This code produces an image that should be exactly the same
