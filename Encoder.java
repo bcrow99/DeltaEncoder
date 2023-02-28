@@ -438,7 +438,7 @@ public class Encoder
 				
 				for(int j = 1; j < delta.length; j++)
 					delta[j] -= channel_delta_min[i];
-				byte [] string      = new byte[xdim * ydim * 2];
+				byte [] string      = new byte[xdim * ydim * 8];
 				channel_length[i]  = DeltaMapper.packStrings2(delta, string_table, string);
 			
 				int string_array_length = channel_length[i] / 8;
@@ -608,7 +608,7 @@ public class Encoder
 				rate  = channel_compressed_length[channel_id];
 				rate /= pixel_length;
 				//System.out.println("Compressed byte length is " + (channel_compressed_length[channel_id] / 8));
-				System.out.println("Zipped string rate is " + String.format("%.4f", rate));
+				System.out.println("Compressed string rate is " + String.format("%.4f", rate));
 				
 				rate  = channel_zipped_compressed_length[channel_id];
 				rate /= pixel_length;
@@ -690,6 +690,7 @@ public class Encoder
 			
 			System.out.println("Min set id is " + min_set_id);
 			int channel[] = DeltaMapper.getChannels(min_set_id);
+			System.out.println();
 			
 			File file = new File("foo");
 		    try
@@ -708,7 +709,6 @@ public class Encoder
 		        	int j = channel[i];
 		            
 		        	System.out.println("Saving " + channel_string[j] + " channel.");
-		        	System.out.println();
 		        	
 		        	// Channel 0-5.
 		            out.writeByte(j);
@@ -717,7 +717,7 @@ public class Encoder
 		            
 		            // Init value for deltas.
 		            out.writeInt(channel_init[j]);
-		            //System.out.println("Init value for deltas is " + channel_init[j]);
+		            System.out.println("Init value for deltas is " + channel_init[j]);
 		        
 		            // Minimum_value for deltas.
 		            out.writeInt(channel_delta_min[j]);
@@ -740,13 +740,14 @@ public class Encoder
 		            if(channel_type[j] < 2)
 		            {
 		                out.writeInt(channel_length[j]);
-		                System.out.println("Bit length is " + channel_length[1]);
+		                System.out.println("Bit length is " + channel_length[j]);
 		            }
 		            else
 		            {
 		        	    out.writeInt(channel_compressed_length[j]);
-		                System.out.println("Bit length is " + channel_compressed_length[1]);	
+		                System.out.println("Bit length is " + channel_compressed_length[j]);	
 		            }
+		            System.out.println();
 		       
 		            ArrayList data_list = (ArrayList)channel_data.get(j);
 		            byte[] data = (byte[])data_list.get(channel_type[j]);

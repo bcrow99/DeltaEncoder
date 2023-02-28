@@ -177,7 +177,7 @@ public class Decoder
 				    	System.out.println("Decompressing zipped strings.");
 				    	Inflater inflater = new Inflater();
 					    inflater.setInput(data, 0, data_length);
-					    byte [] string   = new byte[xdim * ydim * 4];
+					    byte [] string   = new byte[xdim * ydim * 8];
 					    int string_length = 0;
 					    try
 					    {
@@ -219,7 +219,7 @@ public class Decoder
 				        int remainder_length = (data.length - 1) * 8 - remainder;
 				        if(bitstring_length != remainder_length)
 				    		System.out.println("Length in header and remainder disagree.");
-				        byte [] string = new byte[xdim * ydim * 4];
+				        byte [] string = new byte[xdim * ydim * 8];
 				        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
 				        int string_length = 0;
 				        if(bit_type == 0)
@@ -248,8 +248,8 @@ public class Decoder
 			        	System.out.println("Decompressing zipped compressed strings.");
 				    	Inflater inflater = new Inflater();
 				    	inflater.setInput(data);
-					    byte [] string   = new byte[xdim * ydim * 4];
-					    byte [] decompressed_string = new byte[xdim * ydim * 4];
+					    byte [] string   = new byte[xdim * ydim * 8];
+					    byte [] decompressed_string = new byte[xdim * ydim * 8];
 					    int string_length = 0;
 					    try
 					    {
@@ -309,7 +309,7 @@ public class Decoder
 			        	    }
 			        	    else if(image_table.contains(5))
 			        	    {
-			        	    	red_blue = image_table.get(4);	
+			        	    	red_blue = image_table.get(5);	
 			        	        red      = DeltaMapper.getSum(red_blue, blue);	
 			        	    }
 			        	    else
@@ -324,10 +324,8 @@ public class Decoder
 			        if(image_table.containsKey(2))
 			        {
 			        	red = image_table.get(2);	
-			        	
 			        	if(image_table.containsKey(3))
 			        	{
-			        		
 			        	    blue_green = image_table.get(3);
 			        	    blue       = DeltaMapper.getSum(blue_green, green);
 			        	  
@@ -335,7 +333,9 @@ public class Decoder
 			        	else if(image_table.containsKey(5))
 			        	{
 			        		red_blue = image_table.get(5);
-			        	    blue       = DeltaMapper.getSum(red_blue, red);  
+			        		for(int j = 0; j < red_blue.length; j++)
+				            	red_blue[j] = -red_blue[j];
+			        	    blue = DeltaMapper.getSum(red_blue, red);  
 			        	}
 			        	else
 		        	        System.out.println("Table does not contain complete set.");
@@ -347,15 +347,20 @@ public class Decoder
 			        	{
 			        	    blue_green = image_table.get(3);
 			        	    blue       = DeltaMapper.getSum(blue_green, green);
-			        	    red_green = image_table.get(4);
-			        	    red       = DeltaMapper.getSum(red_green, green);
+			        	    red_green  = image_table.get(4);
+			        	    red        = DeltaMapper.getSum(red_green, green);
 			        	}
-			        	else if(image_table.containsKey(3) && image_table.containsKey(5))
+			        	else if(image_table.containsKey(4) && image_table.containsKey(5))
 			        	{
-			        	    blue_green = image_table.get(3);
-			        	    blue       = DeltaMapper.getSum(blue_green, green);
-			        	    red_blue   = image_table.get(5);
-			        	    red        = DeltaMapper.getSum(red_blue, blue);
+			        	    red_green = image_table.get(4);
+			        	    red  = DeltaMapper.getSum(red_green, green);
+			        	    
+			        	    
+			        	    red_blue  = image_table.get(5);
+			        	    for(int j = 0; j < red_blue.length; j++)
+				            	red_blue[j] = -red_blue[j];
+			        	    blue = DeltaMapper.getSum(red_blue, red);
+			        	   
 			        	}
 			        	else
 			        		System.out.println("Table does not contain complete set.");	
@@ -365,37 +370,30 @@ public class Decoder
 			    {
 			        // We have the red channel but not blue or green.
 			        red = image_table.get(2);	
-			        if(image_table.containsKey(4))
+			        if(image_table.containsKey(3) && image_table.containsKey(4))
 			        {
 			            red_green = image_table.get(4);
-			            green     = DeltaMapper.getSum(red_green, red);
-			            if(image_table.containsKey(3))
-			            {
-			                blue_green = 	image_table.get(3);
-			                blue       = DeltaMapper.getSum(blue_green, green);
-			            }
-			            else
-		        	        System.out.println("Table does not contain complete set.");
+			            for(int j = 0; j < red_green.length; j++)
+			            	red_green[j] = -red_green[j];
+			            green      = DeltaMapper.getSum(red_green, red);
+			            blue_green = 	image_table.get(3);
+			            blue       = DeltaMapper.getSum(blue_green, green);
 			        }
-			        else if(image_table.containsKey(5))
+			        else if(image_table.containsKey(4) && image_table.containsKey(5))
 			        {
 			            red_blue = image_table.get(5);	
+			            for(int j = 0; j < red_blue.length; j++)
+			            	red_blue[j] = -red_blue[j];
 			            blue     = DeltaMapper.getSum(red_blue, red);
-			            if(image_table.containsKey(3))
-			            {
-			                blue_green = image_table.get(3);
-			                green      = DeltaMapper.getSum(blue_green, blue);
-			            }
-			            else if(image_table.containsKey(4))
-			            {
-			                red_green = image_table.get(4);
-			                green      = DeltaMapper.getSum(red_green, red); 
-			            }
-			            else
-		        	        System.out.println("Table does not contain complete set.");
+			            
+			            red_green = image_table.get(4);
+			            for(int j = 0; j < red_green.length; j++)
+			            	red_green[j] = -red_green[j];
+			            green      = DeltaMapper.getSum(red_green, red);
 			        }
+			        else
+	        	        System.out.println("Table does not contain complete set.");
 			    }
-			   
 			}
 			catch(Exception e)
 			{
@@ -409,8 +407,10 @@ public class Decoder
 			    {
 			    	int _blue = blue[i * xdim + j];
 			    	_blue <<= pixel_shift;
+			    	
 			    	int _green = green[i * xdim + j];
 			    	_green <<= pixel_shift;
+			    
 			    	int _red   = red[i * xdim + j]; 
 			    	_red <<= pixel_shift;
 			    	
