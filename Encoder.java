@@ -500,6 +500,7 @@ public class Encoder
 				if(zero_one_ratio > .5)
 				{
 					channel_compressed_length[i] = DeltaMapper.compressZeroStrings(string, channel_length[i], compressed_string);
+					channel_bit_type[i] = 0;
 				}
 				else
 				{
@@ -706,7 +707,10 @@ public class Encoder
 			if(!initialized)
 				apply_item.doClick();
 			
-			System.out.println("Min set id is " + min_set_id);
+			System.out.println("Saving " + set_string[min_set_id]);
+			System.out.println("Set rate is " + String.format("%.2f", set_rate[min_set_id]));
+			System.out.println();
+			
 			int channel[] = DeltaMapper.getChannels(min_set_id);
 			System.out.println();
 			
@@ -735,11 +739,11 @@ public class Encoder
 		            
 		            // Init value for deltas.
 		            out.writeInt(channel_init[j]);
-		            System.out.println("Init value for deltas is " + channel_init[j]);
+		            //System.out.println("Init value for deltas is " + channel_init[j]);
 		        
 		            // Minimum_value for deltas.
 		            out.writeInt(channel_delta_min[j]);
-		            System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
+		            //System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
 		        
 		            // Compression type 0-4.
 		            out.writeByte(channel_compression_type[j]);
@@ -747,8 +751,10 @@ public class Encoder
 		            // Bit type.
 		            out.writeByte(channel_bit_type[j]);
 		            
-		            // The length of the table used for
-		            // string packing/unpacking.
+		            System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
+		            System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
+		            System.out.println();
+		            // The length of the table used for string packing/unpacking.
 		            int [] string_table = (int[])channel_table.get(j);
 		            out.writeShort(string_table.length);
 		            //System.out.println("String table length is " + string_table.length);
