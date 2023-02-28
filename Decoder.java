@@ -122,6 +122,8 @@ public class Decoder
 			    
 			        int compression = in.readByte();
 			        //System.out.println("Compression type is " + compression_string[compression]);
+			        
+			        byte compression_bit_type = in.readByte();
 			    
 			        int table_length = 0;
 			    
@@ -136,8 +138,11 @@ public class Decoder
 			        //System.out.println("Read string table.");
 			   
 			        int bitstring_length = 0;
-			        bitstring_length = in.readInt();
+			        int packed_length    = in.readInt();
+			        int compressed_length = in.readInt();
 			        //System.out.println("Bitstring length is " + bitstring_length);
+			        
+			        
 			   
 			        int data_length = in.readInt();
 			    
@@ -146,9 +151,11 @@ public class Decoder
 			    
 			        if(compression == 0)
 				    {
+			        	bitstring_length = packed_length;
+			        	
 				        byte remainder = data[data.length - 1];
 				        int remainder_length = (data.length - 1) * 8 - remainder;
-				       
+				        
 				    	System.out.println("Decompressing packed strings.");
 				    	
 				    	// We don't need to know the bitstring length to unpack delta strings
@@ -174,6 +181,7 @@ public class Decoder
 				    }
 			        else if(compression == 1)
 				    {
+			        	bitstring_length = packed_length;
 				    	System.out.println("Decompressing zipped strings.");
 				    	Inflater inflater = new Inflater();
 					    inflater.setInput(data, 0, data_length);
@@ -214,6 +222,7 @@ public class Decoder
 				    }
 			        else if(compression == 2)
 				    {
+			        	bitstring_length = compressed_length;
 				    	System.out.println("Decompressing compressed strings.");
 				        byte remainder = data[data.length - 1];
 				        int remainder_length = (data.length - 1) * 8 - remainder;
@@ -221,11 +230,25 @@ public class Decoder
 				    		System.out.println("Length in header and remainder disagree.");
 				        byte [] string = new byte[xdim * ydim * 8];
 				        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
+				        if(bit_type != compression_bit_type)
+				        {
+				        	System.out.println("Bit type in header does not agree with bit type in data.");
+				        }
 				        int string_length = 0;
-				        if(bit_type == 0)
+				        if(compression_bit_type == 0)
 				        	string_length = DeltaMapper.decompressZeroStrings(data, bitstring_length - 1, string);	
 				        else
 				        	string_length = DeltaMapper.decompressOneStrings(data, bitstring_length - 1, string);
+				        // The string length might include extra trailing bits, 0 to # of iterations.
+				        // Not sure if any of the original bits get corrupted.  Doesn't seem to mess
+				        // anything up, unless it has something to do with getting the bit type bit wrong.
+				        if(string_length != packed_length)
+				        {
+				        	System.out.println("Length of string returned from recursion is " + string_length);
+				        	System.out.println("Bit type is " + bit_type);
+				        	System.out.println("Compression is " + compression);
+				        	System.out.println("Original string length is " + packed_length);
+				        }
 						int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
 						if(number_unpacked != xdim * ydim)
 					    	System.out.println("Number of values unpacked does not agree with image dimensions.");
@@ -245,6 +268,7 @@ public class Decoder
 			        }
 			        else if(compression == 3)
 				    {
+			        	bitstring_length = compressed_length;
 			        	System.out.println("Decompressing zipped compressed strings.");
 				    	Inflater inflater = new Inflater();
 				    	inflater.setInput(data);
@@ -259,12 +283,25 @@ public class Decoder
 					        if(bitstring_length != remainder_length)
 					    		System.out.println("Length in header and remainder disagree.");
 					        
-					        // This should be 1, since zip doesn't work well on 0-compressed strings.
 					        byte bit_type = DeltaMapper.checkStringType(string, bitstring_length);
-					        if(bit_type == 0)
+					        if(bit_type != compression_bit_type)
+					        {
+					        	System.out.println("Bit type in header disagrees with bit type in data.");
+					        }
+					        if(compression_bit_type == 0)
 					        	string_length = DeltaMapper.decompressZeroStrings(string, bitstring_length - 1, decompressed_string);	
 					        else
 					        	string_length = DeltaMapper.decompressOneStrings(string, bitstring_length - 1, decompressed_string);
+					        // The string length might include extra trailing bits, 0 to # of iterations.
+					        // Not sure if any of the original bits get corrupted.  Doesn't seem to mess
+					        // anything up.
+					        if(string_length != packed_length)
+					        {
+					        	System.out.println("Length of string returned from recursion is " + string_length);
+					        	System.out.println("Bit type is " + bit_type);
+					        	System.out.println("Compression is " + compression);
+					        	System.out.println("Original string length is " + packed_length);
+					        }
 					        int number_unpacked = DeltaMapper.unpackStrings2(decompressed_string, string_table, delta);
 							if(number_unpacked != xdim * ydim)
 						    	System.out.println("Number of values unpacked does not agree with image dimensions.");
@@ -354,8 +391,6 @@ public class Decoder
 			        	{
 			        	    red_green = image_table.get(4);
 			        	    red  = DeltaMapper.getSum(red_green, green);
-			        	    
-			        	    
 			        	    red_blue  = image_table.get(5);
 			        	    for(int j = 0; j < red_blue.length; j++)
 				            	red_blue[j] = -red_blue[j];
