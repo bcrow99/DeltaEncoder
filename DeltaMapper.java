@@ -246,8 +246,6 @@ public class DeltaMapper
             }
         }
         
-        System.out.println("First value in result 1 was " + dst[0]);
-        System.out.println("Init value was " + init_value);
         return dst;
     }
     
@@ -913,8 +911,20 @@ public class DeltaMapper
                 dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
         }
         current_size += 9;
-       
-        // Assuming the type bit and null bits do not need to be cleared.
+        int last_byte = current_size / 8 - 1;
+        int remainder = current_size % 8;
+        int last_bit  = 7;
+        if(remainder != 0)
+        {
+            last_byte++;
+            last_bit = remainder - 1;
+        }
+        byte mask  = (byte)0xfe;
+        mask     <<= last_bit;
+        
+        // Assuming no information in the null bits.
+        dst[last_byte] &= mask;
+        
         return(current_size);
     }
     
@@ -977,7 +987,7 @@ public class DeltaMapper
            mask++;
         }
         
-        System.out.println("The number of iterations is " + number_of_iterations);
+        //System.out.println("The number of iterations is " + number_of_iterations);
         
         current_size = 0;
         if(number_of_iterations == 1)
@@ -1061,8 +1071,7 @@ public class DeltaMapper
                else
                {
                    // Current bit is a 0.
-                   // We want 10 -> 01.
-                   
+                   // We want 10 -> 01. 
                    // Increment and leave a 0 bit.
                    current_bit++;
                    if(current_bit == 8)
@@ -1090,9 +1099,8 @@ public class DeltaMapper
             	// Padding the input makes recursion work since the only values that
             	// get corrupted in the recursion are at the end of the string.
             	// There might be another way to preserve the values at the end of the
-            	// string but it gets pretty complicated.  Adding a byte to the
-            	// input is easy.
-            	// This may have been fixed--check.
+            	// string but it gets pretty complicated.  
+            	
             	
                 current_bit++;
                 if(current_bit == 8)
@@ -1228,7 +1236,6 @@ public class DeltaMapper
         return(number_of_bits);
     }
    
-    
     public static int compressOneStrings(byte src[], int size, byte dst[])
     {
         byte[]  temp = new byte[src.length * 10];
@@ -1240,13 +1247,9 @@ public class DeltaMapper
         {
             previous_size = current_size;
             if(number_of_iterations % 2 == 1)
-            {
                 current_size = compressOneBits(dst, previous_size, temp);
-            }
             else
-            {
                 current_size = compressOneBits(temp, previous_size, dst);
-            }
             number_of_iterations++;
         }
         if(number_of_iterations > 1)
@@ -1299,8 +1302,7 @@ public class DeltaMapper
         mask <<= last_bit;
         dst[last_byte] |= mask;
         
-        // Might want to clear null bits.
-        
+        // Might want to clear null bits first.
         return(current_size);
     }
     
@@ -1494,75 +1496,6 @@ public class DeltaMapper
          
         return(string_type);
     }
-    
-    public static int compressStrings(byte src[], int size, double ratio, byte dst[])
-    {
-    	int length = 0;
-    	byte [] temp = new byte[src.length * 2];
-    	if(ratio > .5) 
-		{
-			System.out.println("Compressing zeros.");
-			length = compressZeroStrings(src, size, temp);
-			
-		}
-		else
-		{
-			System.out.println("Compressing ones.");
-			length =  DeltaMapper.compressOneStrings(src, size, temp);
-		}
-    	System.out.println("Length of compressed string is " + length);
-    	
-    	int lower_byte = length & 0x00FF;
-    	int upper_byte = length >> 8;
-        byte value     = (byte) lower_byte;
-        dst[0]         = value;
-        value          = (byte) upper_byte;
-        dst[1]         = value;
-        
-        int array_length = length / 8;
-        if(length % 8 != 0)
-        	array_length++;
-        
-        for(int i = 0; i < array_length; i++)
-        	dst[i + 2] = temp[i];
-        System.out.println("Length of compressed string is " + length);
-        return(length + 16);
-    }
-    
-    public static int decompressStrings(byte src[], byte dst[])
-    {
-    	 int lower_byte = (int)src[0];
-    	 if(lower_byte < 0)
-    		 lower_byte += 127;
-    	 int upper_byte = (int)src[1];
-    	 if(upper_byte < 0)
-    		 upper_byte += 127;
-    	 upper_byte <<= 8;
-    	 
-    	 int size = lower_byte + upper_byte;
-    	 
-    	 System.out.println("Length of string is " + size);
-    	
-    	 int last_byte = size / 8;
-         int last_bit  = size % 8;
-         byte string_type   = 1;
-         string_type <<= last_bit;
-         string_type &= src[last_byte];
-         
-         int bit_length = 0;
-         if(string_type != 0)
-         {
-         	System.out.println("String type is 1.");
-         	//bit_length = decompressOneStrings(src, size, dst);
-         }
-         else
-         {
-         	System.out.println("String type is 0.");
-         	//bit_length = decompressZeroStrings(src, size, dst);
-         }	
-         return(bit_length);
-    }
-    
     
     public static int[] getChannels(int set_id)
     {
