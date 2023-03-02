@@ -287,11 +287,14 @@ public class Decoder
 					        if(bit_type != compression_bit_type)
 					        {
 					        	System.out.println("Bit type in header disagrees with bit type in data.");
+					        	System.out.println("Bit type in header is " + compression_bit_type);
+					        	System.out.println("Bit type in data is " + bit_type);
 					        }
 					        if(compression_bit_type == 0)
 					        	string_length = DeltaMapper.decompressZeroStrings(string, bitstring_length - 1, decompressed_string);	
 					        else
 					        	string_length = DeltaMapper.decompressOneStrings(string, bitstring_length - 1, decompressed_string);
+					        
 					        // The string length might include extra trailing bits, 0 to # of iterations.
 					        // Not sure if any of the original bits get corrupted.  Doesn't seem to mess
 					        // anything up.

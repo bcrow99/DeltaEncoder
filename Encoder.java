@@ -44,7 +44,7 @@ public class Encoder
 	
 	ArrayList channel_table, channel_data, channel_src;
 	
-	
+	double  file_ratio;
 	int     min_set_id = 0;
 	int     pixel_shift = 3;
 	long    file_length = 0;
@@ -64,9 +64,9 @@ public class Encoder
 		String os           = System.getProperty("os.name");
 		String os_version   = System.getProperty("os.version");
 		String machine      = System.getProperty("os.arch");
-		//System.out.println("Current java version is " + java_version);
-		//System.out.println("Current os is " + os + " " + os_version + " on " + machine);
-		//System.out.println("Image file is " + filename);
+		System.out.println("Current java version is " + java_version);
+		System.out.println("Current os is " + os + " " + os_version + " on " + machine);
+		System.out.println("Image file is " + filename);
 		Encoder encoder = new Encoder(prefix + filename);
 	}
 
@@ -84,12 +84,14 @@ public class Encoder
 			int number_of_bits     = color_model.getPixelSize();
 			xdim                   = original_image.getWidth();
 			ydim                   = original_image.getHeight();
+			
 		    original_pixel         = new int[xdim * ydim];
 		    alpha                  = new int[xdim * ydim];
 			blue                   = new int[xdim * ydim];
 		    green                  = new int[xdim * ydim];
 		    red                    = new int[xdim * ydim];
 		    
+		    // PNG files do not always have this raster type.
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				int[]          pixel = new int[xdim * ydim];
@@ -125,6 +127,8 @@ public class Encoder
 			    	}
 			    }
                
+			    
+			    
 			    JFrame frame = new JFrame("Encoder");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
@@ -233,7 +237,7 @@ public class Encoder
 	{
 		int    [] new_alpha, new_blue, new_green, new_red, new_pixel;
 		int       pixel_length;
-		double    file_ratio;
+		
 		
 		public ApplyHandler()
 		{
@@ -340,8 +344,18 @@ public class Encoder
 		
 		public void actionPerformed(ActionEvent event)
 		{
-		    System.out.println("Pixel shift is " + pixel_shift);
-		    System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
+			// Clear all array lists.
+			channel_src.clear();
+		    channel_table.clear();
+		    
+		    for(int i = 0; i < 6; i++)
+		    {
+		    	ArrayList data_list = (ArrayList)channel_data.get(i);
+		    	data_list.clear();
+		    }
+			
+			System.out.println("Pixel shift is " + pixel_shift);
+		    //System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
 		    System.out.println();
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -415,7 +429,7 @@ public class Encoder
 		    channel_min[5]  = (short)red_blue_min;
 		    channel_init[5] = (short)shifted_red_blue[0]; 
 		    
-		    channel_src.clear();
+		    
 		    channel_src.add(shifted_blue);
 		    channel_src.add(shifted_green);
 		    channel_src.add(shifted_red);
@@ -662,6 +676,7 @@ public class Encoder
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        // Not initalizing the alpha channel.
+		    	// One of the most helpful features of png.
 	            new_pixel[i] = 0;
 	          
 	            new_pixel[i] |= new_blue[i] << 16;
@@ -708,16 +723,19 @@ public class Encoder
 				apply_item.doClick();
 			
 			System.out.println("Saving " + set_string[min_set_id]);
-			System.out.println("Set rate is " + String.format("%.2f", set_rate[min_set_id]));
+			System.out.println("Set rate  is " + String.format("%.2f", set_rate[min_set_id]));
+			System.out.println("RGB rate  is " + String.format("%.2f", set_rate[0]));
+			System.out.println("File rate is " + String.format("%.2f", file_ratio));
+			System.out.println("Shift is     " + pixel_shift);
+		    
 			System.out.println();
 			
 			int channel[] = DeltaMapper.getChannels(min_set_id);
 			System.out.println();
 			
-			File file = new File("foo");
 		    try
 		    {
-		        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+		        DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
 		        
 		        // Dimensions of frame.
 		        out.writeShort(xdim);
@@ -776,8 +794,8 @@ public class Encoder
 		        
 		            // The data itself.
 		            out.write(data, 0, data.length);
-		        }
-		        
+		        } 
+		        out.flush();
 		        out.close();
 		    }
 		    catch(Exception e)

@@ -912,11 +912,10 @@ public class DeltaMapper
             if(remainder > 1)
                 dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
         }
-        //System.out.println("Number of iterations is " + number_of_iterations);
-        
-        // Bitstring plus # of iterations.
-        //return(current_size + 8);
-        return(current_size + 9);
+        current_size += 9;
+       
+        // Assuming the type bit and null bits do not need to be cleared.
+        return(current_size);
     }
     
     public static int decompressZeroStrings(byte src[], int size, byte dst[])
@@ -1287,14 +1286,20 @@ public class DeltaMapper
             if(remainder > 1)
                 dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
         }
-        
-        
         current_size += 9;
-        int current_byte = current_size / 8;
-        int current_bit  = current_size % 8;
+        int last_byte = current_size / 8 - 1;
+        int remainder = current_size % 8;
+        int last_bit  = 7;
+        if(remainder != 0)
+        {
+            last_byte++;
+            last_bit = remainder - 1;
+        }
         byte mask        = 1;
-        mask <<= current_bit;
-        dst[current_byte] |= mask;
+        mask <<= last_bit;
+        dst[last_byte] |= mask;
+        
+        // Might want to clear null bits.
         
         return(current_size);
     }
@@ -1359,7 +1364,6 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        
         System.out.println("The number of iterations is " + number_of_iterations);
         
         
@@ -1397,9 +1401,9 @@ public class DeltaMapper
                 number_of_iterations--;
             }
         }
-        
         return(current_size);
     } 
+    
     public static byte checkStringType(byte src[], int size)
     {
         int  byte_index;
@@ -1407,21 +1411,34 @@ public class DeltaMapper
         int  addend;
         int  mask;
         int  remainder, i;
-        int  previous_size, current_size, byte_size;
+ 
  
          
-        int last_byte = size / 8;
-        int last_bit  = size % 8;
+        int last_byte = size / 8 - 1;
+        remainder = size % 8;
+        
+        int last_bit = 7;
+        if(remainder != 0)
+        {
+        	last_byte++;
+        	last_bit = remainder - 1;
+        }
+     
         byte string_type   = 1;
         string_type <<= last_bit;
         string_type &= src[last_byte];
         if(string_type != 0)
         {
-        	//System.out.println("String type is 1.");
+        	// The value can be 1 thru -127.
+        	// We'll reset it to 1.
+        	System.out.println("String type is " + string_type);
+        	
+        	string_type = 1;
+        	
         }
         else
         {
-        	//System.out.println("String type is 0.");
+        	System.out.println("String type is " + string_type);
         }
         size--;
         
@@ -1474,6 +1491,7 @@ public class DeltaMapper
            mask++;
         }
         //System.out.println("The number of iterations is " + number_of_iterations);
+         
         return(string_type);
     }
     
