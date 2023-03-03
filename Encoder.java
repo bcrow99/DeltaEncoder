@@ -29,8 +29,8 @@ public class Encoder
 	int [] green;
 	int [] blue;
 	
-	byte   [] delta_bytes, delta_strings, zipped_strings; 
-	byte   [] compressed_strings, zipped_compressed_strings;
+	//byte   [] delta_bytes, delta_strings, zipped_strings; 
+	//byte   [] compressed_strings, zipped_compressed_strings;
 	byte   [] channel_compression_type, channel_bit_type;
 	int    [] channel_init, channel_min, channel_length, channel_zipped_length;
 	int    [] channel_compressed_length, channel_zipped_compressed_length;
@@ -57,8 +57,8 @@ public class Encoder
 			System.out.println("Usage: java Encoder <filename>");
 			System.exit(0);
 		}
-	    String prefix      = new String("");
-	    //String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+	    //String prefix      = new String("");
+	    String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
 		String os           = System.getProperty("os.name");
@@ -127,8 +127,6 @@ public class Encoder
 			    	}
 			    }
                
-			    
-			    
 			    JFrame frame = new JFrame("Encoder");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
@@ -458,7 +456,7 @@ public class Encoder
 				
 				for(int j = 1; j < delta.length; j++)
 					delta[j] -= channel_delta_min[i];
-				byte [] string      = new byte[xdim * ydim * 8];
+				byte [] string      = new byte[xdim * ydim * 4];
 				channel_length[i]  = DeltaMapper.packStrings2(delta, string_table, string);
 			
 				int string_array_length = channel_length[i] / 8;
@@ -479,7 +477,7 @@ public class Encoder
 				data_list.add(clipped_string);
 				//*********************************************************************
 				
-				byte [] zipped_string = new byte[xdim * ydim * 2];
+				byte [] zipped_string = new byte[string.length * 2];
 			    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
 		    	deflater.setInput(clipped_string);
 		    	deflater.finish();
@@ -502,7 +500,7 @@ public class Encoder
 					zero_one_ratio -= min_value;
 		        }	
 			    zero_one_ratio  /= channel_length[i];
-				byte[] compressed_string = new byte[xdim * ydim * 4];	
+				byte[] compressed_string = new byte[string.length * 2];	
 				
 				// It's worth noting that odd 0's at the end of the output double themselves in the recursive process,
 				// although a single iteration can be managed accurately.  Seems that the original length of the bitstring is intact,
@@ -539,7 +537,7 @@ public class Encoder
 				data_list.add(clipped_string);	
 				//*********************************************************************
 				
-				zipped_string = new byte[xdim * ydim * 8];
+				zipped_string = new byte[clipped_string.length * 2];
 				deflater = new Deflater(Deflater.BEST_COMPRESSION);
 				deflater.setInput(clipped_string);
 		    	deflater.finish();
@@ -578,7 +576,6 @@ public class Encoder
 				    channel_rate[i] /= pixel_length;	
 				}
 		    }
-		    
 		    
 			//System.out.println("************************************************************************");
 		   
@@ -802,7 +799,6 @@ public class Encoder
 		    {
 			    System.out.println(e.toString());
 		    }
-		    
 		}
 	}
 }

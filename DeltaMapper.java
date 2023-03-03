@@ -845,7 +845,7 @@ public class DeltaMapper
    
     public static int compressZeroStrings(byte src[], int size, byte dst[])
     {
-        byte[]  temp = new byte[src.length * 10];
+        byte[]  temp = new byte[src.length * 2];
         
         int number_of_iterations = 1;
         int previous_size        = size;
@@ -1227,7 +1227,7 @@ public class DeltaMapper
    
     public static int compressOneStrings(byte src[], int size, byte dst[])
     {
-        byte[]  temp = new byte[src.length * 10];
+        byte[]  temp = new byte[src.length * 2];
         
         int number_of_iterations = 1;
         int previous_size        = size;
