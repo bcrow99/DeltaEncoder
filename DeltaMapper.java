@@ -656,14 +656,6 @@ public class DeltaMapper
     
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
-    	// Not using this currently, but gives us a handle on the
-    	// ratio of zero and one bits, which is a good predictor
-    	// of whether or not the bit transform will increase or
-    	// decrease the length of the bit string, instead of just
-    	// going ahead and doing the transform and checking the 
-    	// result.
-        int number_of_zero_bits = 0;
-        
         for(int i = 0; i < dst.length; i++)
         	dst[i] = 0;
         int current_byte        = 0;
@@ -689,7 +681,6 @@ public class DeltaMapper
                if((src[k] & (mask << j)) == 0)
                {
                    // Current bit is a 0.
-                   number_of_zero_bits++;
                    current_bit++;
                    if(current_bit == 8)
                    {
@@ -740,7 +731,6 @@ public class DeltaMapper
                     current_byte++;
                     current_bit = dst[current_byte] = 0;
                 }
-                number_of_zero_bits++;
                 current_bit++;
                 if(current_bit == 8)
                 {
@@ -1028,9 +1018,7 @@ public class DeltaMapper
        
         return(current_size);
     }
-    
-    
-    
+   
     public static int compressOneBits(byte src[], int size, byte dst[])
     {
         for(int i = 0; i < dst.length; i++)
@@ -1098,16 +1086,12 @@ public class DeltaMapper
             {
                 // Put a 0 down to signal that there is an odd 1.
             	// This works for single iterations but fails in the recursive case.
-            	// Padding the input makes recursion work since the only values that
-            	// get corrupted in the recursion are at the end of the string.
-            	// There might be another way to preserve the values at the end of the
+            	// There may be another way to preserve the values at the end of the
             	// string but it gets pretty complicated. 
-            	
             	// It might be the original length is uncorrupted but haven't checked.
             	// It seems like everything works without padding the input. Still can't trust
             	// that the length returned by the string decompression functions arent off by 
             	// the number of iterations, so it helps to know the original length.
-            	
                 current_bit++;
                 if(current_bit == 8)
                 {
@@ -1238,7 +1222,6 @@ public class DeltaMapper
        
         int number_of_bits = current_byte * 8;
         number_of_bits += current_bit;
-        
         return(number_of_bits);
     }
    
@@ -1309,8 +1292,6 @@ public class DeltaMapper
         byte mask        = 1;
         mask <<= last_bit;
         dst[last_byte] |= mask;
-        
-        // Might want to clear null bits first.
         return(current_size);
     }
     
@@ -1362,8 +1343,6 @@ public class DeltaMapper
                 number_of_iterations += addend;
                 mask++;
             }
-            else
-                mask = 1;
         }
         else
         {
@@ -1374,8 +1353,6 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        //System.out.println("The number of iterations is " + number_of_iterations);
-        
         
         current_size = 0;
         if(number_of_iterations == 1)
@@ -1420,13 +1397,10 @@ public class DeltaMapper
         int  number_of_iterations;
         int  addend;
         int  mask;
-        int  remainder, i;
+
  
- 
-         
         int last_byte = size / 8 - 1;
-        remainder = size % 8;
-        
+        int remainder = size % 8; 
         int last_bit = 7;
         if(remainder != 0)
         {
@@ -1441,14 +1415,12 @@ public class DeltaMapper
         {
         	// The value can be 1 thru -127.
         	// We'll reset it to 1.
-        	System.out.println("String type is " + string_type);
-        	
         	string_type = 1;
-        	
+        	//System.out.println("String type is " + string_type);
         }
         else
         {
-        	System.out.println("String type is " + string_type);
+        	//System.out.println("String type is " + string_type);
         }
         size--;
         
@@ -1460,7 +1432,7 @@ public class DeltaMapper
         {
             int value = 254;
             addend = 2;
-            for(i = 1; i < remainder; i++)
+            for(int i = 1; i < remainder; i++)
             {
                 value -= addend;
                 addend <<= 1;
@@ -1475,7 +1447,7 @@ public class DeltaMapper
             if(remainder > 1)
             {
                 mask = 1;
-                for(i = 2; i < remainder; i++)
+                for(int i = 2; i < remainder; i++)
                 {
                     mask <<= 1;
                     mask++;
@@ -1488,8 +1460,6 @@ public class DeltaMapper
                 number_of_iterations += addend;
                 mask++;
             }
-            else
-                mask = 1;
         }
         else
         {

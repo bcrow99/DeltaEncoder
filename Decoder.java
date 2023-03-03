@@ -328,11 +328,10 @@ public class Decoder
 			    }
 			    in.close();
 			    
-			 
+			    // Figure out what channels we have.
 			    if(image_table.containsKey(0))
 			    {
 			        blue = image_table.get(0);	
-			        
 			        if(image_table.containsKey(1))
 			        {
 			        	green = image_table.get(1);
@@ -372,7 +371,7 @@ public class Decoder
 			        		}
 			        		else if(image_table.containsKey(4))
 			        		{
-			        			red_green = image_table.get(3);
+			        			red_green = image_table.get(4);
 			        		    for(int i = 0; i < red_green.length; i++)
 			        		    	red_green[i] = - red_green[i];
 			        		    green = DeltaMapper.getSum(red_green, red);    	
