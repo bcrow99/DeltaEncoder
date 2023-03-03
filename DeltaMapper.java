@@ -911,6 +911,8 @@ public class DeltaMapper
                 dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
         }
         current_size += 9;
+        
+        
         int last_byte = current_size / 8 - 1;
         int remainder = current_size % 8;
         int last_bit  = 7;
@@ -922,8 +924,8 @@ public class DeltaMapper
         byte mask  = (byte)0xfe;
         mask     <<= last_bit;
         
-        // Assuming no information in the null bits.
         dst[last_byte] &= mask;
+        
         
         return(current_size);
     }
@@ -1099,8 +1101,12 @@ public class DeltaMapper
             	// Padding the input makes recursion work since the only values that
             	// get corrupted in the recursion are at the end of the string.
             	// There might be another way to preserve the values at the end of the
-            	// string but it gets pretty complicated.  
+            	// string but it gets pretty complicated. 
             	
+            	// It might be the original length is uncorrupted but haven't checked.
+            	// It seems like everything works without padding the input. Still can't trust
+            	// that the length returned by the string decompression functions arent off by 
+            	// the number of iterations, so it helps to know the original length.
             	
                 current_bit++;
                 if(current_bit == 8)
@@ -1298,6 +1304,8 @@ public class DeltaMapper
             last_byte++;
             last_bit = remainder - 1;
         }
+        
+       // Might want to clear null bits first.
         byte mask        = 1;
         mask <<= last_bit;
         dst[last_byte] |= mask;
@@ -1366,7 +1374,7 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        System.out.println("The number of iterations is " + number_of_iterations);
+        //System.out.println("The number of iterations is " + number_of_iterations);
         
         
         current_size = 0;
@@ -1563,8 +1571,6 @@ public class DeltaMapper
     	}
     	return channel;
     }
-    
-   
     
 	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
 	{

@@ -328,6 +328,7 @@ public class Decoder
 			    }
 			    in.close();
 			    
+			 
 			    if(image_table.containsKey(0))
 			    {
 			        blue = image_table.get(0);	
@@ -355,6 +356,74 @@ public class Decoder
 			        	    else
 			        	        System.out.println("Table does not contain complete set.");
 			        	}	
+			        }
+			        else
+			        {
+			        	if(image_table.containsKey(2))
+				        {
+			        		// We have a blue and red channel, we need a green channel.
+			        		red = image_table.get(2);	
+			        		if(image_table.containsKey(3))
+			        		{
+			        		    blue_green = image_table.get(3);
+			        		    for(int i = 0; i < blue_green.length; i++)
+			        		    	blue_green[i] = - blue_green[i];
+			        		    green = DeltaMapper.getSum(blue_green, blue);
+			        		}
+			        		else if(image_table.containsKey(4))
+			        		{
+			        			red_green = image_table.get(3);
+			        		    for(int i = 0; i < red_green.length; i++)
+			        		    	red_green[i] = - red_green[i];
+			        		    green = DeltaMapper.getSum(red_green, red);    	
+			        		}
+			        		else
+			        		{
+			        			System.out.println("Image table does not contain complete set.");
+			        			for(int i = 0; i < 6; i++)
+			        			{
+			        				if(image_table.containsKey(i))
+			        				{
+			        					System.out.println("Image table contains " + channel_string[i]);
+			        				}
+			        			}
+			        			System.out.println();	
+			        		}
+				        }
+			        	else
+			        	{
+			        		// Blue, but no red or green channel.
+			        		if(image_table.containsKey(3) && image_table.containsKey(5))
+			        		{
+			        		    blue_green = image_table.get(3);
+			        		    for(int i = 0; i < blue_green.length; i++)
+			        		    	blue_green[i] = -blue_green[i];
+			        		    green = DeltaMapper.getSum(blue_green, blue); 
+			        		    red_blue = image_table.get(5);
+			        		    red   = DeltaMapper.getSum(red_blue, blue); 
+			        		}
+			        		else if(image_table.containsKey(4)&& image_table.containsKey(5) )
+			        		{
+			        		    red_blue = image_table.get(5);
+			        		    red = DeltaMapper.getSum(red_blue, blue);
+			        		    red_green = image_table.get(4);
+			        		    for(int i = 0; i < red_green.length; i++)
+			        		    	red_green[i] = -red_green[i];
+			        		    green = DeltaMapper.getSum(red_green, red);
+			        		}
+			        		else
+			        		{
+			        			System.out.println("Image table does not contain complete set.");
+			        			for(int i = 0; i < 6; i++)
+			        			{
+			        				if(image_table.containsKey(i))
+			        				{
+			        					System.out.println("Image table contains " + channel_string[i]);
+			        				}
+			        			}
+			        			System.out.println();
+			        		}
+			        	}
 			        }
 			    }
 			    else if(image_table.containsKey(1))

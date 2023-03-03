@@ -57,16 +57,16 @@ public class Encoder
 			System.out.println("Usage: java Encoder <filename>");
 			System.exit(0);
 		}
-	    //String prefix      = new String("");
-	    String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+	    String prefix      = new String("");
+	    //String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
 		String os           = System.getProperty("os.name");
 		String os_version   = System.getProperty("os.version");
 		String machine      = System.getProperty("os.arch");
-		System.out.println("Current java version is " + java_version);
-		System.out.println("Current os is " + os + " " + os_version + " on " + machine);
-		System.out.println("Image file is " + filename);
+		//System.out.println("Current java version is " + java_version);
+		//System.out.println("Current os is " + os + " " + os_version + " on " + machine);
+		//System.out.println("Image file is " + filename);
 		Encoder encoder = new Encoder(prefix + filename);
 	}
 
