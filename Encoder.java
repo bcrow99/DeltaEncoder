@@ -29,11 +29,10 @@ public class Encoder
 	int [] green;
 	int [] blue;
 	
-	//byte   [] delta_bytes, delta_strings, zipped_strings; 
-	//byte   [] compressed_strings, zipped_compressed_strings;
 	byte   [] channel_compression_type, channel_bit_type;
 	int    [] channel_init, channel_min, channel_length, channel_zipped_length;
 	int    [] channel_compressed_length, channel_zipped_compressed_length;
+	int    [] channel_zipped_byte_length;
 	int    [] set_sum, channel_sum,channel_delta_min;
 	double [] set_rate, channel_rate;
 	String [] type_string;
@@ -215,6 +214,10 @@ public class Encoder
 				frame.setLocation(400, 200);
 				frame.setVisible(true);
 			} 
+			else
+			{
+				System.out.println("File raster type not supported.");
+			}
 		} 
 		catch (Exception e)
 		{
@@ -251,20 +254,18 @@ public class Encoder
 		    new_pixel   = new int[xdim * ydim];
 		    
 		   
-		    // The 4 different kinds of compressions we intend to evaluate per channel.
+		    // The 5 different kinds of compressions we intend to evaluate per channel.
 		    // Huffman encoding usually offers some amount of compression unless
 		    // the blocks are so small the extra overhead becomes significant.
-		    // We're using png files to get a ratio for simple zip encoding, another alternative.
-		  
-		    type_string    = new String[5];
+		    type_string = new String[6];
 			type_string[0] = new String("strings");
 			type_string[1] = new String("zipped strings");
 			type_string[2] = new String("compressed strings");
 			type_string[3] = new String("zipped compressed strings");
-			
+			type_string[4] = new String("zipped bytes");
 			// If a frame is divided into blocks, there 
 			// might be multiple types of compression.
-			type_string[4] = new String("mixed");
+			type_string[5] = new String("mixed");
 		  
 		    // The delta sum for each channel.
 		    channel_sum  = new int[6];
@@ -283,6 +284,7 @@ public class Encoder
 		    channel_zipped_length = new int[6];
 		    channel_compressed_length = new int[6];
 		    channel_zipped_compressed_length = new int[6];
+		    channel_zipped_byte_length = new int[6];
 		    
 		    // The look up tables used to pack/unpack strings.
 		    channel_table = new ArrayList();
@@ -451,6 +453,74 @@ public class Encoder
 				int [] string_table = DeltaMapper.getRandomTable(histogram);
 				channel_table.add(string_table);
 				
+				
+				
+				
+				int    number_of_values = 0;
+				int    predicted_bit_length = 0;
+				double predicted_zero_one_ratio = 0;
+				int    min_value = Integer.MAX_VALUE;
+				
+				for(int j = 0; j < histogram.length; j++)
+				{
+					number_of_values += histogram[j];
+					if(histogram.length == 1)
+					{
+					    predicted_bit_length = number_of_values;
+					    predicted_zero_one_ratio = 1.;
+					}
+					else if(histogram.length == 2)
+					{
+					    predicted_bit_length += histogram[j];
+					    if(j == 1)
+					    {
+					    	if(histogram[0] > histogram[1])
+					    	    predicted_zero_one_ratio = histogram[0];
+					    	else
+					    		predicted_zero_one_ratio = histogram[1];
+					    	predicted_zero_one_ratio /= number_of_values;
+					    }
+					}
+					else
+					{
+						int k = string_table[j];
+					    if(j < histogram.length - 1)	
+					    {
+					        predicted_bit_length += histogram[j] * (k + 1); 
+					        if(histogram[j] < min_value)
+					        	min_value = histogram[j];
+					    }
+					    else
+					    {
+					    	predicted_bit_length += histogram[j] * (k + 1);
+					    	 if(histogram[j] < min_value)
+						        	min_value = histogram[j];
+					    	
+					    	predicted_zero_one_ratio  = number_of_values;
+					    	predicted_zero_one_ratio -= min_value;
+					    	
+					    	predicted_zero_one_ratio /= predicted_bit_length;
+					    	// Don't understand why the bit length always 
+					    	// seems to be off by a little bit.
+					    	// Works well enough to be useful.
+					    	// We can predict the (approximate) length of a bit string 
+					    	// and whether it's likely to compress further.
+					    }
+					}
+				}
+				
+				
+				
+				
+				System.out.println("Predicted bit length of packed strings is " + predicted_bit_length);
+				System.out.println("Predicted zero one ratio is " + String.format("%.2f", predicted_zero_one_ratio));
+				if(number_of_values != xdim * ydim)
+					System.out.println("Number of values did not agree with image_dimensions.");
+				
+				
+				
+			
+				
 				ArrayList data_list = (ArrayList)channel_data.get(i);
 				data_list.clear();
 				
@@ -491,14 +561,17 @@ public class Encoder
 		    	//*********************************************************************
 		    	
 		    	double zero_one_ratio = xdim * ydim;
+		    	System.out.println("Actual zero one ratio initialized to " + String.format("%.0f", zero_one_ratio));
 		        if(histogram.length > 1)
 		        {
-					int min_value = Integer.MAX_VALUE;
+					min_value = Integer.MAX_VALUE;
 					for(int j = 0; j < histogram.length; j++)
 						 if(histogram[j] < min_value)
 							min_value = histogram[j];
 					zero_one_ratio -= min_value;
+					System.out.println("Subtracting " + min_value);
 		        }	
+		        System.out.println("Dividing by " + channel_length[i]);
 			    zero_one_ratio  /= channel_length[i];
 				byte[] compressed_string = new byte[string.length * 2];	
 				
@@ -509,6 +582,7 @@ public class Encoder
 				// although the length returned by the decompression functions should be close and sometimes the same.  Not
 				// sure if it's something that ever screws things up.  The limit of the difference should be the number of iterations of
 				// the bitwise compression.
+				
 				if(zero_one_ratio > .5)
 				{
 					channel_compressed_length[i] = DeltaMapper.compressZeroStrings(string, channel_length[i], compressed_string);
@@ -550,29 +624,75 @@ public class Encoder
 		    	data_list.add(clipped_string);
 		    	//*********************************************************************
 				
-				if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i]  
-				   && channel_length[i] < channel_zipped_compressed_length[i])
+		    	// Huffman encoding actual pixel values for bgr.
+		    	// Want to encode deltas.
+		    	if(i < 3)
+		    	{
+		    	    byte [] image_bytes = new byte[xdim * ydim];
+		    	    for(int j = 0; j < image_bytes.length; j++)
+		    	    	image_bytes[j] = (byte)src[j];
+		    	    deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    	    deflater.setInput(image_bytes);
+			    	deflater.finish();	
+			    	zipped_string = new byte[image_bytes.length * 2];
+			    	zipped_string_length = deflater.deflate(zipped_string);
+			    	deflater.end();
+			    	clipped_string = new byte[zipped_string_length];
+			    	for(int j = 0; j < zipped_string_length; j++)
+			    		clipped_string[j] = zipped_string[j];
+			    	channel_zipped_byte_length[i] = zipped_string_length * 8;
+			    	data_list.add(clipped_string);
+		    	}
+		    	else
+		    	{
+		    		// Not trying to deal with difference frames yet,
+		    		// which can have a range that exceeds maximum byte value.
+		    		channel_zipped_byte_length[i] = pixel_length;
+		    	}
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	
+		    	if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i]  
+				   && channel_length[i] < channel_zipped_compressed_length[i] && channel_length[i] < channel_zipped_byte_length[i])
 				{
 				    channel_compression_type[i]	 = 0;
 				    channel_rate[i]  = channel_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else if(channel_zipped_length[i] < channel_compressed_length[i] && channel_zipped_length[i] < channel_zipped_compressed_length[i])
+				else if(channel_zipped_length[i] < channel_compressed_length[i] && channel_zipped_length[i] < channel_zipped_compressed_length[i]
+				    && channel_zipped_length[i] < channel_zipped_byte_length[i])
 				{
 					channel_compression_type[i] = 1;
 					channel_rate[i]  = channel_zipped_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else if(channel_compressed_length[i] < channel_zipped_compressed_length[i])
+				else if(channel_compressed_length[i] < channel_zipped_compressed_length[i] && channel_compressed_length[i] < channel_zipped_byte_length[i])
 				{
 					channel_compression_type[i] = 2;
 					channel_rate[i]  = channel_compressed_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else
+				else if(channel_zipped_compressed_length[i] < channel_zipped_byte_length[i])
 				{
 					channel_compression_type[i] = 3;
 					channel_rate[i]  = channel_zipped_compressed_length[i];
+				    channel_rate[i] /= pixel_length;	
+				}
+				else
+				{
+					channel_compression_type[i] = 4;
+					channel_rate[i]  = channel_zipped_byte_length[i];
 				    channel_rate[i] /= pixel_length;	
 				}
 		    }
@@ -617,6 +737,19 @@ public class Encoder
 			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
 			System.out.println();
 			
+			double min_delta_rate = Double.MAX_VALUE;
+			for(int i = 0; i < 10; i++)
+			{
+				if(set_rate[i] < min_delta_rate)
+				{
+				    min_delta_rate = set_rate[i];
+				    min_index = i;
+				}
+			}
+			System.out.println("A set with the lowest compression ratio is " + set_string[min_index]);
+			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
+			System.out.println();
+			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			
 			double rate = 1;
@@ -642,8 +775,11 @@ public class Encoder
 				
 				rate  = channel_zipped_compressed_length[channel_id];
 				rate /= pixel_length;
-				//System.out.println("Zipped compressed byte length is " + (channel_zipped_compressed_length[channel_id] / 8));
 				System.out.println("Zipped compressed string rate is " + String.format("%.4f", rate));
+				
+				rate  = channel_zipped_byte_length[channel_id];
+				rate /= pixel_length;
+				System.out.println("Zipped byte length is " + String.format("%.4f", rate));
 				
 				System.out.println();
 			}
@@ -673,7 +809,6 @@ public class Encoder
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        // Not initalizing the alpha channel.
-		    	// One of the most helpful features of png.
 	            new_pixel[i] = 0;
 	          
 	            new_pixel[i] |= new_blue[i] << 16;
@@ -705,7 +840,6 @@ public class Encoder
 		    	{
 		    		image.setRGB(i, j, original_pixel[j * xdim + i]);
 		    	}
-		    	
 		    } 
 			System.out.println("Reloaded original image.");
 			image_canvas.repaint();
@@ -760,7 +894,7 @@ public class Encoder
 		            out.writeInt(channel_delta_min[j]);
 		            //System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
 		        
-		            // Compression type 0-4.
+		            // Compression type 0-5.
 		            out.writeByte(channel_compression_type[j]);
 		            
 		            // Bit type.
