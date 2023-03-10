@@ -32,7 +32,7 @@ public class Encoder
 	byte   [] channel_compression_type, channel_bit_type;
 	int    [] channel_init, channel_min, channel_length, channel_zipped_length;
 	int    [] channel_compressed_length, channel_zipped_compressed_length;
-	int    [] channel_zipped_byte_length;
+	int    [] channel_zipped_delta_length, channel_zipped_pixel_length;
 	int    [] set_sum, channel_sum,channel_delta_min;
 	double [] set_rate, channel_rate;
 	String [] type_string;
@@ -40,6 +40,8 @@ public class Encoder
 	String [] channel_string;
 	int    [] shifted_blue, shifted_green, shifted_red;
 	int    [] shifted_blue_green, shifted_red_green, shifted_red_blue;
+	
+	int    [][] compression_length;
 	
 	ArrayList channel_table, channel_data, channel_src;
 	
@@ -254,18 +256,19 @@ public class Encoder
 		    new_pixel   = new int[xdim * ydim];
 		    
 		   
-		    // The 5 different kinds of compressions we intend to evaluate per channel.
+		    // The 6 different kinds of compressions we intend to evaluate per channel.
 		    // Huffman encoding usually offers some amount of compression unless
 		    // the blocks are so small the extra overhead becomes significant.
-		    type_string = new String[6];
+		    type_string    = new String[7];
 			type_string[0] = new String("strings");
 			type_string[1] = new String("zipped strings");
 			type_string[2] = new String("compressed strings");
 			type_string[3] = new String("zipped compressed strings");
-			type_string[4] = new String("zipped bytes");
+			type_string[4] = new String("zipped delta bytes");
+			type_string[5] = new String("zipped pixel bytes");
 			// If a frame is divided into blocks, there 
 			// might be multiple types of compression.
-			type_string[5] = new String("mixed");
+			type_string[6] = new String("mixed");
 		  
 		    // The delta sum for each channel.
 		    channel_sum  = new int[6];
@@ -279,12 +282,15 @@ public class Encoder
 		    // What type of string being compressed.
 		    channel_bit_type = new byte[6];
 		    
-		    // The lengths of the bit string produced.
-		    channel_length = new int[6];
-		    channel_zipped_length = new int[6];
-		    channel_compressed_length = new int[6];
+		    compression_length = new int[6][6];
+		    
+		    // The lengths of the bit string produced for each channel.
+		    channel_length                   = new int[6];
+		    channel_zipped_length            = new int[6];
+		    channel_compressed_length        = new int[6];
 		    channel_zipped_compressed_length = new int[6];
-		    channel_zipped_byte_length = new int[6];
+		    channel_zipped_delta_length      = new int[6];
+		    channel_zipped_pixel_length      = new int[6];
 		    
 		    // The look up tables used to pack/unpack strings.
 		    channel_table = new ArrayList();
@@ -512,8 +518,8 @@ public class Encoder
 				
 				
 				
-				System.out.println("Predicted bit length of packed strings is " + predicted_bit_length);
-				System.out.println("Predicted zero one ratio is " + String.format("%.2f", predicted_zero_one_ratio));
+				//System.out.println("Predicted bit length of packed strings is " + predicted_bit_length);
+				//System.out.println("Predicted zero one ratio is " + String.format("%.2f", predicted_zero_one_ratio));
 				if(number_of_values != xdim * ydim)
 					System.out.println("Number of values did not agree with image_dimensions.");
 				
@@ -528,6 +534,7 @@ public class Encoder
 					delta[j] -= channel_delta_min[i];
 				byte [] string      = new byte[xdim * ydim * 4];
 				channel_length[i]  = DeltaMapper.packStrings2(delta, string_table, string);
+				compression_length[i][0] = channel_length[i];
 			
 				int string_array_length = channel_length[i] / 8;
 				byte remainder = (byte)(channel_length[i] % 8);
@@ -557,11 +564,12 @@ public class Encoder
 		    	for(int j = 0; j < zipped_string_length; j++)
 		    		clipped_string[j] = zipped_string[j];
 		    	channel_zipped_length[i] = zipped_string_length * 8;
+		    	compression_length[i][1] = channel_zipped_length[i];
 		    	data_list.add(clipped_string);
 		    	//*********************************************************************
 		    	
 		    	double zero_one_ratio = xdim * ydim;
-		    	System.out.println("Actual zero one ratio initialized to " + String.format("%.0f", zero_one_ratio));
+		    	//System.out.println("Actual zero one ratio initialized to " + String.format("%.0f", zero_one_ratio));
 		        if(histogram.length > 1)
 		        {
 					min_value = Integer.MAX_VALUE;
@@ -569,15 +577,14 @@ public class Encoder
 						 if(histogram[j] < min_value)
 							min_value = histogram[j];
 					zero_one_ratio -= min_value;
-					System.out.println("Subtracting " + min_value);
+					//System.out.println("Subtracting " + min_value);
 		        }	
-		        System.out.println("Dividing by " + channel_length[i]);
 			    zero_one_ratio  /= channel_length[i];
 				byte[] compressed_string = new byte[string.length * 2];	
 				
-				// It's worth noting that odd 0's at the end of the output double themselves in the recursive process,
-				// although a single iteration can be managed accurately.  Seems that the original length of the bitstring is intact,
-				// although I haven't exactly checked.
+				// Odd 0's at the end of the output double themselves in the recursive process,
+				// although a single iteration can be managed accurately.  The original length of the bitstring might be intact.
+				
 				// As long as you use the original length instead of the length returned by the decompression functions everything works,
 				// although the length returned by the decompression functions should be close and sometimes the same.  Not
 				// sure if it's something that ever screws things up.  The limit of the difference should be the number of iterations of
@@ -593,6 +600,7 @@ public class Encoder
 					channel_compressed_length[i] =  DeltaMapper.compressOneStrings(string, channel_length[i], compressed_string);
 					channel_bit_type[i] = 1;
 				}
+				compression_length[i][2] = channel_compressed_length[i];
 				string_array_length = channel_compressed_length[i] / 8;
 				remainder = (byte)(channel_compressed_length[i] % 8);
 				if(remainder != 0)
@@ -621,17 +629,22 @@ public class Encoder
 		    	for(int j = 0; j < zipped_string_length; j++)
 		    		clipped_string[j] = zipped_string[j];
 		    	channel_zipped_compressed_length[i] = zipped_string_length * 8;
+		    	compression_length[i][3] = channel_zipped_compressed_length[i];
 		    	data_list.add(clipped_string);
 		    	//*********************************************************************
 				
-		    	// Huffman encoding actual pixel values for bgr.
-		    	// Want to encode deltas.
-		    	if(i < 3)
+		    	byte [] image_bytes = new byte[xdim * ydim];
+		    	
+		    	
+		    	int number_of_zero_values = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    			if(histogram[j] == 0)
+	    				number_of_zero_values++; 
+		    	if(histogram.length - number_of_zero_values < 257)
 		    	{
-		    	    byte [] image_bytes = new byte[xdim * ydim];
-		    	    for(int j = 0; j < image_bytes.length; j++)
-		    	    	image_bytes[j] = (byte)src[j];
-		    	    deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    		for(int j = 0; j < image_bytes.length; j++)
+		    	    	image_bytes[j] = (byte)delta[j];
+		    		deflater = new Deflater(Deflater.BEST_COMPRESSION);
 		    	    deflater.setInput(image_bytes);
 			    	deflater.finish();	
 			    	zipped_string = new byte[image_bytes.length * 2];
@@ -640,50 +653,74 @@ public class Encoder
 			    	clipped_string = new byte[zipped_string_length];
 			    	for(int j = 0; j < zipped_string_length; j++)
 			    		clipped_string[j] = zipped_string[j];
-			    	channel_zipped_byte_length[i] = zipped_string_length * 8;
+			    	channel_zipped_delta_length[i] = zipped_string_length * 8;
+			    	compression_length[i][4] = channel_zipped_delta_length[i];
 			    	data_list.add(clipped_string);
 		    	}
 		    	else
 		    	{
-		    		// Not trying to deal with difference frames yet,
-		    		// which can have a range that exceeds maximum byte value.
-		    		channel_zipped_byte_length[i] = pixel_length;
+		    		channel_zipped_delta_length[i] = pixel_length;
+		    		compression_length[i][4] = channel_zipped_delta_length[i];
+		    		data_list.add(delta);
+		    		
+		    		System.out.println("Channel is " + channel_string[i]);
+		    		System.out.println("Did not huffman encode deltas.");
+		    		System.out.println();
+		    	}	
+		    		
+		    	
+		    	for(int j = 0; j < image_bytes.length; j++)
+	    	    	image_bytes[j] = (byte)src[j];
+		    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	    deflater.setInput(image_bytes);
+		    	deflater.finish();	
+		    	zipped_string = new byte[image_bytes.length * 2];
+		    	zipped_string_length = deflater.deflate(zipped_string);
+		    	deflater.end();
+		    	clipped_string = new byte[zipped_string_length];
+		    	for(int j = 0; j < zipped_string_length; j++)
+		    		clipped_string[j] = zipped_string[j];
+		    	channel_zipped_pixel_length[i] = zipped_string_length * 8;
+		    	compression_length[i][5] = channel_zipped_pixel_length[i];
+		    	data_list.add(clipped_string);		
+		    	
+		    	int min_index = 0;
+		    	min_value = compression_length[i][0];
+		    	for(int j = 1; j < 6; j++)
+		    	{
+		    		if(compression_length[i][j] < min_value)
+		    		{
+		    			min_index = j;
+		    			min_value = compression_length[i][j];
+		    		}
 		    	}
 		    	
+		    	channel_compression_type[i] = (byte)min_index;
+		    	channel_rate[i]             = min_value;
+		    	channel_rate[i]             /= pixel_length;
 		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
+		    	/*
 		    	if(channel_length[i] < channel_compressed_length[i] && channel_length[i] < channel_zipped_length[i]  
-				   && channel_length[i] < channel_zipped_compressed_length[i] && channel_length[i] < channel_zipped_byte_length[i])
+				   && channel_length[i] < channel_zipped_compressed_length[i] && channel_length[i] < channel_zipped_delta_length[i])
 				{
 				    channel_compression_type[i]	 = 0;
 				    channel_rate[i]  = channel_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
 				else if(channel_zipped_length[i] < channel_compressed_length[i] && channel_zipped_length[i] < channel_zipped_compressed_length[i]
-				    && channel_zipped_length[i] < channel_zipped_byte_length[i])
+				    && channel_zipped_length[i] < channel_zipped_delta_length[i])
 				{
 					channel_compression_type[i] = 1;
 					channel_rate[i]  = channel_zipped_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else if(channel_compressed_length[i] < channel_zipped_compressed_length[i] && channel_compressed_length[i] < channel_zipped_byte_length[i])
+				else if(channel_compressed_length[i] < channel_zipped_compressed_length[i] && channel_compressed_length[i] < channel_zipped_delta_length[i])
 				{
 					channel_compression_type[i] = 2;
 					channel_rate[i]  = channel_compressed_length[i];
 				    channel_rate[i] /= pixel_length;
 				}
-				else if(channel_zipped_compressed_length[i] < channel_zipped_byte_length[i])
+				else if(channel_zipped_compressed_length[i] < channel_zipped_delta_length[i])
 				{
 					channel_compression_type[i] = 3;
 					channel_rate[i]  = channel_zipped_compressed_length[i];
@@ -692,9 +729,10 @@ public class Encoder
 				else
 				{
 					channel_compression_type[i] = 4;
-					channel_rate[i]  = channel_zipped_byte_length[i];
+					channel_rate[i]  = channel_zipped_delta_length[i];
 				    channel_rate[i] /= pixel_length;	
 				}
+				*/
 		    }
 		    
 			//System.out.println("************************************************************************");
@@ -777,9 +815,13 @@ public class Encoder
 				rate /= pixel_length;
 				System.out.println("Zipped compressed string rate is " + String.format("%.4f", rate));
 				
-				rate  = channel_zipped_byte_length[channel_id];
+				rate  = channel_zipped_delta_length[channel_id];
 				rate /= pixel_length;
-				System.out.println("Zipped byte length is " + String.format("%.4f", rate));
+				System.out.println("Zipped delta length is " + String.format("%.4f", rate));
+				
+				rate  = channel_zipped_pixel_length[channel_id];
+				rate /= pixel_length;
+				System.out.println("Zipped pixel length is " + String.format("%.4f", rate));
 				
 				System.out.println();
 			}

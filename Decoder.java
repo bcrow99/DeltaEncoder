@@ -319,12 +319,79 @@ public class Decoder
 							image_table.put(channel, result);
 							System.out.println();
 					    }
+					    
 					    catch(Exception e)
 					    {
 					    	System.out.println(e.toString());
 					    }
 					    inflater.end();
 				    }
+			        else if(compression == 4)
+			        {
+			        	System.out.println("Decompressing zipped deltas.");
+			        	
+			        	Inflater inflater = new Inflater();
+				    	inflater.setInput(data);
+				    	byte [] bytes  = new byte[xdim * ydim];
+				    	int     length = 0;
+					    try
+					    {
+					        length = inflater.inflate(bytes);
+					        if(length != xdim * ydim)
+					        	System.out.println("Length does not agree with image dimensions.");
+					        else
+					        {
+					        	for(int j = 0; j < bytes.length; j++)
+					        	{
+					        		delta[j] = (int)bytes[j];
+					        		if(delta[j] < 0)
+					        			delta[j] += 256;
+					        	}
+					        }
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    }
+					    inflater.end();
+				    	
+				    	for(int j = 1; j < delta.length; j++)
+						     delta[j] += delta_min;
+						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						image_table.put(channel, result);
+			        }
+			        else if(compression == 5)
+			        {
+			        	System.out.println("Decompressing zipped pixels.");
+			        	Inflater inflater = new Inflater();
+				    	inflater.setInput(data);
+					    
+				    	int []  result = new int[xdim * ydim];
+				    	byte [] bytes  = new byte[xdim * ydim];
+				    	
+                        int     length = 0;
+					    try
+					    {
+					        length = inflater.inflate(bytes);
+					        if(length != xdim * ydim)
+					        	System.out.println("Length does not agree with image dimensions.");
+					        else
+					        {
+					        	for(int j = 0; j < bytes.length; j++)
+					        	{
+					        		result[j] = (int)bytes[j];
+					        		if(result[j] < 0)
+					        			result[j] += 256;
+					        	}
+					        	image_table.put(channel, result);
+					        }
+					    }
+					    catch(Exception e)
+					    {
+					    	System.out.println(e.toString());
+					    }
+					    inflater.end();
+			        }
 			    }
 			    in.close();
 			    
@@ -399,7 +466,13 @@ public class Decoder
 			        		    	blue_green[i] = -blue_green[i];
 			        		    green = DeltaMapper.getSum(blue_green, blue); 
 			        		    red_blue = image_table.get(5);
+			        		    
+			        		    System.out.println("Got here.");
 			        		    red   = DeltaMapper.getSum(red_blue, blue); 
+			        		    for(int i = 0; i < red.length; i++)
+			        		    	if(red[i] > 255)
+			        		    		red[i] = 255;
+			        		    
 			        		}
 			        		else if(image_table.containsKey(4)&& image_table.containsKey(5) )
 			        		{
@@ -453,10 +526,23 @@ public class Decoder
 			        	// We have the green channel, but not blue or red.
 			        	if(image_table.containsKey(3) && image_table.containsKey(4))
 			        	{
+			        		for(int i = 0; i < green.length; i++)
+			        		{
+			        			if(green[i] > 255)
+			        				System.out.println("Green value too large.");
+			        			else if(green[i] < 0)
+			        			{
+			        				//System.out.println("Green value negative.");
+			        				green[i] = 0;
+			        			}
+			        		}
 			        	    blue_green = image_table.get(3);
 			        	    blue       = DeltaMapper.getSum(blue_green, green);
 			        	    red_green  = image_table.get(4);
 			        	    red        = DeltaMapper.getSum(red_green, green);
+			        	    
+			        	    System.out.println("Got here.");
+			        	         
 			        	}
 			        	else if(image_table.containsKey(4) && image_table.containsKey(5))
 			        	{
@@ -514,15 +600,20 @@ public class Decoder
 			    	int _blue = blue[i * xdim + j];
 			    	_blue <<= pixel_shift;
 			    	
+			    	
 			    	int _green = green[i * xdim + j];
 			    	_green <<= pixel_shift;
 			    
 			    	int _red   = red[i * xdim + j]; 
 			    	_red <<= pixel_shift;
+			    	/*
+			    	if(_red > 255)
+			    		System.out.println("Red is out of bounds.");
+			    	*/
 			    	
 			    	int pixel = 0;
-			    	pixel |= _blue << 16;
-	                pixel |= _green << 8;    
+			    	pixel |= _red << 16;
+	                pixel |= _red << 8;    
 	                pixel |= _red;	
 	                
 			    	image.setRGB(j, i, pixel);
