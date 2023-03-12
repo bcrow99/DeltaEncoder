@@ -42,7 +42,7 @@ public class Encoder
 	
 	int    [][] compression_length;
 	
-	ArrayList channel_table, channel_data, channel_src;
+	ArrayList channel_table, channel_map, channel_data, channel_src, channel_histogram_length;
 	
 	double  file_ratio;
 	int     min_set_id = 0;
@@ -287,10 +287,15 @@ public class Encoder
 		    // The look up tables used to pack/unpack strings.
 		    channel_table = new ArrayList();
 		    
+		    // Map used to remove histogram holes.
+		    channel_map = new ArrayList();
+		    
 		    // Different compression results.
 		    channel_data = new ArrayList();
 		    
 		    channel_src  = new ArrayList();
+		    
+		    channel_histogram_length = new ArrayList();
 		   
 		    for(int i = 0; i < 6; i++)
 		    {
@@ -345,6 +350,8 @@ public class Encoder
 			// Clear all array lists.
 			channel_src.clear();
 		    channel_table.clear();
+		    channel_map.clear();
+		    channel_histogram_length.clear();
 		    
 		    for(int i = 0; i < 6; i++)
 		    {
@@ -543,6 +550,8 @@ public class Encoder
 					 clipped_string[string_array_length] = (byte)null_bits;
 				}
 				data_list.add(clipped_string);
+				
+				compression_length[i][0] = pixel_length;
 				//*********************************************************************
 				
 				byte [] zipped_string = new byte[string.length * 2];
@@ -556,6 +565,8 @@ public class Encoder
 		    		clipped_string[j] = zipped_string[j];
 		    	compression_length[i][1] = zipped_string_length * 8;
 		    	data_list.add(clipped_string);
+		    	
+		    	compression_length[i][1] = pixel_length;
 		    	//*********************************************************************
 		    	
 		    	double zero_one_ratio = xdim * ydim;
@@ -605,10 +616,12 @@ public class Encoder
 					 clipped_string[string_array_length] = (byte)null_bits;
 				}
 				data_list.add(clipped_string);	
+				
+				compression_length[i][2] = pixel_length;
 				//*********************************************************************
 				
 				zipped_string = new byte[clipped_string.length * 2];
-				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 				deflater.setInput(clipped_string);
 		    	deflater.finish();
 		    	zipped_string_length = deflater.deflate(zipped_string);
@@ -619,20 +632,70 @@ public class Encoder
 		    	compression_length[i][3] = zipped_string_length * 8;
 		    	
 		    	data_list.add(clipped_string);
+		    	compression_length[i][3] = pixel_length;
 		    	//*********************************************************************
 				
 		    	byte [] image_bytes = new byte[xdim * ydim];
 		    	
-		    	
+		    	/*
 		    	int number_of_zero_values = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] == 0)
+	    			{
 	    				number_of_zero_values++; 
-		    	if(histogram.length < 257)
+	    				//System.out.println("No " + j + " values in deltas.");
+	    			}
+	    		
+	    		
+	    		Hashtable <Integer,Integer> delta_table = new Hashtable<Integer, Integer>();
+	    		Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
+	    		int k = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    		{
+	    		    if(histogram[j] != 0)
+	    		    {
+	    		    	delta_table.put(j, k);
+	    		    	inverse_table.put(k,j);
+	    		    	k++;
+	    		    }
+	    		    else
+	    		    {
+	    		    	//System.out.println("Zero instances of " + j);
+	    		    }
+	    		}
+	    		
+	    		
+	    		// Transforming the data like this does not affect results,
+	    		// as far as I can tell.  Still not sure why unzipping
+	    		// deltas was creating artifacts.
+	    		int[] new_delta = new int[delta.length];
+	    		int[] old_delta = new int[delta.length];
+	    		for(int j = 1; j < delta.length; j++)
+	    		{
+	    		    int key = delta[j];
+	    		    if(!delta_table.containsKey(key))
+	    		    {
+	    		        System.out.println("Delta value " + key + " is not in table.");	
+	    		    }
+	    		    else
+	    		    {
+	    		    	int value = delta_table.get(key);
+	    		    	new_delta[j] = value;
+	    		    	key = value;
+	    		    	old_delta[j] = inverse_table.get(key);
+	    		    	if(delta[j] != old_delta[j])
+	    		    		System.out.println("Result disagrees with original value.");
+	    		    }
+	    		}
+	    		*/
+	    		System.out.println();
+	    		
+		    	//if(histogram.length - number_of_zero_values + 1 < 257)
+	    		if(histogram.length < 258)
 		    	{
 		    		for(int j = 0; j < image_bytes.length; j++)
 		    	    	image_bytes[j] = (byte)delta[j];
-		    		deflater = new Deflater(Deflater.BEST_COMPRESSION);
+		    		deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 		    	    deflater.setInput(image_bytes);
 			    	deflater.finish();	
 			    	zipped_string = new byte[image_bytes.length * 2];
@@ -643,6 +706,7 @@ public class Encoder
 			    		clipped_string[j] = zipped_string[j];
 			    	compression_length[i][4] = zipped_string_length * 8;
 			    	data_list.add(clipped_string);
+			    	compression_length[i][4] = pixel_length;
 		    	}
 		    	else
 		    	{
@@ -654,9 +718,90 @@ public class Encoder
 		    		System.out.println();
 		    	}	
 		    		
-		    	for(int j = 0; j < image_bytes.length; j++)
-	    	    	image_bytes[j] = (byte)src[j];
-		    	deflater = new Deflater(Deflater.BEST_COMPRESSION);
+	    	
+	    		histogram_list       = DeltaMapper.getHistogram(src);
+			    histogram            = (int[])histogram_list.get(1);
+	    		
+	    		
+	    		int number_of_zero_values = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    			if(histogram[j] == 0)
+	    				number_of_zero_values++; 
+	    		
+	    		int [] key_table = new int[histogram.length - number_of_zero_values];
+	    		int k = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    			if(histogram[j] != 0)
+	    				key_table[k++] = j;
+	    		
+	    		int [] value_table = new int[key_table.length];
+	    		for(int j = 0; j < value_table.length; j++)
+	    			value_table[j] = j;
+	    		
+	    		
+	    			
+	    		System.out.println(channel_string[i] + " has a histogram with length " + histogram.length);
+	    		System.out.println("There are " + number_of_zero_values + " zero instances." );
+	    		
+	    		Hashtable <Integer,Integer> src_table = new Hashtable<Integer, Integer>();
+	    		Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
+	    		k = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    		{
+	    		    if(histogram[j] != 0)
+	    		    {
+	    		    	src_table.put(j, k);
+	    		    	inverse_table.put(k,j);
+	    		    	k++;
+	    		    }
+	    		}
+	    		
+	    		
+	    		for(int j = 0; j < key_table.length; j++)
+	    			if(!src_table.containsKey(key_table[j]))
+	    				System.out.println("Key not in table.");
+	    		channel_map.add(key_table);
+	    		
+	    		
+	    		
+	    		// Transforming the data like this does not affect results,
+	    		// as far as I can tell.  Still not sure why unzipping
+	    		// deltas was creating artifacts.
+	    		int[] new_src = new int[src.length];
+	    		int[] old_src = new int[src.length];
+	    		for(int j = 0; j < src.length; j++)
+	    		{
+	    		    int key = src[j];
+	    		    if(!src_table.containsKey(key))
+	    		    {
+	    		        System.out.println("Src value " + key + " is not in table.");	
+	    		    }
+	    		    else
+	    		    {
+	    		    	int value = src_table.get(key);
+	    		    	new_src[j] = value;
+	    		    	key = value;
+	    		    	old_src[j] = inverse_table.get(key);
+	    		    	if(src[j] != old_src[j])
+	    		    		System.out.println("Result disagrees with original value.");
+	    		    }
+	    		}
+	    		
+	    		channel_histogram_length.add(histogram.length);
+	    		if(histogram.length - number_of_zero_values < 257)
+	    		{
+	    		   if(histogram.length > 256)
+	    		   {
+		    	        for(int j = 0; j < image_bytes.length; j++)
+	    	    	        image_bytes[j] = (byte)new_src[j];
+	    		   }
+	    		   else
+	    		   {
+	    			   for(int j = 0; j < image_bytes.length; j++)
+	    	    	        image_bytes[j] = (byte)src[j];   
+	    		   }
+	    		 
+		    	deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 	    	    deflater.setInput(image_bytes);
 		    	deflater.finish();	
 		    	zipped_string = new byte[image_bytes.length * 2];
@@ -667,7 +812,10 @@ public class Encoder
 		    		clipped_string[j] = zipped_string[j];
 		    	compression_length[i][5] = zipped_string_length * 8;
 		    	data_list.add(clipped_string);		
-		    	
+	    		}
+	    		else
+	    			compression_length[i][5] = pixel_length;
+	    		
 		    	int min_index = 0;
 		    	min_value = compression_length[i][0];
 		    	for(int j = 1; j < 6; j++)
@@ -720,7 +868,7 @@ public class Encoder
 				}
 			}
 			
-			min_set_id = min_index;
+			
 			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
 			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
 			System.out.println();
@@ -737,6 +885,7 @@ public class Encoder
 			System.out.println("A set with the lowest compression ratio is " + set_string[min_index]);
 			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
 			System.out.println();
+			min_set_id = min_index;
 			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			
@@ -892,15 +1041,21 @@ public class Encoder
 		            System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
 		            System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
 		            System.out.println();
-		            // The length of the table used for string packing/unpacking.
+		            
+		            // Tables for packing and mapping.
 		            int [] string_table = (int[])channel_table.get(j);
 		            out.writeShort(string_table.length);
-		            //System.out.println("String table length is " + string_table.length);
-		        
-		            // The table itself.
 		            for(int k = 0; k < string_table.length; k++)
 		                out.writeInt(string_table[k]);
 		       
+		            int [] key_table = (int[])channel_map.get(j);
+		            out.writeShort(key_table.length);
+		            for(int k = 0; k < key_table.length; k++)
+		                out.writeInt(key_table[k]);
+		            
+		            int histogram_length = (int)channel_histogram_length.get(j);
+		            out.writeInt(histogram_length);
+		            
 		            // The lengths of the packed and compressed bitstrings.
 		            out.writeInt(compression_length[j][0]);
 		        	out.writeInt(compression_length[j][2]);
