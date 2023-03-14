@@ -50,6 +50,7 @@ public class DeltaMapper
 	    return histogram;
 	}
 	
+
 	public static ArrayList getHistogram(int value[])
 	{  
 	    int value_min = value[0];
@@ -650,7 +651,6 @@ public class DeltaMapper
                 src_byte++;
             }
         }
-        
         return(number_unpacked);
     }
     
@@ -1500,7 +1500,7 @@ public class DeltaMapper
     	else if(set_id == 3)
     	{
     		channel[0] = 0;
-    	    channel[1] = 1;
+    	    channel[1] = 3;
     	    channel[2] = 4;	
     	}
     	else if(set_id == 4)

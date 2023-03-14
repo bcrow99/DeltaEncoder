@@ -43,6 +43,7 @@ public class Encoder
 	int    [][] compression_length;
 	
 	ArrayList channel_table, channel_map, channel_data, channel_src, channel_histogram_length;
+	ArrayList delta_map, delta_histogram_length;
 	
 	double  file_ratio;
 	int     min_set_id = 0;
@@ -289,13 +290,17 @@ public class Encoder
 		    
 		    // Map used to remove histogram holes.
 		    channel_map = new ArrayList();
+		    delta_map = new ArrayList();
 		    
 		    // Different compression results.
 		    channel_data = new ArrayList();
 		    
+		    // Original pixels for each channel.
 		    channel_src  = new ArrayList();
 		    
+		    // The decoder needs this to see whether values were remapped to remove histogram holes.
 		    channel_histogram_length = new ArrayList();
+		    delta_histogram_length = new ArrayList();
 		   
 		    for(int i = 0; i < 6; i++)
 		    {
@@ -351,7 +356,9 @@ public class Encoder
 			channel_src.clear();
 		    channel_table.clear();
 		    channel_map.clear();
+		    delta_map.clear();
 		    channel_histogram_length.clear();
+		    delta_histogram_length.clear();
 		    
 		    for(int i = 0; i < 6; i++)
 		    {
@@ -410,7 +417,6 @@ public class Encoder
 		    channel_min[3]  = (short)blue_green_min;
 		    channel_init[3] = (short)shifted_blue_green[0]; 
 		    
-		    
 		    shifted_red_green = DeltaMapper.getDifference(shifted_red, shifted_green);
 	        int red_green_min = 0;
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -457,9 +463,6 @@ public class Encoder
 				int [] histogram            = (int[])histogram_list.get(1);
 				int [] string_table = DeltaMapper.getRandomTable(histogram);
 				channel_table.add(string_table);
-				
-				
-				
 				
 				int    number_of_values = 0;
 				int    predicted_bit_length = 0;
@@ -515,17 +518,11 @@ public class Encoder
 				}
 				
 				
-				
-				
 				//System.out.println("Predicted bit length of packed strings is " + predicted_bit_length);
 				//System.out.println("Predicted zero one ratio is " + String.format("%.2f", predicted_zero_one_ratio));
 				if(number_of_values != xdim * ydim)
 					System.out.println("Number of values did not agree with image_dimensions.");
-				
-				
-				
 			
-				
 				ArrayList data_list = (ArrayList)channel_data.get(i);
 				data_list.clear();
 				
@@ -638,13 +635,7 @@ public class Encoder
 		    	byte [] image_bytes = new byte[xdim * ydim];
 		    	
 		    	/*
-		    	int number_of_zero_values = 0;
-	    		for(int j = 0; j < histogram.length; j++)
-	    			if(histogram[j] == 0)
-	    			{
-	    				number_of_zero_values++; 
-	    				//System.out.println("No " + j + " values in deltas.");
-	    			}
+		    	
 	    		
 	    		
 	    		Hashtable <Integer,Integer> delta_table = new Hashtable<Integer, Integer>();
@@ -690,11 +681,54 @@ public class Encoder
 	    		*/
 	    		System.out.println();
 	    		
-		    	//if(histogram.length - number_of_zero_values + 1 < 257)
-	    		if(histogram.length < 258)
+	    		
+	    		
+	    		
+	    		
+	    		
+	    		
+	    		
+	    		
+	    		
+	    		int number_of_zero_values = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    			if(histogram[j] == 0)
+	    				number_of_zero_values++; 
+	    		
+	    		int [] key_table = new int[histogram.length - number_of_zero_values];
+	    		int k = 0;
+	    		for(int j = 0; j < histogram.length; j++)
+	    			if(histogram[j] != 0)
+	    				key_table[k++] = j;
+	    		
+	    		delta_map.add(key_table);
+	    		delta_histogram_length.add(histogram.length);
+	    		
+	    		// We're comparing this to 257, not 256, to allow
+	    		// for the code at the beginning of the delta values,
+	    		// which might not be included in delta values.
+		    	if(histogram.length - number_of_zero_values + 1 < 257)
 		    	{
-		    		for(int j = 0; j < image_bytes.length; j++)
-		    	    	image_bytes[j] = (byte)delta[j];
+	    		    if(histogram.length < 255)
+		    	    {
+		    		    for(int j = 0; j < image_bytes.length; j++)
+		    	    	    image_bytes[j] = (byte)delta[j];
+		    	    }
+	    		    else
+	    		    {
+	    		    	Hashtable <Integer,Integer> delta_table = new Hashtable<Integer, Integer>();
+	    		    	for(int j = 0; j < key_table.length; j++)
+	    		    		delta_table.put(key_table[j], j);
+	    		    	// Don't alter the code, since it might not be in the key table.
+	    		    	// Start with 1.
+	    		    	for(int j = 1; j < image_bytes.length; j++)
+	    		    	{
+	    		    		int key = delta[j];
+	    		    		int value = delta_table.get(key);
+		    	    	    image_bytes[j] = (byte)value;
+	    		    	}
+		    	    	
+	    		    }
 		    		deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 		    	    deflater.setInput(image_bytes);
 			    	deflater.finish();	
@@ -706,7 +740,6 @@ public class Encoder
 			    		clipped_string[j] = zipped_string[j];
 			    	compression_length[i][4] = zipped_string_length * 8;
 			    	data_list.add(clipped_string);
-			    	compression_length[i][4] = pixel_length;
 		    	}
 		    	else
 		    	{
@@ -718,18 +751,17 @@ public class Encoder
 		    		System.out.println();
 		    	}	
 		    		
-	    	
+	    	    // The only time we use a histogram with pixel values.
 	    		histogram_list       = DeltaMapper.getHistogram(src);
 			    histogram            = (int[])histogram_list.get(1);
 	    		
-	    		
-	    		int number_of_zero_values = 0;
+	    		number_of_zero_values = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] == 0)
 	    				number_of_zero_values++; 
 	    		
-	    		int [] key_table = new int[histogram.length - number_of_zero_values];
-	    		int k = 0;
+	    		key_table = new int[histogram.length - number_of_zero_values];
+	    		k = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] != 0)
 	    				key_table[k++] = j;
@@ -744,56 +776,32 @@ public class Encoder
 	    		System.out.println("There are " + number_of_zero_values + " zero instances." );
 	    		
 	    		Hashtable <Integer,Integer> src_table = new Hashtable<Integer, Integer>();
-	    		Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
+	    		
 	    		k = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    		{
 	    		    if(histogram[j] != 0)
 	    		    {
 	    		    	src_table.put(j, k);
-	    		    	inverse_table.put(k,j);
 	    		    	k++;
 	    		    }
 	    		}
-	    		
 	    		
 	    		for(int j = 0; j < key_table.length; j++)
 	    			if(!src_table.containsKey(key_table[j]))
 	    				System.out.println("Key not in table.");
 	    		channel_map.add(key_table);
-	    		
-	    		
-	    		
-	    		// Transforming the data like this does not affect results,
-	    		// as far as I can tell.  Still not sure why unzipping
-	    		// deltas was creating artifacts.
-	    		int[] new_src = new int[src.length];
-	    		int[] old_src = new int[src.length];
-	    		for(int j = 0; j < src.length; j++)
-	    		{
-	    		    int key = src[j];
-	    		    if(!src_table.containsKey(key))
-	    		    {
-	    		        System.out.println("Src value " + key + " is not in table.");	
-	    		    }
-	    		    else
-	    		    {
-	    		    	int value = src_table.get(key);
-	    		    	new_src[j] = value;
-	    		    	key = value;
-	    		    	old_src[j] = inverse_table.get(key);
-	    		    	if(src[j] != old_src[j])
-	    		    		System.out.println("Result disagrees with original value.");
-	    		    }
-	    		}
-	    		
 	    		channel_histogram_length.add(histogram.length);
 	    		if(histogram.length - number_of_zero_values < 257)
 	    		{
 	    		   if(histogram.length > 256)
 	    		   {
 		    	        for(int j = 0; j < image_bytes.length; j++)
-	    	    	        image_bytes[j] = (byte)new_src[j];
+		    	        {
+		    	        	int key = src[j];
+		    	        	int value = src_table.get(key);
+	    	    	        image_bytes[j] = (byte)value;
+		    	        }
 	    		   }
 	    		   else
 	    		   {
@@ -1054,6 +1062,14 @@ public class Encoder
 		                out.writeInt(key_table[k]);
 		            
 		            int histogram_length = (int)channel_histogram_length.get(j);
+		            out.writeInt(histogram_length);
+		            
+		            key_table = (int[])delta_map.get(j);
+		            out.writeShort(key_table.length);
+		            for(int k = 0; k < key_table.length; k++)
+		                out.writeInt(key_table[k]);
+		            
+		            histogram_length = (int)delta_histogram_length.get(j);
 		            out.writeInt(histogram_length);
 		            
 		            // The lengths of the packed and compressed bitstrings.

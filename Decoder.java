@@ -108,6 +108,7 @@ public class Decoder
 		        int [] delta = new int[xdim * ydim];
 		        int  [] string_table = new int[1];
 			    int [] key_table = new int[1];
+			    int [] delta_key_table = new int[1];
 			    
 			    pixel_shift = in.readByte();
 			    System.out.println("Pixel shift is " + pixel_shift);
@@ -151,6 +152,19 @@ public class Decoder
 			        System.out.println("Read key table.");
 			        
 			        int histogram_length = in.readInt();
+			        
+			        table_length = in.readShort();
+			        //System.out.println("Key table length is " +  table_length);
+			    
+			        delta_key_table = new int[table_length];
+			        for(int j = 0; j < table_length; j++)
+			        {
+			    	    delta_key_table[j] = in.readInt();
+			        }
+			        System.out.println("Read key table.");
+			        
+			        int delta_histogram_length = in.readInt();
+			        
 			        
 			        int bitstring_length = 0;
 			        int packed_length    = in.readInt();
@@ -354,11 +368,29 @@ public class Decoder
 					        	System.out.println("Length does not agree with image dimensions.");
 					        else
 					        {
-					        	for(int j = 0; j < bytes.length; j++)
+					        	if(delta_histogram_length > 255)
 					        	{
-					        		delta[j] = (int)bytes[j];
-					        		if(delta[j] < 0)
-					        			delta[j] += 256;
+					        		System.out.println("Channel is " + channel_string[channel]);
+					        		System.out.println("Remapping values.");
+					        	    Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
+					        	    for(int j = 0; j < delta_key_table.length; j++)
+					        		    inverse_table.put(j, key_table[j]);
+					        	    for(int j = 1; j < delta.length; j++)
+					        	    {
+					        		    int key = (int)bytes[j];
+					        		    if(key < 0)
+					        		    	key += 256;
+					        		    delta[j] = inverse_table.get(key);
+					        	    }	
+					        	}
+					        	else
+					        	{
+					        	    for(int j = 0; j < bytes.length; j++)
+					        	    {
+					        		    delta[j] = (int)bytes[j];
+					        		    if(delta[j] < 0)
+					        			    delta[j] += 256;
+					        	    }
 					        	}
 					        }
 					    }
