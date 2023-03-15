@@ -517,7 +517,6 @@ public class Encoder
 					}
 				}
 				
-				
 				//System.out.println("Predicted bit length of packed strings is " + predicted_bit_length);
 				//System.out.println("Predicted zero one ratio is " + String.format("%.2f", predicted_zero_one_ratio));
 				if(number_of_values != xdim * ydim)
@@ -528,7 +527,7 @@ public class Encoder
 				
 				for(int j = 1; j < delta.length; j++)
 					delta[j] -= channel_delta_min[i];
-				byte [] string = new byte[xdim * ydim * 4];
+				byte [] string = new byte[xdim * ydim * 8];
 				compression_length[i][0] = DeltaMapper.packStrings2(delta, string_table, string);
 			
 				int string_array_length = compression_length[i][0] / 8;
@@ -548,7 +547,7 @@ public class Encoder
 				}
 				data_list.add(clipped_string);
 				
-				compression_length[i][0] = pixel_length;
+				//compression_length[i][0] = pixel_length;
 				//*********************************************************************
 				
 				byte [] zipped_string = new byte[string.length * 2];
@@ -563,7 +562,7 @@ public class Encoder
 		    	compression_length[i][1] = zipped_string_length * 8;
 		    	data_list.add(clipped_string);
 		    	
-		    	compression_length[i][1] = pixel_length;
+		    	//compression_length[i][1] = pixel_length;
 		    	//*********************************************************************
 		    	
 		    	double zero_one_ratio = xdim * ydim;
@@ -614,7 +613,7 @@ public class Encoder
 				}
 				data_list.add(clipped_string);	
 				
-				compression_length[i][2] = pixel_length;
+				//compression_length[i][2] = pixel_length;
 				//*********************************************************************
 				
 				zipped_string = new byte[clipped_string.length * 2];
@@ -629,67 +628,26 @@ public class Encoder
 		    	compression_length[i][3] = zipped_string_length * 8;
 		    	
 		    	data_list.add(clipped_string);
-		    	compression_length[i][3] = pixel_length;
+		    	//compression_length[i][3] = pixel_length;
 		    	//*********************************************************************
 				
 		    	byte [] image_bytes = new byte[xdim * ydim];
 		    	
-		    	/*
+		        /*
+		    	ArrayList result = DeltaMapper.getAbsoluteDeltasFromValues1(src, xdim, ydim);
+		    	delta = (int[])result.get(2);
+		    	*/
 		    	
-	    		
-	    		
-	    		Hashtable <Integer,Integer> delta_table = new Hashtable<Integer, Integer>();
-	    		Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
-	    		int k = 0;
-	    		for(int j = 0; j < histogram.length; j++)
-	    		{
-	    		    if(histogram[j] != 0)
-	    		    {
-	    		    	delta_table.put(j, k);
-	    		    	inverse_table.put(k,j);
-	    		    	k++;
-	    		    }
-	    		    else
-	    		    {
-	    		    	//System.out.println("Zero instances of " + j);
-	    		    }
-	    		}
-	    		
-	    		
-	    		// Transforming the data like this does not affect results,
-	    		// as far as I can tell.  Still not sure why unzipping
-	    		// deltas was creating artifacts.
-	    		int[] new_delta = new int[delta.length];
-	    		int[] old_delta = new int[delta.length];
-	    		for(int j = 1; j < delta.length; j++)
-	    		{
-	    		    int key = delta[j];
-	    		    if(!delta_table.containsKey(key))
-	    		    {
-	    		        System.out.println("Delta value " + key + " is not in table.");	
-	    		    }
-	    		    else
-	    		    {
-	    		    	int value = delta_table.get(key);
-	    		    	new_delta[j] = value;
-	    		    	key = value;
-	    		    	old_delta[j] = inverse_table.get(key);
-	    		    	if(delta[j] != old_delta[j])
-	    		    		System.out.println("Result disagrees with original value.");
-	    		    }
-	    		}
-	    		*/
-	    		System.out.println();
-	    		
-	    		
-	    		
-	    		
-	    		
-	    		
-	    		
-	    		
-	    		
-	    		
+		    	for(int j = 0; j < delta.length; j++)
+		    	{
+		    		delta[j] += channel_delta_min[i];
+		    		if(delta[j] < 0)
+		    			delta[j] = -delta[j];
+		    	}
+	    	    
+		    	histogram_list       = DeltaMapper.getHistogram(delta);
+		    	histogram = (int[])histogram_list.get(1);
+		    	
 	    		int number_of_zero_values = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] == 0)
@@ -700,6 +658,7 @@ public class Encoder
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] != 0)
 	    				key_table[k++] = j;
+	    	    
 	    		
 	    		delta_map.add(key_table);
 	    		delta_histogram_length.add(histogram.length);
@@ -711,6 +670,7 @@ public class Encoder
 		    	{
 	    		    if(histogram.length < 255)
 		    	    {
+	    		    	System.out.println("Got here.");
 		    		    for(int j = 0; j < image_bytes.length; j++)
 		    	    	    image_bytes[j] = (byte)delta[j];
 		    	    }
@@ -929,7 +889,6 @@ public class Encoder
 				
 				System.out.println();
 			}
-			
 	    	
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  

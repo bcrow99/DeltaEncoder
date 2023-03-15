@@ -150,6 +150,94 @@ public class DeltaMapper
 		return sum;
 	}
 	
+	
+	// These function use horizontal deltas.
+    public static int[] getValuesFromAbsoluteDeltas1(ArrayList delta_list, int xdim, int ydim)
+    {
+    	int init_value = (int)delta_list.get(0);
+    	int[] map      = (int[])delta_list.get(1);
+    	int[] delta    = (int[])delta_list.get(2);
+    	
+    	int[] dst      = new int[xdim * ydim];
+        int k          = 0;
+        int value      = init_value;
+        int current_value = value;
+        
+        for(int i = 0; i < ydim; i++)
+        {
+            if(i == 0)
+            {
+                dst[k]  = init_value; 
+                k++;
+            } 
+            else
+            {  
+                if(map[k] == 1)
+                    value -= delta[k];
+                else
+                    value += delta[k];
+                dst[k] = value;
+                k++;
+                current_value = value;
+            }
+            
+            for(int j = 1; j < xdim; j++)
+            {
+                if(map[k] == 1)
+                    current_value -= delta[k];
+                else
+                    current_value += delta[k];
+                dst[k]       = current_value;
+                k++;
+            }
+        }
+        return dst;
+    }
+	
+	public static ArrayList getAbsoluteDeltasFromValues1(int src[], int xdim, int ydim)
+    {
+        int[] dst = new int[xdim * ydim];
+        int[] map = new int[xdim * ydim];
+        int   init_value = src[0];
+        
+        int k     = 0;
+        int value = init_value;
+        for(int i = 0; i < ydim; i++)
+        {
+        	// We set the first value to zero to mark the type of deltas as horizontal.
+            if(i == 0)
+        	    dst[k++] = 0;
+            else
+            {
+            	int delta  = src[k] - init_value;
+            	dst[k]     = Math.abs(delta);
+            	if(delta >= 0)
+            	    map[k] = 0;
+            	else
+            	    map[k] = 1;
+            	init_value += delta;
+            	value = init_value;
+            	k++;
+            }
+            for(int j = 1; j < xdim; j++)
+            {
+                int delta      = src[k] - value;
+                value += delta;
+                dst[k]       = Math.abs(delta);
+                if(delta >= 0)
+            	    map[k] = 0;
+            	else
+            	    map[k] = 1;
+            }
+        }
+        
+        ArrayList result = new ArrayList();
+        result.add(src[0]);
+        result.add(map);
+        result.add(dst);
+        return result;
+    }
+    
 	// These functions use the sums of the vertical deltas and horizontal deltas 
 	// to decide which deltas to use in compression.
 	// Those values work better than the sum of the absolute values as a heuristic
@@ -227,6 +315,7 @@ public class DeltaMapper
         }
         	
     }
+    
     
     // These function use horizontal deltas.
     public static int[] getValuesFromDeltas1(int src[],int xdim, int ydim, int init_value)

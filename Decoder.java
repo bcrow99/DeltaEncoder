@@ -540,15 +540,8 @@ public class Decoder
 			        		    red_blue = image_table.get(5);
 			        		    
 			        		    red   = DeltaMapper.getSum(red_blue, blue); 
-			        		    for(int i = 0; i < red.length; i++)
-			        		    	if(red[i] > 255)
-			        		    	{
-			        		    		red[i] = 255;
-			        		    		System.out.println("Value out of bounds.");
-			        		    	}
-			        		    
 			        		}
-			        		else if(image_table.containsKey(4)&& image_table.containsKey(5) )
+			        		else if(image_table.containsKey(4) && image_table.containsKey(5) )
 			        		{
 			        		    red_blue = image_table.get(5);
 			        		    red = DeltaMapper.getSum(red_blue, blue);
@@ -556,6 +549,15 @@ public class Decoder
 			        		    for(int i = 0; i < red_green.length; i++)
 			        		    	red_green[i] = -red_green[i];
 			        		    green = DeltaMapper.getSum(red_green, red);
+			        		}
+			        		else if(image_table.containsKey(3) && image_table.containsKey(4))
+			        		{
+			        			blue_green = image_table.get(3);
+			        		    for(int i = 0; i < blue_green.length; i++)
+			        		    	blue_green[i] = -blue_green[i];
+			        		    green = DeltaMapper.getSum(blue_green, blue); 
+			        		    red_green = image_table.get(4);
+			        		    red = DeltaMapper.getSum(red_green, green);
 			        		}
 			        		else
 			        		{
