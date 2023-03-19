@@ -453,6 +453,13 @@ public class Encoder
 		    	int [] src = (int [])channel_src.get(i);
 		    	int [] delta = new int[xdim * ydim];
 			    delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
+			    
+			    /*
+			    for(int j = 1; j < delta.length; j++)
+			    	if(delta[j] < 0)
+			    		delta[j] = -delta[j];
+			    */
+			   
 			    if(delta[0] == 0)
 			    	channel_sum[i] = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
 			    else
@@ -633,33 +640,79 @@ public class Encoder
 				
 		    	byte [] image_bytes = new byte[xdim * ydim];
 		    	
-		        /*
-		    	ArrayList result = DeltaMapper.getAbsoluteDeltasFromValues1(src, xdim, ydim);
-		    	delta = (int[])result.get(2);
-		    	*/
-		    	
-		    	for(int j = 0; j < delta.length; j++)
+		        
+		    	int [] delta_sign = new int[xdim * ydim];
+		    	delta_sign[0] = 0;
+		    	for(int j = 1; j < delta.length; j++)
 		    	{
 		    		delta[j] += channel_delta_min[i];
 		    		if(delta[j] < 0)
+		    		{
 		    			delta[j] = -delta[j];
+		    			delta_sign[j] = 1;
+		    		}
+		    		else
+		    			delta_sign[j] = 0;
 		    	}
-	    	    
+		    	/*
+		    	histogram_list       = DeltaMapper.getHistogram(delta_sign);
+		    	histogram = (int[])histogram_list.get(1);
+		    	System.out.println("Delta bitmap contains " + histogram.length + " values.");
+		    	string_table = DeltaMapper.getRandomTable(histogram);
+		    	System.out.println("Rank table:");
+		    	for(int j = 0; j < string_table.length; j++)
+		    		System.out.println(j + " -> " + string_table[j]);
+		    	*/
+		    	
+		    	int [] rank_table = new int[2];
+		    	rank_table[0] = 0;
+		    	rank_table[1] = 1;
+		    	byte [] sign_string = new byte[xdim * ydim];
+				int sign_string_length = DeltaMapper.packStrings2(delta_sign, rank_table, sign_string);
+				
+				double ratio = sign_string_length;
+				ratio        /= pixel_length;
+				System.out.println("Sign string is " + String.format("%.3f", ratio) + " of image size.");
+				
+				zipped_string = new byte[sign_string_length / 8 * 2];
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				int sign_string_array_length = sign_string_length / 8;
+				if(sign_string_length % 8 != 0)
+					sign_string_array_length++;
+				deflater.setInput(sign_string, 0, sign_string_array_length);
+		    	deflater.finish();
+		    	zipped_string_length = deflater.deflate(zipped_string);
+		    	deflater.end();
+		    	
+		    	ratio = zipped_string_length;
+		    	ratio /= xdim * ydim;
+		    	System.out.println("Zipped sign string is " + String.format("%.3f", ratio) + " of image size.");
+		    	
+		    	compressed_string = new byte[sign_string_array_length * 2];
+		    	int compression_sign_string_length = DeltaMapper.compressZeroStrings(sign_string, sign_string_length, compressed_string);
+		    	
+		    	ratio = compression_sign_string_length;
+		    	ratio /= pixel_length;
+		    	System.out.println("Compressed sign string is " + String.format("%.3f", ratio) + " of image size.");
+		    	
+		    	System.out.println();
+		    	
 		    	histogram_list       = DeltaMapper.getHistogram(delta);
 		    	histogram = (int[])histogram_list.get(1);
 		    	
+		    	System.out.println("The deltas contain " + histogram.length + " values.");
 	    		int number_of_zero_values = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] == 0)
 	    				number_of_zero_values++; 
+	    		System.out.println("The deltas contain " + number_of_zero_values + " instances of 0.");
 	    		
 	    		int [] key_table = new int[histogram.length - number_of_zero_values];
 	    		int k = 0;
 	    		for(int j = 0; j < histogram.length; j++)
 	    			if(histogram[j] != 0)
 	    				key_table[k++] = j;
-	    	    
-	    		
+	  
 	    		delta_map.add(key_table);
 	    		delta_histogram_length.add(histogram.length);
 	    		
@@ -670,7 +723,6 @@ public class Encoder
 		    	{
 	    		    if(histogram.length < 255)
 		    	    {
-	    		    	System.out.println("Got here.");
 		    		    for(int j = 0; j < image_bytes.length; j++)
 		    	    	    image_bytes[j] = (byte)delta[j];
 		    	    }
@@ -679,7 +731,10 @@ public class Encoder
 	    		    	Hashtable <Integer,Integer> delta_table = new Hashtable<Integer, Integer>();
 	    		    	for(int j = 0; j < key_table.length; j++)
 	    		    		delta_table.put(key_table[j], j);
+	    		    	
 	    		    	// Don't alter the code, since it might not be in the key table.
+	    		    	image_bytes[0] = (byte)delta[0];
+	    		    	
 	    		    	// Start with 1.
 	    		    	for(int j = 1; j < image_bytes.length; j++)
 	    		    	{
@@ -732,8 +787,8 @@ public class Encoder
 	    		
 	    		
 	    			
-	    		System.out.println(channel_string[i] + " has a histogram with length " + histogram.length);
-	    		System.out.println("There are " + number_of_zero_values + " zero instances." );
+	    		//System.out.println(channel_string[i] + " has a histogram with length " + histogram.length);
+	    		//System.out.println("There are " + number_of_zero_values + " zero instances." );
 	    		
 	    		Hashtable <Integer,Integer> src_table = new Hashtable<Integer, Integer>();
 	    		
