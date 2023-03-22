@@ -452,18 +452,60 @@ public class Encoder
 		    {
 		    	int [] src = (int [])channel_src.get(i);
 		    	int [] delta = new int[xdim * ydim];
-			    delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
 			    
-			    /*
+		    	
+		    	ArrayList list1 = DeltaMapper.getDeltasFromValues1(src, xdim, ydim);
+		    	int        sum1 = (int)list1.get(0);
+		    	int []   delta1 = (int [])list1.get(1);
+		    	
+		    	int _sum1 = DeltaMapper.getHorizontalDeltaSum(delta1, xdim, ydim);
+		    	
+		    	System.out.println("Horizontal sum returned with deltas is " + sum1);
+		    	System.out.println("Calculated sum is " + _sum1);
+		    	
+		    	
+		    	ArrayList list2 = DeltaMapper.getDeltasFromValues2(src, xdim, ydim);
+		    	int        sum2 = (int)list2.get(0);
+		    	int []   delta2 = (int [])list2.get(1);
+		    	
+		    	int _sum2 = DeltaMapper.getHorizontalDeltaSum(delta2, xdim, ydim);
+		    	System.out.println("Vertical sum returned with deltas is " + sum2);
+		    	System.out.println("Horizontal calculated sum is " + _sum2);
+		    	
+		    	if(sum1 <= sum2)
+		    	{
+		    		delta = delta1;
+		    		channel_sum[i] = sum1;
+		    	}
+		    	else
+		    	{
+		    		delta = delta2;
+		    		channel_sum[i] = sum2;
+		    	}
+		    	
+		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
+		    	int        sum3 = (int)list3.get(0);
+		    	int []   delta3 = (int [])list3.get(1);
+		    	System.out.println("Paeth sum returned with deltas is " + sum3);
+		    	int _sum3 = DeltaMapper.getHorizontalDeltaSum(delta3, xdim, ydim);
+		    	System.out.println("Horizontal calculated sum is " + _sum3);
+		    	_sum3 = DeltaMapper.getVerticalDeltaSum(delta3, xdim, ydim);
+		    	System.out.println("Vertical calculated sum is " + _sum3);
+		    	
+		    	delta = delta1;
+		    	//delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
+			    
 			    for(int j = 1; j < delta.length; j++)
 			    	if(delta[j] < 0)
 			    		delta[j] = -delta[j];
-			    */
 			   
+		    	/*
 			    if(delta[0] == 0)
 			    	channel_sum[i] = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
 			    else
 			    	channel_sum[i] = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
+			    */
+		    	
 			    ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[i] = (int)histogram_list.get(0);
 		
@@ -531,9 +573,11 @@ public class Encoder
 			
 				ArrayList data_list = (ArrayList)channel_data.get(i);
 				data_list.clear();
-				
+				/*
 				for(int j = 1; j < delta.length; j++)
 					delta[j] -= channel_delta_min[i];
+				*/
+				
 				byte [] string = new byte[xdim * ydim * 8];
 				compression_length[i][0] = DeltaMapper.packStrings2(delta, string_table, string);
 			
