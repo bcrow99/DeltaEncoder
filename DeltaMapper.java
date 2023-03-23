@@ -347,6 +347,7 @@ public class DeltaMapper
     
     // These functions use the horizontal, vertical, or diagonal
     // delta depending on the result of a convolution.
+    
     public static ArrayList getDeltasFromValues3(int src[], int xdim, int ydim)
     {
         int[] dst          = new int[xdim * ydim];
@@ -392,7 +393,8 @@ public class DeltaMapper
         System.out.println("Vertical sum is " + vertical_sum);
         System.out.println("Diagonal sum is " + diagonal_sum);
         System.out.println("Limit sum is " + limit_sum);
-        
+         
+        k = 0;
         for(int i = 0; i < ydim; i++)
         {
         	if(i == 0)
@@ -484,10 +486,7 @@ public class DeltaMapper
             	    	}
             	    	dst[k++] = delta;
             	    	
-            	    	/*
-            	    	if((delta < 0 && previous_delta > 0) || (delta > 0 && previous_delta < 0))
-            	    		previous_delta = -previous_delta;
-            	    	*/
+            	    	
             	    	sum += Math.abs(delta - previous_delta);
             	    	
             	    	previous_delta = delta;
@@ -513,136 +512,176 @@ public class DeltaMapper
         dst[0] = init_value;
         int value = init_value;
         
-        // We know the first value in the source data is used to code the type of deltas.
-        // Skip 0 and start with 1.
+        if(src[0] != 2)
+        	System.out.println("Wrong code.");
+        
         for(int i = 1; i < xdim; i++)
         {
         	value   += src[i];
         	dst[i] = value;
         }
         
-        
-        // Now we can use values from the destination data to get the rest of the values. 
         for(int i = 1; i < ydim; i++)
         {
-            for(int j = 0; j < xdim; j++)
+            for(int j = 0; j < xdim; j++)	
             {
-            	int index  = i * xdim + j;
-            	dst[index] = dst[index - xdim] + src[index]; 
-            }
-        }
-       
-        return dst;
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    // These function use horizontal deltas.
-    
-    /*
-    public static int[] getDeltasFromValues1(int src[], int xdim, int ydim, int init_value)
-    {
-        int[] dst = new int[xdim * ydim];
-    	
-        int k     = 0;
-        int value = init_value;
-        for(int i = 0; i < ydim; i++)
-        {
-        	// We set the first value to zero to mark the type of deltas as horizontal.
-            if(i == 0)
-        	    dst[k++] = 0;
-            else
-            {
-            	int delta   = src[k] - init_value;
-            	dst[k++]    = delta;
-            	init_value += delta;
-            	value = init_value;
-            }
-            for(int j = 1; j < xdim; j++)
-            {
-                int delta      = src[k]  - value;
-                value += delta;
-                dst[k++]       = delta;
-            }
-        }
-        
-        return dst;
-    }
-    
-    public static int[] getValuesFromDeltas1(int src[],int xdim, int ydim, int init_value)
-    {
-    	int[] dst = new int[xdim * ydim];
-    	
-        int k     = 0;
-        int value = init_value;
-        for(int i = 0; i < ydim; i++)
-        {
-            value            += src[k];
-            int current_value = value;
-            dst[k++]          = current_value;
-            for(int j = 1; j < xdim; j++)
-            {
-                current_value += src[k];
-                dst[k++]       = current_value;
-            }
-        }
-        return dst;
-    }
-    
-    
-    // These functions use vertical deltas.
-    public static int[] getDeltasFromValues2(int src[], int xdim, int ydim, int init_value)
-    {
-        int[] dst = new int[xdim * ydim];
-    	
-        
-        int k     = 0;
-        int value = init_value;
-        int delta = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-            for(int j = 0; j < xdim; j++)
-            {
-            	if(i == 0)
+            	if(j == 0)
             	{
-            		// Setting the first value to 1 mark the type of deltas vertical.
-            		if(j == 0)
-            			dst[k++] = 1;
-            		else
-            		{
-            		    delta     = src[k] - value;
-                        value     += delta;
-                        dst[k++]  = delta;
-            		}
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
             	}
             	else
             	{
-                    delta          = src[k]  - src[k - xdim];
-                    dst[k++]       = delta;
+            	    int a = dst[i * xdim + j - 1];
+            	    int b = dst[(i - 1) * xdim + j];
+            	    int c = dst[(i - 1) * xdim + j - 1];
+            	    int d = a + b - c;
+            	    
+            	    int delta_a = Math.abs(a - d);
+        	    	int delta_b = Math.abs(b - d);
+        	    	int delta_c = Math.abs(c - d);
+        	    	
+        	    	if(delta_a <= delta_b && delta_a <= delta_c)
+        	    	{
+        	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+        	    	}
+        	    	else if(delta_b <= delta_c)
+        	    	{
+        	    		dst[i * xdim + j] = b + src[i * xdim + j];
+        	    	}
+        	    	else
+        	    	{
+        	    		dst[i * xdim + j] = c + src[i * xdim + j];
+        	    	}
             	}
             }
         }
+        
         return dst;
     }
+    
+    public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
+    {
+        int[]  dst         = new int[xdim * ydim];
+        byte[] direction   = new byte[xdim * ydim];
+        
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        int previous_delta = 0;
+        int sum            = 0;
+        int horizontal     = 0;
+    	int vertical       = 0;
+    	int diagonal       = 0;
+        
+        
+        int horizontal_sum = 0;
+        int vertical_sum   = 0;
+        int diagonal_sum   = 0;
+        int limit_sum      = 0;
+        
+        int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 3 to mark the delta type ideal.
+            			dst[k] = 3;
+            			direction[k] = 0;
+            			k++;
+            	    }
+            		else
+            		{
+            			// We don't have an upper or upper diagonal delta to check
+            			// in the first row, so we just use horizontal deltas.
+            		    delta   = src[k] - value;
+                        value  += delta;
+                        dst[k]  = delta;
+                        direction[k] = 0;
+                        k++;
+                        sum    += Math.abs(previous_delta - delta);
+                        
+                        previous_delta = delta;
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta or diagonal delta to check,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta        = src[k] - init_value;
+            	    	init_value   = src[k];
+            	    	dst[k]       = delta;
+            	    	direction[k] = 1;
+            	    	k++;
+            	    	
+            	    	previous_delta = delta;
+            	    }
+            	    else
+            	    {
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c))
+            	    	{
+            	    		delta = a;
+            	    	    dst[k] = delta;
+            	    	    direction[k] = 0;
+            	    	    k++;
+            	    	    
+            	    	    sum += Math.abs(previous_delta - delta);
+            	    	    previous_delta = delta;
+            	    	}
+            	    	else if(Math.abs(b)<= Math.abs(c))
+            	    	{
+            	    		delta  = b;
+            	    		dst[k] = delta;
+            	    	    direction[k] = 1;
+            	    	    k++;	
+            	    	    
+            	    	    sum += Math.abs(previous_delta - delta);
+            	    	    previous_delta = delta;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta = c;
+            	    		dst[k] = delta;
+            	    	    direction[k] = 2;
+            	    	    k++;	
+            	    	    
+            	    	    sum += Math.abs(previous_delta - delta);
+            	    	    previous_delta = delta;
+            	    	}
+            	    }
+                }
+        	}
+        }
+        
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        result.add(direction);
+        return result;
+    }
 
-    public static int[] getValuesFromDeltas2(int src[],int xdim, int ydim, int init_value)
+    public static int[] getValuesFromDeltas4(int [] src, int xdim, int ydim, int init_value, byte [] direction)
     {
     	int[] dst = new int[xdim * ydim];
-    	
-    	// We know the first value in the source data is 0.
-    	// We use that to mark the type of deltas.
         dst[0] = init_value;
-    	
         int value = init_value;
+        
+        if(src[0] != 3)
+        	System.out.println("Wrong code.");
         
         for(int i = 1; i < xdim; i++)
         {
@@ -650,55 +689,34 @@ public class DeltaMapper
         	dst[i] = value;
         }
         
-        
-        // Now we can use values from the destination data. 
         for(int i = 1; i < ydim; i++)
         {
-            for(int j = 0; j < xdim; j++)
+            for(int j = 0; j < xdim; j++)	
             {
-            	int index  = i * xdim + j;
-            	dst[index] = dst[index - xdim] + src[index]; 
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            		int current_direction = direction[i * xdim + j]; 
+            		if(current_direction == 0)
+            		    value = dst[i * xdim + j - 1];
+            		else if(current_direction == 1)
+            		    value = dst[(i - 1) * xdim + j];
+            		else if(current_direction == 2)
+            		    value = dst[(i - 1) * xdim + j - 1];
+            	    value += src[i * xdim + j];
+            	    dst[i * xdim + j] = value;
+            	}
             }
         }
-       
+        
         return dst;
     }
     
-    */
-    
-    public static int[] getDeltasFromValues(int src[])
-    {
-    	int   length = src.length;
-        int[] dst = new int[length];
-    	
-        int value  = src[0];
-        dst[0]     = value;
-        int j      = 0;
-        for(int i = 1; i < length; i++)
-        {
-            int delta     = src[i] - value;
-            value        += delta;
-            dst[i]      = delta;
-        }
-        return dst;
-    }
-
-    public static int[] getValuesFromDeltas(int src[])
-    {
-    	int length = src.length;
-    	int[] dst = new int[length];
-    	
-        int value = src[0];
-        dst[0]    = value;
-        for(int i = 1; i < length; i++)
-        {
-            value  = dst[i - 1];
-            value += src[i];
-            dst[i] = value;
-        }
-        return dst;
-    }
-
     // These packing/unpacking functions represent int values
     // as unary strings.
     // This set of functions makes no assumptions about the 

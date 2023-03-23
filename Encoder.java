@@ -462,6 +462,7 @@ public class Encoder
 		    	
 		    	System.out.println("Horizontal sum returned with deltas is " + sum1);
 		    	System.out.println("Calculated sum is " + _sum1);
+		    	System.out.println();
 		    	
 		    	
 		    	ArrayList list2 = DeltaMapper.getDeltasFromValues2(src, xdim, ydim);
@@ -471,6 +472,7 @@ public class Encoder
 		    	int _sum2 = DeltaMapper.getHorizontalDeltaSum(delta2, xdim, ydim);
 		    	System.out.println("Vertical sum returned with deltas is " + sum2);
 		    	System.out.println("Horizontal calculated sum is " + _sum2);
+		    	System.out.println();
 		    	
 		    	if(sum1 <= sum2)
 		    	{
@@ -486,13 +488,35 @@ public class Encoder
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
 		    	int []   delta3 = (int [])list3.get(1);
+		    	
+		    	
+		    	int [] paeth_values = DeltaMapper.getValuesFromDeltas3(delta3, xdim, ydim, src[0]);
+		    	
+		    	//System.out.print("First value in source is " + src[0]);
+		    	//System.out.print("First value in result is " + paeth_values[0]);
+		    	
 		    	System.out.println("Paeth sum returned with deltas is " + sum3);
 		    	int _sum3 = DeltaMapper.getHorizontalDeltaSum(delta3, xdim, ydim);
-		    	System.out.println("Horizontal calculated sum is " + _sum3);
-		    	_sum3 = DeltaMapper.getVerticalDeltaSum(delta3, xdim, ydim);
-		    	System.out.println("Vertical calculated sum is " + _sum3);
+		    
+		    	System.out.println();
 		    	
-		    	delta = delta1;
+		    	
+		    	ArrayList list4 = DeltaMapper.getDeltasFromValues4(src, xdim, ydim);
+		    	int        sum4 = (int)list4.get(0);
+		    	int []   delta4 = (int [])list4.get(1);
+		    	
+		    	byte [] direction = (byte [])list4.get(2);
+		    	int [] ideal_values = DeltaMapper.getValuesFromDeltas4(delta3, xdim, ydim, src[0], direction);
+		    	
+		    	int number_of_errors = 0;
+		    	for(int j = 0; j < src.length; j++)
+		    	{
+		    		if(src[j] != ideal_values[j])
+		    			number_of_errors++;
+		    	}
+		    	
+		    	System.out.println("Values contained " + number_of_errors + " errors.");
+		    	delta = delta4;
 		    	//delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
 			    
 			    for(int j = 1; j < delta.length; j++)
