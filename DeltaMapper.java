@@ -363,20 +363,35 @@ public class DeltaMapper
         int horizontal_sum = 0;
         int vertical_sum   = 0;
         int diagonal_sum   = 0;
+        int limit_sum      = 0;
         
         for(int i = 1; i < ydim; i++)
         {
         	for(int j = 1; j < xdim; j++)
         	{
-        		horizontal_sum += Math.abs(src[i * xdim + j] - src[i * xdim + j - 1]);
-        		vertical_sum += Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j]);
-        		diagonal_sum += Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j - 1]);
+        		
+        		int horizontal_delta = Math.abs(src[i * xdim + j] - src[i * xdim + j - 1]);
+        		horizontal_sum  += horizontal_delta;
+        		
+        		int vertical_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j]);
+        		vertical_sum += vertical_delta;
+        		
+        		int diagonal_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j - 1]);
+        		diagonal_sum += diagonal_delta;
+        		
+        		if(horizontal_delta <= vertical_delta && horizontal_delta <= diagonal_delta)
+        			limit_sum += horizontal_delta;
+        		else if(vertical_delta <= diagonal_delta)
+        			limit_sum += vertical_delta;
+        		else
+        			limit_sum += diagonal_delta;
         	}
         }
         
-        //System.out.println("Horizontal sum is " + horizontal_sum);
-        //System.out.println("Vertical sum is " + vertical_sum);
-        //System.out.println("Diagonal sum is " + diagonal_sum);
+        System.out.println("Horizontal sum is " + horizontal_sum);
+        System.out.println("Vertical sum is " + vertical_sum);
+        System.out.println("Diagonal sum is " + diagonal_sum);
+        System.out.println("Limit sum is " + limit_sum);
         
         for(int i = 0; i < ydim; i++)
         {
