@@ -361,6 +361,10 @@ public class DeltaMapper
     	int diagonal       = 0;
         int k              = 0;
         
+        
+        // We're checking to see how close the paeth filter comes to an
+        // ideal delta set--which is not very close, but it can still produce
+        // a better result than just using horizontal or vertical deltas.
         int horizontal_sum = 0;
         int vertical_sum   = 0;
         int diagonal_sum   = 0;
@@ -388,11 +392,6 @@ public class DeltaMapper
         			limit_sum += diagonal_delta;
         	}
         }
-        
-        System.out.println("Horizontal sum is " + horizontal_sum);
-        System.out.println("Vertical sum is " + vertical_sum);
-        System.out.println("Diagonal sum is " + diagonal_sum);
-        System.out.println("Limit sum is " + limit_sum);
          
         k = 0;
         for(int i = 0; i < ydim; i++)
@@ -495,11 +494,7 @@ public class DeltaMapper
         	}
         }
         
-        System.out.println("The number of horizontal deltas is " + horizontal);
-        System.out.println("The number of vertical deltas is " + vertical);
-        System.out.println("The number of diagonal deltas is " + diagonal);
-        
-        
+       
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
@@ -561,6 +556,7 @@ public class DeltaMapper
         return dst;
     }
     
+    // Get an ideal delta set and a map of the which pixels are used.
     public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
     {
         int[]  dst         = new int[xdim * ydim];
@@ -628,6 +624,7 @@ public class DeltaMapper
             	    }
             	    else
             	    {
+            	    	// Now we have a set of 3 possible pixels to use.
             	    	int a = src[k] - src[k - 1];
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - xdim - 1];
