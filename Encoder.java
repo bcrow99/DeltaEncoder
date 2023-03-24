@@ -458,21 +458,14 @@ public class Encoder
 		    	int        sum1 = (int)list1.get(0);
 		    	int []   delta1 = (int [])list1.get(1);
 		    	
-		    	int _sum1 = DeltaMapper.getHorizontalDeltaSum(delta1, xdim, ydim);
 		    	
-		    	System.out.println("Horizontal sum returned with deltas is " + sum1);
-		    	System.out.println("Calculated sum is " + _sum1);
-		    	System.out.println();
 		    	
 		    	
 		    	ArrayList list2 = DeltaMapper.getDeltasFromValues2(src, xdim, ydim);
 		    	int        sum2 = (int)list2.get(0);
 		    	int []   delta2 = (int [])list2.get(1);
 		    	
-		    	int _sum2 = DeltaMapper.getHorizontalDeltaSum(delta2, xdim, ydim);
-		    	System.out.println("Vertical sum returned with deltas is " + sum2);
-		    	System.out.println("Horizontal calculated sum is " + _sum2);
-		    	System.out.println();
+		    	
 		    	
 		    	if(sum1 <= sum2)
 		    	{
@@ -496,8 +489,7 @@ public class Encoder
 		    	//System.out.print("First value in result is " + paeth_values[0]);
 		    	
 		    	System.out.println("Paeth sum returned with deltas is " + sum3);
-		    	int _sum3 = DeltaMapper.getHorizontalDeltaSum(delta3, xdim, ydim);
-		    
+		    	
 		    	System.out.println();
 		    	
 		    	
@@ -517,24 +509,16 @@ public class Encoder
 		    	
 		    	System.out.println("Values contained " + number_of_errors + " errors.");
 		    	delta = delta4;
-		    	//delta = DeltaMapper.getDeltasFromValues(src, xdim, ydim, channel_init[i]);
+		    	
 			    
 			    for(int j = 1; j < delta.length; j++)
 			    	if(delta[j] < 0)
 			    		delta[j] = -delta[j];
-			   
-		    	/*
-			    if(delta[0] == 0)
-			    	channel_sum[i] = DeltaMapper.getHorizontalDeltaSum(delta, xdim, ydim);
-			    else
-			    	channel_sum[i] = DeltaMapper.getVerticalDeltaSum(delta, xdim, ydim);
-			    */
-		    	
 			    ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[i] = (int)histogram_list.get(0);
 		
 				int [] histogram            = (int[])histogram_list.get(1);
-				int [] string_table = DeltaMapper.getRandomTable(histogram);
+				int [] string_table = DeltaMapper.getRankTable(histogram);
 				channel_table.add(string_table);
 				
 				int    number_of_values = 0;
@@ -726,7 +710,7 @@ public class Encoder
 		    	histogram_list       = DeltaMapper.getHistogram(delta_sign);
 		    	histogram = (int[])histogram_list.get(1);
 		    	System.out.println("Delta bitmap contains " + histogram.length + " values.");
-		    	string_table = DeltaMapper.getRandomTable(histogram);
+		    	string_table = DeltaMapper.getRankTable(histogram);
 		    	System.out.println("Rank table:");
 		    	for(int j = 0; j < string_table.length; j++)
 		    		System.out.println(j + " -> " + string_table[j]);

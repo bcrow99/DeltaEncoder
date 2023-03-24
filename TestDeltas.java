@@ -442,17 +442,37 @@ public class TestDeltas
 		    channel_src.add(shifted_red_green);
 		    channel_src.add(shifted_red_blue);
 		    
+		    byte [] delta_string = new byte[xdim * ydim * 8];
 		    for(int i = 0; i < 6; i++)
 		    {
 		    	int [] src = (int [])channel_src.get(i);
-		    	int number_of_errors;
+		    	int number_of_errors, min_value;
+		    	ArrayList histogram_list;
+		    	int [] histogram, rank_table;
+		    	double fraction;
 			    
 		    	System.out.println("Processing " + channel_string[i] + " channel.");
+		    	System.out.println();
 		    	ArrayList list1 = DeltaMapper.getDeltasFromValues1(src, xdim, ydim);
 		    	int        sum1 = (int)list1.get(0);
 		    	int []   delta1 = (int [])list1.get(1);
 		    	System.out.println("Sum returned with horizontal deltas is " + sum1);
 		    	
+		    	histogram_list  = DeltaMapper.getHistogram(delta1);
+				min_value       = (int)histogram_list.get(0);
+				histogram       = (int[])histogram_list.get(1);
+				rank_table      = DeltaMapper.getRankTable(histogram);
+				System.out.println("There are " + histogram.length + " values.");
+				System.out.println("The minimum value is " + min_value);
+				for(int j = 1; j < delta1.length; j++)
+					delta1[j] -= min_value;
+				int length1     = DeltaMapper.packStrings2(delta1, rank_table, delta_string);
+				fraction        = length1;
+				fraction       /= pixel_length;
+				System.out.println("The delta string is " + String.format("%.2f",fraction) + " the size of original data");
+		    	
+				for(int j = 1; j < delta1.length; j++)
+					delta1[j] += min_value;
 		    	int [] horizontal_values = DeltaMapper.getValuesFromDeltas1(delta1, xdim, ydim, src[0]);
 		    	number_of_errors = 0;
 		    	for(int j = 0; j < src.length; j++)
@@ -462,13 +482,30 @@ public class TestDeltas
 		    	}
 		    	if(number_of_errors != 0)
 		    	    System.out.println("There were " + number_of_errors + " errors in the horizontal values.");
+		    	System.out.println();
+		    	
 		    	
 		    	ArrayList list2 = DeltaMapper.getDeltasFromValues2(src, xdim, ydim);
 		    	int        sum2 = (int)list2.get(0);
 		    	int []   delta2 = (int [])list2.get(1);
 		    	System.out.println("Sum returned with vertical deltas is " + sum2);
+		    	histogram_list  = DeltaMapper.getHistogram(delta2);
+				min_value       = (int)histogram_list.get(0);
+				histogram       = (int[])histogram_list.get(1);
+				rank_table      = DeltaMapper.getRankTable(histogram);
+				System.out.println("There are " + histogram.length + " values.");
+				System.out.println("The minimum value is " + min_value);
+				for(int j = 1; j < delta2.length; j++)
+					delta2[j] -= min_value;
+				int length2     = DeltaMapper.packStrings2(delta2, rank_table, delta_string);
+				fraction        = length2;
+				fraction       /= pixel_length;
+				System.out.println("The delta string is " + String.format("%.2f",fraction) + " the size of original data");
+				
 		    	
-		    	int [] vertical_values = DeltaMapper.getValuesFromDeltas1(delta1, xdim, ydim, src[0]);
+				for(int j = 1; j < delta1.length; j++)
+					delta2[j] += min_value;
+				int [] vertical_values = DeltaMapper.getValuesFromDeltas2(delta2, xdim, ydim, src[0]);
 		    	number_of_errors = 0;
 		    	for(int j = 0; j < src.length; j++)
 		    	{
@@ -477,12 +514,28 @@ public class TestDeltas
 		    	}
 		    	if(number_of_errors != 0)
 		    	    System.out.println("There were " + number_of_errors + " errors in the vertical values.");
+		    	System.out.println();
 		    	
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
 		    	int []   delta3 = (int [])list3.get(1);
 		    	System.out.println("Sum returned with paeth deltas is " + sum3);
+		    	histogram_list  = DeltaMapper.getHistogram(delta3);
+				min_value       = (int)histogram_list.get(0);
+				histogram       = (int[])histogram_list.get(1);
+				rank_table      = DeltaMapper.getRankTable(histogram);
+				System.out.println("There are " + histogram.length + " values.");
+				System.out.println("The minimum value is " + min_value);
+				for(int j = 1; j < delta2.length; j++)
+					delta3[j] -= min_value;
+				int length3     = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
+				fraction        = length3;
+				fraction       /= pixel_length;
+				System.out.println("The delta string is " + String.format("%.2f",fraction) + " the size of original data");
+				
 		    	
+				for(int j = 1; j < delta1.length; j++)
+					delta3[j] += min_value;
 		    	int [] paeth_values = DeltaMapper.getValuesFromDeltas3(delta3, xdim, ydim, src[0]);
 		    	number_of_errors = 0;
 		    	for(int j = 0; j < src.length; j++)
@@ -492,6 +545,7 @@ public class TestDeltas
 		    	}
 		    	if(number_of_errors != 0)
 		    	    System.out.println("There were " + number_of_errors + " errors in the paeth values.");
+		    	System.out.println();
 		    	
 		    	ArrayList list4 = DeltaMapper.getDeltasFromValues4(src, xdim, ydim);
 		    	int        sum4 = (int)list4.get(0);
@@ -499,6 +553,62 @@ public class TestDeltas
 		    	byte [] direction = (byte [])list4.get(2);
 		    	System.out.println("Sum returned with ideal deltas is " + sum4);
 		    	
+		    	for(int j = 1; j < delta4.length; j++)
+		    		if(delta4[j] < 0)
+		    			delta4[j] = -delta4[j];
+		    	histogram_list  = DeltaMapper.getHistogram(delta4);
+				min_value       = (int)histogram_list.get(0);
+				histogram       = (int[])histogram_list.get(1);
+				rank_table      = DeltaMapper.getRankTable(histogram);
+				System.out.println("There are " + histogram.length + " values.");
+				System.out.println("The minimum value is " + min_value);
+				
+				int length4     = DeltaMapper.packStrings2(delta4, rank_table, delta_string);
+				fraction        = length4;
+				fraction       /= pixel_length;
+				System.out.println("The delta string is " + String.format("%.2f",fraction) + " the size of original data");
+				
+				double zero_one_ratio = xdim * ydim;
+		        if(histogram.length > 1)
+		        {
+					min_value = Integer.MAX_VALUE;
+					for(int j = 0; j < histogram.length; j++)
+						 if(histogram[j] < min_value)
+							min_value = histogram[j];
+					zero_one_ratio -= min_value;
+		        }	
+			    zero_one_ratio  /= length4;
+			    
+			    byte [] compressed_string = new byte[xdim * ydim * 4];
+			    int compression_length4 = 0;
+			    if(zero_one_ratio > .5)
+			    {
+			    	compression_length4 = DeltaMapper.compressZeroStrings(delta_string, length4, compressed_string);	
+			    }
+			    else
+			    {
+			    	compression_length4 = DeltaMapper.compressOneStrings(delta_string, length4, compressed_string);	
+			    }
+			    fraction        = compression_length4;
+				fraction       /= pixel_length;
+				System.out.println("The compressed delta string is " + String.format("%.2f",fraction) + " the size of original data");
+			   
+				byte [] zipped_string = new byte[length4 * 2];
+				int array_length = length4 / 8;
+				if(length4 % 8 != 0)
+					array_length++;
+			    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+		    	deflater.setInput(delta_string, 0, array_length);
+		    	deflater.finish();
+		    	int zipped_string_length = deflater.deflate(zipped_string);
+		    	deflater.end();
+		    	
+		    	fraction = zipped_string_length * 8;
+		    	fraction       /= pixel_length;
+				System.out.println("The zipped delta string is " + String.format("%.2f",fraction) + " the size of original data");
+		    	/*
+				for(int j = 1; j < delta1.length; j++)
+					delta4[j] += min_value;
 		    	int [] ideal_values = DeltaMapper.getValuesFromDeltas4(delta4, xdim, ydim, src[0], direction);
 		    	number_of_errors = 0;
 		    	for(int j = 0; j < src.length; j++)
@@ -506,9 +616,9 @@ public class TestDeltas
 		    		if(src[j] != ideal_values[j])
 		    			number_of_errors++;
 		    	}
+		    	*/
 		    	if(number_of_errors != 0)
 		    	    System.out.println("There were " + number_of_errors + " errors in the ideal values.");
-		    	
 		    	System.out.println();
 		    }  
 	    	

@@ -78,7 +78,7 @@ public class DeltaMapper
 	    return histogram_list;
 	}
 	
-	public static int[] getRandomTable(int histogram[])
+	public static int[] getRankTable(int histogram[])
 	{
 		ArrayList key_list     = new ArrayList();
 	    Hashtable rank_table   = new Hashtable();
@@ -123,62 +123,7 @@ public class DeltaMapper
 	}
 	
 	
-	public static int getVerticalDeltaSum(int src[], int xdim, int ydim)
-	{
-		int sum = 0;
-		for(int i = 1; i < ydim - 1; i++)
-		{
-			for(int j = 0; j < xdim - 1; j++)
-			{
-			    int delta = src[i * xdim + j] - src[i * xdim + j - 1];
-			    sum += Math.abs(delta);
-			}
-		}
-		return sum;
-	}
-	
-	public static int getHorizontalDeltaSum(int src[], int xdim, int ydim)
-	{
-		int sum = 0;
-		for(int i = 0; i < ydim - 1; i++)
-		{
-			for(int j = 1; j < xdim - 1; j++)
-			{
-				int delta = src[i * xdim + j] - src[i * xdim + j - 1];
-			    sum += Math.abs(delta);	
-			}
-		}
-		return sum;
-	}
-	
-	// These functions use the sums of the vertical deltas and horizontal deltas 
-	// to decide which deltas to use in compression.
-	// Those values work better than the sum of the absolute values as a heuristic
-	// to decide which to use.
-	
-	/*
-	public static int[] getDeltasFromValues(int src[], int xdim, int ydim, int init_value)
-    {
-		int [] delta1     = getDeltasFromValues1(src, xdim, ydim);
-		int    delta_sum1 = getHorizontalDeltaSum(delta1, xdim, ydim);
-    	int [] delta2     = getDeltasFromValues2(src, xdim, ydim, init_value);
-		int    delta_sum2 = getVerticalDeltaSum(delta2, xdim, ydim);
-    	
-		if(delta_sum1 <= delta_sum2)
-		{
-			//System.out.println("Using horizontal deltas.");
-			return delta1;
-		}
-		else
-		{
-			//System.out.println("Using vertical deltas.");
-			return delta2;
-		}
-    }
-	*/
-	
-	
-    public static int[] getValuesFromDeltas(int src[],int xdim, int ydim, int init_value)
+    public static int[] getValuesFromDeltas(int src[], int xdim, int ydim, int init_value)
     {
         if(src[0] == 0)
         {
@@ -191,6 +136,12 @@ public class DeltaMapper
         {
         	//System.out.println("Type of delta is vertical.");
         	int [] value = getValuesFromDeltas2(src, xdim, ydim, init_value);
+        	return value;   	
+        }
+        else if(src[0] == 2)
+        {
+        	//System.out.println("Type of delta is paeth.");
+        	int [] value = getValuesFromDeltas3(src, xdim, ydim, init_value);
         	return value;   	
         }
         else
@@ -208,7 +159,6 @@ public class DeltaMapper
     {
         int[] dst            = new int[xdim * ydim];
         int   sum            = 0;
-        int   previous_delta = 0;
         int   init_value     = src[0];
         int   value          = init_value;
          
@@ -223,19 +173,16 @@ public class DeltaMapper
             	int delta   = src[k] - init_value;
             	dst[k++]    = delta;
             	init_value += delta;
+            	sum        += Math.abs(delta);
             	value       = init_value;
-            	
-            	previous_delta = delta;
-            	
             }
+            
             for(int j = 1; j < xdim; j++)
             {
                 int delta = src[k]  - value;
                 value    += delta;
-                sum      += Math.abs(previous_delta - delta);
+                sum      += Math.abs(delta);
                 dst[k++]  = delta;
-                
-                previous_delta = delta;
             }
         }
         
@@ -278,7 +225,7 @@ public class DeltaMapper
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
-        int previous_delta = 0;
+       
         int sum            = 0;
         
         int k          = 0;
@@ -293,20 +240,17 @@ public class DeltaMapper
             			dst[k++] = 1;
             		else
             		{
-            		    delta     = src[k] - value;
-                        value     += delta;
+            		    delta    = src[k] - value;
+                        value    += delta;
                         dst[k++]  = delta;
-                        
-                        previous_delta = delta;
+                        sum      += Math.abs(delta);
             		}
             	}
             	else
             	{
                     delta    = src[k]  - src[k - xdim];
                     dst[k++] = delta;
-                    sum     += Math.abs(previous_delta - delta);
-                    
-                    previous_delta = delta;
+                    sum     += Math.abs(delta);
             	}
             }
         }
@@ -331,7 +275,6 @@ public class DeltaMapper
         	dst[i] = value;
         }
         
-        
         // Now we can use values from the destination data to get the rest of the values. 
         for(int i = 1; i < ydim; i++)
         {
@@ -346,7 +289,7 @@ public class DeltaMapper
     }
     
     // These functions use the horizontal, vertical, or diagonal
-    // delta depending on the result of a convolution.
+    // deltas depending on the result of a convolution.
     
     public static ArrayList getDeltasFromValues3(int src[], int xdim, int ydim)
     {
@@ -354,7 +297,7 @@ public class DeltaMapper
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
-        int previous_delta = 0;
+        
         int sum            = 0;
         int horizontal     = 0;
     	int vertical       = 0;
@@ -412,9 +355,7 @@ public class DeltaMapper
             		    delta     = src[k] - value;
                         value     += delta;
                         dst[k++]  = delta;
-                        sum      += Math.abs(previous_delta - delta);
-                        
-                        previous_delta = delta;
+                        sum      += Math.abs(delta);
             		}
             	}
             }
@@ -429,8 +370,7 @@ public class DeltaMapper
             	    	delta      = src[k] - init_value;
             	    	init_value = src[k];
             	    	dst[k++]   = delta;
-            	    	
-            	    	previous_delta = delta;
+            	        sum += Math.abs(delta);
             	    }
             	    else
             	    {
@@ -486,15 +426,12 @@ public class DeltaMapper
             	    	dst[k++] = delta;
             	    	
             	    	
-            	    	sum += Math.abs(delta - previous_delta);
-            	    	
-            	    	previous_delta = delta;
+            	    	sum += Math.abs(delta);
             	    }
                 }
         	}
         }
         
-       
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
@@ -504,8 +441,9 @@ public class DeltaMapper
     public static int[] getValuesFromDeltas3(int src[], int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
-        dst[0] = init_value;
+        dst[0]    = init_value;
         int value = init_value;
+
         
         if(src[0] != 2)
         	System.out.println("Wrong code.");
@@ -556,7 +494,7 @@ public class DeltaMapper
         return dst;
     }
     
-    // Get an ideal delta set and a map of the which pixels are used.
+    // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
     {
         int[]  dst         = new int[xdim * ydim];
@@ -565,17 +503,7 @@ public class DeltaMapper
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
-        int previous_delta = 0;
         int sum            = 0;
-        int horizontal     = 0;
-    	int vertical       = 0;
-    	int diagonal       = 0;
-        
-        
-        int horizontal_sum = 0;
-        int vertical_sum   = 0;
-        int diagonal_sum   = 0;
-        int limit_sum      = 0;
         
         int k = 0;
         for(int i = 0; i < ydim; i++)
@@ -587,7 +515,7 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             		    // Setting the first value to 3 to mark the delta type ideal.
-            			dst[k] = 3;
+            			dst[k]       = 3;
             			direction[k] = 0;
             			k++;
             	    }
@@ -595,14 +523,12 @@ public class DeltaMapper
             		{
             			// We don't have an upper or upper diagonal delta to check
             			// in the first row, so we just use horizontal deltas.
-            		    delta   = src[k] - value;
-                        value  += delta;
-                        dst[k]  = delta;
+            		    delta        = src[k] - value;
+                        value       += delta;
+                        dst[k]       = delta;
                         direction[k] = 0;
+                        sum         += Math.abs(delta);
                         k++;
-                        sum    += Math.abs(previous_delta - delta);
-                        
-                        previous_delta = delta;
             		}
             	}
             }
@@ -618,9 +544,8 @@ public class DeltaMapper
             	    	init_value   = src[k];
             	    	dst[k]       = delta;
             	    	direction[k] = 1;
+            	    	sum          += Math.abs(delta);
             	    	k++;
-            	    	
-            	    	previous_delta = delta;
             	    }
             	    else
             	    {
@@ -631,33 +556,27 @@ public class DeltaMapper
             	    	
             	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c))
             	    	{
-            	    		delta = a;
-            	    	    dst[k] = delta;
+            	    		delta        = a;
+            	    	    dst[k]       = delta;
             	    	    direction[k] = 0;
+            	    	    sum         += Math.abs(delta);
             	    	    k++;
-            	    	    
-            	    	    sum += Math.abs(previous_delta - delta);
-            	    	    previous_delta = delta;
             	    	}
             	    	else if(Math.abs(b)<= Math.abs(c))
             	    	{
-            	    		delta  = b;
-            	    		dst[k] = delta;
+            	    		delta        = b;
+            	    		dst[k]       = delta;
             	    	    direction[k] = 1;
-            	    	    k++;	
-            	    	    
-            	    	    sum += Math.abs(previous_delta - delta);
-            	    	    previous_delta = delta;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
             	    	}
             	    	else
             	    	{
-            	    		delta = c;
-            	    		dst[k] = delta;
+            	    		delta        = c;
+            	    		dst[k]       = delta;
             	    	    direction[k] = 2;
+            	    	    sum         += Math.abs(delta);
             	    	    k++;	
-            	    	    
-            	    	    sum += Math.abs(previous_delta - delta);
-            	    	    previous_delta = delta;
             	    	}
             	    }
                 }
