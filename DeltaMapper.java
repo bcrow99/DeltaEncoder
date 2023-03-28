@@ -497,8 +497,8 @@ public class DeltaMapper
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
     {
-        int[]  dst         = new int[xdim * ydim];
-        byte[] direction   = new byte[xdim * ydim];
+        int[]  dst        = new int[xdim * ydim];
+        int[] direction   = new int[xdim * ydim];
         
         int init_value     = src[0];
         int value          = init_value;
@@ -590,7 +590,7 @@ public class DeltaMapper
         return result;
     }
 
-    public static int[] getValuesFromDeltas4(int [] src, int xdim, int ydim, int init_value, byte [] direction)
+    public static int[] getValuesFromDeltas4(int [] src, int xdim, int ydim, int init_value, int [] direction)
     {
     	int[] dst = new int[xdim * ydim];
         dst[0] = init_value;
