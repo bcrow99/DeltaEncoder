@@ -431,7 +431,6 @@ public class DeltaMapper
                 }
         	}
         }
-        
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
@@ -632,6 +631,303 @@ public class DeltaMapper
         
         return dst;
     }
+    
+    // Get an optimal set of orthogonal deltas and a map of which pixels are used.
+    public static ArrayList getDeltasFromValues5(int src[], int xdim, int ydim)
+    {
+        int[]  dst        = new int[xdim * ydim];
+        int[] direction   = new int[xdim * ydim];
+        
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        int sum            = 0;
+        
+        int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 4 to mark the delta type optimal orthogonal.
+            			dst[k]       = 4;
+            			direction[k] = 0;
+            			k++;
+            	    }
+            		else
+            		{
+            			// We don't have an upper delta to check
+            			// in the first row, so we just use horizontal deltas.
+            		    delta        = src[k] - value;
+                        value       += delta;
+                        dst[k]       = delta;
+                        direction[k] = 0;
+                        sum         += Math.abs(delta);
+                        k++;
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta to check,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta        = src[k] - init_value;
+            	    	init_value   = src[k];
+            	    	dst[k]       = delta;
+            	    	direction[k] = 1;
+            	    	sum          += Math.abs(delta);
+            	    	k++;
+            	    }
+            	    else
+            	    {
+            	    	// Now we have 2 possible pixels to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	
+            	    	if(Math.abs(a) <= Math.abs(b))
+            	    	{
+            	    		delta        = a;
+            	    	    dst[k]       = delta;
+            	    	    direction[k] = 0;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta        = b;
+            	    		dst[k]       = delta;
+            	    	    direction[k] = 1;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    }
+                }
+        	}
+        }
+        
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        result.add(direction);
+        return result;
+    }
+
+    public static int[] getValuesFromDeltas5(int [] src, int xdim, int ydim, int init_value, int [] direction)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0] = init_value;
+        int value = init_value;
+        
+        if(src[0] != 4)
+        	System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)	
+            {
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            		int current_direction = direction[i * xdim + j]; 
+            		if(current_direction == 0)
+            		    value = dst[i * xdim + j - 1];
+            		else if(current_direction == 1)
+            		    value = dst[(i - 1) * xdim + j];
+            	    value += src[i * xdim + j];
+            	    dst[i * xdim + j] = value;
+            	}
+            }
+        }
+        
+        return dst;
+    }
+    
+    
+    public static ArrayList getDeltasFromValues6(int src[], int xdim, int ydim)
+    {
+        int[] dst          = new int[xdim * ydim];
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        
+        int sum            = 0;
+        int horizontal     = 0;
+    	int vertical       = 0;
+    	int diagonal       = 0;
+        int k              = 0;
+        
+        
+        // We're keeping track of which pixel gets used, and then 
+        // using the value to make our next prediction.
+       
+        int previous_value = 0;
+         
+        k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 5 to mark the delta type.
+            			dst[k++] = 5;
+            	    }
+            		else
+            		{
+            			// We don't have an upper or upper diagonal delta to check
+            			// in the first row, so we just use horizontal deltas.
+            		    delta     = src[k] - value;
+                        value    += delta;
+                        dst[k++]  = delta;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta or diagonal delta,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	dst[k++]   = delta;
+            	        sum += Math.abs(delta);
+            	        
+            	        previous_value = init_value;
+            	    }
+            	    else
+            	    {
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = previous_value;
+            	    	
+            	    	// Prediction deltas.
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	// Actual deltas.
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	{
+            	    	    delta = horizontal_delta;
+            	    	    previous_value = a;
+            	    	}
+            	    	else if(delta_b <= delta_c)
+            	    	{
+            	    	    delta = vertical_delta;
+            	    	    previous_value = b;
+            	    	}
+            	    	else
+            	    	{
+            	    	    delta = diagonal_delta;
+            	    	    previous_value = c;
+            	    	}
+            	    	dst[k++] = delta;
+            	    	
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        return result;
+    }
+
+    public static int[] getValuesFromDeltas6(int src[], int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0]    = init_value;
+        int value = init_value;
+
+        
+        if(src[0] != 2)
+        	System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)	
+            {
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            	    int a = dst[i * xdim + j - 1];
+            	    int b = dst[(i - 1) * xdim + j];
+            	    int c = dst[(i - 1) * xdim + j - 1];
+            	    int d = a + b - c;
+            	    
+            	    int delta_a = Math.abs(a - d);
+        	    	int delta_b = Math.abs(b - d);
+        	    	int delta_c = Math.abs(c - d);
+        	    	
+        	    	if(delta_a <= delta_b && delta_a <= delta_c)
+        	    	{
+        	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+        	    	}
+        	    	else if(delta_b <= delta_c)
+        	    	{
+        	    		dst[i * xdim + j] = b + src[i * xdim + j];
+        	    	}
+        	    	else
+        	    	{
+        	    		dst[i * xdim + j] = c + src[i * xdim + j];
+        	    	}
+            	}
+            }
+        }
+        
+        return dst;
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     // These packing/unpacking functions represent int values
     // as unary strings.
