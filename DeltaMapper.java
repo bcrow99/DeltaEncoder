@@ -2121,39 +2121,91 @@ public class DeltaMapper
     	return channel;
     }
     
-    /*
-	public static int getBlockDeltaSum(int src[], int src_xdim, int src_ydim, int block_xdim, int block_ydim)
-	{
-		int xdim = src_xdim / block_xdim;
-	    int ydim = src_ydim / block_ydim;
-	    
-	    int delta_sum = 0;
-	    int yoffset   = 0;
-	    for(int i = 0; i < ydim; i++)
-	    {
-	    	int xoffset = 0;
-	    	for(int j = 0; j < xdim; j++)
-	    	{
-	    		int [] block      = DeltaMapper.extract(src, src_xdim, xoffset, yoffset, block_xdim, block_ydim);
-	  		    int    init_value = block[0];
-	  		    int [] delta      = DeltaMapper.getDeltasFromValues(block, block_xdim, block_ydim, init_value); 
-	  		    if(delta[0] == 0)
-	  		    {
-	  		    	//System.out.println("Delta type is horizontal.");
-	  		    	int h_sum =  DeltaMapper.getHorizontalDeltaSum(delta, block_xdim, block_ydim);
-	  		    	delta_sum += h_sum;
-	  		    }
-	  		    else
-	  		    {
-	  		    	//System.out.println("Delta type is vertical.");
-	  		    	int v_sum = DeltaMapper.getVerticalDeltaSum(delta, block_xdim, block_ydim);
-	  		    	delta_sum += v_sum;
-	  		    } 	
-	  		    xoffset += block_xdim;
-	    	}
-	    	yoffset += block_ydim;
-	    }
-	    return delta_sum;
-	}
-	*/
+    public static int[] getHuffmanLength(int [] w)
+    {
+    	int n = w.length;
+    	
+    	int leaf = n - 1;
+    	int root = n - 1;
+    	int next;
+    	
+    	// Create tree.
+    	for(next = n - 1; next > 0; n--)
+    	{
+    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
+    	    {
+    	    	if(root >= 0)
+    	    	{
+    	        // Use internal node and reassign w[next].
+    	    	System.out.println("Root = " + root);
+    	    	w[next] = w[root];
+    	    	w[root] = next;
+    	    	root--;
+    	    	}
+    	    }
+    	    else if(root >= 0)
+    	    {
+    	    	// Use leaf node and reassign w[next].
+    	    	w[next] = w[leaf];
+    	    	w[root] = next;
+    	    	leaf--;
+    	    	if(leaf < 0 || (root > next && w[root] < w[leaf]))
+    	    	{
+    	    		// Use internal node to get second child.  
+    	    		// We are adding to w[next], not reassigning it.
+    	    		w[next] += w[root];
+    	    		w[root]  = next;
+    	    		root--;
+    	    	}
+    	    	else
+    	    	{
+    	    		// Use leaf node.  Add to w[next].
+    	    		w[next] += w[leaf];
+    	    		leaf--;
+    	    	}
+    	    }
+    	}
+    	
+    	System.out.println("Got here.");
+    	
+    	// Traverse tree from root down, converting parent pointers into
+    	// internal node depths.
+    	w[1] = 0;
+    	for(next = 2; next < n - 1; next++)
+    		w[next] = w[w[next]] + 1;
+    	
+    	// Final pass to produce code lengths.
+    	int avail = 1;
+    	int used  = 0;
+    	int depth = 0;
+    	
+    	root = 1;
+    	next = 0;
+    	
+    	while(avail > 0)
+    	{
+    		// Count internal nodes at each depth.
+    		while(root < n && w[root] == depth)
+    		{
+    			used++;
+    			root++;
+    		}
+    		
+    		// Assign as leaves any nodes that are not internal.
+    		while(avail > used)
+    		{
+    			w[next]= depth;
+    			next++;
+    			avail--;
+    		}
+    		
+    		// Reset variables.
+    		avail = 2 * used;
+    		used  = 0;
+    		depth++;
+    	}
+    	
+    	int [] length = new int[n];
+    	return length;
+    }
 }
