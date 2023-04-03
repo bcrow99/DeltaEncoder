@@ -2121,6 +2121,25 @@ public class DeltaMapper
     	return channel;
     }
     
+    public static int[] getCanonicalCode(int [] length)
+    {
+    	int n = length.length;
+    	
+        int [] code         = new int[n];
+        int [] shifted_code = new int[n];
+        int max_length = length[n - 1];
+        
+        code[0] = 0;
+        shifted_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+        	int shift = max_length - length[i];
+        	shifted_code[i] = code[i] >> shift;
+        }
+        return shifted_code;
+    }
+    
     public static int[] getHuffmanLength(int [] w)
     {
     	int n = w.length;
@@ -2162,20 +2181,12 @@ public class DeltaMapper
     	    	leaf--;
     	    }
     	}
-        System.out.println("root = " + root);
-        System.out.println("leaf = " + leaf);
-    	for(int i = 0; i < w.length; i++)
-    		System.out.println("w[" + i + "] = " + w[i]);
-    	System.out.println();
     	
     	// Traverse tree from root down, converting parent pointers into
     	// internal node depths.
     	w[1] = 0;
     	for(next = 2; next < n; next++)
     		w[next] = w[w[next]] + 1;
-    	for(int i = 0; i < w.length; i++)
-    		System.out.println("w[" + i + "] = " + w[i]);
-    	System.out.println();
     	
     	// Final pass to produce code lengths.
     	int avail = 1;
@@ -2197,7 +2208,7 @@ public class DeltaMapper
     		// Assign as leaves any nodes that are not internal.
     		while(avail > used)
     		{
-    			w[next]= depth;
+    			w[next] = depth;
     			next++;
     			avail--;
     		}
