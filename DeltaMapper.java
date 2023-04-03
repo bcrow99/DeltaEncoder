@@ -2130,49 +2130,52 @@ public class DeltaMapper
     	int next;
     	
     	// Create tree.
-    	for(next = n - 1; next > 0; n--)
+    	for(next = n - 1; next > 0; next--)
     	{
+    		// Find first child.
     	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
     	    {
-    	    	if(root >= 0)
-    	    	{
     	        // Use internal node and reassign w[next].
-    	    	System.out.println("Root = " + root);
     	    	w[next] = w[root];
     	    	w[root] = next;
     	    	root--;
-    	    	}
     	    }
-    	    else if(root >= 0)
+    	    else
     	    {
     	    	// Use leaf node and reassign w[next].
     	    	w[next] = w[leaf];
-    	    	w[root] = next;
     	    	leaf--;
-    	    	if(leaf < 0 || (root > next && w[root] < w[leaf]))
-    	    	{
-    	    		// Use internal node to get second child.  
-    	    		// We are adding to w[next], not reassigning it.
-    	    		w[next] += w[root];
-    	    		w[root]  = next;
-    	    		root--;
-    	    	}
-    	    	else
-    	    	{
-    	    		// Use leaf node.  Add to w[next].
-    	    		w[next] += w[leaf];
-    	    		leaf--;
-    	    	}
+    	    }
+    	    
+    	    // Find second child.
+    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
+    	    {
+    	        // Use internal node and reassign w[next].
+    	    	w[next] += w[root];
+    	    	w[root] = next;
+    	    	root--;
+    	    }
+    	    else
+    	    {
+    	    	// Use leaf node and reassign w[next].
+    	    	w[next] += w[leaf];
+    	    	leaf--;
     	    }
     	}
-    	
-    	System.out.println("Got here.");
+        System.out.println("root = " + root);
+        System.out.println("leaf = " + leaf);
+    	for(int i = 0; i < w.length; i++)
+    		System.out.println("w[" + i + "] = " + w[i]);
+    	System.out.println();
     	
     	// Traverse tree from root down, converting parent pointers into
     	// internal node depths.
     	w[1] = 0;
-    	for(next = 2; next < n - 1; next++)
+    	for(next = 2; next < n; next++)
     		w[next] = w[w[next]] + 1;
+    	for(int i = 0; i < w.length; i++)
+    		System.out.println("w[" + i + "] = " + w[i]);
+    	System.out.println();
     	
     	// Final pass to produce code lengths.
     	int avail = 1;
@@ -2206,6 +2209,8 @@ public class DeltaMapper
     	}
     	
     	int [] length = new int[n];
+    	for(int i = 0; i < n; i++)
+    		length[i] = w[i];
     	return length;
     }
 }

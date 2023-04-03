@@ -11,8 +11,9 @@ public class TestCodelength
 	    
 	    int [] length = DeltaMapper.getHuffmanLength(weight);
 	    
-	    System.out.println("Got here.");
+	    //System.out.println("Got here.");
 	    for(int i = 0; i < length.length; i++)
-	    	System.out.println(length[i] + " ");
+	    	System.out.print(length[i] + " ");
+	    System.out.println();
 	}
 }
