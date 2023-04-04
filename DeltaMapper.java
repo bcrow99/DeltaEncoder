@@ -2224,4 +2224,63 @@ public class DeltaMapper
     		length[i] = w[i];
     	return length;
     }
+    
+    double getZeroOneRatio(int [] code, int [] length, int [] frequency[])
+    {
+    	int    n     = code.length;
+    	double ratio = 0;
+    	
+    	int    number_of_zeros = 0;
+    	int    number_of_ones  = 0;
+    	
+    	for(int i = 0; i < n; i++)
+    	{
+    		int mask = 1;
+    		for(int j = 0; j < length[i]; j++)
+    		{
+    			int bit_mask = mask << j;
+    			int bit      = code[i] & bit_mask;
+    			if(bit == 0)
+    				number_of_zeros++;
+    			else
+    				number_of_ones++;
+    		}
+    	}
+    	ratio  = number_of_zeros;
+    	ratio /= number_of_ones;
+    	
+    	return ratio;
+    }
+    
+    int getShannonLimit(int [] weight)
+    {
+    	int sum = 0;
+    	int n   = weight.length;
+    	
+    	for(int i = 0; i < n; i++)
+    	    sum += weight[i];
+    	
+    	int limit = 0;
+    	for(int i = 0; i < n; i++)
+    	{
+    		double exponent = weight[i];
+    		exponent       /= sum;
+    		limit += (int)Math.pow(2, exponent);
+    	}
+    	
+    	return limit;
+    }
+
+    
+    int getCost(int [] length, int [] frequency)
+    {
+    	int n    = length.length;
+    	int cost = 0;
+    	
+    	for(int i = 0; i < n; i++)
+    	    cost += length[i] * frequency[i];
+    	
+    	return cost;
+    }
+
 }
