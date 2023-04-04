@@ -2140,9 +2140,17 @@ public class DeltaMapper
         return shifted_code;
     }
     
-    public static int[] getHuffmanLength(int [] w)
+    public static int[] getHuffmanLength(int [] weight)
     {
-    	int n = w.length;
+    	// The in-place processing is one of the
+    	// trickiest parts of this code, but we
+    	// don't want to modify the input so we'll 
+    	// make a copy and work from that.
+    	int n = weight.length;
+    	
+    	int [] w = new int[n];
+    	for(int i = 0; i < n; i++)
+    		w[i] = weight[i];
     	
     	int leaf = n - 1;
     	int root = n - 1;
@@ -2225,7 +2233,7 @@ public class DeltaMapper
     	return length;
     }
     
-    double getZeroOneRatio(int [] code, int [] length, int [] frequency[])
+    public static double getZeroOneRatio(int [] code, int [] length, int [] frequency)
     {
     	int    n     = code.length;
     	double ratio = 0;
@@ -2252,7 +2260,7 @@ public class DeltaMapper
     	return ratio;
     }
     
-    int getShannonLimit(int [] weight)
+    public static double getShannonLimit(int [] weight)
     {
     	int sum = 0;
     	int n   = weight.length;
@@ -2260,25 +2268,28 @@ public class DeltaMapper
     	for(int i = 0; i < n; i++)
     	    sum += weight[i];
     	
-    	int limit = 0;
+    	double limit = 0;
     	for(int i = 0; i < n; i++)
     	{
     		double exponent = weight[i];
     		exponent       /= sum;
-    		limit += (int)Math.pow(2, exponent);
+    		
+    		double factor = Math.pow(2, exponent);
+    		limit          += weight[i] * factor;
     	}
     	
     	return limit;
     }
 
-    
-    int getCost(int [] length, int [] frequency)
+    public static int getCost(int [] length, int [] frequency)
     {
     	int n    = length.length;
     	int cost = 0;
     	
     	for(int i = 0; i < n; i++)
+    	{
     	    cost += length[i] * frequency[i];
+    	}
     	
     	return cost;
     }
