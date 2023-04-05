@@ -7,10 +7,11 @@ public class TestCodelength
     
 	public TestCodelength()
 	{
-	    int [] weight = {29, 17, 3, 1, 1};
+	    int [] weight = {20, 17, 6, 3, 2, 2, 2, 1, 1, 1};
 	    
 	 
 	    double limit     = DeltaMapper.getShannonLimit(weight);
+	    
 	    System.out.println("The shannon limit is " + String.format("%.2f", limit));
 	    System.out.println();
 	    
@@ -39,8 +40,18 @@ public class TestCodelength
 	    length[2] = 3;
 	    code[3]   = 14;
 	    length[3] = 4;
-	    code[4]   = 15;
-	    length[4] = 4;
+	    code[4]   = 30;
+	    length[4] = 5;
+	    code[5]   = 62;
+	    length[5] = 6;
+	    code[6]   = 126;
+	    length[6] = 7;
+	    code[7]   = 254;
+	    length[7] = 8;
+	    code[8]   = 510;
+	    length[8] = 9;
+	    code[9]   = 511;
+	    length[9] = 9;
 	    
 	    cost      = DeltaMapper.getCost(length, weight);
 	    ratio  = DeltaMapper.getZeroOneRatio(code, length, weight);
