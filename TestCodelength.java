@@ -32,31 +32,9 @@ public class TestCodelength
 	    System.out.println("The zero one ratio for the huffman code is " + String.format("%.2f", ratio));
 	    System.out.println();
 	    
-	    code[0]   = 0;
-	    for(int i = 1; i < 10; i++)
-	    	code[i] = code[i - 1] + (int)Math.pow(2, i);
-	    for(int i = 0; i < 9; i++)
-	    	length[i] = i + 1;
-	    length[9] = 9;
-	    length[0] = 1;
-	    code[1]   = 2;
-	    length[1] = 2;
-	    code[2]   = 6;
-	    length[2] = 3;
-	    code[3]   = 14;
-	    length[3] = 4;
-	    code[4]   = 30;
-	    length[4] = 5;
-	    code[5]   = 62;
-	    length[5] = 6;
-	    code[6]   = 126;
-	    length[6] = 7;
-	    code[7]   = 254;
-	    length[7] = 8;
-	    code[8]   = 510;
-	    length[8] = 9;
-	    code[9]   = 511;
-	    length[9] = 9;
+	    code   = DeltaMapper.getUnaryCode(n);
+	    length = DeltaMapper.getUnaryLength(n);
+	    
 	    
 	    cost      = DeltaMapper.getCost(length, weight);
 	    ratio  = DeltaMapper.getZeroOneRatio(code, length, weight);

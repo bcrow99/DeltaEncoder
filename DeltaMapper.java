@@ -2140,6 +2140,28 @@ public class DeltaMapper
         return shifted_code;
     }
     
+    public static int[] getUnaryCode(int n)
+    {
+        int [] code         = new int[n];
+       
+        code[0] = 0;
+	    for(int i = 1; i < n; i++)
+	    {
+	    	code[i] = code[i - 1] + (int)Math.pow(2, i);
+	    }
+	    code[n - 1]++;
+        return code;
+    }
+    
+    public static int[] getUnaryLength(int n)
+    {
+    	int [] length = new int[n];
+    	for(int i = 0; i < n; i++)
+    		length[i] = i + 1;
+    	length[n - 1]--;
+    	return length;
+    }
+    
     public static int[] getHuffmanLength(int [] weight)
     {
     	// The in-place processing is one of the
@@ -2227,10 +2249,7 @@ public class DeltaMapper
     		depth++;
     	}
     	
-    	int [] length = new int[n];
-    	for(int i = 0; i < n; i++)
-    		length[i] = w[i];
-    	return length;
+    	 return w;
     }
     
     public static double getZeroOneRatio(int [] code, int [] length, int [] frequency)
