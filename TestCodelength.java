@@ -33,6 +33,11 @@ public class TestCodelength
 	    System.out.println();
 	    
 	    code[0]   = 0;
+	    for(int i = 1; i < 10; i++)
+	    	code[i] = code[i - 1] + (int)Math.pow(2, i);
+	    for(int i = 0; i < 9; i++)
+	    	length[i] = i + 1;
+	    length[9] = 9;
 	    length[0] = 1;
 	    code[1]   = 2;
 	    length[1] = 2;
