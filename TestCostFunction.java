@@ -455,7 +455,7 @@ public class TestCostFunction
 		    	ArrayList histogram_list;
 		    	int [] histogram, rank_table, frequency, length, code;
 		    	int n, cost;
-		    	double fraction, ratio;
+		    	double ratio;
 			    
 		    	System.out.println("Processing " + channel_string[i] + " channel.");
 		    	System.out.println();
@@ -463,7 +463,7 @@ public class TestCostFunction
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
 		    	int []   delta3 = (int [])list3.get(1);
-		    	System.out.println("Sum returned with paeth deltas is " + sum3);
+		    	//System.out.println("Sum returned with paeth deltas is " + sum3);
 		    	histogram_list  = DeltaMapper.getHistogram(delta3);
 				min_value       = (int)histogram_list.get(0);
 				histogram       = (int[])histogram_list.get(1);
@@ -492,6 +492,9 @@ public class TestCostFunction
 			    
 			    System.out.println("The expected length of the huffman output is " + cost);
 			    System.out.println("The zero one ratio for the huffman code is " + String.format("%.2f", ratio));
+			    
+			    double limit     = DeltaMapper.getShannonLimit(frequency);
+			    System.out.println("The shannon limit is " + String.format("%.2f", limit));
 			    System.out.println();
 				
 				
@@ -499,10 +502,10 @@ public class TestCostFunction
 				//System.out.println("The minimum value is " + min_value);
 				for(int j = 1; j < delta3.length; j++)
 					delta3[j] -= min_value;
-				int length3     = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
-				fraction        = length3;
-				fraction       /= pixel_length;
-				//System.out.println("The delta string is " + String.format("%.2f",fraction) + " the size of original data");
+				int length3  = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
+				ratio        = length3;
+				ratio       /= pixel_length;
+				//System.out.println("The delta string is " + String.format("%.2f",ratio) + " the size of original data");
 				
 				for(int j = 1; j < delta3.length; j++)
 					delta3[j] += min_value;
@@ -517,7 +520,6 @@ public class TestCostFunction
 		    	    System.out.println("There were " + number_of_errors + " errors in the paeth values.");
 		    	System.out.println();
 		    	
-		  
 		    	n = delta3.length;
 		    	int [] sign = new int[n];
 		        
@@ -551,9 +553,12 @@ public class TestCostFunction
 			    {
 			    	compression_length3 = DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);	
 			    }
-			    fraction        = compression_length3;
-				fraction       /= pixel_length;
-				//System.out.println("The compressed paeth delta string is " + String.format("%.2f",fraction) + " the size of original data");
+			    ratio        = compression_length3;
+				ratio       /= pixel_length;
+				System.out.println("The compressed unary strings have length " + compression_length3);
+				System.out.println();
+				
+				//System.out.println("The compressed paeth delta string is " + String.format("%.2f",ratio) + " the size of original data");
 			   
 				byte [] zipped_string = new byte[length3 * 2];
 				int array_length = length3 / 8;
@@ -565,9 +570,9 @@ public class TestCostFunction
 		    	int zipped_string_length = deflater.deflate(zipped_string);
 		    	deflater.end();
 		    	
-		    	fraction = zipped_string_length * 8;
-		    	fraction       /= pixel_length;
-				//System.out.println("The zipped paeth delta string is " + String.format("%.2f",fraction) + " the size of original data");
+		    	ratio = zipped_string_length * 8;
+		    	ratio       /= pixel_length;
+				//System.out.println("The zipped paeth delta string is " + String.format("%.2f",ratio) + " the size of original data");
 		    	
 				ArrayList list4  = DeltaMapper.getDeltasFromValues4(src, xdim, ydim);
 				int [] direction = (int [])list4.get(2);
@@ -577,9 +582,9 @@ public class TestCostFunction
 				histogram       = (int[])histogram_list.get(1);
 				rank_table      = DeltaMapper.getRankTable(histogram);
 				int d_length    = DeltaMapper.packStrings2(direction, rank_table, direction_string);
-				fraction        = d_length;
-				fraction       /= pixel_length;
-				//System.out.println("The direction string is " + String.format("%.2f",fraction) + " the size of original data");
+				ratio        = d_length;
+				ratio       /= pixel_length;
+				//System.out.println("The direction string is " + String.format("%.2f",ratio) + " the size of original data");
 				zero_one_ratio = xdim * ydim;
 		        if(histogram.length > 1)
 		        {
@@ -600,9 +605,9 @@ public class TestCostFunction
 			    {
 			    	compression_length_d = DeltaMapper.compressOneStrings(direction_string, d_length, compressed_string);	
 			    }
-			    fraction        = compression_length_d;
-				fraction       /= pixel_length;
-				//System.out.println("The compressed direction string is " + String.format("%.2f",fraction) + " the size of original data");
+			    ratio        = compression_length_d;
+				ratio       /= pixel_length;
+				//System.out.println("The compressed direction string is " + String.format("%.2f",ratio) + " the size of original data");
 			    
 
 		    	histogram_list  = DeltaMapper.getHistogram(sign);
@@ -610,9 +615,9 @@ public class TestCostFunction
 				histogram       = (int[])histogram_list.get(1);
 				rank_table      = DeltaMapper.getRankTable(histogram);
 				int s_length    = DeltaMapper.packStrings2(sign, rank_table, sign_string);
-				fraction        = s_length;
-				fraction       /= pixel_length;
-				//System.out.println("The sign string is " + String.format("%.2f",fraction) + " the size of original data");
+				ratio        = s_length;
+				ratio       /= pixel_length;
+				//System.out.println("The sign string is " + String.format("%.2f",ratio) + " the size of original data");
 				zero_one_ratio = xdim * ydim;
 		        if(histogram.length > 1)
 		        {
@@ -633,9 +638,9 @@ public class TestCostFunction
 			    {
 			    	compression_length_s = DeltaMapper.compressOneStrings(direction_string, s_length, compressed_string);	
 			    }
-			    fraction        = compression_length_s;
-				fraction       /= pixel_length;
-				//System.out.println("The compressed sign string is " + String.format("%.2f",fraction) + " the size of original data");
+			    ratio        = compression_length_s;
+				ratio       /= pixel_length;
+				//System.out.println("The compressed sign string is " + String.format("%.2f",ratio) + " the size of original data");
 			    
 			
 				System.out.println();
