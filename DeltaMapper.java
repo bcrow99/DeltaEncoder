@@ -2199,14 +2199,14 @@ public class DeltaMapper
     	    // Find second child.
     	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
     	    {
-    	        // Use internal node and reassign w[next].
+    	        // Use internal node and add to w[next].
     	    	w[next] += w[root];
     	    	w[root] = next;
     	    	root--;
     	    }
     	    else
     	    {
-    	    	// Use leaf node and reassign w[next].
+    	    	// Use leaf node and add to w[next].
     	    	w[next] += w[leaf];
     	    	leaf--;
     	    }
@@ -2300,6 +2300,8 @@ public class DeltaMapper
     	return limit;
     }
 
+    // We'll refer to integer values as frequencies,
+    // and fractions as weights.
     public static int getCost(int [] length, int [] frequency)
     {
     	int n    = length.length;
@@ -2311,6 +2313,148 @@ public class DeltaMapper
     	}
     	
     	return cost;
+    }
+    
+    public static ArrayList getStringInformation(byte [] string)
+    {
+    	ArrayList string_information = new ArrayList();
+    	Hashtable zero_table         = new Hashtable();
+    	Hashtable one_table          = new Hashtable();
+    	
+    	
+    	byte mask = 1;
+    	int  n    = string.length;
+    	
+    	int zero_maxlength = 1;
+    	int one_maxlength  = 1;
+    	byte init = string[0];
+    	int previous_type = init & mask;
+    	int  length = 1;
+    	for(int i = 1; i < 8; i++)
+    	{
+    		int type = init & mask << i;	
+    		if(previous_type == 0)
+    		{
+    			if(type == 0)
+    			    length++;
+    			else
+    			{
+    			    if(zero_table.containsKey(length))	
+    			    {
+    			        int value = (int)zero_table.get(length);
+    			        value++;
+    			        zero_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			        zero_table.put(length, 1);
+    			        if(length > zero_maxlength)
+    			        	zero_maxlength = length;
+    			    }
+    			    previous_type = 1;
+			        length = 1;
+    			}
+    		}
+    		else
+    		{
+    			if(type != 0)
+    			    length++;
+    			else
+    			{
+    			    if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length,1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+    			    previous_type = 0;
+			        length = 1;
+    			}	
+    		}
+    	}
+    	
+    	
+    	for(int i = 1; i < n; i++)
+    	{
+    		for(int j = 0; j < 8; j++)
+    		{
+    			int type = init & mask << i;	
+        		if(previous_type == 0)
+        		{
+        			if(type == 0)
+        			    length++;
+        			else
+        			{
+        			    if(zero_table.containsKey(length))	
+        			    {
+        			        int value = (int)zero_table.get(length);
+        			        value++;
+        			        zero_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			        zero_table.put(length,1);
+        			        if(length > zero_maxlength)
+        			        	zero_maxlength = length;
+        			    }
+        			    previous_type = 1;
+    			        length = 1;
+        			}
+        		}
+        		else
+        		{
+        			if(type != 0)
+        			    length++;
+        			else
+        			{
+        			    if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    	one_table.put(length,1);    
+        			    previous_type = 0;
+    			        length = 1;
+        			}	
+        		}	
+    		}
+    	}
+    	
+    	ArrayList zero_list = new ArrayList();
+    	for(int i = 0; i < zero_maxlength; i++)
+    	{
+    		if(zero_table.containsKey(i + 1))
+    		{
+    			int value = (int)zero_table.get(i + 1);
+    			zero_list.add(value);
+    		}
+    		else
+    			zero_list.add(0);
+    	}
+    	
+    	ArrayList one_list = new ArrayList();
+    	for(int i = 0; i < one_maxlength; i++)
+    	{
+    		if(one_table.containsKey(i + 1))
+    		{
+    			int value = (int)one_table.get(i + 1);
+    			one_list.add(value);
+    		}
+    		else
+    			one_list.add(0);
+    	}
+    	
+    	string_information.add(zero_list);
+    	string_information.add(one_list);
+    	return string_information;
     }
 
 }
