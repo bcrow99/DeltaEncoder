@@ -457,8 +457,8 @@ public class TestCostFunction
 		    	int n, cost;
 		    	double ratio;
 			    
-		    	System.out.println("Processing " + channel_string[i] + " channel.");
-		    	System.out.println();
+		    	//System.out.println("Processing " + channel_string[i] + " channel.");
+		    	//System.out.println();
 		    	
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
@@ -468,12 +468,18 @@ public class TestCostFunction
 				min_value       = (int)histogram_list.get(0);
 				histogram       = (int[])histogram_list.get(1);
 				rank_table      = DeltaMapper.getRankTable(histogram);
-				
 				n = histogram.length;
-				frequency = new int[n];
+				int [] ordered_rank = new int[n];
 				for(int j = 0; j < n; j++)
 				{
 					int k = rank_table[j];
+					ordered_rank[k] = j;
+				}
+				
+				frequency = new int[n];
+				for(int j = 0; j < n; j++)
+				{
+					int k = ordered_rank[j];
 					frequency[j] = histogram[k];
 				}
 				
@@ -482,21 +488,23 @@ public class TestCostFunction
 				cost   = DeltaMapper.getCost(length, frequency);
 				ratio  = DeltaMapper.getZeroOneRatio(code, length, frequency);
 				
+				/*
+				if(i == 0)
+				{
+				    n = length.length;
+				    
+				    System.out.println("The lengths of the unary codes: ");
+				    for(int j = 0; j < n; j++)
+				    	System.out.println(length[j]);
+				    System.out.println("Frequencies: ");
+				    for(int j = 0; j < n; j++)
+				    	System.out.println(frequency[j]);
+				    
+				}
+				*/
+				
 				System.out.println("The expected length of the unary strings without compression is " + cost);
-				System.out.println("The zero one ratio is " + String.format("%.2f", ratio));
-				
-				code   = DeltaMapper.getCanonicalCode(length);
-				length = DeltaMapper.getHuffmanLength(frequency);
-				cost   = DeltaMapper.getCost(length, frequency);
-				ratio  = DeltaMapper.getZeroOneRatio(code, length, frequency);
-			    
-			    System.out.println("The expected length of the huffman output is " + cost);
-			    System.out.println("The zero one ratio for the huffman code is " + String.format("%.2f", ratio));
-			    
-			    double limit     = DeltaMapper.getShannonLimit(frequency);
-			    System.out.println("The shannon limit is " + String.format("%.2f", limit));
-			    System.out.println();
-				
+				//System.out.println("The zero one ratio is " + String.format("%.2f", ratio));
 				
 				//System.out.println("There are " + histogram.length + " values.");
 				//System.out.println("The minimum value is " + min_value);
@@ -505,7 +513,66 @@ public class TestCostFunction
 				int length3  = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
 				ratio        = length3;
 				ratio       /= pixel_length;
-				//System.out.println("The delta string is " + String.format("%.2f",ratio) + " the size of original data");
+				
+				// The discrepancy between the expected and actual lengths is because the first delta
+				// is a code instead of 0. 
+				System.out.println("The actual length is " + length3);
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				code   = DeltaMapper.getCanonicalCode(length);
+				length = DeltaMapper.getHuffmanLength(frequency);
+				cost   = DeltaMapper.getCost(length, frequency);
+				ratio  = DeltaMapper.getZeroOneRatio(code, length, frequency);
+				
+
+				/*
+				if(i == 0)
+				{
+				    n = length.length;
+				    
+				    System.out.println("The lengths of the canonical codes: ");
+				    for(int j = 0; j < n; j++)
+				    	System.out.println(length[j]);
+				    System.out.println("Frequencies: ");
+				    for(int j = 0; j < n; j++)
+				    	System.out.println(frequency[j]);
+				    
+				}
+				*/
+			    
+			    System.out.println("The expected length of the huffman output is " + cost);
+			    //System.out.println("The zero one ratio for the huffman code is " + String.format("%.2f", ratio));
+			    
+			    n = delta3.length;
+			    byte [] delta_bytes = new byte[n];
+			    for(int j = 0; j < n; j++)
+			    	delta_bytes[j] = (byte)delta3[j];
+			    byte [] zipped_bytes = new byte[2 * n];
+			    
+			    Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);	
+		    	deflater.setInput(delta_bytes, 0, n);
+		    	deflater.finish();
+		    	int zipped_byte_length = deflater.deflate(zipped_bytes);
+		    	deflater.end();
+		    	
+		    	// Deflate does a little worse than expected, except for binary images, where it does a lot better.
+		    	System.out.println("The actual length of the output from deflate is " + (zipped_byte_length * 8));
+		    	
+			    double limit     = DeltaMapper.getShannonLimit(frequency);
+			    //System.out.println("The shannon limit is " + String.format("%.2f", limit));
+			    //System.out.println();
 				
 				for(int j = 1; j < delta3.length; j++)
 					delta3[j] += min_value;
@@ -555,16 +622,15 @@ public class TestCostFunction
 			    }
 			    ratio        = compression_length3;
 				ratio       /= pixel_length;
-				System.out.println("The compressed unary strings have length " + compression_length3);
-				System.out.println();
+				//System.out.println("The compressed unary strings have length " + compression_length3);
+				//System.out.println();
 				
-				//System.out.println("The compressed paeth delta string is " + String.format("%.2f",ratio) + " the size of original data");
-			   
+
 				byte [] zipped_string = new byte[length3 * 2];
 				int array_length = length3 / 8;
 				if(length3 % 8 != 0)
 					array_length++;
-			    Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+			    deflater = new Deflater(Deflater.BEST_COMPRESSION);	
 		    	deflater.setInput(delta_string, 0, array_length);
 		    	deflater.finish();
 		    	int zipped_string_length = deflater.deflate(zipped_string);
@@ -572,7 +638,7 @@ public class TestCostFunction
 		    	
 		    	ratio = zipped_string_length * 8;
 		    	ratio       /= pixel_length;
-				//System.out.println("The zipped paeth delta string is " + String.format("%.2f",ratio) + " the size of original data");
+				//System.out.println("The zipped unary strings have length " + zipped_string_length * 8);
 		    	
 				ArrayList list4  = DeltaMapper.getDeltasFromValues4(src, xdim, ydim);
 				int [] direction = (int [])list4.get(2);
@@ -641,9 +707,7 @@ public class TestCostFunction
 			    ratio        = compression_length_s;
 				ratio       /= pixel_length;
 				//System.out.println("The compressed sign string is " + String.format("%.2f",ratio) + " the size of original data");
-			    
-			
-				System.out.println();
+				//System.out.println();
 		    }  
 	    	
 			// This code produces an image that should be exactly the same
