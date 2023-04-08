@@ -2456,5 +2456,43 @@ public class DeltaMapper
     	string_information.add(one_list);
     	return string_information;
     }
-
+    public static int getLowerBound(int length, int iterations)
+    {
+    	int bound = length;
+    	for(int i = 0; i < iterations; i++)
+    		bound = (bound - 1) / 2;
+    	return bound;
+    }
+    
+    public static int getUpperBound(int length, int iterations)
+    {
+    	int bound = length;
+    	for(int i = 0; i < iterations; i++)
+    		bound = (bound - 1) * 2;
+    	return bound;
+    }
+    
+    public static int getRecursiveLimit(int length)
+    {
+    	int limit = 0;
+    	if(length >= 3)
+    	{
+    		limit = 1;
+    		int current = length;
+    		while(current > 4)
+    		{
+    			limit++;
+    			current = (current - 1)/ 2;
+    		}
+    	}
+    	return limit;
+    }
+    
+    public static int [] getLimitTable(int length)
+    {
+    	int [] limit = new int[length + 1];
+    	for(int i = 0; i <= length; i++)
+    		limit[i] = getRecursiveLimit(i);
+    	return limit;
+    }
 }
