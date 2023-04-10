@@ -2456,6 +2456,85 @@ public class DeltaMapper
     	string_information.add(one_list);
     	return string_information;
     }
+    
+    double [] getSlidingWindowRatio(byte [] string, int length, int number_of_bits, int interval)
+    {
+        ArrayList ratio_list = new ArrayList();
+        int n                = length - number_of_bits;
+        double [] ratio      = new double[n];
+        
+        int  zero_sum   = 0;
+        int  one_sum    = 0;
+        byte mask       = 1;
+        int  start_byte = 0;
+        int  end_byte   = 0;
+    	int first_bit = string[start_byte] & mask;
+    	if(first_bit == 0)
+    	    zero_sum++;
+    	else
+    		one_sum++;
+    	
+    	int start_shift = 1;
+    	int end_shift   = 1;
+    	for(int i = 1; i < number_of_bits; i++)
+    	{
+    	    int bit = string[end_byte] & mask << end_shift;   	
+    	    if(bit == 0)
+     	       zero_sum++;
+     	    else
+     		   one_sum++;
+    	    end_shift++;
+    	    if(end_shift == 8)
+    	    { 
+    	    	end_shift = 0;
+    	    	end_byte++;
+    	    }
+    	}
+    	
+    	double current_ratio = zero_sum;
+    	current_ratio       /= one_sum;
+    	ratio[0] = current_ratio;
+    	
+        int i = 1; 
+    	while(i < n)
+    	{
+    		// Remove a value from our sliding window.
+    		if(first_bit == 0)
+    			zero_sum--;
+    		else
+    			one_sum--;
+    		
+    		// This value is already part of our sum, but we want to
+    		// know what its so we can decrement it from our sums
+    		// in the next loop.
+    		first_bit    = string[start_byte] & mask << start_shift;
+    		start_shift++;
+    		if(start_shift == 8)
+    		{
+    			start_shift = 0;
+    			start_byte++;
+    		}
+    		
+    		// New value.
+    		int last_bit = string[end_byte] & mask << end_shift; 
+    		if(last_bit == 0)
+    			zero_sum++;
+    		else
+    			one_sum++;
+    		end_shift++;
+    		if(end_shift == 8)
+    		{
+    			end_shift = 0;
+    			end_byte++;
+    		}
+    		
+    		current_ratio  = zero_sum;
+        	current_ratio /= one_sum;
+        	ratio[i++]   = current_ratio;
+    	}
+        return ratio;
+    }
+    
     public static int getLowerBound(int length, int iterations)
     {
     	int bound = length;
