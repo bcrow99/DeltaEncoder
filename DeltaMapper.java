@@ -4,6 +4,7 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
+   
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -289,8 +290,7 @@ public class DeltaMapper
     }
     
     // These functions use the horizontal, vertical, or diagonal
-    // deltas depending on the result of a convolution.
-    
+    // deltas depending on the result of a convolution. 
     public static ArrayList getDeltasFromValues3(int src[], int xdim, int ydim)
     {
         int[] dst          = new int[xdim * ydim];
@@ -303,7 +303,6 @@ public class DeltaMapper
     	int vertical       = 0;
     	int diagonal       = 0;
         int k              = 0;
-        
         
         // We're checking to see how close the paeth filter comes to an
         // ideal delta set--which is not very close, but it can still produce
