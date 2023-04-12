@@ -2456,11 +2456,13 @@ public class DeltaMapper
     	return string_information;
     }
     
-    double [] getSlidingWindowRatio(byte [] string, int length, int number_of_bits, int interval)
+    public static ArrayList getSlidingWindowRatio(byte [] string, int length, int number_of_bits)
     {
         ArrayList ratio_list = new ArrayList();
         int n                = length - number_of_bits;
         double [] ratio      = new double[n];
+        int    [] start      = new int[n];
+        int    [] end        = new int[n];
         
         int  zero_sum   = 0;
         int  one_sum    = 0;
@@ -2490,8 +2492,9 @@ public class DeltaMapper
     	    }
     	}
     	
+    	
     	double current_ratio = zero_sum;
-    	current_ratio       /= one_sum;
+    	current_ratio       /= (one_sum + zero_sum);
     	ratio[0] = current_ratio;
     	
         int i = 1; 
@@ -2528,12 +2531,46 @@ public class DeltaMapper
     		}
     		
     		current_ratio  = zero_sum;
-        	current_ratio /= one_sum;
+        	current_ratio /= (zero_sum + one_sum);
         	ratio[i++]   = current_ratio;
     	}
-        return ratio;
+    	
+    	ratio_list.add(ratio);
+        return ratio_list;
     }
-    
+   
+    public static int getLengthDifference(int length, int bit_type, int transform_type, int iterations)
+    {
+        int difference = 0;
+        
+        if(bit_type == transform_type)
+        {
+            int positive = length;
+            int negative = 0;
+            int previous = length;
+            int current  = 0;
+            for(int i = 0; i < iterations; i++)
+            {
+            	current   = 2 * negative;
+            	positive /= 2;
+            	current += positive;
+            	if(previous % 2 != 0)
+            	{
+            		current++;
+            		negative++;
+            	}
+            	previous = current; 
+            }
+            difference = current - length;
+        }
+        else
+        {
+            int expanded_length = (int)Math.pow(2, iterations) * length;
+            difference = expanded_length - length;
+        }
+        
+        return difference;
+    }
     public static int getLowerBound(int length, int iterations)
     {
     	int bound = length;
