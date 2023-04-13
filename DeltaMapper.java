@@ -2517,11 +2517,11 @@ public class DeltaMapper
     	}
     	
     	int size = zero_table.size();
-    	System.out.println("Zero table size is " + size);
-    	System.out.println("Max length for a zero string is " + zero_maxlength);
+    	//System.out.println("Zero table size is " + size);
+    	//System.out.println("Max length for a zero string is " + zero_maxlength);
     	size = one_table.size();
-    	System.out.println("One table size is " + size);
-    	System.out.println("Max length for a one string is " + one_maxlength);
+    	//System.out.println("One table size is " + size);
+    	//System.out.println("Max length for a one string is " + one_maxlength);
     	
     	ArrayList zero_list = new ArrayList();
     	for(int i = 0; i < zero_maxlength; i++)
@@ -2657,10 +2657,7 @@ public class DeltaMapper
             	}
             	previous = current; 
             }
-            if(bit_type == 1 && transform_type == 1)
-                System.out.println("Original length is " + length + ", new length is " + current);
             difference = current - length;
-            System.out.println("Difference is " + difference);
         }
         else
         {

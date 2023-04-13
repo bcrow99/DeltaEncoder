@@ -458,6 +458,7 @@ public class TestStringInformation
 		    	double ratio;
 			    
 		    	System.out.println("Processing " + channel_string[i] + " channel.");
+		    	System.out.println();
 		    
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
@@ -478,8 +479,6 @@ public class TestStringInformation
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);
 				
-				System.out.println("Zero list has size " + zero_list.size());
-				System.out.println("One list has size " + one_list.size());
 				
 				int number_of_zero_bits = 0;
 				for(int j = 0; j < zero_list.size(); j++)
@@ -495,6 +494,20 @@ public class TestStringInformation
 				    int value = (int)one_list.get(j);
 				    int total = (j + 1) * value;
 				    number_of_one_bits += total;
+				}
+				
+				int number_of_zero_lengths = 0;
+				for(int j = 0; j < zero_list.size(); j++)
+				{
+					if((int)zero_list.get(j) != 0)
+						number_of_zero_lengths++;	
+				}
+				
+				int number_of_one_lengths = 0;
+				for(int j = 0; j < one_list.size(); j++)
+				{
+					if((int)one_list.get(j) != 0)
+						number_of_one_lengths++;	
 				}
 				
 				double zero_one_ratio = number_of_zero_bits;
@@ -515,39 +528,43 @@ public class TestStringInformation
 			    
 			    System.out.println("The zero ratio calculated from the string length is " + String.format("%.4f", zero_one_ratio));
 			    
-			    n = zero_list.size();
+			    n = number_of_zero_lengths;
 			    int [] zero_difference = new int[n];
 			    
-			    if(zero_one_ratio > 5)
+			    if(zero_one_ratio > .5)
 			    {
+			    	
+			    	System.out.println("Compressing zero strings:");
 			    	for(int j = 0; j < n; j++)
+			    	{
 			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 0, 1);
+			    		System.out.println((j + 1) + " ->" + (j + 1 + zero_difference[j]));
+			    	}
+			    	
 			    }
 			    else
 			    {
 			    	for(int j = 0; j < n; j++)
 			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 1, 1);	
-			    	System.out.println("First zero difference with one transform is " + zero_difference[0]);
 			    }
 			    
-			    
-				
-			    n = one_list.size();
+			    n = number_of_one_lengths;
 			    int [] one_difference = new int[n];
 			    
-			    if(zero_one_ratio > 5)
+			    if(zero_one_ratio > .5)
 			    {
 			    	for(int j = 0; j < n; j++)
 			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 0, 1);
-			    	System.out.println("First one difference with zero transform is " + one_difference[0]);
 			    }
 			    else
 			    {
+			    	System.out.println("Compressing one strings:");
 			    	for(int j = 0; j < n; j++)
+			    	{
 			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 1, 1);
-			    	System.out.println("Second one difference with one transform is " + one_difference[1]);
+			    		System.out.println((j + 1) + " ->" + (j + 1 + one_difference[j]));
+			    	}
 			    }
-				
 				System.out.println();
 		    }  
 	    	
