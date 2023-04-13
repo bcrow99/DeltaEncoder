@@ -540,8 +540,8 @@ public class TestStringInformation
 			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 0, 1);
 			    		System.out.println((j + 1) + " ->" + (j + 1 + zero_difference[j]));
 			    	}
-			    	System.out.println("The longest one string is " + number_of_one_lengths);
-			    	
+			    	//System.out.println("The longest one string is " + number_of_one_lengths);
+			    	System.out.println("The longest one string is " + one_list.size());
 			    }
 			    else
 			    {
@@ -564,8 +564,9 @@ public class TestStringInformation
 			    	{
 			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 1, 1);
 			    		System.out.println((j + 1) + " ->" + (j + 1 + one_difference[j]));
-			    		System.out.println("The longest zero string is " + number_of_zero_lengths);
 			    	}
+			    	//System.out.println("The longest zero string is " + number_of_zero_lengths);
+		    		System.out.println("The longest zero string is " + zero_list.size());
 			    }
 				System.out.println();
 		    }  
