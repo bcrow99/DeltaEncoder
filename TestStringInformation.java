@@ -474,12 +474,80 @@ public class TestStringInformation
 				ratio        = length3;
 				ratio       /= pixel_length;
 				
-				ArrayList info      = DeltaMapper.getStringInformation(delta_string);
+				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);
 				
 				System.out.println("Zero list has size " + zero_list.size());
 				System.out.println("One list has size " + one_list.size());
+				
+				int number_of_zero_bits = 0;
+				for(int j = 0; j < zero_list.size(); j++)
+				{
+				    int value = (int)zero_list.get(j);
+				    int total = (j + 1) * value;
+				    number_of_zero_bits += total;
+				}
+				
+				int number_of_one_bits = 0;
+				for(int j = 0; j < one_list.size(); j++)
+				{
+				    int value = (int)one_list.get(j);
+				    int total = (j + 1) * value;
+				    number_of_one_bits += total;
+				}
+				
+				double zero_one_ratio = number_of_zero_bits;
+				zero_one_ratio       /= number_of_zero_bits + number_of_one_bits;
+				
+				System.out.println("The zero ratio calculated from the string information is " + String.format("%.4f", zero_one_ratio));
+				
+				zero_one_ratio = xdim * ydim;
+		        if(histogram.length > 1)
+		        {
+					min_value = Integer.MAX_VALUE;
+					for(int j = 0; j < histogram.length; j++)
+						 if(histogram[j] < min_value)
+							min_value = histogram[j];
+					zero_one_ratio -= min_value;
+		        }	
+			    zero_one_ratio  /= length3;
+			    
+			    System.out.println("The zero ratio calculated from the string length is " + String.format("%.4f", zero_one_ratio));
+			    
+			    n = zero_list.size();
+			    int [] zero_difference = new int[n];
+			    
+			    if(zero_one_ratio > 5)
+			    {
+			    	for(int j = 0; j < n; j++)
+			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 0, 1);
+			    }
+			    else
+			    {
+			    	for(int j = 0; j < n; j++)
+			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 1, 1);	
+			    	System.out.println("First zero difference with one transform is " + zero_difference[0]);
+			    }
+			    
+			    
+				
+			    n = one_list.size();
+			    int [] one_difference = new int[n];
+			    
+			    if(zero_one_ratio > 5)
+			    {
+			    	for(int j = 0; j < n; j++)
+			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 0, 1);
+			    	System.out.println("First one difference with zero transform is " + one_difference[0]);
+			    }
+			    else
+			    {
+			    	for(int j = 0; j < n; j++)
+			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 1, 1);
+			    	System.out.println("Second one difference with one transform is " + one_difference[1]);
+			    }
+				
 				System.out.println();
 		    }  
 	    	

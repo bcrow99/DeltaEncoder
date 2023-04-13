@@ -2314,24 +2314,23 @@ public class DeltaMapper
     	return cost;
     }
     
-    public static ArrayList getStringInformation(byte [] string)
+    public static ArrayList getStringInformation(byte [] string, int bit_length)
     {
     	ArrayList string_information = new ArrayList();
     	Hashtable zero_table         = new Hashtable();
     	Hashtable one_table          = new Hashtable();
     	
-    	
     	byte mask = 1;
-    	int  n    = string.length;
-    	
     	int zero_maxlength = 1;
     	int one_maxlength  = 1;
     	byte init = string[0];
     	int previous_type = init & mask;
     	int  length = 1;
+    	int  type   = 0;
+    	// For now we'll assume the bitlength is greater than 8.
     	for(int i = 1; i < 8; i++)
     	{
-    		int type = init & mask << i;	
+    		type = init & mask << i;	
     		if(previous_type == 0)
     		{
     			if(type == 0)
@@ -2378,12 +2377,12 @@ public class DeltaMapper
     		}
     	}
     	
-    	
+    	int n = bit_length / 8;
     	for(int i = 1; i < n; i++)
     	{
     		for(int j = 0; j < 8; j++)
     		{
-    			int type = init & mask << i;	
+    			type = string[i] & mask << j;	
         		if(previous_type == 0)
         		{
         			if(type == 0)
@@ -2419,13 +2418,110 @@ public class DeltaMapper
         			        one_table.put(length, value);
         			    }
         			    else
-        			    	one_table.put(length,1);    
+        			    {
+        			    	one_table.put(length,1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
         			    previous_type = 0;
     			        length = 1;
         			}	
         		}	
     		}
     	}
+    	
+    	if(bit_length % 8 != 0)
+    	{
+    		n             = bit_length / 8;
+    		int remainder = bit_length % 8;
+    		byte last     = string[n];
+    		for(int i = 0; i < remainder; i++)
+    		{
+    			type = last & mask << i;	
+        		if(previous_type == 0)
+        		{
+        			if(type == 0)
+        			    length++;
+        			else
+        			{
+        			    if(zero_table.containsKey(length))	
+        			    {
+        			        int value = (int)zero_table.get(length);
+        			        value++;
+        			        zero_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			        zero_table.put(length, 1);
+        			        if(length > zero_maxlength)
+        			        	zero_maxlength = length;
+        			    }
+        			    previous_type = 1;
+    			        length = 1;
+        			}
+        		}
+        		else
+        		{
+        			if(type != 0)
+        			    length++;
+        			else
+        			{
+        			    if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			    	one_table.put(length,1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
+        			    previous_type = 0;
+    			        length = 1;
+        			}	
+        		}	
+    		}
+    	}
+    	
+    	if(type == 0 && previous_type == 0)
+    	{
+    		if(zero_table.containsKey(length))	
+		    {
+		        int value = (int)zero_table.get(length);
+		        value++;
+		        zero_table.put(length, value);
+		    }
+		    else
+		    {
+		        zero_table.put(length, 1);
+		        if(length > zero_maxlength)
+		        	zero_maxlength = length;
+		    }   	
+    	}
+    	else if(type != 0 && previous_type != 0)
+    	{
+    		if(one_table.containsKey(length))	
+		    {
+		        int value = (int)one_table.get(length);
+		        value++;
+		        one_table.put(length, value);
+		    }
+		    else
+		    {
+		    	one_table.put(length,1); 
+		    	if(length > one_maxlength)
+		        	one_maxlength = length;
+		    }	
+    	}
+    	
+    	int size = zero_table.size();
+    	System.out.println("Zero table size is " + size);
+    	System.out.println("Max length for a zero string is " + zero_maxlength);
+    	size = one_table.size();
+    	System.out.println("One table size is " + size);
+    	System.out.println("Max length for a one string is " + one_maxlength);
     	
     	ArrayList zero_list = new ArrayList();
     	for(int i = 0; i < zero_maxlength; i++)
@@ -2561,7 +2657,10 @@ public class DeltaMapper
             	}
             	previous = current; 
             }
+            if(bit_type == 1 && transform_type == 1)
+                System.out.println("Original length is " + length + ", new length is " + current);
             difference = current - length;
+            System.out.println("Difference is " + difference);
         }
         else
         {
