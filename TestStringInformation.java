@@ -454,7 +454,7 @@ public class TestStringInformation
 		    	int number_of_errors, min_value;
 		    	ArrayList histogram_list;
 		    	int [] histogram, rank_table, frequency, length, code;
-		    	int n, cost;
+		    	int n;
 		    	double ratio;
 			    
 		    	System.out.println("Processing " + channel_string[i] + " channel.");
@@ -472,14 +472,33 @@ public class TestStringInformation
 				for(int j = 1; j < delta3.length; j++)
 					delta3[j] -= min_value;
 				int length3  = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
-				ratio        = length3;
-				ratio       /= pixel_length;
 				
-				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
+				
+				double zero_one_ratio = xdim * ydim;
+		        if(histogram.length > 1)
+		        {
+					min_value = Integer.MAX_VALUE;
+					for(int j = 0; j < histogram.length; j++)
+						 if(histogram[j] < min_value)
+							min_value = histogram[j];
+					zero_one_ratio -= min_value;
+		        }	
+			    zero_one_ratio  /= length3;
+			    
+			    System.out.println("The zero ratio calculated from the string length is " + String.format("%.4f", zero_one_ratio));
+				
+			    byte [] compressed_string = new byte[xdim * ydim * 8];
+			    int compression_length = 0;
+			    if(zero_one_ratio > .5)
+					compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compressed_string);
+			    else
+					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
+				
+				
+				//ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
+			    ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);
-				
-				
 				
 				int number_of_zero_bits = 0;
 				for(int j = 0; j < zero_list.size(); j++)
@@ -517,23 +536,12 @@ public class TestStringInformation
 						number_of_one_holes++;
 				}
 				
-				double zero_one_ratio = number_of_zero_bits;
+				zero_one_ratio = number_of_zero_bits;
 				zero_one_ratio       /= number_of_zero_bits + number_of_one_bits;
 				
 				System.out.println("The zero ratio calculated from the string information is " + String.format("%.4f", zero_one_ratio));
 				
-				zero_one_ratio = xdim * ydim;
-		        if(histogram.length > 1)
-		        {
-					min_value = Integer.MAX_VALUE;
-					for(int j = 0; j < histogram.length; j++)
-						 if(histogram[j] < min_value)
-							min_value = histogram[j];
-					zero_one_ratio -= min_value;
-		        }	
-			    zero_one_ratio  /= length3;
-			    
-			    System.out.println("The zero ratio calculated from the string length is " + String.format("%.4f", zero_one_ratio));
+				
 			    
 			    n = number_of_zero_lengths;
 			    int [] zero_difference = new int[n];
@@ -550,7 +558,7 @@ public class TestStringInformation
 			    	}
 			    	System.out.println();
 			    	
-			    	System.out.println("The longest opposite (one) string is " + one_list.size());
+			    	System.out.println("The longest opposite string is " + one_list.size());
 			    	System.out.println("The number of opposite holes is " + number_of_one_holes);
 			    	System.out.println("The longest individual opposite string is " + number_of_one_lengths);
 			    }

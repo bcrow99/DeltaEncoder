@@ -1232,6 +1232,18 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
+    public static int compressAlternatingBits(byte src[], int length, int zero_maxlength, int one_maxlength, byte dst[])
+    {
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+        int current_byte        = 0;
+        int current_bit         = 0;
+        byte mask               = 0x01;
+       
+        int number_of_bits = 0;
+        return number_of_bits;
+    }
+    
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
         for(int i = 0; i < dst.length; i++)
@@ -2319,9 +2331,9 @@ public class DeltaMapper
     	ArrayList string_information = new ArrayList();
     	Hashtable zero_table         = new Hashtable();
     	Hashtable one_table          = new Hashtable();
-    	ArrayList pixel_position     = new ArrayList();
-    	ArrayList pixel_type         = new ArrayList();
-    	ArrayList pixel_length       = new ArrayList();
+    	ArrayList string_position     = new ArrayList();
+    	ArrayList string_type         = new ArrayList();
+    	ArrayList string_length       = new ArrayList();
     	
     	byte mask = 1;
     	int zero_maxlength = 1;
@@ -2331,11 +2343,11 @@ public class DeltaMapper
     	int  length = 1;
     	int  type   = 0;
     	
-    	pixel_position.add(0);
+    	string_position.add(0);
     	if(previous_type == 0)
-    	    pixel_type.add(0);
+    	    string_type.add(0);
     	else
-    		pixel_type.add(0);
+    		string_type.add(0);
     	
     	// For now we'll assume the bit string length is greater than 8.
     	for(int i = 1; i < 8; i++)
@@ -2348,7 +2360,7 @@ public class DeltaMapper
     			else
     			{
     				// Add the length for the previous pixel.
-    				pixel_length.add(length);
+    				string_length.add(length);
     			    if(zero_table.containsKey(length))	
     			    {
     			        int value = (int)zero_table.get(length);
@@ -2362,8 +2374,8 @@ public class DeltaMapper
     			        if(length > zero_maxlength)
     			        	zero_maxlength = length;
     			    }
-    			    pixel_position.add(i);
-			        pixel_type.add(0);
+    			    string_position.add(i);
+			        string_type.add(0);
     			    previous_type = 1;
 			        length        = 1;
     			}
@@ -2374,7 +2386,7 @@ public class DeltaMapper
     			    length++;
     			else
     			{
-    				pixel_length.add(length);
+    				string_length.add(length);
     			    if(one_table.containsKey(length))	
     			    {
     			        int value = (int)one_table.get(length);
@@ -2387,8 +2399,8 @@ public class DeltaMapper
     			    	if(length > one_maxlength)
     			        	one_maxlength = length;
     			    }
-    			    pixel_position.add(i);
-			        pixel_type.add(0);
+    			    string_position.add(i);
+			        string_type.add(0);
     			    previous_type = 0;
 			        length = 1;
     			}	
@@ -2408,7 +2420,7 @@ public class DeltaMapper
         			else
         			{
         				// Add the length of the previous pixel.
-        				pixel_length.add(length);
+        				string_length.add(length);
         			    if(zero_table.containsKey(length))	
         			    {
         			        int value = (int)zero_table.get(length);
@@ -2424,8 +2436,8 @@ public class DeltaMapper
         			    
         			    // Add the type and initial bit position
         			    // of the current pixel.
-        			    pixel_position.add(i * 8 + j);
-    			        pixel_type.add(1);
+        			    string_position.add(i * 8 + j);
+    			        string_type.add(1);
         			    previous_type = 1;
     			        length = 1;
         			}
@@ -2436,7 +2448,7 @@ public class DeltaMapper
         			    length++;
         			else
         			{
-        				pixel_length.add(length);
+        				string_length.add(length);
         			    if(one_table.containsKey(length))	
         			    {
         			        int value = (int)one_table.get(length);
@@ -2449,8 +2461,8 @@ public class DeltaMapper
         			    	if(length > one_maxlength)
         			        	one_maxlength = length;
         			    }
-        			    pixel_position.add(i * 8 + j);
-    			        pixel_type.add(0);
+        			    string_position.add(i * 8 + j);
+    			        string_type.add(0);
         			    previous_type = 0;
     			        length        = 1;
         			}	
@@ -2473,7 +2485,7 @@ public class DeltaMapper
         			    length++;
         			else
         			{
-        			    pixel_length.add(length);
+        			    string_length.add(length);
         			    if(zero_table.containsKey(length))	
         			    {
         			        int value = (int)zero_table.get(length);
@@ -2486,8 +2498,8 @@ public class DeltaMapper
         			        if(length > zero_maxlength)
         			        	zero_maxlength = length;
         			    }
-        			    pixel_position.add(n * 8 + i);
-        			    pixel_type.add(1);
+        			    string_position.add(n * 8 + i);
+        			    string_type.add(1);
         			    previous_type = 1;
     			        length = 1;
         			}
@@ -2510,8 +2522,8 @@ public class DeltaMapper
         			    	if(length > one_maxlength)
         			        	one_maxlength = length;
         			    }
-        			    pixel_position.add(n * 8 + i);
-        			    pixel_type.add(0);
+        			    string_position.add(n * 8 + i);
+        			    string_type.add(0);
         			    previous_type = 0;
     			        length = 1;
         			}	
@@ -2551,7 +2563,7 @@ public class DeltaMapper
 		        	one_maxlength = length;
 		    }	
     	}
-    	pixel_length.add(length);
+    	string_length.add(length);
     	
     	int size = zero_table.size();
     	//System.out.println("Zero table size is " + size);
@@ -2587,9 +2599,9 @@ public class DeltaMapper
     	
     	string_information.add(zero_list);
     	string_information.add(one_list);
-    	string_information.add(pixel_position);
-    	string_information.add(pixel_type);
-    	string_information.add(pixel_length);
+    	string_information.add(string_position);
+    	string_information.add(string_type);
+    	string_information.add(string_length);
     	return string_information;
     }
     
