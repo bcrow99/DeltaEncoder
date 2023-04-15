@@ -2319,6 +2319,9 @@ public class DeltaMapper
     	ArrayList string_information = new ArrayList();
     	Hashtable zero_table         = new Hashtable();
     	Hashtable one_table          = new Hashtable();
+    	ArrayList pixel_position     = new ArrayList();
+    	ArrayList pixel_type         = new ArrayList();
+    	ArrayList pixel_length       = new ArrayList();
     	
     	byte mask = 1;
     	int zero_maxlength = 1;
@@ -2327,7 +2330,14 @@ public class DeltaMapper
     	int previous_type = init & mask;
     	int  length = 1;
     	int  type   = 0;
-    	// For now we'll assume the bitlength is greater than 8.
+    	
+    	pixel_position.add(0);
+    	if(previous_type == 0)
+    	    pixel_type.add(0);
+    	else
+    		pixel_type.add(0);
+    	
+    	// For now we'll assume the bit string length is greater than 8.
     	for(int i = 1; i < 8; i++)
     	{
     		type = init & mask << i;	
@@ -2337,11 +2347,14 @@ public class DeltaMapper
     			    length++;
     			else
     			{
+    				// Add the length for the previous pixel.
+    				pixel_length.add(length);
     			    if(zero_table.containsKey(length))	
     			    {
     			        int value = (int)zero_table.get(length);
     			        value++;
     			        zero_table.put(length, value);
+    			        
     			    }
     			    else
     			    {
@@ -2349,8 +2362,10 @@ public class DeltaMapper
     			        if(length > zero_maxlength)
     			        	zero_maxlength = length;
     			    }
+    			    pixel_position.add(i);
+			        pixel_type.add(0);
     			    previous_type = 1;
-			        length = 1;
+			        length        = 1;
     			}
     		}
     		else
@@ -2359,6 +2374,7 @@ public class DeltaMapper
     			    length++;
     			else
     			{
+    				pixel_length.add(length);
     			    if(one_table.containsKey(length))	
     			    {
     			        int value = (int)one_table.get(length);
@@ -2371,6 +2387,8 @@ public class DeltaMapper
     			    	if(length > one_maxlength)
     			        	one_maxlength = length;
     			    }
+    			    pixel_position.add(i);
+			        pixel_type.add(0);
     			    previous_type = 0;
 			        length = 1;
     			}	
@@ -2389,6 +2407,8 @@ public class DeltaMapper
         			    length++;
         			else
         			{
+        				// Add the length of the previous pixel.
+        				pixel_length.add(length);
         			    if(zero_table.containsKey(length))	
         			    {
         			        int value = (int)zero_table.get(length);
@@ -2401,6 +2421,11 @@ public class DeltaMapper
         			        if(length > zero_maxlength)
         			        	zero_maxlength = length;
         			    }
+        			    
+        			    // Add the type and initial bit position
+        			    // of the current pixel.
+        			    pixel_position.add(i * 8 + j);
+    			        pixel_type.add(1);
         			    previous_type = 1;
     			        length = 1;
         			}
@@ -2411,6 +2436,7 @@ public class DeltaMapper
         			    length++;
         			else
         			{
+        				pixel_length.add(length);
         			    if(one_table.containsKey(length))	
         			    {
         			        int value = (int)one_table.get(length);
@@ -2423,13 +2449,16 @@ public class DeltaMapper
         			    	if(length > one_maxlength)
         			        	one_maxlength = length;
         			    }
+        			    pixel_position.add(i * 8 + j);
+    			        pixel_type.add(0);
         			    previous_type = 0;
-    			        length = 1;
+    			        length        = 1;
         			}	
         		}	
     		}
     	}
     	
+    	// We need to finish up the last odd byte.
     	if(bit_length % 8 != 0)
     	{
     		n             = bit_length / 8;
@@ -2444,6 +2473,7 @@ public class DeltaMapper
         			    length++;
         			else
         			{
+        			    pixel_length.add(length);
         			    if(zero_table.containsKey(length))	
         			    {
         			        int value = (int)zero_table.get(length);
@@ -2456,6 +2486,8 @@ public class DeltaMapper
         			        if(length > zero_maxlength)
         			        	zero_maxlength = length;
         			    }
+        			    pixel_position.add(n * 8 + i);
+        			    pixel_type.add(1);
         			    previous_type = 1;
     			        length = 1;
         			}
@@ -2478,6 +2510,8 @@ public class DeltaMapper
         			    	if(length > one_maxlength)
         			        	one_maxlength = length;
         			    }
+        			    pixel_position.add(n * 8 + i);
+        			    pixel_type.add(0);
         			    previous_type = 0;
     			        length = 1;
         			}	
@@ -2485,6 +2519,7 @@ public class DeltaMapper
     		}
     	}
     	
+    	// We still need to add the last pixel length;
     	if(type == 0 && previous_type == 0)
     	{
     		if(zero_table.containsKey(length))	
@@ -2498,7 +2533,8 @@ public class DeltaMapper
 		        zero_table.put(length, 1);
 		        if(length > zero_maxlength)
 		        	zero_maxlength = length;
-		    }   	
+		    }  
+    		
     	}
     	else if(type != 0 && previous_type != 0)
     	{
@@ -2515,6 +2551,7 @@ public class DeltaMapper
 		        	one_maxlength = length;
 		    }	
     	}
+    	pixel_length.add(length);
     	
     	int size = zero_table.size();
     	//System.out.println("Zero table size is " + size);
@@ -2523,6 +2560,7 @@ public class DeltaMapper
     	//System.out.println("One table size is " + size);
     	//System.out.println("Max length for a one string is " + one_maxlength);
     	
+    	// Convert the hashtable data to simple lists.
     	ArrayList zero_list = new ArrayList();
     	for(int i = 0; i < zero_maxlength; i++)
     	{
@@ -2549,6 +2587,9 @@ public class DeltaMapper
     	
     	string_information.add(zero_list);
     	string_information.add(one_list);
+    	string_information.add(pixel_position);
+    	string_information.add(pixel_type);
+    	string_information.add(pixel_length);
     	return string_information;
     }
     

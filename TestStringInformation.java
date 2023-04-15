@@ -480,6 +480,7 @@ public class TestStringInformation
 				ArrayList one_list  = (ArrayList)info.get(1);
 				
 				
+				
 				int number_of_zero_bits = 0;
 				for(int j = 0; j < zero_list.size(); j++)
 				{
@@ -488,26 +489,32 @@ public class TestStringInformation
 				    number_of_zero_bits += total;
 				}
 				
-				int number_of_one_bits = 0;
+				int number_of_one_bits  = 0;
+				
 				for(int j = 0; j < one_list.size(); j++)
 				{
 				    int value = (int)one_list.get(j);
 				    int total = (j + 1) * value;
 				    number_of_one_bits += total;
 				}
-				
+				int number_of_zero_holes = 0;
 				int number_of_zero_lengths = 0;
 				for(int j = 0; j < zero_list.size(); j++)
 				{
 					if((int)zero_list.get(j) != 0)
 						number_of_zero_lengths++;	
+					else
+						number_of_zero_holes++;
 				}
 				
+				int number_of_one_holes = 0;
 				int number_of_one_lengths = 0;
 				for(int j = 0; j < one_list.size(); j++)
 				{
 					if((int)one_list.get(j) != 0)
-						number_of_one_lengths++;	
+						number_of_one_lengths++;
+					else
+						number_of_one_holes++;
 				}
 				
 				double zero_one_ratio = number_of_zero_bits;
@@ -535,13 +542,17 @@ public class TestStringInformation
 			    {
 			    	
 			    	System.out.println("Compressing zero strings:");
+			    	System.out.println();
 			    	for(int j = 0; j < n; j++)
 			    	{
 			    		zero_difference[j] = DeltaMapper.getLengthDifference(j + 1, 0, 0, 1);
 			    		System.out.println((j + 1) + " ->" + (j + 1 + zero_difference[j]));
 			    	}
-			    	//System.out.println("The longest one string is " + number_of_one_lengths);
-			    	System.out.println("The longest one string is " + one_list.size());
+			    	System.out.println();
+			    	
+			    	System.out.println("The longest opposite (one) string is " + one_list.size());
+			    	System.out.println("The number of opposite holes is " + number_of_one_holes);
+			    	System.out.println("The longest individual opposite string is " + number_of_one_lengths);
 			    }
 			    else
 			    {
@@ -560,13 +571,17 @@ public class TestStringInformation
 			    else
 			    {
 			    	System.out.println("Compressing one strings:");
+			    	System.out.println();
 			    	for(int j = 0; j < n; j++)
 			    	{
 			    		one_difference[j] = DeltaMapper.getLengthDifference(j + 1, 1, 1, 1);
 			    		System.out.println((j + 1) + " ->" + (j + 1 + one_difference[j]));
 			    	}
-			    	//System.out.println("The longest zero string is " + number_of_zero_lengths);
-		    		System.out.println("The longest zero string is " + zero_list.size());
+			    	System.out.println();
+		    		
+			    	System.out.println("The longest opposite (zero) string is " + zero_list.size());
+		    		System.out.println("The number of opposite holes is " + number_of_zero_holes);
+			    	System.out.println("The longest individual opposite string is " + number_of_zero_lengths);
 			    }
 				System.out.println();
 		    }  
