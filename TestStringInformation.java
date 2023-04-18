@@ -495,7 +495,7 @@ public class TestStringInformation
 					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
 				
 				
-				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
+				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3, histogram.length - 1);
 			    //ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);

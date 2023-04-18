@@ -2341,7 +2341,7 @@ public class DeltaMapper
     	else
     		string_type.add(1);
     	
-    	// For now we'll assume the bit string length is greater than 8.
+    	// Assuming the bit string length is greater than 8.
     	for(int i = 1; i < 8; i++)
     	{
     		type = init & mask << i;	
@@ -2657,7 +2657,7 @@ public class DeltaMapper
 		        
 		        if(remainder == 0)
 		        {
-		        	System.out.println("Last bit in stream was a single one string.");
+		        	System.out.println("Trailing one bit in bit stream.");
 		        }
 		        else
 		        {
@@ -2744,10 +2744,8 @@ public class DeltaMapper
 		    }
 		}
     	
-    	
     	if(remainder != 0) // We need to finish up the last odd byte.
     	{
-    		
     		byte extra     = string[n];
     		for(int i = 0; i < remainder; i++)
     		{
@@ -2755,7 +2753,11 @@ public class DeltaMapper
         		if(previous_type == 0)
         		{
         			if(type == 0)
+        			{
         			    length++;
+        			    if(i == remainder - 1)
+        			    	string_length.add(length);
+        			}
         			else
         			{
         			    string_length.add(length);
@@ -2771,10 +2773,15 @@ public class DeltaMapper
         			        if(length > zero_maxlength)
         			        	zero_maxlength = length;
         			    }
-        			    string_position.add(n * 8 + i);
-        			    string_type.add(1);
-        			    previous_type = 1;
-    			        length = 1;
+        			    if(i !=  remainder - 1)
+        			    {
+        			        string_position.add(n * 8 + i);
+        			        string_type.add(1);
+        			        previous_type = 1;
+    			            length = 1;
+        			    }
+        			    else
+        			    	System.out.println("Trailing one bit in bit stream.");
         			}
         		}
         		else if(previous_type == 1)
