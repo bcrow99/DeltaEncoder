@@ -495,8 +495,8 @@ public class TestStringInformation
 					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
 				
 				
-				//ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
-			    ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
+				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3);
+			    //ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);
 				
@@ -507,6 +507,10 @@ public class TestStringInformation
 				    int total = (j + 1) * value;
 				    number_of_zero_bits += total;
 				}
+				int first_value = (int)zero_list.get(0);
+				System.out.println("The number of 0 strings with length 1 is " + first_value);
+				first_value = (int)one_list.get(0);
+				System.out.println("The number of 1 strings with length 1 is " + first_value);
 				
 				int number_of_one_bits  = 0;
 				

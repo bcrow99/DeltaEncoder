@@ -1232,18 +1232,6 @@ public class DeltaMapper
         return(number_unpacked);
     }
     
-    public static int compressAlternatingBits(byte src[], int length, int zero_maxlength, int one_maxlength, byte dst[])
-    {
-        for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
-        int current_byte        = 0;
-        int current_bit         = 0;
-        byte mask               = 0x01;
-       
-        int number_of_bits = 0;
-        return number_of_bits;
-    }
-    
     public static int compressZeroBits(byte src[], int size, byte dst[])
     {
         for(int i = 0; i < dst.length; i++)
@@ -1981,7 +1969,7 @@ public class DeltaMapper
         return(current_size);
     } 
     
-    public static byte checkStringType(byte src[], int size)
+    public static ArrayList checkStringType(byte src[], int size)
     {
         int  byte_index;
         int  number_of_iterations;
@@ -2060,9 +2048,11 @@ public class DeltaMapper
            number_of_iterations &= mask;
            mask++;
         }
-        //System.out.println("The number of iterations is " + number_of_iterations);
-         
-        return(string_type);
+        
+        ArrayList result = new ArrayList();
+        result.add(string_type);
+        result.add(number_of_iterations);
+        return result;
     }
     
     public static int[] getChannels(int set_id)
@@ -2326,7 +2316,7 @@ public class DeltaMapper
     	return cost;
     }
     
-    public static ArrayList getStringInformation(byte [] string, int bit_length)
+    public static ArrayList getStringInformation(byte [] string, int bit_length, int max_length)
     {
     	ArrayList string_information = new ArrayList();
     	Hashtable zero_table         = new Hashtable();
@@ -2340,6 +2330,8 @@ public class DeltaMapper
     	int one_maxlength  = 1;
     	byte init = string[0];
     	int previous_type = init & mask;
+    	if(previous_type != 0)
+    		previous_type = 1;
     	int  length = 1;
     	int  type   = 0;
     	
@@ -2347,7 +2339,7 @@ public class DeltaMapper
     	if(previous_type == 0)
     	    string_type.add(0);
     	else
-    		string_type.add(0);
+    		string_type.add(1);
     	
     	// For now we'll assume the bit string length is greater than 8.
     	for(int i = 1; i < 8; i++)
@@ -2374,18 +2366,40 @@ public class DeltaMapper
     			        if(length > zero_maxlength)
     			        	zero_maxlength = length;
     			    }
+    				
     			    string_position.add(i);
-			        string_type.add(0);
+			        string_type.add(1);
     			    previous_type = 1;
 			        length        = 1;
     			}
     		}
-    		else
+    		else if(previous_type == 1)
     		{
     			if(type != 0)
+    			{
     			    length++;
+    			    if(length == max_length)
+    			    {
+    			    	string_length.add(length);
+    			    	if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			    	one_table.put(length,1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
+    			    	previous_type = 2;
+        			    length        = 0;
+    			    }
+    			}
     			else
     			{
+    				length++;
     				string_length.add(length);
     			    if(one_table.containsKey(length))	
     			    {
@@ -2395,20 +2409,28 @@ public class DeltaMapper
     			    }
     			    else
     			    {
-    			    	one_table.put(length,1); 
+    			    	one_table.put(length, 1); 
     			    	if(length > one_maxlength)
     			        	one_maxlength = length;
     			    }
-    			    string_position.add(i);
-			        string_type.add(0);
-    			    previous_type = 0;
-			        length = 1;
+    			    previous_type = 2;
+    			    length        = 0;
     			}	
+    		}
+    		else if(previous_type == 2)
+    		{
+    		    if(type == 0)
+    		        previous_type = 0;
+    		    else
+    		    	previous_type = 1;
+    		    length = 1;
+    		    string_position.add(i);
+		        string_type.add(previous_type);
     		}
     	}
     	
     	int n = bit_length / 8;
-    	for(int i = 1; i < n; i++)
+    	for(int i = 1; i < n - 1; i++)
     	{
     		for(int j = 0; j < 8; j++)
     		{
@@ -2442,10 +2464,30 @@ public class DeltaMapper
     			        length = 1;
         			}
         		}
-        		else
+        		else if(previous_type == 1)
         		{
         			if(type != 0)
+        			{
         			    length++;
+        			    if(length == max_length)
+        			    {
+        			    	string_length.add(length);
+        			    	if(one_table.containsKey(length))	
+            			    {
+            			        int value = (int)one_table.get(length);
+            			        value++;
+            			        one_table.put(length, value);
+            			    }
+            			    else
+            			    {
+            			    	one_table.put(length,1); 
+            			    	if(length > one_maxlength)
+            			        	one_maxlength = length;
+            			    }
+        			    	previous_type = 2;
+            			    length        = 0;	
+        			    }
+        			}
         			else
         			{
         				string_length.add(length);
@@ -2461,24 +2503,255 @@ public class DeltaMapper
         			    	if(length > one_maxlength)
         			        	one_maxlength = length;
         			    }
-        			    string_position.add(i * 8 + j);
-    			        string_type.add(0);
-        			    previous_type = 0;
-    			        length        = 1;
+        			    previous_type = 2;
+    			        length        = 0;
         			}	
-        		}	
+        		}
+        		else if(previous_type == 2)
+        		{
+        			if(type == 0)
+        		        previous_type = 0;
+        		    else
+        		    	previous_type = 1;
+        		    length = 1;	
+        		    string_position.add(i * 8 + j);
+			        string_type.add(previous_type);
+        		}
     		}
     	}
     	
-    	// We need to finish up the last odd byte.
-    	if(bit_length % 8 != 0)
+    	n = bit_length / 8;
+    	byte last = string[n - 1];
+    	int remainder = bit_length % 8;
+    	
+    	for(int i = 0; i < 7; i++)
     	{
-    		n             = bit_length / 8;
-    		int remainder = bit_length % 8;
-    		byte last     = string[n];
+    		type = last & mask << i;	
+    		if(previous_type == 0)
+    		{
+    			if(type == 0)
+    			    length++;
+    			else
+    			{
+    				// Add the length for the previous pixel.
+    				string_length.add(length);
+    			    if(zero_table.containsKey(length))	
+    			    {
+    			        int value = (int)zero_table.get(length);
+    			        value++;
+    			        zero_table.put(length, value);
+    			        
+    			    }
+    			    else
+    			    {
+    			        zero_table.put(length, 1);
+    			        if(length > zero_maxlength)
+    			        	zero_maxlength = length;
+    			    }
+    				
+    			    string_position.add(i);
+			        string_type.add(1);
+    			    previous_type = 1;
+			        length        = 1;
+    			}
+    		}
+    		else if(previous_type == 1)
+    		{
+    			if(type != 0)
+    			{
+    			    length++;
+    			    if(length == max_length)
+    			    {
+    			    	string_length.add(length);
+    			    	if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			    	one_table.put(length,1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
+    			    	previous_type = 2;
+        			    length        = 0;
+    			    }
+    			}
+    			else
+    			{
+    				length++;
+    				string_length.add(length);
+    			    if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length, 1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+    			    previous_type = 2;
+    			    length        = 0;
+    			}	
+    		}
+    		else if(previous_type == 2)
+    		{
+    		    if(type == 0)
+    		        previous_type = 0;
+    		    else
+    		    	previous_type = 1;
+    		    length = 1;
+    		    string_position.add(i);
+		        string_type.add(previous_type);
+    		}
+    	}
+    	
+    	type = last & mask << 7;
+    	if(previous_type == 0)
+		{
+			if(type == 0)
+			{
+			    length++;
+			    if(remainder == 0)
+			    {
+			    	string_length.add(length);
+				    if(zero_table.containsKey(length))	
+				    {
+				        int value = (int)zero_table.get(length);
+				        value++;
+				        zero_table.put(length, value);
+				        
+				    }
+				    else
+				    {
+				        zero_table.put(length, 1);
+				        if(length > zero_maxlength)
+				        	zero_maxlength = length;
+				    }	
+			    }
+			}
+			else
+			{
+				// Add the length for the previous pixel.
+				string_length.add(length);
+			    if(zero_table.containsKey(length))	
+			    {
+			        int value = (int)zero_table.get(length);
+			        value++;
+			        zero_table.put(length, value);
+			        
+			    }
+			    else
+			    {
+			        zero_table.put(length, 1);
+			        if(length > zero_maxlength)
+			        	zero_maxlength = length;
+			    }
+				
+			    
+		        
+		        if(remainder == 0)
+		        {
+		        	System.out.println("Last bit in stream was a single one string.");
+		        }
+		        else
+		        {
+		        	string_position.add(bit_length - 1);
+			        string_type.add(1);
+				    previous_type = 1;
+			        length        = 1;	
+		        }
+			}
+		}
+		else if(previous_type == 1)
+		{
+			if(type != 0)
+			{
+			    length++;
+			    if(length == max_length)
+			    {
+			    	string_length.add(length);
+			    	if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length,1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+			    	previous_type = 2;
+    			    length        = 0;
+			    }
+			}
+			else
+			{
+				length++;
+				string_length.add(length);
+			    if(one_table.containsKey(length))	
+			    {
+			        int value = (int)one_table.get(length);
+			        value++;
+			        one_table.put(length, value);
+			    }
+			    else
+			    {
+			    	one_table.put(length, 1); 
+			    	if(length > one_maxlength)
+			        	one_maxlength = length;
+			    }
+			    previous_type = 2;
+			    length        = 0;
+			}	
+		}
+		else if(previous_type == 2)
+		{
+		    if(type == 0)
+		    {
+		    	string_position.add(n * 8 - 1);
+		        string_type.add(0);
+		        previous_type = 0;
+		        length = 1;
+		        if(remainder == 0)
+		        {
+		        	string_length.add(length);
+		        	int value = (int)zero_table.get(length);
+		        	value++;
+			        zero_table.put(length, value);
+		        }
+		    }
+		    else
+		    {
+		    	if(remainder == 0)
+		        {
+		    		System.out.println("Trailing one bit in bitstream.");
+		        }
+		        else
+		        {
+		        	string_position.add(n * 8 - 1);
+			        string_type.add(1);
+			        previous_type = 1;
+			        length = 1;   	
+		        }
+		    }
+		}
+    	
+    	
+    	if(remainder != 0) // We need to finish up the last odd byte.
+    	{
+    		
+    		byte extra     = string[n];
     		for(int i = 0; i < remainder; i++)
     		{
-    			type = last & mask << i;	
+    			type = extra & mask << i;	
         		if(previous_type == 0)
         		{
         			if(type == 0)
@@ -2504,7 +2777,7 @@ public class DeltaMapper
     			        length = 1;
         			}
         		}
-        		else
+        		else if(previous_type == 1)
         		{
         			if(type != 0)
         			    length++;
@@ -2527,9 +2800,15 @@ public class DeltaMapper
         			    previous_type = 0;
     			        length = 1;
         			}	
-        		}	
+        		}
+        		else if(previous_type == 2)
+        		{
+        			
+        		}
     		}
     	}
+    	
+    	
     	
     	// We still need to add the last pixel length;
     	if(type == 0 && previous_type == 0)
@@ -2656,7 +2935,7 @@ public class DeltaMapper
     			one_sum--;
     		
     		// This value is already part of our sum, but we want to
-    		// know what its so we can decrement it from our sums
+    		// know what it is so we can decrement it from our sum
     		// in the next loop.
     		first_bit    = string[start_byte] & mask << start_shift;
     		start_shift++;
