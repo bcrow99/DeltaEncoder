@@ -2316,6 +2316,548 @@ public class DeltaMapper
     	return cost;
     }
     
+    public static ArrayList getStringInformation2(byte [] string, int bit_length)
+    {
+    	ArrayList string_information = new ArrayList();
+    	Hashtable zero_table         = new Hashtable();
+    	Hashtable one_table          = new Hashtable();
+    	ArrayList string_position    = new ArrayList();
+    	ArrayList string_type        = new ArrayList();
+    	ArrayList string_length      = new ArrayList();
+    	
+    	byte mask = 1;
+    	int zero_maxlength = 1;
+    	int one_maxlength  = 1;
+    	
+    	int number_of_zero_bits = 0;
+    	int number_of_one_bits  = 0;
+    	
+    	// Get the first bit.
+    	byte init = string[0];
+    	int previous_type = init & mask;
+    	if(previous_type != 0)
+    	{
+    		previous_type = 1;
+    		number_of_one_bits++;
+    	}
+    	else
+    		number_of_zero_bits++;
+    	
+    	
+    	int  length = 1;
+    	int  type   = 0;
+    	string_position.add(0);
+    	
+    	// Initializing our data from the first byte.
+    	// Assuming the bit string length is greater than 8.
+    	for(int i = 1; i < 8; i++)
+    	{
+    		length++;
+    		type = init & mask << i;
+    		
+    		if(type == 0)
+    			number_of_zero_bits++;
+    		else
+    			number_of_one_bits++;
+    		
+    		
+    		if(previous_type == 0)
+    		{
+    			if(type != 0)
+    			{
+    				string_length.add(length);
+    				string_type.add(0);
+    			    if(zero_table.containsKey(length))	
+    			    {
+    			        int value = (int)zero_table.get(length);
+    			        value++;
+    			        zero_table.put(length, value);
+    			        
+    			    }
+    			    else
+    			    {
+    			        zero_table.put(length, 1);
+    			        if(length > zero_maxlength)
+    			        	zero_maxlength = length;
+    			    }
+    			    previous_type = 2;
+			        length        = 0;
+    			}
+    		}
+    		else if(previous_type == 1)
+    		{
+    			length++;
+    			if(type == 0)
+    			{
+    				string_length.add(length);
+    				string_type.add(1);
+    			    if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length, 1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+    			    previous_type = 2;
+    			    length        = 0;
+    			}	
+    		}
+    		else if(previous_type == 2)
+    		{
+    			string_position.add(i);
+    		    if(type == 0)
+    		        previous_type = 0;
+    		    else
+    		    	previous_type = 1;
+    		}
+    	}
+    	
+    	// Now do all the bytes except the last one.
+    	// This way we don't have to keep checking
+    	// if we've reached the end of the bit stream.
+    	int n = bit_length / 8;
+    	for(int i = 1; i < n - 1; i++)
+    	{
+    		for(int j = 0; j < 8; j++)
+    		{
+    			length++;
+    			type = string[i] & mask << j;	
+    			
+    			if(type == 0)
+        			number_of_zero_bits++;
+        		else
+        			number_of_one_bits++;
+    			
+        		if(previous_type == 0)
+        		{
+        			if(type != 0)
+        			{
+        				// Add the length of the previous pixel.
+        				string_length.add(length);
+        				string_type.add(0);
+        			    if(zero_table.containsKey(length))	
+        			    {
+        			        int value = (int)zero_table.get(length);
+        			        value++;
+        			        zero_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			        zero_table.put(length,1);
+        			        if(length > zero_maxlength)
+        			        	zero_maxlength = length;
+        			    }
+        			    previous_type = 2;
+    			        length = 0;
+        			}
+        		}
+        		else if(previous_type == 1)
+        		{
+        			if(type == 0)
+        			{
+        				string_length.add(length);
+        				string_type.add(1);
+        			    if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			    	one_table.put(length,1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
+        			    previous_type = 2;
+    			        length        = 0;
+        			}	
+        		}
+        		else if(previous_type == 2)
+        		{
+        			string_position.add(i * 8 + j);
+        			if(type == 0)
+        		        previous_type = 0;
+        		    else
+        		    	previous_type = 1;  
+        		}
+    		}
+    	}
+    	
+    	// Now check the last full byte.
+    	n             = bit_length / 8;
+    	byte last     = string[n - 1];
+    	int remainder = bit_length % 8;
+    	
+    	if(remainder == 0)
+    		System.out.println("Remainder is 0.");
+    	for(int i = 0; i < 7; i++)
+    	{
+    		length++;
+    		type = last & mask << i;
+    		
+    		if(type == 0)
+    			number_of_zero_bits++;
+    		else
+    			number_of_one_bits++;
+    		
+    		if(previous_type == 0)
+    		{
+    			if(type != 0)
+    			{
+    				// Add the length for the previous pixel.
+    				string_length.add(length);
+    				string_type.add(0);
+    			    if(zero_table.containsKey(length))	
+    			    {
+    			        int value = (int)zero_table.get(length);
+    			        value++;
+    			        zero_table.put(length, value);
+    			        
+    			    }
+    			    else
+    			    {
+    			        zero_table.put(length, 1);
+    			        if(length > zero_maxlength)
+    			        	zero_maxlength = length;
+    			    }
+    			    previous_type = 2;
+    			    length        = 0;
+    			}
+    		}
+    		else if(previous_type == 1)
+    		{
+    			if(type == 0)
+    			{
+    				string_length.add(length);
+    				string_type.add(1);
+    			    if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length, 1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+    			    previous_type = 2;
+    			    length        = 0;
+    			}	
+    		}
+    		else if(previous_type == 2)
+    		{
+    			string_position.add((n - 1) * 8 + i);
+    		    if(type == 0)
+    		        previous_type = 0;
+    		    else
+    		    	previous_type = 1;
+    		}
+    	}
+    	
+    	// Check the last bit in the last full byte.
+    	type = last & mask << 7;
+    	length++;
+    	if(type == 0)
+			number_of_zero_bits++;
+		else
+			number_of_one_bits++;
+    	
+    	if(remainder == 0)
+    	{
+    		string_length.add(length);
+    		if(previous_type == 0)
+    		{
+    		    if(type == 0)
+    		    	string_type.add(2);   	
+    		    else
+    		    	string_type.add(0);  
+    		    if(zero_table.containsKey(length))	
+			    {
+			        int value = (int)zero_table.get(length);
+			        value++;
+			        zero_table.put(length, value);
+			        
+			    }
+			    else
+			    {
+			        zero_table.put(length, 1);
+			        if(length > zero_maxlength)
+			        	zero_maxlength = length;
+			    }
+    		    
+    		}
+    		else if(previous_type == 1)
+    		{
+    		    if(type != 0)
+    		    	string_type.add(3);   
+    		    else
+    		    	string_type.add(1);
+    		    
+    		    if(one_table.containsKey(length))	
+			    {
+			        int value = (int)one_table.get(length);
+			        value++;
+			        one_table.put(length, value);
+			    }
+			    else
+			    {
+			    	one_table.put(length, 1); 
+			    	if(length > one_maxlength)
+			        	one_maxlength = length;
+			    }
+    		}
+    		else if(previous_type == 2)
+    		{
+    			string_position.add(n * 8 - 1);
+    		    if(type == 0)
+    		    {
+    		    	string_type.add(2);
+    		    	if(zero_table.containsKey(length))	
+    			    {
+    			        int value = (int)zero_table.get(length);
+    			        value++;
+    			        zero_table.put(length, value);
+    			        
+    			    }
+    			    else
+    			    {
+    			        zero_table.put(length, 1);
+    			        if(length > zero_maxlength)
+    			        	zero_maxlength = length;
+    			    }
+    		    	
+    		    }
+    		    else
+    		    {
+    		    	System.out.println("Adding trailing one bit.");
+    		    	string_type.add(3);
+    		    	if(one_table.containsKey(length))	
+    			    {
+    			        int value = (int)one_table.get(length);
+    			        value++;
+    			        one_table.put(length, value);
+    			    }
+    			    else
+    			    {
+    			    	one_table.put(length, 1); 
+    			    	if(length > one_maxlength)
+    			        	one_maxlength = length;
+    			    }
+    		    }
+    		}
+    	}
+    	else  // Remainder does not equal 0.
+    	{
+    		if(previous_type == 0)
+    		{
+    			if(type != 0)
+    			{
+    			    string_length.add(length);
+    			    string_type.add(0);  
+    			    previous_type = 2;
+    			    length = 0;
+    			}
+    		       	
+    		}
+    		else if(previous_type == 1)
+    		{
+    		    if(type == 0)
+    		    {
+    		    	string_length.add(length);
+    			    string_type.add(1);  
+    			    previous_type = 2;
+    			    length = 0;	
+    		    }
+    		}
+    		else if(previous_type == 2)
+    		{
+    			string_position.add(n * 8 - 1);
+    		    if(type == 0)
+    		    	previous_type = 0;
+    		    else
+    		    	previous_type = 1;
+    		}	
+    	}
+    	
+    	if(remainder != 0) // We need to finish up the last odd byte.
+    	{
+    		byte extra     = string[n];
+    		for(int i = 0; i < remainder; i++)
+    		{
+    			type = extra & mask << i;	
+    			length++;
+    			if(type == 0)
+        			number_of_zero_bits++;
+        		else
+        			number_of_one_bits++;
+    			
+        		if(previous_type == 0)
+        		{
+        			if(type == 0)
+        			{
+        			    if(i == remainder - 1)
+        			    {
+        			    	string_length.add(length);
+        			    	string_type.add(2);
+        			    	 if(zero_table.containsKey(length))	
+             			    {
+             			        int value = (int)zero_table.get(length);
+             			        value++;
+             			        zero_table.put(length, value);
+             			    }
+             			    else
+             			    {
+             			        zero_table.put(length, 1);
+             			        if(length > zero_maxlength)
+             			        	zero_maxlength = length;
+             			    }
+        			    	
+        			    }
+        			}
+        			else
+        			{
+        			    string_length.add(length);
+        			    string_type.add(0);
+        			    if(zero_table.containsKey(length))	
+        			    {
+        			        int value = (int)zero_table.get(length);
+        			        value++;
+        			        zero_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			        zero_table.put(length, 1);
+        			        if(length > zero_maxlength)
+        			        	zero_maxlength = length;
+        			    }
+        			    previous_type = 2;
+        			    length = 0;
+        			}
+        		}
+        		else if(previous_type == 1)
+        		{
+        			if(type == 0)
+        			{
+        				string_length.add(length);
+        			    string_type.add(1);
+        			    if(one_table.containsKey(length))	
+        			    {
+        			        int value = (int)one_table.get(length);
+        			        value++;
+        			        one_table.put(length, value);
+        			    }
+        			    else
+        			    {
+        			    	one_table.put(length, 1); 
+        			    	if(length > one_maxlength)
+        			        	one_maxlength = length;
+        			    }
+        			    
+        			    previous_type = 2;
+        			    length        = 0;
+        			}
+        			else
+        			{
+        			    if(i == remainder - 1)
+        			    {
+        			    	System.out.println("Adding trailing one bits.");
+        			        string_type.add(3);
+        			        string_length.add(length);
+        			        if(one_table.containsKey(length))	
+            			    {
+            			        int value = (int)one_table.get(length);
+            			        value++;
+            			        one_table.put(length, value);
+            			    }
+            			    else
+            			    {
+            			    	one_table.put(length,1); 
+            			    	if(length > one_maxlength)
+            			        	one_maxlength = length;
+            			    }
+        			    }
+        			}	
+        		}
+        		else if(previous_type == 2)
+        		{
+        			string_position.add(n * 8 + i);
+        		    if(type == 0)	
+        		    {
+        		    	if(i == remainder - 1)
+    			        {
+    			        	string_type.add(2);
+    			        	string_length.add(length);
+    			        }
+    			        else
+    			        	previous_type = 0;
+        		    }
+        		    else
+        		    {
+        		        System.out.println("Adding trailing one bit.");
+        		    	if(i == remainder - 1)
+    			        {
+    			        	string_type.add(3);
+    			        	string_length.add(length);
+    			        }
+    			        else
+    			        	previous_type = 1;
+        		    }
+        		}
+    		}
+    	}
+        
+    	double ratio = number_of_zero_bits;
+    	ratio       /= number_of_zero_bits + number_of_one_bits;
+    	System.out.println("Accumulated zero ratio is " + String.format("%.4f", ratio));
+    	
+    	int size = zero_table.size();
+    	//System.out.println("Zero table size is " + size);
+    	//System.out.println("Max length for a zero string is " + zero_maxlength);
+    	size = one_table.size();
+    	//System.out.println("One table size is " + size);
+    	//System.out.println("Max length for a one string is " + one_maxlength);
+    	
+    	// Convert the hashtable data to simple lists.
+    	ArrayList zero_list = new ArrayList();
+    	for(int i = 0; i < zero_maxlength; i++)
+    	{
+    		if(zero_table.containsKey(i + 1))
+    		{
+    			int value = (int)zero_table.get(i + 1);
+    			zero_list.add(value);
+    		}
+    		else
+    			zero_list.add(0);
+    	}
+    	
+    	ArrayList one_list = new ArrayList();
+    	for(int i = 0; i < one_maxlength; i++)
+    	{
+    		if(one_table.containsKey(i + 1))
+    		{
+    			int value = (int)one_table.get(i + 1);
+    			one_list.add(value);
+    		}
+    		else
+    			one_list.add(0);
+    	}
+    	
+    	string_information.add(zero_list);
+    	string_information.add(one_list);
+    	string_information.add(string_position);
+    	string_information.add(string_type);
+    	string_information.add(string_length);
+    	return string_information;
+    }
+    
     public static ArrayList getStringInformation(byte [] string, int bit_length, int max_length)
     {
     	ArrayList string_information = new ArrayList();
@@ -2727,7 +3269,6 @@ public class DeltaMapper
 		    if(type == 0)
 		    {
 		    	string_position.add(n * 8 - 1);
-		        
 		        previous_type = 0;
 		        length = 1;
 		        if(remainder == 0)
@@ -2754,8 +3295,6 @@ public class DeltaMapper
 		    }
 		}
     	
-    	if(remainder == 0)
-    		System.out.println("Bit string is even.");
     	if(remainder != 0) // We need to finish up the last odd byte.
     	{
     		byte extra     = string[n];
@@ -2880,18 +3419,6 @@ public class DeltaMapper
         		}
     		}
     	}
-    	
-    	
-        if(one_table.containsKey(1))
-        	System.out.println("One table contains strings of length 1");
-        else
-        	System.out.println("One table does not contain strings of length 1");
-        
-        if(one_table.containsKey(max_length + 1))
-        	System.out.println("One table contains length greater than maxlength.");
-        else
-        	System.out.println("One table does not contain length greater than maxlength.");
-        
         
     	int size = zero_table.size();
     	//System.out.println("Zero table size is " + size);

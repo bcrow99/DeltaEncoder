@@ -495,7 +495,7 @@ public class TestStringInformation
 					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
 				
 				
-				ArrayList info      = DeltaMapper.getStringInformation(delta_string, length3, histogram.length - 1);
+				ArrayList info      = DeltaMapper.getStringInformation2(delta_string, length3);
 			    //ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
 				ArrayList zero_list = (ArrayList)info.get(0);
 				ArrayList one_list  = (ArrayList)info.get(1);
@@ -510,14 +510,15 @@ public class TestStringInformation
 				n = s_length.size();
 				int number_of_zero_bits = 0;
 				int number_of_one_bits  = 0;
-				for(int j = 0; j < n - 1; j++)
+				for(int j = 0; j < n; j++)
 				{
 					int current_type = (int)s_type.get(j);
 					int current_length = (int)s_length.get(j);
 					
 					if(current_type == 0)
 					{
-						number_of_zero_bits += current_length;
+						number_of_zero_bits += current_length - 1;
+						number_of_one_bits++;
 					}
 					else if(current_type == 1)
 					{
@@ -525,6 +526,10 @@ public class TestStringInformation
 						number_of_zero_bits++;
 					}
 					else if(current_type == 2)
+					{
+						number_of_zero_bits += current_length;
+					}
+					else if(current_type == 3)
 					{
 						number_of_one_bits += current_length;
 					}
