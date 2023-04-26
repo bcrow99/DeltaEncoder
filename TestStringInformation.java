@@ -487,29 +487,23 @@ public class TestStringInformation
 			    
 			    System.out.println("The zero ratio calculated from the string length is " + String.format("%.4f", zero_one_ratio));
 				
-			    byte [] compressed_string = new byte[xdim * ydim * 8];
-			    int compression_length = 0;
-			    if(zero_one_ratio > .5)
-					compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compressed_string);
-			    else
-					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
-				
-				
-				ArrayList info      = DeltaMapper.getStringInformation2(delta_string, length3);
-			    //ArrayList info      = DeltaMapper.getStringInformation(compressed_string, compression_length);
-				ArrayList zero_list = (ArrayList)info.get(0);
-				ArrayList one_list  = (ArrayList)info.get(1);
+
+				ArrayList info        = DeltaMapper.getStringInformation2(delta_string, length3);
+				ArrayList zero_list   = (ArrayList)info.get(0);
+				ArrayList one_list    = (ArrayList)info.get(1);
 				ArrayList s_position  = (ArrayList)info.get(2);
 				ArrayList s_type      = (ArrayList)info.get(3);
 				ArrayList s_length    = (ArrayList)info.get(4);
-				
 				System.out.println("The position list has size " + s_position.size());
 				System.out.println("The type list has size " + s_type.size());
 				System.out.println("The length list has size " + s_length.size());
 				
-				n = s_length.size();
 				int number_of_zero_bits = 0;
 				int number_of_one_bits  = 0;
+				
+				int number_of_2_strings = 0;
+				int number_of_3_strings = 0;
+				n = s_length.size();
 				for(int j = 0; j < n; j++)
 				{
 					int current_type = (int)s_type.get(j);
@@ -528,17 +522,175 @@ public class TestStringInformation
 					else if(current_type == 2)
 					{
 						number_of_zero_bits += current_length;
+						number_of_2_strings++;
 					}
 					else if(current_type == 3)
 					{
 						number_of_one_bits += current_length;
+						number_of_3_strings++;
 					}
 				}
+				
+				System.out.println("There were " + number_of_2_strings + " zero strings with no stop bit.");
+				System.out.println("There were " + number_of_3_strings + " one strings with no stop bit.");
 				
 				
 				zero_one_ratio = number_of_zero_bits;
 				zero_one_ratio       /= number_of_zero_bits + number_of_one_bits;
 				System.out.println("The zero ratio calculated from the string information is " + String.format("%.4f", zero_one_ratio));
+				
+				
+			    byte [] compressed_string = new byte[xdim * ydim * 8];
+			    int compression_length = 0;
+			    if(zero_one_ratio > .5)
+			    {
+			    	int predicted_length = 0;
+			    	
+			    	for(int j = 0; j < n - 2; j++)
+			    	{
+			    		int current_type = (int)s_type.get(j);
+			    		int current_length = (int)s_length.get(j);
+			    		if(current_type == 0)
+			    			predicted_length += (current_length - 1) / 2 + 2;
+			    		else
+			    		{
+			    			predicted_length += (current_length - 1) * 2;
+			    			
+			    		    // We end up with a trailing run bit and need to check the next string type.
+			    			int next_type  = ((int)s_type.get(j + 1));
+			    			if(next_type == 0)
+			    				predicted_length++;
+			    			else
+			    				predicted_length += 2;
+			    			int this_length = (int)s_length.get(j);
+			    			this_length++;
+			    			s_length.set(j, this_length);
+			    			s_type.set(j, 4);
+			    			int next_length = (int)s_length.get(j + 1);
+		    				next_length--;
+		    				s_length.set(j + 1, next_length);
+			    		}
+			    	}
+			    	
+			    	int next_to_last_type = (int)s_type.get(n - 2);
+			    	int next_to_last_length    = (int)s_length.get(n - 2);
+			    	if(next_to_last_type == 0)
+			    		predicted_length += (next_to_last_length - 1) / 2 + 2;
+			    	else
+			    	{
+			    		predicted_length += (next_to_last_length - 1) * 2;	
+			    		int next_type  = ((int)s_type.get(n - 1));
+		    			if(next_type == 0 || next_type == 2)
+		    				predicted_length++;
+		    			else
+		    				predicted_length += 2;
+		    			int this_length = (int)s_length.get(n - 2);
+		    			this_length++;
+		    			s_length.set(n - 2, this_length);
+		    			s_type.set(n - 2, 4);
+		    			int next_length = (int)s_length.get(n - 1);
+	    				next_length--;
+	    				s_length.set(n - 1, next_length);
+			    	}
+			    	
+			    	int last_type   = (int)s_type.get(n - 1);
+			    	int last_length = (int)s_length.get(n - 1);
+			    	if(last_length > 0)
+			    	{
+			    	    if(last_type == 0)
+			    	    {
+			    	    	predicted_length += (last_length - 1) / 2 + 2;    	
+			    	    }
+			    	    else if(last_type == 1)
+			    	    {
+			    	    	predicted_length += (last_length - 1) * 2 + 1;	
+			    	    }
+			    	    else if(last_type == 2)
+			    	    {
+			    	        predicted_length += last_length / 2;
+			    	    }
+			    	    else if(last_type == 3)
+			    	    {
+			    	    	predicted_length += last_length * 2;
+			    	    }
+			    	}
+			    	
+					compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compressed_string);
+					
+					System.out.println("Predicted length of bit string is " + predicted_length);
+					System.out.println("Actual length of bit string is " + compression_length);
+			    }
+			    else
+			    {
+                    int predicted_length = 0;
+			    	
+			    	for(int j = 0; j < n - 2; j++)
+			    	{
+			    		int current_type = (int)s_type.get(j);
+			    		int current_length = (int)s_length.get(j);
+			    		if(current_type == 1)
+			    			predicted_length += (current_length - 1) / 2 + 2;
+			    		else
+			    		{
+			    			predicted_length += (current_length - 1) * 2;
+			    			
+			    		    // We end up with a trailing run bit and need to check the next string type.
+			    			int next_type  = ((int)s_type.get(j + 1));
+			    			if(next_type == 1)
+			    				predicted_length++;
+			    			else
+			    				predicted_length += 2;
+			    			int next_length = (int)s_length.get(j + 1);
+		    				next_length--;
+		    				s_length.set(j + 1, next_length);
+			    		}
+			    	}
+			    	
+			    	int next_to_last_type = (int)s_type.get(n - 2);
+			    	int next_to_last_length    = (int)s_length.get(n - 2);
+			    	if(next_to_last_type == 1)
+			    		predicted_length += (next_to_last_length - 1) / 2 + 2;
+			    	else
+			    	{
+			    		predicted_length += (next_to_last_length - 1) * 2;	
+			    		int next_type  = ((int)s_type.get(n - 1));
+		    			if(next_type == 1 || next_type == 3)
+		    				predicted_length++;
+		    			else
+		    				predicted_length += 2;
+		    			int next_length = (int)s_length.get(n - 1);
+	    				next_length--;
+	    				s_length.set(n - 1, next_length);
+			    	}
+			    	
+			    	int last_type   = (int)s_type.get(n - 1);
+			    	int last_length = (int)s_length.get(n - 1);
+			    	if(last_length > 0)
+			    	{
+			    	    if(last_type == 1)
+			    	    {
+			    	    	predicted_length += (last_length - 1) / 2 + 2;    	
+			    	    }
+			    	    else if(last_type == 0)
+			    	    {
+			    	    	predicted_length += (last_length - 1) * 2 + 1;	
+			    	    }
+			    	    else if(last_type == 3)
+			    	    {
+			    	        predicted_length += last_length / 2;
+			    	    }
+			    	    else if(last_type == 2)
+			    	    {
+			    	    	predicted_length += last_length * 2;
+			    	    }
+			    	}
+			    	
+					compression_length =  DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
+					System.out.println("Predicted length of bit string is " + predicted_length);
+					System.out.println("Actual length of bit string is " + compression_length);
+			    }
+				
+				
 				
 			    
 				System.out.println();
