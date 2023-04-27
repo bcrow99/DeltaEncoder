@@ -542,10 +542,66 @@ public class TestStringInformation
 				
 			    byte [] compressed_string = new byte[xdim * ydim * 8];
 			    int compression_length = 0;
+			    
+			    
+		    	ArrayList t_length = new ArrayList();
+		    	ArrayList t_type   = new ArrayList();
+		    	for(int j = 0; j < n - 2; j++)
+		    	{
+		    		int current_type   = (int)s_type.get(j);
+		    		int current_length = (int)s_length.get(j);
+		    		
+		    		if(current_type == 0)
+		    		{
+		    		    int compressed_length = (current_length - 1) / 2 + 2;	
+		    		    t_length.add(compressed_length);
+		    		    t_type.add(0);
+		    		}
+		    		else if(current_type == 1)
+		    		{
+		    			int compressed_length = (current_length - 1) * 2 + 1;	
+		    			t_length.add(compressed_length);
+		    		    t_type.add(1);
+		    		    int next_type = (int)s_type.get(j + 1);
+		    		    if(next_type == 0)
+		    		    {
+		    		    	t_length.add(1);
+		    		    	t_type.add(1);
+		    		    }
+		    		    else if(next_type == 1)
+		    		    {
+		    		    	t_length.add(0); 
+		    		    	t_type.add(0);
+		    		    }
+		    		}
+		    		else
+		    			System.out.println("Unexpected type.");
+		    	}
+			    
+		    	// We're neglecting the last two elements in the list so
+		    	// we don't have to deal with the end conditions.
+		    	System.out.println("Original list has size " + s_length.size());
+		    	
+		    	int predicted_length2 = 0;
+			    System.out.println("Transformed list has size " + t_length.size());
+			    n = t_length.size();
+			    for(int j = 0; j < n; j++)
+			    {
+			        int current_length = (int) t_length.get(j);	
+			        predicted_length2 += current_length;
+			    }
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
 			    if(zero_one_ratio > .5)
 			    {
 			    	int predicted_length = 0;
-			    	
+			    	n = s_length.size();
 			    	for(int j = 0; j < n - 2; j++)
 			    	{
 			    		int current_type = (int)s_type.get(j);
@@ -615,15 +671,17 @@ public class TestStringInformation
 			    	    }
 			    	}
 			    	
+			    	
+			    	
 					compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compressed_string);
 					
-					System.out.println("Predicted length of bit string is " + predicted_length);
+					System.out.println("Predicted length of bit string is " + predicted_length2);
 					System.out.println("Actual length of bit string is " + compression_length);
 			    }
 			    else
 			    {
                     int predicted_length = 0;
-			    	
+			    	n = s_length.size();
 			    	for(int j = 0; j < n - 2; j++)
 			    	{
 			    		int current_type = (int)s_type.get(j);
