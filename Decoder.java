@@ -40,7 +40,7 @@ public class Decoder
 			System.exit(0);
 		}
 	    String prefix      = new String("");
-	   
+	    //String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
 		String os           = System.getProperty("os.name");
@@ -66,14 +66,11 @@ public class Decoder
 		channel_string[4] = new String("red-green");
 		channel_string[5] = new String("red-blue");
 		
-		String [] compression_string = new String[7];
+		String [] compression_string = new String[4];
 		compression_string[0] = new String("strings");
 		compression_string[1] = new String("zipped strings");
 		compression_string[2] = new String("compressed_strings");
 		compression_string[3] = new String("zipped compressed strings");
-		compression_string[4] = new String("zipped deltas");
-		compression_string[5] = new String("zipped pixels");
-		compression_string[6] = new String("mixed");
 		
 		Hashtable <Integer, int[]> image_table = new Hashtable<Integer, int[]>();
 	
@@ -107,8 +104,7 @@ public class Decoder
 		        
 		        int [] delta = new int[xdim * ydim];
 		        int  [] string_table = new int[1];
-			    int [] key_table = new int[1];
-			    int [] delta_key_table = new int[1];
+			    
 			    
 			    pixel_shift = in.readByte();
 			    System.out.println("Pixel shift is " + pixel_shift);
@@ -141,36 +137,13 @@ public class Decoder
 			        }
 			        //System.out.println("Read string table.");
 			   
-			        table_length = in.readShort();
-			        //System.out.println("Key table length is " +  table_length);
-			    
-			        key_table = new int[table_length];
-			        for(int j = 0; j < table_length; j++)
-			        {
-			    	    key_table[j] = in.readInt();
-			        }
-			        System.out.println("Read key table.");
-			        
-			        int histogram_length = in.readInt();
-			        
-			        table_length = in.readShort();
-			        //System.out.println("Key table length is " +  table_length);
-			    
-			        delta_key_table = new int[table_length];
-			        for(int j = 0; j < table_length; j++)
-			        {
-			    	    delta_key_table[j] = in.readInt();
-			        }
-			        System.out.println("Read key table.");
-			        
-			        int delta_histogram_length = in.readInt();
-			        
-			        
 			        int bitstring_length = 0;
 			        int packed_length    = in.readInt();
 			        int compressed_length = in.readInt();
 			        //System.out.println("Bitstring length is " + bitstring_length);
 			        
+			        
+			   
 			        int data_length = in.readInt();
 			    
 			        byte [] data = new byte[data_length];
@@ -198,7 +171,7 @@ public class Decoder
 						for(int j = 1; j < delta.length; j++)
 						     delta[j] += delta_min;
 						
-						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
 						if(channel > 2)
 							for(int j = 0; j < result.length; j++)
 								result[j] += channel_min;
@@ -237,7 +210,7 @@ public class Decoder
 						for(int j = 1; j < delta.length; j++)
 						     delta[j] += delta_min;
 						
-						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
 						
 						if(channel > 2)
 							for(int j = 0; j < result.length; j++)
@@ -256,7 +229,8 @@ public class Decoder
 				        if(bitstring_length != remainder_length)
 				    		System.out.println("Length in header and remainder disagree.");
 				        byte [] string = new byte[xdim * ydim * 8];
-				        byte bit_type = DeltaMapper.checkStringType(data, bitstring_length);
+				        ArrayList info = DeltaMapper.checkStringType(data, bitstring_length);
+				        byte bit_type = (byte)info.get(0);
 				        if(bit_type != compression_bit_type)
 				        {
 				        	System.out.println("Bit type in header does not agree with bit type in data.");
@@ -283,7 +257,7 @@ public class Decoder
 						for(int j = 1; j < delta.length; j++)
 						     delta[j] += delta_min;
 						
-						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+						int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
 						
 						if(channel > 2)
 							for(int j = 0; j < result.length; j++)
@@ -310,7 +284,8 @@ public class Decoder
 					        if(bitstring_length != remainder_length)
 					    		System.out.println("Length in header and remainder disagree.");
 					        
-					        byte bit_type = DeltaMapper.checkStringType(string, bitstring_length);
+					        ArrayList info = DeltaMapper.checkStringType(string, bitstring_length);
+					        byte bit_type = (byte)info.get(0);
 					        if(bit_type != compression_bit_type)
 					        {
 					        	System.out.println("Bit type in header disagrees with bit type in data.");
@@ -337,7 +312,7 @@ public class Decoder
 						    	System.out.println("Number of values unpacked does not agree with image dimensions.");
 							for(int j = 1; j < delta.length; j++)
 							     delta[j] += delta_min;
-							int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
+							int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
 							if(channel > 2)
 								for(int j = 0; j < result.length; j++)
 									result[j] += channel_min;
@@ -346,124 +321,12 @@ public class Decoder
 							image_table.put(channel, result);
 							System.out.println();
 					    }
-					    
 					    catch(Exception e)
 					    {
 					    	System.out.println(e.toString());
 					    }
 					    inflater.end();
 				    }
-			        else if(compression == 4)
-			        {
-			        	System.out.println("Decompressing zipped deltas.");
-			        	
-			        	Inflater inflater = new Inflater();
-				    	inflater.setInput(data);
-				    	byte [] bytes  = new byte[xdim * ydim];
-				    	int     length = 0;
-					    try
-					    {
-					        length = inflater.inflate(bytes);
-					        if(length != xdim * ydim)
-					        	System.out.println("Length does not agree with image dimensions.");
-					        else
-					        {
-					        	if(delta_histogram_length > 255)
-					        	{
-					        		System.out.println("Channel is " + channel_string[channel]);
-					        		System.out.println("Remapping values.");
-					        	    Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
-					        	    for(int j = 0; j < delta_key_table.length; j++)
-					        		    inverse_table.put(j, key_table[j]);
-					        	    for(int j = 1; j < delta.length; j++)
-					        	    {
-					        		    int key = (int)bytes[j];
-					        		    if(key < 0)
-					        		    	key += 256;
-					        		    delta[j] = inverse_table.get(key);
-					        	    }	
-					        	}
-					        	else
-					        	{
-					        	    for(int j = 0; j < bytes.length; j++)
-					        	    {
-					        		    delta[j] = (int)bytes[j];
-					        		    if(delta[j] < 0)
-					        			    delta[j] += 256;
-					        	    }
-					        	}
-					        }
-					    }
-					    catch(Exception e)
-					    {
-					    	System.out.println(e.toString());
-					    }
-					    inflater.end();
-				    	
-				    	for(int j = 1; j < delta.length; j++)
-						     delta[j] += delta_min;
-						int [] result = DeltaMapper.getValuesFromDeltas(delta, xdim , ydim, init_value);
-						image_table.put(channel, result);
-			        }
-			        else if(compression == 5)
-			        {
-			        	System.out.println("Decompressing zipped pixels.");
-			        	Inflater inflater = new Inflater();
-				    	inflater.setInput(data);
-					    
-				    	int []  result = new int[xdim * ydim];
-				    	byte [] bytes  = new byte[xdim * ydim];
-				    	
-                        int     length = 0;
-					    try
-					    {
-					        length = inflater.inflate(bytes);
-					        if(length != xdim * ydim)
-					        	System.out.println("Length does not agree with image dimensions.");
-					        else
-					        {
-					        	for(int j = 0; j < bytes.length; j++)
-					        	{
-					        		result[j] = (int)bytes[j];
-					        		if(result[j] < 0)
-					        			result[j] += 256;
-					        	}
-					        	
-					        	int [] final_result = new int[result.length];
-					        	for(int j = 0; j < result.length; j++)
-					        	{
-					        	    final_result[j] = result[j];	
-					        	}
-					        	
-					        	if(histogram_length  > 256)
-					        	{
-					        		System.out.println("Channel is " + channel_string[channel]);
-					        		System.out.println("Remapping values.");
-					        	    Hashtable <Integer,Integer> inverse_table = new Hashtable<Integer, Integer>();
-					        	    for(int j = 0; j < key_table.length; j++)
-					        		    inverse_table.put(j, key_table[j]);
-					        	    for(int j = 0; j < result.length; j++)
-					        	    {
-					        		    int key = result[j];
-					        		    final_result[j] = inverse_table.get(key);
-					        	    }
-					        	}
-					        	if(channel > 2)
-					        	{
-					        		System.out.println("Channel min is " + channel_min);
-					        		System.out.println();
-					        		for(int j = 0; j < result.length; j++)
-					        			final_result[j] += channel_min;
-					        	}
-					        	image_table.put(channel, final_result);
-					        }
-					    }
-					    catch(Exception e)
-					    {
-					    	System.out.println(e.toString());
-					    }
-					    inflater.end();
-			        }
 			    }
 			    in.close();
 			    
@@ -538,10 +401,9 @@ public class Decoder
 			        		    	blue_green[i] = -blue_green[i];
 			        		    green = DeltaMapper.getSum(blue_green, blue); 
 			        		    red_blue = image_table.get(5);
-			        		    
 			        		    red   = DeltaMapper.getSum(red_blue, blue); 
 			        		}
-			        		else if(image_table.containsKey(4) && image_table.containsKey(5) )
+			        		else if(image_table.containsKey(4)&& image_table.containsKey(5) )
 			        		{
 			        		    red_blue = image_table.get(5);
 			        		    red = DeltaMapper.getSum(red_blue, blue);
@@ -549,15 +411,6 @@ public class Decoder
 			        		    for(int i = 0; i < red_green.length; i++)
 			        		    	red_green[i] = -red_green[i];
 			        		    green = DeltaMapper.getSum(red_green, red);
-			        		}
-			        		else if(image_table.containsKey(3) && image_table.containsKey(4))
-			        		{
-			        			blue_green = image_table.get(3);
-			        		    for(int i = 0; i < blue_green.length; i++)
-			        		    	blue_green[i] = -blue_green[i];
-			        		    green = DeltaMapper.getSum(blue_green, blue); 
-			        		    red_green = image_table.get(4);
-			        		    red = DeltaMapper.getSum(red_green, green);
 			        		}
 			        		else
 			        		{
@@ -585,12 +438,7 @@ public class Decoder
 			        	{
 			        	    blue_green = image_table.get(3);
 			        	    blue       = DeltaMapper.getSum(blue_green, green);
-			        	    for(int i = 0; i < blue.length; i++)
-		        		    	if(blue[i] > 255)
-		        		    	{
-		        		    		System.out.println("Value out of bounds: " + blue[i]);
-		        		    		blue[i] = 255;
-		        		    	}
+			        	  
 			        	}
 			        	else if(image_table.containsKey(5))
 			        	{
@@ -607,19 +455,10 @@ public class Decoder
 			        	// We have the green channel, but not blue or red.
 			        	if(image_table.containsKey(3) && image_table.containsKey(4))
 			        	{
-			        		for(int i = 0; i < green.length; i++)
-			        		{
-			        			if(green[i] > 255)
-			        				System.out.println("Green value too large.");
-			        			else if(green[i] < 0)
-			        			{
-			        				System.out.println("Green value negative.");
-			        			}
-			        		}
 			        	    blue_green = image_table.get(3);
 			        	    blue       = DeltaMapper.getSum(blue_green, green);
 			        	    red_green  = image_table.get(4);
-			        	    red        = DeltaMapper.getSum(red_green, green);     
+			        	    red        = DeltaMapper.getSum(red_green, green);
 			        	}
 			        	else if(image_table.containsKey(4) && image_table.containsKey(5))
 			        	{
@@ -669,15 +508,6 @@ public class Decoder
 				System.out.println(e.toString());
 			}
 			
-			for(int i = 0; i < red.length; i++)
-			{
-			    if(red[i] < 0)
-			    {
-			    	//System.out.println("Negative value: " + red[i]);
-			    }
-			    else if(red[i] > 255)
-			    	System.out.println("Value out of bounds.");
-			}
 			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 			for(int i = 0; i < ydim; i++)
 			{
@@ -691,7 +521,7 @@ public class Decoder
 			    
 			    	int _red   = red[i * xdim + j]; 
 			    	_red <<= pixel_shift;
-			    
+			    	
 			    	int pixel = 0;
 			    	pixel |= _blue << 16;
 	                pixel |= _green << 8;    
