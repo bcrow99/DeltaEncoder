@@ -2316,6 +2316,7 @@ public class DeltaMapper
     	return cost;
     }
     
+    
     public static ArrayList getStringInformation2(byte [] string, int bit_length)
     {
     	ArrayList string_information = new ArrayList();
@@ -3460,6 +3461,7 @@ public class DeltaMapper
     	return string_information;
     }
     
+    
     public static ArrayList getSlidingWindowRatio(byte [] string, int length, int number_of_bits)
     {
         ArrayList ratio_list = new ArrayList();
@@ -3541,6 +3543,229 @@ public class DeltaMapper
     	
     	ratio_list.add(ratio);
         return ratio_list;
+    }
+   
+    public static double getZeroRatio(byte [] string, int bit_length)
+    {
+    	int byte_length = bit_length / 8;
+    	int zero_sum    = 0;
+        int one_sum     = 0;
+        byte mask       = 1;
+        
+        int n           = byte_length;
+        
+        for(int i = 0; i < n; i++)
+        {
+        	for(int j = 0; j < 8; j++)
+        	{
+        	    int k = string[i] & mask << j;	
+        	    if(k == 0)
+        	    	zero_sum++;
+        	    else
+        	    	one_sum++;
+        	}
+        }
+       
+    	int remainder = bit_length % 8;
+    	if(remainder != 0)
+    	{
+    		for(int i = 0; i < remainder; i++)
+    		{
+    			int j = string[byte_length] & mask << i;
+    			if(j == 0)
+    				zero_sum++;
+    			else
+    				one_sum++;
+    		}
+    	}
+    	
+    	double ratio = zero_sum;
+    	ratio       /= zero_sum + one_sum;
+    	return ratio;
+    }
+    
+    public static ArrayList getTransformInformation(byte [] string, int length)
+    {
+    	ArrayList data_list = new ArrayList();
+    	
+    	// 96 is close to the minimum bit length 
+    	// when a single iteration of the bitwise transform will produce 
+    	// compression taking into account the overhead.
+    	int minimum_length     = 96;
+        int number_of_segments = length / minimum_length;
+        
+    	// We add any remainder to the last segment.
+        int remainder = length % minimum_length;
+        
+        // One of the considerations for choosing a minimum length of 96 is 
+        // it divides evenly by 8.
+        int segment_length     = minimum_length / 8;
+        
+        // The last segment_length might contain extra bytes and/or extra unused bits.
+        int last_segment_length = segment_length + remainder / 8;
+        if(remainder % 8 != 0)
+        	last_segment_length++;
+        
+        int adaptive_length = 0;
+        ArrayList string_list = new ArrayList();
+     
+        for(int i = 0; i < number_of_segments; i++)
+        {
+            if(i != number_of_segments - 1) 
+            {
+                byte [] segment = new byte[segment_length];	
+                byte [] compressed_segment = new byte[2 * segment_length];
+                for(int j = 0; j < segment_length; j++)
+                	segment[j] = string[i * 12 + j];
+                double zero_ratio = getZeroRatio(segment, minimum_length);
+                if(zero_ratio >= .5)
+                {
+                    int  compression_length = compressZeroStrings(segment, minimum_length, compressed_segment);
+                    ArrayList info = checkStringType(compressed_segment, compression_length);
+                    int iterations = (int)info.get(1);
+                    
+                    // We always do one iteration of the bitwise transform so we check to see if it 
+                    // compressed or expanded the data.
+                    if(compression_length > minimum_length)
+                    {
+                    	iterations = 0;
+                    	adaptive_length += minimum_length;
+                    }
+                    else
+                    	adaptive_length += compression_length;
+                    
+                    ArrayList segment_list = new ArrayList();
+                    segment_list.add(0);
+                    segment_list.add(iterations);
+                    segment_list.add(i * minimum_length);
+                    segment_list.add(minimum_length);
+                    
+                    string_list.add(segment_list);
+                    
+                }
+                else
+                {
+                	int compression_length = compressOneStrings(segment, minimum_length, compressed_segment);
+                	ArrayList info = checkStringType(compressed_segment, compression_length);
+                	int iterations = (int)info.get(1);
+                	if(compression_length > minimum_length)
+                    {
+                    	iterations = 0;
+                    	adaptive_length += minimum_length;
+                    }
+                    else
+                    	adaptive_length += compression_length;
+                	ArrayList segment_list = new ArrayList();
+                    segment_list.add(1);
+                    segment_list.add(iterations);
+                    segment_list.add(i * minimum_length);
+                    segment_list.add(minimum_length);
+                    
+                    string_list.add(segment_list);
+                }
+            }
+            else
+            {
+                byte [] segment = new byte[last_segment_length]; 
+                byte [] compressed_segment = new byte[2 * last_segment_length];
+                double zero_ratio = getZeroRatio(segment, minimum_length + remainder);
+                if(zero_ratio >= .5)
+                {
+                    int  compression_length = compressZeroStrings(segment, minimum_length + remainder, compressed_segment);
+                    ArrayList info = checkStringType(compressed_segment, compression_length);
+                    int iterations = (int)info.get(1);
+                    if(compression_length > minimum_length)
+                    {
+                    	iterations = 0;
+                    	adaptive_length += minimum_length + remainder;
+                    }
+                    else
+                    	adaptive_length += compression_length;
+                    ArrayList segment_list = new ArrayList();
+                    segment_list.add(0);
+                    segment_list.add(iterations);
+                    segment_list.add(i * minimum_length);
+                    segment_list.add(minimum_length + remainder);
+                    
+                    string_list.add(segment_list);
+                }
+                else
+                {
+                	int compression_length = compressOneStrings(segment, minimum_length + remainder, compressed_segment);
+                	ArrayList info = checkStringType(compressed_segment, compression_length);
+                	int iterations = (int)info.get(1);
+                	if(compression_length > minimum_length)
+                    {
+                    	iterations = 0;
+                    	adaptive_length += minimum_length + remainder;
+                    }
+                    else
+                    	adaptive_length += compression_length;
+                	
+                	ArrayList segment_list = new ArrayList();
+                    segment_list.add(1);
+                    segment_list.add(iterations);
+                    segment_list.add(i * minimum_length);
+                    segment_list.add(minimum_length + remainder);
+                    
+                    string_list.add(segment_list);
+                }
+            }
+        }
+    	
+        ArrayList merged_list = new ArrayList();
+        
+        ArrayList init_list = (ArrayList)string_list.get(0);
+        
+        int previous_type       = (int)init_list.get(0);
+        int previous_iterations = (int)init_list.get(1);
+        int previous_offset     = (int)init_list.get(2);
+        int previous_length     = (int)init_list.get(3);
+        
+        int n = string_list.size();
+    	for(int i = 1; i < n; i++)
+    	{
+    	    ArrayList segment_list = (ArrayList)string_list.get(i);
+    	    int type       = (int)segment_list.get(0);
+            int iterations = (int)segment_list.get(1);
+            int offset     = (int)segment_list.get(2);
+            int bit_length = (int)segment_list.get(3);
+            
+            if(type == previous_type && iterations == previous_iterations)
+            {
+            	previous_length += bit_length;
+            	if(i == n - 1)
+            	{
+            		ArrayList new_segment_list = new ArrayList();
+                	new_segment_list.add(previous_type);
+                	new_segment_list.add(previous_iterations);
+                	new_segment_list.add(previous_offset);
+                	new_segment_list.add(previous_length);
+                	merged_list.add(new_segment_list);	
+            	}
+            }
+            else
+            {
+            	ArrayList new_segment_list = new ArrayList();
+            	new_segment_list.add(previous_type);
+            	new_segment_list.add(previous_iterations);
+            	new_segment_list.add(previous_offset);
+            	new_segment_list.add(previous_length);
+            	merged_list.add(new_segment_list);
+            	
+            	previous_type       = type;
+            	previous_iterations = iterations;
+            	previous_offset     = offset;
+            	previous_length     = length;
+            	
+            }
+    	}
+        
+    	System.out.println("Orginal list had size " + string_list.size());
+    	System.out.println("Merged list had size " + merged_list.size());
+        data_list.add(merged_list);
+        data_list.add(adaptive_length);
+        return data_list;
     }
    
     public static int getLengthDifference(int length, int bit_type, int transform_type, int iterations)
