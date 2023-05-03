@@ -536,8 +536,45 @@ public class Segmenter
 			    
 			    zero_ratio = DeltaMapper.getZeroRatio(delta_string, length3);
 			    System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
+			    
+			    byte [] compression_string = new byte[2 * length3];
+			    if(zero_ratio >= .5)
+			    {
+			        int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
+			        if(compression_length > length3)
+			        {
+			        	System.out.println("String did not compress.");
+			        	double compression_ratio = length3;
+			        	compression_ratio       /= pixel_length;
+			        	System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
+			        }
+			        else
+			        {
+			            double compression_ratio = compression_length;
+			            compression_ratio /= pixel_length;
+			            System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
+			        }
+			    }
+			    else
+			    {
+			    	int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
+			    	if(compression_length > length3)
+			    	{
+			        	System.out.println("String did not compress.");
+			        	double compression_ratio = compression_length;
+			            compression_ratio /= pixel_length;
+			            System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
+			    	}
+			        else
+			        {
+			            double compression_ratio = compression_length;
+			            compression_ratio /= pixel_length;
+			            System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
+			        }
+			    }
 				
-				ArrayList string_list = DeltaMapper.getTransformInformation(delta_string, length3);
+				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3);
+				ArrayList string_list = (ArrayList)data_list.get(0);
 				n = string_list.size();
 				
 				double min_ratio = 1.;
@@ -562,10 +599,16 @@ public class Segmenter
 						max_iterations = iterations;
 					
 				}
+
+				int adaptive_length = (int)data_list.get(1);
+				double compression_ratio = adaptive_length;
+				compression_ratio /= pixel_length;
+				
 				System.out.println("The smallest zero ratio for a segment was " + String.format("%.2f", min_ratio));
 				System.out.println("The largest zero ratio for a segment was " + String.format("%.2f", max_ratio));
 				System.out.println("The smallest number of iterations was " +  min_iterations);
-				System.out.println("The largest number of iterations was " + max_iterations);
+			    System.out.println("The largest number of iterations was " + max_iterations);
+				System.out.println("The compression ratio for adaptive encoding less overhead is " + String.format("%.2f", compression_ratio));
 				System.out.println();
 				
 				

@@ -3619,7 +3619,12 @@ public class DeltaMapper
                  // compressed or expanded the data.
                  //double compression_ratio = 1.;
                  if(compression_length > minimum_length)
+                 {
                  	iterations = 0;
+                 	adaptive_length += minimum_length;
+                 }
+                 else
+                	 adaptive_length += compression_length; 
                  segment_list.add(iterations);	
             }
             else
@@ -3628,7 +3633,12 @@ public class DeltaMapper
                 ArrayList info = checkStringType(compressed_segment, compression_length);
                 int iterations = (int)info.get(1);
                 if(compression_length > minimum_length)
+                {
                 	iterations = 0;
+                	adaptive_length += minimum_length;
+                }
+                else
+                	adaptive_length += compression_length;
                 segment_list.add(iterations);	
             }
             
@@ -3650,7 +3660,13 @@ public class DeltaMapper
              ArrayList info = checkStringType(compressed_segment, compression_length);
              int iterations = (int)info.get(1);
              if(compression_length > minimum_length + remainder)
-             	iterations = 0;
+             {
+            	 iterations = 0;
+            	 adaptive_length += minimum_length + remainder;
+             }
+             else
+            	 adaptive_length += compression_length; 
+             	
              segment_list.add(iterations);	
         }
         else
@@ -3659,13 +3675,21 @@ public class DeltaMapper
             ArrayList info = checkStringType(compressed_segment, compression_length);
             int iterations = (int)info.get(1);
             if(compression_length > minimum_length + remainder)
+            {
             	iterations = 0;
+            	adaptive_length += minimum_length + remainder;
+            }
+            else
+            	adaptive_length += compression_length;
             segment_list.add(iterations);		
         }
         
         string_list.add(segment_list);
-        
-        return string_list;
+       
+       
+        data_list.add(string_list);
+        data_list.add(adaptive_length);
+        return data_list;
     }
                 
                 /*
