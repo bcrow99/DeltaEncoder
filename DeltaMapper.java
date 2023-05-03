@@ -3731,10 +3731,11 @@ public class DeltaMapper
         	    int current_length     = (int)current_segment.get(3);
         	    int next_length        = (int)next_segment.get(3);
         	    
-        	    if(current_type == next_type && current_iterations == next_iterations)
+        	    if(current_type == next_type && current_iterations == next_iterations && current_type == 0)
         	    {
-        	    	
-        	        double new_ratio = (current_ratio + next_ratio) / 2;
+        	    	current_ratio *= current_length;
+        	    	next_ratio    *= next_length;
+        	        double new_ratio = (current_ratio + next_ratio) / (current_length + next_length);
         	        int    new_length = current_length + next_length;
         	        
         	        ArrayList merged_segment = new ArrayList();
@@ -3767,19 +3768,62 @@ public class DeltaMapper
         
         
         System.out.println("The original number of segments was " + number_of_segments);
-        
         System.out.println("The merged number of segments was " + current_number_of_segments);
         
+        int adaptive_length2 = 0;
+        int n = current_list.size();
+        for(i = 0; i < n; i++)
+        {
+            segment_list = (ArrayList)current_list.get(i);	
+            
+            zero_ratio     = (double)segment_list.get(0);
+            int iterations = (int)segment_list.get(1);
+            int offset     = (int)segment_list.get(2);
+            int bit_length = (int)segment_list.get(3);
+            
+            int byte_length = bit_length / 8;
+            if(bit_length % 8 != 0)
+            	byte_length++;
+            
+           
+            segment = new byte[byte_length];
+            
+            // Don't know why the processed string is sometimes expanding more than twice
+            // as large as the original string.  Have been relying on that as the limit.
+            
+            // Should check what happens when we dont try to compress segments that 
+            // already show 0 iterations.  Also, check lengths when we merge to 
+            // make sure zero_ratio is a simple average.  
+            
+            // byte [] compressed_string = new byte[2 * byte_length];
+            byte [] compressed_string = new byte[4 * byte_length];
+            
+            for(int j = offset; j < offset + byte_length; j++)
+                segment[j - offset] = string[j];
+            
+            if(zero_ratio >= .5)
+            {
+                int compression_length = compressZeroStrings(segment, bit_length, compressed_string);
+                if(compression_length > bit_length)
+                	adaptive_length2  += bit_length;	
+                else
+                    adaptive_length2      += compression_length;
+            }
+            else
+            {
+            	int compression_length = compressOneStrings(segment, bit_length, compressed_string); 
+            	if(compression_length > bit_length)
+                	adaptive_length2  += bit_length;	
+                else
+                    adaptive_length2      += compression_length;
+            }
+        }
         
-        
-        
-        
-        
-        
-        
+        System.out.println("Adaptive length produced by original list is " + adaptive_length);
+        System.out.println("Adaptive length produced by merged list is " + adaptive_length2);
         
         data_list.add(current_list);
-        data_list.add(adaptive_length);
+        data_list.add(adaptive_length2);
         return data_list;
     }
                 

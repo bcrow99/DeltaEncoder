@@ -489,7 +489,7 @@ public class Segmenter
 		    channel_src.add(shifted_red_green);
 		    channel_src.add(shifted_red_blue);
 		    
-		    byte [] delta_string    = new byte[xdim * ydim * 8];
+		    byte [] delta_string    = new byte[xdim * ydim * 10];
 		    byte [] sign_string     = new byte[xdim * ydim];
 		    byte [] direction_string = new byte[xdim * ydim];
 		    
