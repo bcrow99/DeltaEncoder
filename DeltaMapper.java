@@ -3617,7 +3617,7 @@ public class DeltaMapper
                  
                  // We always do one iteration of the bitwise transform so we check to see if it 
                  // compressed or expanded the data.
-                 //double compression_ratio = 1.;
+                 
                  if(compression_length > minimum_length)
                  {
                  	iterations = 0;
@@ -3626,6 +3626,8 @@ public class DeltaMapper
                  else
                 	 adaptive_length += compression_length; 
                  segment_list.add(iterations);	
+                 segment_list.add(i * minimum_length);
+                 segment_list.add(minimum_length);
             }
             else
             {
@@ -3639,7 +3641,9 @@ public class DeltaMapper
                 }
                 else
                 	adaptive_length += compression_length;
-                segment_list.add(iterations);	
+                segment_list.add(iterations);
+                segment_list.add(i * minimum_length);
+                segment_list.add(minimum_length);
             }
             
             
@@ -3668,6 +3672,8 @@ public class DeltaMapper
             	 adaptive_length += compression_length; 
              	
              segment_list.add(iterations);	
+             segment_list.add(i * minimum_length);
+             segment_list.add(minimum_length + remainder);
         }
         else
         {
@@ -3681,13 +3687,98 @@ public class DeltaMapper
             }
             else
             	adaptive_length += compression_length;
-            segment_list.add(iterations);		
+            segment_list.add(iterations);
+            segment_list.add(i * minimum_length);
+            segment_list.add(minimum_length + remainder);
         }
         
         string_list.add(segment_list);
        
+        ArrayList previous_list               = new ArrayList();
+        ArrayList current_list                = new ArrayList();
+        int       current_number_of_segments  = number_of_segments;
+        int       previous_number_of_segments = number_of_segments + 1;
        
-        data_list.add(string_list);
+        for(i = 0; i < number_of_segments; i++)
+        {
+        	segment_list = (ArrayList)string_list.get(i);
+        	previous_list.add(segment_list);
+        }
+        	
+        while(current_number_of_segments != previous_number_of_segments)
+        {
+        	current_list.clear();
+        	int n = previous_list.size();
+        	previous_number_of_segments = n;
+        	for(i = 0; i < n - 1; i++)
+        	{
+        	    ArrayList current_segment = (ArrayList)	previous_list.get(i);
+        	    ArrayList next_segment    = (ArrayList)	previous_list.get(i + 1);
+        	    
+        	    double current_ratio = (double)current_segment.get(0);
+        	    int    current_type = 0;
+        	    if(current_ratio < .5)
+        	    	current_type = 1;
+        	    double next_ratio = (double)next_segment.get(0);
+        	    int next_type = 0;
+        	    if(next_ratio < .5)
+        	    	next_type = 1;
+        	    
+        	    int current_iterations = (int)current_segment.get(1);
+        	    int next_iterations    = (int)next_segment.get(1);
+        	    
+        	    int current_offset     = (int)current_segment.get(2);
+        	    int current_length     = (int)current_segment.get(3);
+        	    int next_length        = (int)next_segment.get(3);
+        	    
+        	    if(current_type == next_type && current_iterations == next_iterations)
+        	    {
+        	    	
+        	        double new_ratio = (current_ratio + next_ratio) / 2;
+        	        int    new_length = current_length + next_length;
+        	        
+        	        ArrayList merged_segment = new ArrayList();
+        	        merged_segment.add(new_ratio);
+        	        merged_segment.add(current_iterations);
+        	        merged_segment.add(current_offset);
+        	        merged_segment.add(new_length);
+        	        current_list.add(merged_segment);
+        	        i++;
+        	    }
+        	    else
+        	    	current_list.add(current_segment);
+        	}
+        	if(i == n - 1)
+        	{
+        		ArrayList current_segment = (ArrayList)	previous_list.get(i);
+        		current_list.add(current_segment);
+        	}
+        	
+        	previous_list.clear();
+        	n = current_list.size();
+        	current_number_of_segments = n;
+        	
+        	for(i = 0; i < n; i++)
+        	{
+        		segment_list = (ArrayList)current_list.get(i);
+        		previous_list.add(segment_list);
+        	}	
+        }
+        
+        
+        System.out.println("The original number of segments was " + number_of_segments);
+        
+        System.out.println("The merged number of segments was " + current_number_of_segments);
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        data_list.add(current_list);
         data_list.add(adaptive_length);
         return data_list;
     }
