@@ -520,14 +520,121 @@ public class Segmenter
 					delta3[j] -= min_value;
 				int length3  = DeltaMapper.packStrings2(delta3, rank_table, delta_string);
 				
+				double zero_ratio = xdim * ydim;
+		        if(histogram.length > 1)
+		        {
+					min_value = Integer.MAX_VALUE;
+					for(int j = 0; j < histogram.length; j++)
+						 if(histogram[j] < min_value)
+							min_value = histogram[j];
+					zero_ratio -= min_value;
+		        }	
+			    zero_ratio  /= length3;
+			    
+			    System.out.println("Processing " + channel_string[i]);
+			    System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
+			    
+			    zero_ratio = DeltaMapper.getZeroRatio(delta_string, length3);
+			    System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
+				
+				ArrayList string_list = DeltaMapper.getTransformInformation(delta_string, length3);
+				n = string_list.size();
+				
+				double min_ratio = 1.;
+				double max_ratio = 0.;
+				
+				int min_iterations = 100;
+				int max_iterations = 0;
+				for(int j = 0; j < n; j++)
+				{
+					ArrayList segment_list = (ArrayList)string_list.get(j);
+					zero_ratio = (double)segment_list.get(0);
+					if(zero_ratio < min_ratio)
+						min_ratio = zero_ratio;
+					if(zero_ratio > max_ratio)
+						max_ratio = zero_ratio;
+					
+					
+					int iterations = (int)segment_list.get(1);
+					if(iterations < min_iterations)
+						min_iterations = iterations;
+					if(iterations > max_iterations)
+						max_iterations = iterations;
+					
+				}
+				System.out.println("The smallest zero ratio for a segment was " + String.format("%.2f", min_ratio));
+				System.out.println("The largest zero ratio for a segment was " + String.format("%.2f", max_ratio));
+				System.out.println("The smallest number of iterations was " +  min_iterations);
+				System.out.println("The largest number of iterations was " + max_iterations);
+				System.out.println();
 				
 				
-				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3);
+				
+				
+				
+				
+				/*
 				int adaptive_length = (int)data_list.get(1);
 				
-				ratio = adaptive_length;
-				ratio /= length3;
-				System.out.println("The expected adaptive compression less overhead is " + String.format("%.2f", ratio));
+				byte [] compressed_string = new byte[length3 * 2];
+				int regular_length = 0;
+				if(zero_one_ratio >= .5)
+					regular_length = DeltaMapper.compressZeroStrings(delta_string, length3, compressed_string);
+				else
+					regular_length = DeltaMapper.compressOneStrings(delta_string, length3, compressed_string);
+				
+				double compression_ratio = regular_length;
+				compression_ratio       /= length3;
+				System.out.println("Regular compression ratio is " + String.format("%.4f", compression_ratio));
+				
+				compression_ratio = adaptive_length;
+				compression_ratio       /= length3;
+				System.out.println("Adaptive compression ratio is " + String.format("%.4f", compression_ratio));
+					
+				
+				ArrayList string_list                   = (ArrayList)data_list.get(0);
+				int       number_of_compressed_segments = 0;
+				int       number_of_zero_transforms     = 0;
+				int       number_of_one_transforms      = 0;
+				
+				int [] iteration = new int[20];
+				for(int j = 0; j < 20; j++)
+					iteration[j] = 0;
+				
+				
+				for(int j = 0; j < string_list.size(); j++)
+				{
+					ArrayList segment_list = (ArrayList)string_list.get(i);
+					int       type       = (int)segment_list.get(0);
+					int       iterations = (int)segment_list.get(1);
+					
+					iteration[iterations]++;
+					
+					if(iterations != 0)
+					{
+						number_of_compressed_segments++;
+						if(type == 0)
+							number_of_zero_transforms++;
+						else
+							number_of_one_transforms++;	
+					}
+				}
+				
+				for(int j = 0; j < 20; j++)
+				{
+					if(iteration[j] != 0)
+						System.out.println("There were " + iteration[j] + " bit transforms with " + j + " iterations.");
+				}
+				
+				System.out.println("Number of segments is " + string_list.size());
+				System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+				System.out.println("Number of unmodified segments is " + (string_list.size() - number_of_compressed_segments));
+				System.out.println("Number of zero transforms is " + number_of_zero_transforms);
+				System.out.println("Number of one transforms is " + number_of_one_transforms);
+				System.out.println();
+				*/
+				
+				
 		    }  
 	    	
 		    
