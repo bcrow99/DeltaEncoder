@@ -18,8 +18,8 @@ public class Segmenter
 	JDialog       shift_dialog;
 	JTextField    shift_value;
 	
-	JDialog       window_dialog;
-	JTextField    window_value;
+	JDialog       segment_dialog;
+	JTextField    segment_value;
 	
 	ImageCanvas   image_canvas;
 	
@@ -53,7 +53,7 @@ public class Segmenter
 	int     pixel_shift = 3;
 	long    file_length = 0;
 	boolean initialized = false;
-	int     window_length = 50;
+	int     segment_length = 0;
 	
 	public static void main(String[] args)
 	{
@@ -89,6 +89,9 @@ public class Segmenter
 			int number_of_bits     = color_model.getPixelSize();
 			xdim                   = original_image.getWidth();
 			ydim                   = original_image.getHeight();
+			
+			file_ratio = file_length;
+			file_ratio /= (xdim * ydim * 24);
 			
 		    original_pixel         = new int[xdim * ydim];
 		    alpha                  = new int[xdim * ydim];
@@ -205,8 +208,8 @@ public class Segmenter
 				settings_menu.add(shift_item);
 				
 				
-				JMenuItem window_item = new JMenuItem("Window Size");
-				ActionListener sliding_window_handler = new ActionListener()
+				JMenuItem segment_item = new JMenuItem("Segment Length");
+				ActionListener segment_length_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
@@ -214,39 +217,39 @@ public class Segmenter
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
 						x += xdim;
-						window_dialog.setLocation(x, y);
-						window_dialog.pack();
-						window_dialog.setVisible(true);
+						segment_dialog.setLocation(x, y);
+						segment_dialog.pack();
+						segment_dialog.setVisible(true);
 					}
 				};
-				window_item.addActionListener(sliding_window_handler);
-				window_dialog = new JDialog(frame, "Window Size");
-				JPanel window_panel = new JPanel(new BorderLayout());
-				JSlider window_slider = new JSlider();
-				window_slider.setMinimum(0);
-				window_slider.setMaximum(100);
-				window_slider.setValue(window_length);
-				window_value = new JTextField(3);
-				window_value.setText(" " + window_length + " ");
-				ChangeListener window_slider_handler = new ChangeListener()
+				segment_item.addActionListener(segment_length_handler);
+				segment_dialog = new JDialog(frame, "Segment Length");
+				JPanel segment_panel = new JPanel(new BorderLayout());
+				JSlider segment_slider = new JSlider();
+				segment_slider.setMinimum(0);
+				segment_slider.setMaximum(100);
+				segment_slider.setValue(segment_length);
+				segment_value = new JTextField(3);
+				segment_value.setText(" " + segment_length + " ");
+				ChangeListener segment_slider_handler = new ChangeListener()
 				{
 					public void stateChanged(ChangeEvent e)
 					{
 						JSlider slider = (JSlider) e.getSource();
-						window_length = slider.getValue();
-						window_value.setText(" " + window_length + " ");
+						segment_length = slider.getValue();
+						segment_value.setText(" " + segment_length + " ");
 						if(slider.getValueIsAdjusting() == false)
 						{
 							apply_item.doClick();
 						}
 					}
 				};
-				window_slider.addChangeListener(window_slider_handler);
-				window_panel.add(window_slider, BorderLayout.CENTER);
-				window_panel.add(window_value, BorderLayout.EAST);
-				window_dialog.add(window_panel);
+				segment_slider.addChangeListener(segment_slider_handler);
+				segment_panel.add(segment_slider, BorderLayout.CENTER);
+				segment_panel.add(segment_value, BorderLayout.EAST);
+				segment_dialog.add(segment_panel);
 				
-				settings_menu.add(window_item);
+				settings_menu.add(segment_item);
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
 				
@@ -407,6 +410,7 @@ public class Segmenter
 		    }
 			
 			System.out.println("Pixel shift is " + pixel_shift);
+			System.out.print("File compression rate is " + String.format("%.2f", file_ratio));
 			
 		    //System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
 		    System.out.println();
@@ -532,7 +536,7 @@ public class Segmenter
 			    zero_ratio  /= length3;
 			    
 			    System.out.println("Processing " + channel_string[i]);
-			    System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
+			    //System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
 			    
 			    zero_ratio = DeltaMapper.getZeroRatio(delta_string, length3);
 			    System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
@@ -572,14 +576,15 @@ public class Segmenter
 			            System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
 			        }
 			    }
-			    System.out.println();
+			    //System.out.println();
 				
-				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3);
+			    int minimum_segment_length = 96 + segment_length * 8;
+				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3, minimum_segment_length);
 				ArrayList string_list = (ArrayList)data_list.get(0);
 				n = string_list.size();
-				System.out.println("There were " + n + " segments.");
+				//System.out.println("There were " + n + " segments.");
 				
-				int overhead = n * 40;
+				int overhead = n * 16;
 				
 				double min_ratio = 1.;
 				double max_ratio = 0.;
@@ -613,8 +618,8 @@ public class Segmenter
 				double compression_ratio = adaptive_length + overhead;
 				compression_ratio /= pixel_length;
 				
-				System.out.println("Original length was " + length3);
-				System.out.println("Adaptive length was " + adaptive_length);
+				//System.out.println("Original length was " + length3);
+				//System.out.println("Adaptive length was " + adaptive_length);
 				
 				System.out.println("The smallest zero ratio for a segment was " + String.format("%.2f", min_ratio));
 				System.out.println("The largest zero ratio for a segment was " + String.format("%.2f", max_ratio));
