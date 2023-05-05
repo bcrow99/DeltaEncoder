@@ -494,8 +494,6 @@ public class Segmenter
 		    channel_src.add(shifted_red_blue);
 		    
 		    byte [] delta_string    = new byte[xdim * ydim * 10];
-		    byte [] sign_string     = new byte[xdim * ydim];
-		    byte [] direction_string = new byte[xdim * ydim];
 		    
 		  
 		    for(int i = 0; i < 6; i++)
@@ -539,7 +537,7 @@ public class Segmenter
 			    //System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
 			    
 			    zero_ratio = DeltaMapper.getZeroRatio(delta_string, length3);
-			    System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
+			    //System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
 			    
 			    byte [] compression_string = new byte[2 * length3];
 			    if(zero_ratio >= .5)
@@ -547,16 +545,16 @@ public class Segmenter
 			        int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
 			        if(compression_length > length3)
 			        {
-			        	System.out.println("String did not compress.");
+			        	//System.out.println("String did not compress.");
 			        	double compression_ratio = length3;
 			        	compression_ratio       /= pixel_length;
-			        	System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
+			        	//System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
 			        }
 			        else
 			        {
 			            double compression_ratio = compression_length;
 			            compression_ratio /= pixel_length;
-			            System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
+			            //System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
 			        }
 			    }
 			    else
@@ -564,16 +562,16 @@ public class Segmenter
 			    	int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
 			    	if(compression_length > length3)
 			    	{
-			        	System.out.println("String did not compress.");
+			        	//System.out.println("String did not compress.");
 			        	double compression_ratio = compression_length;
 			            compression_ratio /= pixel_length;
-			            System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
+			            //System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
 			    	}
 			        else
 			        {
 			            double compression_ratio = compression_length;
 			            compression_ratio /= pixel_length;
-			            System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
+			            //System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
 			        }
 			    }
 			    //System.out.println();
@@ -582,7 +580,7 @@ public class Segmenter
 				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3, minimum_segment_length);
 				ArrayList string_list = (ArrayList)data_list.get(0);
 				n = string_list.size();
-				//System.out.println("There were " + n + " segments.");
+				System.out.println("There were " + n + " segments.");
 				
 				int overhead = n * 16;
 				

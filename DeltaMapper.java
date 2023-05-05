@@ -1416,13 +1416,13 @@ public class DeltaMapper
     {
         byte[]  temp = new byte[src.length * 2];
         
-        int number_of_iterations = 1;
+        int iterations = 1;
         int previous_size        = size;
         int current_size         = compressZeroBits(src, previous_size, dst);
         while(current_size < previous_size)
         {
             previous_size = current_size;
-            if(number_of_iterations % 2 == 1)
+            if(iterations % 2 == 1)
             {
                 current_size = compressZeroBits(dst, previous_size, temp);
             }
@@ -1430,16 +1430,16 @@ public class DeltaMapper
             {
                 current_size = compressZeroBits(temp, previous_size, dst);
             }
-            number_of_iterations++;
+            iterations++;
         }
-        if(number_of_iterations > 1)
+        if(iterations > 1)
         {
         	// This means our first pass did not expand the data,
         	// and we broke out of a loop when we finally did.
             current_size = previous_size;
-            number_of_iterations--;
+            iterations--;
         }
-        if(number_of_iterations % 2 == 0) 
+        if(iterations % 2 == 0) 
         {
         	// The last recursion used temp as a source,
         	// which then produced a string longer than the previous one,
@@ -1455,7 +1455,7 @@ public class DeltaMapper
         if(current_size % 8 == 0)
         {
             int byte_size      = current_size / 8;
-            dst[byte_size] = (byte) number_of_iterations;
+            dst[byte_size] = (byte) iterations;
             dst[byte_size] &= 127;
         }
         else
@@ -1463,27 +1463,17 @@ public class DeltaMapper
             int  remainder = current_size % 8;
             int byte_size = current_size / 8;
 
-            dst[byte_size] |= (byte) (number_of_iterations << remainder);
+            dst[byte_size] |= (byte) (iterations << remainder);
             byte_size++;
             dst[byte_size] = 0;
             if(remainder > 1)
-                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
+                dst[byte_size] = (byte) (iterations >> 8 - remainder);
         }
-        current_size += 9;
         
-        
-        int last_byte = current_size / 8 - 1;
-        int remainder = current_size % 8;
-        int last_bit  = 7;
-        if(remainder != 0)
-        {
-            last_byte++;
-            last_bit = remainder - 1;
-        }
-        byte mask  = (byte)0xfe;
-        mask     <<= last_bit;
-        
-        dst[last_byte] &= mask;
+        int last_byte = current_size / 8;
+        if(current_size % 8 != 0)
+        	last_byte++;
+        dst[last_byte] = (byte)iterations;
         
         
         return(current_size);
@@ -1501,87 +1491,52 @@ public class DeltaMapper
         
         // Getting the number of iterations appended to
         // the end of the string.
-        byte_index = size / 8 - 1;
-        remainder  = size % 8;
-        if(remainder != 0)
+        
+        int last_byte = size / 8;
+        if(size % 8 != 0)
+        	last_byte++;
+        int iterations = src[last_byte];
+        
+        if(iterations < 0)
         {
-            int value = 254;
-            addend = 2;
-            for(i = 1; i < remainder; i++)
-            {
-                value -= addend;
-                addend <<= 1;
-            } 
-            mask = value;
-            number_of_iterations = src[byte_index];
-            if(number_of_iterations < 0)
-                number_of_iterations += 256;
-            number_of_iterations &= mask;
-            number_of_iterations >>= remainder;
-            byte_index++;
-            if(remainder > 1)
-            {
-                mask = 1;
-                for(i = 2; i < remainder; i++)
-                {
-                    mask <<= 1;
-                    mask++;
-                }
-                addend = src[byte_index]; 
-                if(addend < 0)
-                    addend += 256;
-                addend &= mask;
-                addend <<= 8 - remainder;
-                number_of_iterations += addend;
-                mask++;
-            }
-            else
-                mask = 1;
-        }
-        else
-        {
-           mask = 127;
-           number_of_iterations = src[byte_index];
-           if(number_of_iterations < 0)
-               number_of_iterations += 256; 
-           number_of_iterations &= mask;
-           mask++;
+        	System.out.println("Not zero type.");
+        	iterations += 256;
         }
         
-        //System.out.println("The number of iterations is " + number_of_iterations);
+        //System.out.println("The number of iterations is " + iterations);
         
         current_size = 0;
-        if(number_of_iterations == 1)
+        if(iterations == 1)
         {
             current_size = decompressZeroBits(src, size - 8, dst);
-            number_of_iterations--;
+            iterations--;
         }
-        else if(number_of_iterations % 2 == 0)
+        else if(iterations % 2 == 0)
         {
             current_size = decompressZeroBits(src, size - 8, temp);
-            number_of_iterations--;
-            while(number_of_iterations > 0)
+            iterations--;
+            while(iterations > 0)
             {
                 previous_size = current_size;
-                if(number_of_iterations % 2 == 0)
+                if(iterations % 2 == 0)
                     current_size = decompressZeroBits(dst, previous_size, temp);
                 else
                     current_size = decompressZeroBits(temp, previous_size, dst);
-                number_of_iterations--;
+                iterations--;
             }
         }
         else
         {
             current_size = decompressZeroBits(src, size - 8, dst);
-            number_of_iterations--;
-            while(number_of_iterations > 0)
+            iterations--;
+            while(iterations > 0)
             {
                 previous_size = current_size;
-                if(number_of_iterations % 2 == 0)
+                if(iterations % 2 == 0)
                     current_size = decompressZeroBits(dst, previous_size, temp);
                 else
                     current_size = decompressZeroBits(temp, previous_size, dst);
-                number_of_iterations--;
+                iterations--;
             }
         }
        
@@ -1798,26 +1753,26 @@ public class DeltaMapper
     {
         byte[]  temp = new byte[src.length * 2];
         
-        int number_of_iterations = 1;
-        int previous_size        = size;
-        int current_size         = compressOneBits(src, previous_size, dst);
+        int iterations    = 1;
+        int previous_size = size;
+        int current_size  = compressOneBits(src, previous_size, dst);
         while(current_size < previous_size)
         {
             previous_size = current_size;
-            if(number_of_iterations % 2 == 1)
+            if(iterations % 2 == 1)
                 current_size = compressOneBits(dst, previous_size, temp);
             else
                 current_size = compressOneBits(temp, previous_size, dst);
-            number_of_iterations++;
+            iterations++;
         }
-        if(number_of_iterations > 1)
+        if(iterations > 1)
         {
         	// This means our first pass did not expand the data,
         	// and we broke out of a loop when we finally did.
             current_size = previous_size;
-            number_of_iterations--;
+            iterations--;
         }
-        if(number_of_iterations % 2 == 0) 
+        if(iterations % 2 == 0) 
         {
         	// The last recursion used temp as a source,
         	// which then produced a string longer than the previous one,
@@ -1830,131 +1785,65 @@ public class DeltaMapper
         }   
         // else the result is already in dst.
     
-        if(current_size % 8 == 0)
-        {
-            int byte_size      = current_size / 8;
-            dst[byte_size] = (byte) number_of_iterations;
-            dst[byte_size] &= 127;
-        }
-        else
-        {
-            int  remainder = current_size % 8;
-            int byte_size = current_size / 8;
-
-            dst[byte_size] |= (byte) (number_of_iterations << remainder);
-            byte_size++;
-            dst[byte_size] = 0;
-            if(remainder > 1)
-                dst[byte_size] = (byte) (number_of_iterations >> 8 - remainder);
-        }
-        current_size += 9;
-        int last_byte = current_size / 8 - 1;
-        int remainder = current_size % 8;
-        int last_bit  = 7;
-        if(remainder != 0)
-        {
-            last_byte++;
-            last_bit = remainder - 1;
-        }
+        int last_byte = current_size / 8;
+        if(current_size % 8 != 0)
+        	last_byte++;
+        dst[last_byte]  = (byte) iterations;
+        dst[last_byte] &= 127;
         
-       // Might want to clear null bits first.
-        byte mask        = 1;
-        mask <<= last_bit;
-        dst[last_byte] |= mask;
-        return(current_size);
+        return current_size;
     }
     
     
     // Returns string length of packed strings, may include extra trailing bits.
     public static int decompressOneStrings(byte src[], int size, byte dst[])
     {
-        int  byte_index;
-        int  number_of_iterations;
-        int  addend;
-        int  mask;
-        int  remainder, i;
-        int  previous_size, current_size, byte_size;
+        int  previous_size, current_size;
         byte[]  temp = new byte[dst.length];
         
         // Getting the number of iterations appended to
         // the end of the string.
-        byte_index = size / 8 - 1;
-        remainder  = size % 8;
-        if(remainder != 0)
-        {
-            int value = 254;
-            addend = 2;
-            for(i = 1; i < remainder; i++)
-            {
-                value -= addend;
-                addend <<= 1;
-            } 
-            mask = value;
-            number_of_iterations = src[byte_index];
-            if(number_of_iterations < 0)
-                number_of_iterations += 256;
-            number_of_iterations &= mask;
-            number_of_iterations >>= remainder;
-            byte_index++;
-            if(remainder > 1)
-            {
-                mask = 1;
-                for(i = 2; i < remainder; i++)
-                {
-                    mask <<= 1;
-                    mask++;
-                }
-                addend = src[byte_index]; 
-                if(addend < 0)
-                    addend += 256;
-                addend &= mask;
-                addend <<= 8 - remainder;
-                number_of_iterations += addend;
-                mask++;
-            }
-        }
+        int last_byte = size / 8;
+        if(size % 8 != 0)
+            last_byte++;
+        int iterations = src[last_byte];
+        if(iterations > 0)
+        	System.out.println("Does not have one type.");
         else
-        {
-           mask = 127;
-           number_of_iterations = src[byte_index];
-           if(number_of_iterations < 0)
-               number_of_iterations += 256; 
-           number_of_iterations &= mask;
-           mask++;
-        }
+        	iterations += 256;
         
         current_size = 0;
-        if(number_of_iterations == 1)
+        if(iterations == 1)
         {
             current_size = decompressOneBits(src, size - 8, dst);
-            number_of_iterations--;
+            iterations--;
         }
-        else if(number_of_iterations % 2 == 0)
+        else if(iterations % 2 == 0)
         {
             current_size = decompressOneBits(src, size - 8, temp);
-            number_of_iterations--;
-            while(number_of_iterations > 0)
+            iterations--;
+            while(iterations > 0)
             {
                 previous_size = current_size;
-                if(number_of_iterations % 2 == 0)
+                if(iterations % 2 == 0)
                     current_size = decompressOneBits(dst, previous_size, temp);
                 else
                     current_size = decompressOneBits(temp, previous_size, dst);
-                number_of_iterations--;
+                iterations--;
             }
         }
         else
         {
             current_size = decompressOneBits(src, size - 8, dst);
-            number_of_iterations--;
-            while(number_of_iterations > 0)
+            iterations--;
+            while(iterations > 0)
             {
                 previous_size = current_size;
-                if(number_of_iterations % 2 == 0)
+                if(iterations % 2 == 0)
                     current_size = decompressOneBits(dst, previous_size, temp);
                 else
                     current_size = decompressOneBits(temp, previous_size, dst);
-                number_of_iterations--;
+                iterations--;
             }
         }
         return(current_size);
@@ -1962,87 +1851,21 @@ public class DeltaMapper
     
     public static ArrayList checkStringType(byte src[], int size)
     {
-        int  byte_index;
-        int  number_of_iterations;
-        int  addend;
-        int  mask;
-
- 
-        int last_byte = size / 8 - 1;
-        int remainder = size % 8; 
-        int last_bit = 7;
-        if(remainder != 0)
-        {
+        int last_byte = size / 8;
+        if(size % 8 != 0)
         	last_byte++;
-        	last_bit = remainder - 1;
-        }
-     
-        byte string_type   = 1;
-        string_type <<= last_bit;
-        string_type &= src[last_byte];
-        if(string_type != 0)
+        
+        int string_type = 0;
+        int iterations  = src[last_byte];
+        if(iterations < 0)
         {
-        	// The value can be 1 thru -127.
-        	// We'll reset it to 1.
         	string_type = 1;
-        	//System.out.println("String type is " + string_type);
+        	iterations += 256;
         }
-        else
-        {
-        	//System.out.println("String type is " + string_type);
-        }
-        size--;
-        
-        // Getting the number of iterations appended to
-        // the end of the string.
-        byte_index = size / 8 - 1;
-        remainder  = size % 8;
-        if(remainder != 0)
-        {
-            int value = 254;
-            addend = 2;
-            for(int i = 1; i < remainder; i++)
-            {
-                value -= addend;
-                addend <<= 1;
-            } 
-            mask = value;
-            number_of_iterations = src[byte_index];
-            if(number_of_iterations < 0)
-                number_of_iterations += 256;
-            number_of_iterations &= mask;
-            number_of_iterations >>= remainder;
-            byte_index++;
-            if(remainder > 1)
-            {
-                mask = 1;
-                for(int i = 2; i < remainder; i++)
-                {
-                    mask <<= 1;
-                    mask++;
-                }
-                addend = src[byte_index]; 
-                if(addend < 0)
-                    addend += 256;
-                addend &= mask;
-                addend <<= 8 - remainder;
-                number_of_iterations += addend;
-                mask++;
-            }
-        }
-        else
-        {
-           mask = 127;
-           number_of_iterations = src[byte_index];
-           if(number_of_iterations < 0)
-               number_of_iterations += 256; 
-           number_of_iterations &= mask;
-           mask++;
-        }
-        
+    
         ArrayList result = new ArrayList();
         result.add(string_type);
-        result.add(number_of_iterations);
+        result.add(iterations);
         return result;
     }
     
@@ -3630,10 +3453,20 @@ public class DeltaMapper
                  else
                  {
                 	 adaptive_length += compression_length; 
+                	 if(iterations == 0)
+                 	    System.out.println("Iterations = 0 although data compressed.");
                  }
                  segment_list.add(iterations);	
                  segment_list.add(i * minimum_length);
                  segment_list.add(minimum_length);
+                 if(compression_length > minimum_length)
+                 {
+                 	segment_list.add(minimum_length);
+                 }
+                 else
+                 {
+                	 segment_list.add(compression_length); 
+                 }
             }
             else
             {
@@ -3646,23 +3479,36 @@ public class DeltaMapper
                 	adaptive_length += minimum_length;
                 }
                 else
+                {
                 	adaptive_length += compression_length;
+                	if(iterations == 0)
+                	    System.out.println("Iterations = 0 although data compressed.");
+                }
                 segment_list.add(iterations);
                 segment_list.add(i * minimum_length);
                 segment_list.add(minimum_length);
+                if(compression_length > minimum_length)
+                {
+                	segment_list.add(minimum_length);
+                }
+                else
+                {
+               	    segment_list.add(compression_length); 
+                }
             }
             
             
             string_list.add(segment_list);
         }
         
+        ArrayList segment_list = new ArrayList();
         int i = number_of_segments - 1;
         byte [] segment = new byte[last_segment_length]; 
         byte [] compressed_segment = new byte[2 * last_segment_length];
         for(int j = 0; j < last_segment_length; j++)
         	segment[j] = string[i * segment_length + j];
         double zero_ratio = getZeroRatio(segment, minimum_length + remainder);
-        ArrayList segment_list = new ArrayList();
+        
         segment_list.add(zero_ratio);
         if(zero_ratio >= .5)
         {
@@ -3672,34 +3518,49 @@ public class DeltaMapper
              if(compression_length > minimum_length + remainder)
              {
             	 iterations = 0;
+            	 segment_list.add(iterations);	
+                 segment_list.add(i * minimum_length);
+                 segment_list.add(minimum_length + remainder);
+                 segment_list.add(minimum_length + remainder);
             	 adaptive_length += minimum_length + remainder;
+            	 
              }
              else
-            	 adaptive_length += compression_length; 
-             	
-             segment_list.add(iterations);	
-             segment_list.add(i * minimum_length);
-             segment_list.add(minimum_length + remainder);
+             {
+            	 segment_list.add(iterations);	
+                 segment_list.add(i * minimum_length);
+                 segment_list.add(minimum_length + remainder);
+                 segment_list.add(compression_length); 
+            	 adaptive_length += compression_length; 	 
+             }
         }
         else
         {
         	int  compression_length = compressOneStrings(segment, minimum_length + remainder, compressed_segment);
             ArrayList info = checkStringType(compressed_segment, compression_length);
             int iterations = (int)info.get(1);
+
             if(compression_length > minimum_length + remainder)
             {
             	iterations = 0;
+            	segment_list.add(iterations);
+            	segment_list.add(i * minimum_length);
+            	segment_list.add(minimum_length + remainder);
             	adaptive_length += minimum_length + remainder;
             }
             else
+            {
+            	segment_list.add(iterations);
+            	segment_list.add(i * minimum_length);
+                segment_list.add(minimum_length + remainder);
+                segment_list.add(compression_length);
             	adaptive_length += compression_length;
-            segment_list.add(iterations);
-            segment_list.add(i * minimum_length);
-            segment_list.add(minimum_length + remainder);
+            }
         }
         
         string_list.add(segment_list);
-       
+        
+        /*
         ArrayList previous_list               = new ArrayList();
         ArrayList current_list                = new ArrayList();
         int       current_number_of_segments  = number_of_segments;
@@ -3775,6 +3636,8 @@ public class DeltaMapper
         
         System.out.println("The original number of segments was " + number_of_segments);
         System.out.println("The merged number of segments was " + current_number_of_segments);
+        */
+        
         
         int adaptive_length2 = 0;
         int n = string_list.size();
@@ -3786,6 +3649,7 @@ public class DeltaMapper
             int iterations = (int)segment_list.get(1);
             int offset     = (int)segment_list.get(2);
             int bit_length = (int)segment_list.get(3);
+            int t_length   = (int)segment_list.get(4);
             
             int byte_length = bit_length / 8;
             if(bit_length % 8 != 0)
@@ -3801,18 +3665,50 @@ public class DeltaMapper
             
             int start = offset / 8;
             
+            //System.out.println("Starting index = " + start);
+            if(offset + bit_length > length)
+            	System.out.println("Scanned extra data.");
+            else if(offset + bit_length == length)
+            	System.out.println("Exactly scanned data.");
+            
+            
             if(offset % 8 != 0)
             	System.out.println("The offset is not an even multiple of 8.");
             for(int j = start; j < start + byte_length; j++)
                 segment[j - start] = string[j];
             
-            
             if(iterations == 0)
             {
-            	compressed_segment_list.add(segment);
-             	compressed_segment_length_list.add(byte_length * 8);
-             	
-             	adaptive_length2  += bit_length;
+            	if(zero_ratio >= .5)
+                {
+            		int compression_length = compressZeroStrings(segment, bit_length, compressed_string);
+            		if(compression_length < bit_length)
+            		{
+            			System.out.println("Segment compressed although list says 0 iterations.");
+            			adaptive_length2 += compression_length;
+            		}
+            		else
+            		{
+            			compressed_segment_list.add(segment);
+                     	compressed_segment_length_list.add(byte_length * 8);
+                     	adaptive_length2  += bit_length;	
+            		}
+                }
+                else
+                {
+                	int compression_length = compressOneStrings(segment, bit_length, compressed_string);
+            		if(compression_length < bit_length)
+            		{
+            			System.out.println("Segment compressed although list says 0 iterations.");
+            			adaptive_length2 += compression_length;
+            		}	
+            		else
+            		{
+            			compressed_segment_list.add(segment);
+                     	compressed_segment_length_list.add(byte_length * 8);
+                     	adaptive_length2  += bit_length;	
+            		}
+                }
             }
             else if(zero_ratio >= .5)
             {
@@ -3821,7 +3717,15 @@ public class DeltaMapper
                 int current_iterations = (int)info.get(1);
                 if(current_iterations != iterations)
                     System.out.println("Current iterations does not agree with iterations on the list.");
-                    
+                if(t_length != compression_length)
+                {
+             		System.out.println("Transform lengths do not agree at index " + i); 
+             		System.out.println("List value = " + t_length + ", current value = " + compression_length);
+             		if(bit_length % 8 == 0)
+             			System.out.println("Bit length is evenly divisible by 8.");
+             		else
+             			System.out.println("Bit length is not evenly divisible by 8.");
+                }
                 adaptive_length2      += compression_length;
                 
             }
@@ -3832,15 +3736,25 @@ public class DeltaMapper
                 int current_iterations = (int)info.get(1);
                 if(current_iterations != iterations)
                     System.out.println("Current iterations does not agree with iterations on the list.");
+                
+                if(t_length != compression_length)
+                {
+             		System.out.println("Transform lengths do not agree at index " + i); 
+             		System.out.println("List value = " + t_length + ", current value = " + compression_length);
+             		if(bit_length % 8 == 0)
+             			System.out.println("Bit length is evenly divisible by 8.");
+             		else
+             			System.out.println("Bit length is not evenly divisible by 8.");
+                }
                 adaptive_length2      += compression_length;
             }
         }
         
-        System.out.println("Adaptive length produced by original list is " + adaptive_length);
-        System.out.println("Adaptive length produced by merged list is " + adaptive_length2);
+        System.out.println("Adaptive length originally produced is " + adaptive_length);
+        System.out.println("Adaptive length produced by list is " + adaptive_length2);
         
         
-        data_list.add(current_list);
+        data_list.add(string_list);
         data_list.add(adaptive_length2);
         return data_list;
     }
