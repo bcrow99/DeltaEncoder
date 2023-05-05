@@ -3496,8 +3496,6 @@ public class DeltaMapper
                	    segment_list.add(compression_length); 
                 }
             }
-            
-            
             string_list.add(segment_list);
         }
         
@@ -3558,92 +3556,127 @@ public class DeltaMapper
             }
         }
         
-        string_list.add(segment_list);
+        string_list.add(segment_list); 
+        number_of_segments = string_list.size();
         
-        /*
+        // Finished constructing initial list.
+        
+        
+
         ArrayList previous_list               = new ArrayList();
         ArrayList current_list                = new ArrayList();
-        int       current_number_of_segments  = number_of_segments;
-        int       previous_number_of_segments = number_of_segments + 1;
+        int       current_number_of_segments  = string_list.size();
+        int       previous_number_of_segments = 0;
        
-        for(i = 0; i < number_of_segments; i++)
+        for(i = 0; i < string_list.size(); i++)
         {
         	segment_list = (ArrayList)string_list.get(i);
         	previous_list.add(segment_list);
         }
-        	
+        
         while(current_number_of_segments != previous_number_of_segments)
         {
+        	previous_number_of_segments = previous_list.size();
         	current_list.clear();
-        	int n = previous_list.size();
-        	previous_number_of_segments = n;
-        	for(i = 0; i < n - 1; i++)
+        
+
+        	for(i = 0; i < previous_number_of_segments - 1; i++)
         	{
-        	    ArrayList current_segment = (ArrayList)	previous_list.get(i);
-        	    ArrayList next_segment    = (ArrayList)	previous_list.get(i + 1);
+        	    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
+        	    ArrayList next_segment_list    = (ArrayList)previous_list.get(i + 1);
         	    
-        	    double current_ratio = (double)current_segment.get(0);
+        	    double current_ratio = (double)current_segment_list.get(0);
         	    int    current_type = 0;
         	    if(current_ratio < .5)
         	    	current_type = 1;
-        	    double next_ratio = (double)next_segment.get(0);
+        	    double next_ratio = (double)next_segment_list.get(0);
         	    int next_type = 0;
         	    if(next_ratio < .5)
         	    	next_type = 1;
         	    
-        	    int current_iterations = (int)current_segment.get(1);
-        	    int next_iterations    = (int)next_segment.get(1);
+        	    int current_iterations = (int)current_segment_list.get(1);
+        	    int next_iterations    = (int)next_segment_list.get(1);
         	    
-        	    int current_offset     = (int)current_segment.get(2);
-        	    int current_length     = (int)current_segment.get(3);
-        	    int next_length        = (int)next_segment.get(3);
-        	    
-        	    if(current_type == next_type && current_iterations == next_iterations)
+        	    if(current_type == next_type && current_iterations > 0 && next_iterations > 0)
         	    {
-        	    	current_ratio *= current_length;
-        	    	next_ratio    *= next_length;
-        	        double new_ratio = (current_ratio + next_ratio) / (current_length + next_length);
-        	        int    new_length = current_length + next_length;
-        	        
-        	        ArrayList merged_segment = new ArrayList();
-        	        merged_segment.add(new_ratio);
-        	        merged_segment.add(current_iterations);
-        	        merged_segment.add(current_offset);
-        	        merged_segment.add(new_length);
-        	        current_list.add(merged_segment);
-        	        i++;
+        	    	int current_offset = (int)current_segment_list.get(2);
+        	    	int current_length = (int)current_segment_list.get(3);
+        	    	int next_length    = (int)next_segment_list.get(3);
+        	    	int merged_length  = current_length + next_length;
+        	    	
+        	    	int byte_offset = current_offset / 8;
+        	    	int byte_length = merged_length / 8;
+        	    	if(merged_length % 8 != 0)
+        	    	{
+        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
+        	    		byte_length++;
+        	    	}
+        	    	
+        	    	byte [] merged_segment = new byte[byte_length];
+        	    	for(int j = 0; j < byte_length; j++)
+        	    		merged_segment[j] = string[j + byte_offset];
+        	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
+        	    	int merged_compression = 0;
+        	    	if(current_type == 0)
+        	    	    merged_compression = compressZeroStrings(merged_segment, merged_length, compressed_merged_segment);
+        	    	else
+        	    		merged_compression = compressOneStrings(merged_segment, merged_length, compressed_merged_segment);
+        	    	int current_compression = (int)current_segment_list.get(4);
+        	    	int next_compression    = (int)next_segment_list.get(4);
+        	    	if(merged_compression <= current_compression + next_compression + 16)
+        	    	{
+        	    		ArrayList merged_segment_list = new ArrayList();
+        	    		
+        	    		double merged_ratio = getZeroRatio(merged_segment, merged_length);
+        	    		ArrayList info      = checkStringType(compressed_merged_segment, merged_compression);
+        	    		int merged_iterations = (int)info.get(1);
+        	    		
+        	    		merged_segment_list.add(merged_ratio);
+        	    		merged_segment_list.add(merged_iterations);
+        	    		merged_segment_list.add(current_offset);
+        	    		merged_segment_list.add(merged_length);
+        	    		merged_segment_list.add(merged_compression);
+        	    		current_list.add(merged_segment_list);
+            	        i++;
+        	    	}
+        	    	else
+        	    	{
+        	    		current_list.add(current_segment_list);
+        	    	}
         	    }
         	    else
-        	    	current_list.add(current_segment);
+        	    {
+        	    	current_list.add(current_segment_list);
+        	    }
         	}
-        	if(i == n - 1)
-        	{
-        		ArrayList current_segment = (ArrayList)	previous_list.get(i);
-        		current_list.add(current_segment);
-        	}
+
+    	    if(i == previous_number_of_segments - 1)
+    	    {
+    		    ArrayList current_segment_list = (ArrayList)	previous_list.get(i);
+    		    current_list.add(current_segment_list);
+    	    }
+    	
+    	    previous_list.clear();
+    	   
+    	    current_number_of_segments = current_list.size();
+    	   
+    	    for(i = 0; i < current_number_of_segments; i++)
+    	    {
+    		    segment_list = (ArrayList)current_list.get(i);
+    		    previous_list.add(segment_list);
+    	    }
+    	    // Previous list now has current number of segments.
         	
-        	previous_list.clear();
-        	n = current_list.size();
-        	current_number_of_segments = n;
-        	
-        	for(i = 0; i < n; i++)
-        	{
-        		segment_list = (ArrayList)current_list.get(i);
-        		previous_list.add(segment_list);
-        	}	
         }
-        
-        
-        System.out.println("The original number of segments was " + number_of_segments);
-        System.out.println("The merged number of segments was " + current_number_of_segments);
-        */
-        
+       
+        System.out.println("Original length of list is " + string_list.size());
+        System.out.println("Merged list length is " + current_list.size());
         
         int adaptive_length2 = 0;
-        int n = string_list.size();
+        int n = current_list.size();
         for(i = 0; i < n; i++)
         {
-            segment_list = (ArrayList)string_list.get(i);	
+            segment_list = (ArrayList)current_list.get(i);	
             
             zero_ratio     = (double)segment_list.get(0);
             int iterations = (int)segment_list.get(1);
@@ -3651,6 +3684,9 @@ public class DeltaMapper
             int bit_length = (int)segment_list.get(3);
             int t_length   = (int)segment_list.get(4);
             
+            //adaptive_length2 += t_length;
+            
+
             int byte_length = bit_length / 8;
             if(bit_length % 8 != 0)
             	byte_length++;
@@ -3751,10 +3787,9 @@ public class DeltaMapper
         }
         
         System.out.println("Adaptive length originally produced is " + adaptive_length);
-        System.out.println("Adaptive length produced by list is " + adaptive_length2);
+        System.out.println("Adaptive length produced by merged list is " + adaptive_length2);
         
-        
-        data_list.add(string_list);
+        data_list.add(current_list);
         data_list.add(adaptive_length2);
         return data_list;
     }

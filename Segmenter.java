@@ -582,7 +582,7 @@ public class Segmenter
 				n = string_list.size();
 				System.out.println("There were " + n + " segments.");
 				
-				int overhead = n * 16;
+				
 				
 				double min_ratio = 1.;
 				double max_ratio = 0.;
@@ -612,6 +612,7 @@ public class Segmenter
 					
 				}
 
+				int overhead = 16 * n;
 				int adaptive_length = (int)data_list.get(1);
 				double compression_ratio = adaptive_length + overhead;
 				compression_ratio /= pixel_length;
