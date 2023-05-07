@@ -4,7 +4,6 @@ import java.lang.Math.*;
 
 public class DeltaMapper
 {
-   
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -2129,7 +2128,7 @@ public class DeltaMapper
     	
     	return cost;
     }
-    
+     
     public static double getZeroRatio(byte [] string, int bit_length)
     {
     	int byte_length = bit_length / 8;
@@ -2172,10 +2171,6 @@ public class DeltaMapper
     public static ArrayList getTransformInformation(byte [] string, int length, int minimum_segment_length)
     {
     	ArrayList data_list = new ArrayList();
-    	
-    	ArrayList compressed_segment_list = new ArrayList();
-    	ArrayList compressed_segment_length_list = new ArrayList();
-    	
     	
     	// 96 is close to the minimum bit length 
     	// when a single iteration of the bitwise transform will produce 
@@ -2259,14 +2254,12 @@ public class DeltaMapper
                 segment_list.add(i * minimum_length);
                 segment_list.add(minimum_length);
                 if(compression_length > minimum_length)
-                {
                 	segment_list.add(minimum_length);
-                }
                 else
-                {
                	    segment_list.add(compression_length); 
-                }
             }
+            
+            
             string_list.add(segment_list);
         }
         
@@ -2287,21 +2280,18 @@ public class DeltaMapper
              if(compression_length > minimum_length + remainder)
              {
             	 iterations = 0;
-            	 segment_list.add(iterations);	
-                 segment_list.add(i * minimum_length);
-                 segment_list.add(minimum_length + remainder);
-                 segment_list.add(minimum_length + remainder);
             	 adaptive_length += minimum_length + remainder;
             	 
              }
              else
-             {
-            	 segment_list.add(iterations);	
-                 segment_list.add(i * minimum_length);
-                 segment_list.add(minimum_length + remainder);
-                 segment_list.add(compression_length); 
-            	 adaptive_length += compression_length; 	 
-             }
+            	 adaptive_length += compression_length; 
+             segment_list.add(iterations);	
+             segment_list.add(i * minimum_length);
+             segment_list.add(minimum_length + remainder);
+             if(compression_length > minimum_length)
+             	segment_list.add(minimum_length + remainder);
+             else
+            	 segment_list.add(compression_length); 
         }
         else
         {
@@ -2312,28 +2302,28 @@ public class DeltaMapper
             if(compression_length > minimum_length + remainder)
             {
             	iterations = 0;
-            	segment_list.add(iterations);
-            	segment_list.add(i * minimum_length);
-            	segment_list.add(minimum_length + remainder);
             	adaptive_length += minimum_length + remainder;
             }
             else
-            {
-            	segment_list.add(iterations);
-            	segment_list.add(i * minimum_length);
-                segment_list.add(minimum_length + remainder);
-                segment_list.add(compression_length);
             	adaptive_length += compression_length;
-            }
+            segment_list.add(iterations);
+            segment_list.add(i * minimum_length);
+            segment_list.add(minimum_length + remainder);
+            if(compression_length > minimum_length + remainder)
+            	segment_list.add(minimum_length + remainder);
+            else
+           	    segment_list.add(compression_length); 
         }
         
-        string_list.add(segment_list); 
+        string_list.add(segment_list);
         number_of_segments = string_list.size();
         
         // Finished constructing initial list.
         
         
-
+        
+        // Merge similar segments.
+        
         ArrayList previous_list               = new ArrayList();
         ArrayList current_list                = new ArrayList();
         int       current_number_of_segments  = string_list.size();
@@ -2378,10 +2368,9 @@ public class DeltaMapper
         	    	int byte_offset = current_offset / 8;
         	    	int byte_length = merged_length / 8;
         	    	if(merged_length % 8 != 0)
-        	    	{
-        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
         	    		byte_length++;
-        	    	}
+        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
+        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
         	    	
         	    	byte [] merged_segment = new byte[byte_length];
         	    	for(int j = 0; j < byte_length; j++)
@@ -2423,7 +2412,7 @@ public class DeltaMapper
 
     	    if(i == previous_number_of_segments - 1)
     	    {
-    		    ArrayList current_segment_list = (ArrayList)	previous_list.get(i);
+    		    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
     		    current_list.add(current_segment_list);
     	    }
     	
@@ -2436,13 +2425,14 @@ public class DeltaMapper
     		    segment_list = (ArrayList)current_list.get(i);
     		    previous_list.add(segment_list);
     	    }
-    	    // Previous list now has current number of segments.
+    	    // Previous list now has current list data.
         	
         }
        
-        System.out.println("Original length of list is " + string_list.size());
-        System.out.println("Merged list length is " + current_list.size());
+        //System.out.println("Original length of list is " + string_list.size());
+        //System.out.println("Merged list length is " + current_list.size());
         
+        // Go back through the list and do some error checking.
         int adaptive_length2 = 0;
         int n = current_list.size();
         for(i = 0; i < n; i++)
@@ -2452,35 +2442,40 @@ public class DeltaMapper
             zero_ratio     = (double)segment_list.get(0);
             int iterations = (int)segment_list.get(1);
             int offset     = (int)segment_list.get(2);
+            
+            // Bit length of original segments, which are evenly divisible by 8.
             int bit_length = (int)segment_list.get(3);
+            
+            // Bit length of transformed data, which might not be divisible by 8.
             int t_length   = (int)segment_list.get(4);
             
-            //adaptive_length2 += t_length;
-            
-
             int byte_length = bit_length / 8;
+           
             if(bit_length % 8 != 0)
+            {
             	byte_length++;
+            	// This shouldn't happen, except at the end of strings.
+            	if(i != n - 1)
+            		System.out.println("Segment had uneven length at index = " + i);
+            }
             
            
             segment = new byte[byte_length];
-            
-          
-            
             byte [] compressed_string = new byte[2 * byte_length];
-          
-            
-            int start = offset / 8;
-            
-            //System.out.println("Starting index = " + start);
-            if(offset + bit_length > length)
-            	System.out.println("Scanned extra data.");
-            else if(offset + bit_length == length)
-            	System.out.println("Exactly scanned data.");
-            
+         
+            // if(offset + bit_length > length)
+            //	  System.out.println("Scanned extra data.");
+            // else if(offset + bit_length == length)
+            //	  System.out.println("Exactly scanned data.");
+
             
             if(offset % 8 != 0)
+            {
+            	// This should never happen.
             	System.out.println("The offset is not an even multiple of 8.");
+            }
+            
+            int start = offset / 8;
             for(int j = start; j < start + byte_length; j++)
                 segment[j - start] = string[j];
             
@@ -2495,11 +2490,7 @@ public class DeltaMapper
             			adaptive_length2 += compression_length;
             		}
             		else
-            		{
-            			compressed_segment_list.add(segment);
-                     	compressed_segment_length_list.add(byte_length * 8);
                      	adaptive_length2  += bit_length;	
-            		}
                 }
                 else
                 {
@@ -2510,11 +2501,7 @@ public class DeltaMapper
             			adaptive_length2 += compression_length;
             		}	
             		else
-            		{
-            			compressed_segment_list.add(segment);
-                     	compressed_segment_length_list.add(byte_length * 8);
                      	adaptive_length2  += bit_length;	
-            		}
                 }
             }
             else if(zero_ratio >= .5)
@@ -2526,12 +2513,15 @@ public class DeltaMapper
                     System.out.println("Current iterations does not agree with iterations on the list.");
                 if(t_length != compression_length)
                 {
+                	/*
+                	System.out.println("DeltaMapper 1 :");
              		System.out.println("Transform lengths do not agree at index " + i); 
              		System.out.println("List value = " + t_length + ", current value = " + compression_length);
              		if(bit_length % 8 == 0)
              			System.out.println("Bit length is evenly divisible by 8.");
              		else
              			System.out.println("Bit length is not evenly divisible by 8.");
+             		*/
                 }
                 adaptive_length2      += compression_length;
             }
@@ -2545,20 +2535,22 @@ public class DeltaMapper
                 
                 if(t_length != compression_length)
                 {
+                	/*
+                	System.out.println("DeltaMapper 2 :");
              		System.out.println("Transform lengths do not agree at index " + i); 
              		System.out.println("List value = " + t_length + ", current value = " + compression_length);
              		if(bit_length % 8 == 0)
              			System.out.println("Bit length is evenly divisible by 8.");
              		else
              			System.out.println("Bit length is not evenly divisible by 8.");
+             		*/
                 }
                 adaptive_length2      += compression_length;
             }
         }
         
-        System.out.println("Adaptive length originally produced is " + adaptive_length);
-        System.out.println("Adaptive length produced by merged list is " + adaptive_length2);
-        
+        //System.out.println("Adaptive length produced by original list is " + adaptive_length);
+        //System.out.println("Adaptive length produced by merged list is " + adaptive_length2);
         data_list.add(current_list);
         data_list.add(adaptive_length2);
         return data_list;
