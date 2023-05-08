@@ -2387,10 +2387,10 @@ public class DeltaMapper
         	    	{
         	    		ArrayList merged_segment_list = new ArrayList();
         	    		
-        	    		double merged_ratio = getZeroRatio(merged_segment, merged_length);
+        	    		
         	    		ArrayList info      = checkStringType(compressed_merged_segment, merged_compression);
         	    		int merged_iterations = (int)info.get(1);
-        	    		
+        	    		double merged_ratio = getZeroRatio(merged_segment, merged_length);
         	    		merged_segment_list.add(merged_ratio);
         	    		merged_segment_list.add(merged_iterations);
         	    		merged_segment_list.add(current_offset);
@@ -2404,11 +2404,41 @@ public class DeltaMapper
         	    		current_list.add(current_segment_list);
         	    	}
         	    }
+        	   
+        	    else if(current_iterations == 0 && next_iterations == 0)
+        	    {
+        	    	int current_offset = (int)current_segment_list.get(2);
+        	    	int current_length = (int)current_segment_list.get(3);
+        	    	int next_length    = (int)next_segment_list.get(3);
+        	    	int merged_length  = current_length + next_length;
+        	    	
+        	    	int byte_offset = current_offset / 8;
+        	    	int byte_length = merged_length / 8;
+        	    	if(merged_length % 8 != 0)
+        	    		byte_length++;
+        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
+        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
+        	    	byte [] merged_segment = new byte[byte_length];
+        	    	for(int j = 0; j < byte_length; j++)
+        	    		merged_segment[j] = string[j + byte_offset];   
+        	    	double merged_ratio = getZeroRatio(merged_segment, merged_length);
+        	    	
+        	    	ArrayList merged_segment_list = new ArrayList();
+        	    	merged_segment_list.add(merged_ratio);
+    	    		merged_segment_list.add(0);
+    	    		merged_segment_list.add(current_offset);
+    	    		merged_segment_list.add(merged_length);
+    	    		merged_segment_list.add(merged_length);
+    	    		current_list.add(merged_segment_list);
+    	    		i++;
+        	    }
+        	
         	    else
         	    {
         	    	current_list.add(current_segment_list);
         	    }
         	}
+        	
 
     	    if(i == previous_number_of_segments - 1)
     	    {
