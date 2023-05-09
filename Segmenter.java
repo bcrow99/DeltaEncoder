@@ -55,6 +55,8 @@ public class Segmenter
 	boolean initialized = false;
 	int     segment_length = 0;
 	
+	boolean compare_non_adaptive_transform = true;
+	
 	public static void main(String[] args)
 	{
 		if (args.length != 1)
@@ -411,8 +413,6 @@ public class Segmenter
 			
 			System.out.println("Pixel shift is " + pixel_shift);
 			System.out.print("File compression rate is " + String.format("%.2f", file_ratio));
-			
-		    //System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
 		    System.out.println();
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -505,13 +505,11 @@ public class Segmenter
 		    	int n, cost;
 		    	double ratio;
 			    
-		    	//System.out.println("Processing " + channel_string[i] + " channel.");
-		    	//System.out.println();
+		    	System.out.println("Processing " + channel_string[i]);
 		    	
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
 		    	int []   delta3 = (int [])list3.get(1);
-		    	//System.out.println("Sum returned with paeth deltas is " + sum3);
 		    	histogram_list  = DeltaMapper.getHistogram(delta3);
 				min_value       = (int)histogram_list.get(0);
 				histogram       = (int[])histogram_list.get(1);
@@ -532,55 +530,39 @@ public class Segmenter
 					zero_ratio -= min_value;
 		        }	
 			    zero_ratio  /= length3;
+			  
 			    
-			    System.out.println("Processing " + channel_string[i]);
-			    //System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
-			    
-			    zero_ratio = DeltaMapper.getZeroRatio(delta_string, length3);
-			    //System.out.println("Zero ratio calculated from string is " + String.format("%.2f", zero_ratio));
-			    
-			    byte [] compression_string = new byte[2 * length3];
-			    if(zero_ratio >= .5)
+			    // In case we want to know how processing the string in its entirety compares to
+			    // processing it in segments.
+			    if(compare_non_adaptive_transform)
 			    {
-			        int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
+			        System.out.println("Zero ratio calculated from histogram is " + String.format("%.2f", zero_ratio));
+			        byte [] compression_string = new byte[2 * length3];
+			        int compression_length = 0;
+			        if(zero_ratio >= .5)
+			        	compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
+			        else
+			        	compression_length = DeltaMapper.compressOneStrings(delta_string, length3, compression_string);
 			        if(compression_length > length3)
-			        {
-			        	//System.out.println("String did not compress.");
-			        	double compression_ratio = length3;
-			        	compression_ratio       /= pixel_length;
-			        	//System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
-			        }
-			        else
-			        {
-			            double compression_ratio = compression_length;
-			            compression_ratio /= pixel_length;
-			            //System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
-			        }
+		            {
+		        	    System.out.println("String did not compress.");
+		        	    double compression_ratio = length3;
+		        	    compression_ratio       /= pixel_length;
+		        	    System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
+		            }
+		            else
+		            {
+		                double compression_ratio = compression_length;
+		                compression_ratio /= pixel_length;
+		                System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
+		            }	
 			    }
-			    else
-			    {
-			    	int compression_length = DeltaMapper.compressZeroStrings(delta_string, length3, compression_string);
-			    	if(compression_length > length3)
-			    	{
-			        	//System.out.println("String did not compress.");
-			        	double compression_ratio = compression_length;
-			            compression_ratio /= pixel_length;
-			            //System.out.println("The compression rate for packed strings is " + String.format("%.2f", compression_ratio));
-			    	}
-			        else
-			        {
-			            double compression_ratio = compression_length;
-			            compression_ratio /= pixel_length;
-			            //System.out.println("The compression rate for compressed strings is " + String.format("%.2f", compression_ratio));
-			        }
-			    }
-			    //System.out.println();
 				
 			    int minimum_segment_length = 64 + segment_length * 8;
 				ArrayList data_list = DeltaMapper.getTransformInformation(delta_string, length3, minimum_segment_length);
 				ArrayList string_list = (ArrayList)data_list.get(0);
 				n = string_list.size();
-				System.out.println("There were " + n + " segments.");
+				
 			
 				double min_ratio = 1.;
 				double max_ratio = 0.;
@@ -611,7 +593,9 @@ public class Segmenter
 		            int offset     = (int)segment_list.get(2);
 		            int bit_length = (int)segment_list.get(3);
 		            int t_length   = (int)segment_list.get(4);
+		            byte [] t_data = (byte [])segment_list.get(5);
 		            
+		           
 		            adaptive_length3 += t_length;
 					
 					if(zero_ratio < min_ratio)
@@ -633,148 +617,55 @@ public class Segmenter
 		            {
 		            	byte_length++;
 		            	if(j != n - 1)
-		            	{
 		            		// This shouldn't happen, except at the end of strings.
 		            		System.out.println("Segment had uneven length at index = " + i);
-		            	}
 		            }
 				
 		            byte [] segment = new byte[byte_length];
 		            byte [] compressed_string = new byte[2 * byte_length];
 		          
 		            int start = offset / 8;
-		            
-		            //System.out.println("Starting index = " + start);
-		            if(offset + bit_length > length3)
-		            	System.out.println("Scanned extra data.");
-		            else if(offset + bit_length == length3)
-		            	System.out.println("Exactly scanned data.");
-		            if(offset % 8 != 0)
-		            {
-		            	// This should never happen.
-		            	System.out.println("The offset is not an even multiple of 8.");
-		            }
 		            for(int k = start; k < start + byte_length; k++)
 		                segment[k - start] = delta_string[k];
 		            
-		           
 		            if(iterations == 0)
 		            {
-		            	if(zero_ratio >= .5)
-		                {
-		            		int compression_length = DeltaMapper.compressZeroStrings(segment, bit_length, compressed_string);
-		            		if(compression_length < bit_length)
-		            		{
-		            			System.out.println("Segment compressed although list says 0 iterations.");
-		            		
-		            			int compressed_byte_length = compression_length / 8;
-		            			if(compression_length % 8 != 0)
-		            				compressed_byte_length++;
-		            			compressed_byte_length++;
-		            			
-		            			byte [] clipped_string = new byte[compressed_byte_length];
-		            			for(int k = 0; k < compressed_byte_length; k++)
-		            				clipped_string[k] = compressed_string[k];
-		            			segment_data.add(clipped_string);
-		            			segment_length.add(compression_length);
-		            			
-		            			adaptive_length2 += compression_length;
-		            		}
-		            		else
-		            		{
-		            			byte [] tagged_segment = new byte[byte_length + 1];
-		            			for(int k = 0; k < byte_length; k ++)
-		            				tagged_segment[k] = segment[k];
-		            			tagged_segment[byte_length] = 0;
-		            			segment_data.add(tagged_segment);
-		                     	segment_length.add(byte_length * 8);
-		                     	adaptive_length2  += bit_length;	
-		            		}
-		                }
-		                else
-		                {
-		                	int compression_length = DeltaMapper.compressOneStrings(segment, bit_length, compressed_string);
-		            		if(compression_length < bit_length)
-		            		{
-		            			System.out.println("Segment compressed although list says 0 iterations.");
-		            			int compressed_byte_length = compression_length / 8;
-		            			if(compression_length % 8 != 0)
-		            				compressed_byte_length++;
-		            			compressed_byte_length++;
-		            			
-		            			byte [] clipped_string = new byte[compressed_byte_length];
-		            			for(int k = 0; k < compressed_byte_length; k++)
-		            				clipped_string[k] = compressed_string[k];
-		            			segment_data.add(clipped_string);
-		            			segment_length.add(compression_length);
-		            			adaptive_length2 += compression_length;
-		            		}	
-		            		else
-		            		{
-		            			byte [] tagged_segment = new byte[byte_length + 1];
-		            			for(int k = 0; k < byte_length; k ++)
-		            				tagged_segment[k] = segment[k];
-		            			tagged_segment[byte_length] = 0;
-		            			segment_data.add(tagged_segment);
-		                     	segment_length.add(byte_length * 8);
-		                     	adaptive_length2  += bit_length;	
-		            		}
-		                }
+		            	byte [] tagged_segment = new byte[byte_length + 1];
+            			for(int k = 0; k < byte_length; k ++)
+            				tagged_segment[k] = segment[k];
+            			tagged_segment[byte_length] = 0;
+            			segment_data.add(tagged_segment);
+                     	segment_length.add(byte_length * 8);	
 		            }
-		            else if(zero_ratio >= .5)
+		            else
 		            {
-		                int compression_length = DeltaMapper.compressZeroStrings(segment, bit_length, compressed_string);
-		                ArrayList info = DeltaMapper.checkStringType(compressed_string, compression_length);
-		                int current_iterations = (int)info.get(1);
-		                if(current_iterations != iterations)
-		                    System.out.println("Current iterations does not agree with iterations on the list.");
+		            	int compression_length = 0;
+		            	if(zero_ratio >= .5)
+		            		compression_length = DeltaMapper.compressZeroStrings(segment, bit_length, compressed_string);
+		            	else
+		            		compression_length = DeltaMapper.compressOneStrings(segment, bit_length, compressed_string); 
+		            	int compressed_byte_length = compression_length / 8;
 		                
-		                int compressed_byte_length = compression_length / 8;
+		            	// To include odd bits.
             			if(compression_length % 8 != 0)
             				compressed_byte_length++;
+            			
+            			// To include overhead.
             			compressed_byte_length++;
             			
             			byte [] clipped_string = new byte[compressed_byte_length];
             			for(int k = 0; k < compressed_byte_length; k++)
             				clipped_string[k] = compressed_string[k];
             			segment_data.add(clipped_string);
-            			segment_length.add(compression_length);
-		                
-		                
-		                adaptive_length2      += compression_length;
-		            }
-		            else
-		            {
-		            	int compression_length = DeltaMapper.compressOneStrings(segment, bit_length, compressed_string); 
-		            	ArrayList info = DeltaMapper.checkStringType(compressed_string, compression_length);
-		                int current_iterations = (int)info.get(1);
-		                if(current_iterations != iterations)
-		                    System.out.println("Current iterations does not agree with iterations on the list.");
-		                
-		                int compressed_byte_length = compression_length / 8;
-            			if(compression_length % 8 != 0)
-            				compressed_byte_length++;    // To include odd bits.
-            			compressed_byte_length++;        // To include overhead.
             			
-            			byte [] clipped_string = new byte[compressed_byte_length];
-            			for(int k = 0; k < compressed_byte_length; k++)
-            				clipped_string[k] = compressed_string[k];
-            			segment_data.add(clipped_string);
+            			for(int k = 0; k < clipped_string.length; k++)
+            			{
+            				if(clipped_string[k] != t_data[k])
+            					System.out.println("Segments differ.");
+            			}
             			segment_length.add(compression_length);
-		                adaptive_length2      += compression_length;
 		            }
-		        }
-		      
-				int overhead = 16 * n;
-				int adaptive_length = (int)data_list.get(1);
-				double compression_ratio = adaptive_length + overhead;
-				compression_ratio /= pixel_length;
-				
-				//System.out.println("Length returned by function is " + adaptive_length);
-				System.out.println("Length generated from list is " + adaptive_length2);
-				System.out.println("Total from transform lengths is " + adaptive_length3);
-				//System.out.println("The size of the segment data list is " + segment_data.size());
-				//System.out.println("The size of the segment length list is " + segment_length.size());
+				}
 				
 				int total_bytes = 4;
 				for(int j = 0; j < n; j++)
@@ -788,6 +679,7 @@ public class Segmenter
 					byte [] current_string = (byte [])segment_data.get(j);
 					if(current_string.length != current_bytes)
 					{
+						System.out.println("Segment data and length lists disagree.");
 						System.out.println("Expected bytes is " + current_bytes);
 						System.out.println("Actual bytes is " + current_string.length);
 					}
@@ -828,7 +720,7 @@ public class Segmenter
 		    	int zipped_length = deflater.deflate(compressed_data);
 		    	deflater.end();
 				
-		    	compression_ratio = data.length * 8;
+		    	double compression_ratio = data.length * 8;
 		    	compression_ratio       /= pixel_length;
 		    	System.out.println("The compression ratio for the adaptive string is " + String.format("%.2f", compression_ratio));
 		    	
@@ -843,7 +735,6 @@ public class Segmenter
 				System.out.println("The largest zero ratio for a segment was " + String.format("%.2f", max_ratio));
 				System.out.println("The smallest number of iterations was " +  min_iterations);
 			    System.out.println("The largest number of iterations was " + max_iterations);
-				//System.out.println("The compression ratio for adaptive encoding less overhead is " + String.format("%.2f", compression_ratio));
 			    System.out.println("The compression ratio for adaptive encoding with estimated overhead is " + String.format("%.2f", compression_ratio));
 				System.out.println("The number of uncompressed segments was " + number_of_uncompressed_segments);
 				System.out.println();
