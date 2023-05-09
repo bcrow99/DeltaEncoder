@@ -55,7 +55,7 @@ public class Segmenter
 	boolean initialized = false;
 	int     segment_length = 0;
 	
-	boolean compare_non_adaptive_transform = true;
+	boolean compare_non_adaptive_transform = false;
 	
 	public static void main(String[] args)
 	{
@@ -414,6 +414,7 @@ public class Segmenter
 			System.out.println("Pixel shift is " + pixel_shift);
 			System.out.print("File compression rate is " + String.format("%.2f", file_ratio));
 		    System.out.println();
+		    System.out.println();
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
@@ -505,7 +506,7 @@ public class Segmenter
 		    	int n, cost;
 		    	double ratio;
 			    
-		    	System.out.println("Processing " + channel_string[i]);
+		    	System.out.println(channel_string[i]);
 		    	
 		    	ArrayList list3 = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 		    	int        sum3 = (int)list3.get(0);
@@ -572,9 +573,7 @@ public class Segmenter
 				
 				int number_of_uncompressed_segments = 0;
 				
-				int adaptive_length2 = 0;
-				int adaptive_length3 = 0;
-				
+			
 				// The list of actual data, plus appended information about the type of transform and
 				// number of iterations.
 				ArrayList segment_data = new ArrayList();
@@ -595,8 +594,9 @@ public class Segmenter
 		            int t_length   = (int)segment_list.get(4);
 		            byte [] t_data = (byte [])segment_list.get(5);
 		            
-		           
-		            adaptive_length3 += t_length;
+		            
+		            segment_data.add(t_data);
+		            segment_length.add(t_length);
 					
 					if(zero_ratio < min_ratio)
 						min_ratio = zero_ratio;
@@ -634,8 +634,8 @@ public class Segmenter
             			for(int k = 0; k < byte_length; k ++)
             				tagged_segment[k] = segment[k];
             			tagged_segment[byte_length] = 0;
-            			segment_data.add(tagged_segment);
-                     	segment_length.add(byte_length * 8);	
+            			//segment_data.add(tagged_segment);
+                     	//segment_length.add(byte_length * 8);	
 		            }
 		            else
 		            {
@@ -656,14 +656,16 @@ public class Segmenter
             			byte [] clipped_string = new byte[compressed_byte_length];
             			for(int k = 0; k < compressed_byte_length; k++)
             				clipped_string[k] = compressed_string[k];
-            			segment_data.add(clipped_string);
+            			//segment_data.add(clipped_string);
             			
             			for(int k = 0; k < clipped_string.length; k++)
             			{
             				if(clipped_string[k] != t_data[k])
-            					System.out.println("Segments differ.");
+            				{
+            					System.out.println("Segment produced from data and segment from list differ.");
+            				}
             			}
-            			segment_length.add(compression_length);
+            			//segment_length.add(compression_length);
 		            }
 				}
 				
@@ -722,23 +724,18 @@ public class Segmenter
 				
 		    	double compression_ratio = data.length * 8;
 		    	compression_ratio       /= pixel_length;
-		    	System.out.println("The compression ratio for the adaptive string is " + String.format("%.2f", compression_ratio));
-		    	
+		    	System.out.println("The compression ratio for the adaptive string is " + String.format("%.4f", compression_ratio));
 		    	compression_ratio = zipped_length * 8;
 		    	compression_ratio       /= pixel_length;
-		    	System.out.println("The compression ratio for the zipped adaptive string is " + String.format("%.2f", compression_ratio));
-				System.out.println();
+		    	System.out.println("The compression ratio for the zipped adaptive string is " + String.format("%.4f", compression_ratio));
+		    	
+				System.out.println("The smallest zero ratio for a segment is " + String.format("%.4f", min_ratio) + ", the largest is " + String.format("%.4f", max_ratio));
+				System.out.println("The smallest number of iterations is " +  min_iterations + ", the largest is " + max_iterations);
+				System.out.println("The number of segments is " + n);
+				System.out.println("The number of uncompressed segments is " + number_of_uncompressed_segments);
 				
-				
-				/*
-				System.out.println("The smallest zero ratio for a segment was " + String.format("%.2f", min_ratio));
-				System.out.println("The largest zero ratio for a segment was " + String.format("%.2f", max_ratio));
-				System.out.println("The smallest number of iterations was " +  min_iterations);
-			    System.out.println("The largest number of iterations was " + max_iterations);
-			    System.out.println("The compression ratio for adaptive encoding with estimated overhead is " + String.format("%.2f", compression_ratio));
-				System.out.println("The number of uncompressed segments was " + number_of_uncompressed_segments);
 				System.out.println();
-				*/
+
 		    }  
 	    	
 		    

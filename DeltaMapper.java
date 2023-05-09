@@ -2213,11 +2213,14 @@ public class DeltaMapper
             // compressed or expanded the data.
             // We could try scanning the data somehow but anything more than simply getting the
             // zero ratio seems just about as expensive as simply doing the transform.
-            byte [] clipped_segment = new byte[1];
+            byte [] t_segment = new byte[1];
             if(compression_length > minimum_length)
             {
             	compression_length = minimum_length;
-            	clipped_segment    = segment;
+            	t_segment    = new byte[segment.length + 1];
+            	for(int j = 0; j < segment.length; j++)
+            		t_segment[j] = segment[j];
+            	t_segment[segment.length] = 0;
             }
             else
             {
@@ -2232,9 +2235,9 @@ public class DeltaMapper
     			// To include overhead.
     			compressed_byte_length++;
     			
-    			clipped_segment = new byte[compressed_byte_length];
+    			t_segment = new byte[compressed_byte_length];
     			for(int k = 0; k < compressed_byte_length; k++)
-    				clipped_segment[k] = compressed_segment[k];
+    				t_segment[k] = compressed_segment[k];
             }
             
             segment_list.add(zero_ratio);
@@ -2242,7 +2245,7 @@ public class DeltaMapper
             segment_list.add(i * minimum_length);
             segment_list.add(minimum_length);
             segment_list.add(compression_length);
-            segment_list.add(clipped_segment);
+            segment_list.add(t_segment);
      
             string_list.add(segment_list);
         }
@@ -2257,7 +2260,7 @@ public class DeltaMapper
         
         int compression_length  = 0;
         int iterations          = 0;
-        byte [] clipped_segment = new byte[1];
+        byte [] t_segment = new byte[1];
         
         double zero_ratio = getZeroRatio(segment, minimum_length + remainder);
         if(zero_ratio >= .5)
@@ -2267,7 +2270,10 @@ public class DeltaMapper
         if(compression_length > minimum_length + remainder)
         {
         	compression_length = minimum_length + remainder;
-        	clipped_segment = segment;
+        	t_segment    = new byte[segment.length + 1];
+        	for(int j = 0; j < segment.length; j++)
+        		t_segment[j] = segment[j];
+        	t_segment[segment.length] = 0;
         }
         else
         {
@@ -2282,9 +2288,9 @@ public class DeltaMapper
 			// To include overhead.
 			compressed_byte_length++;
 			
-			clipped_segment = new byte[compressed_byte_length];
+			t_segment = new byte[compressed_byte_length];
 			for(int k = 0; k < compressed_byte_length; k++)
-				clipped_segment[k] = compressed_segment[k];
+				t_segment[k] = compressed_segment[k];
         }
         
         segment_list.add(zero_ratio);
@@ -2292,7 +2298,7 @@ public class DeltaMapper
    	    segment_list.add(i * minimum_length);
    	    segment_list.add(minimum_length + remainder);
    	    segment_list.add(compression_length);
-   	    segment_list.add(clipped_segment);
+   	    segment_list.add(t_segment);
       
         string_list.add(segment_list);
         
@@ -2390,9 +2396,9 @@ public class DeltaMapper
         				// To include overhead.
         				compressed_byte_length++;
         				
-        				clipped_segment = new byte[compressed_byte_length];
+        				t_segment = new byte[compressed_byte_length];
         				for(int k = 0; k < compressed_byte_length; k++)
-        					clipped_segment[k] = compressed_merged_segment[k];
+        					t_segment[k] = compressed_merged_segment[k];
         	    		
         	    		
         	    		ArrayList merged_segment_list = new ArrayList();
@@ -2401,7 +2407,7 @@ public class DeltaMapper
         	    		merged_segment_list.add(current_offset);
         	    		merged_segment_list.add(merged_length);
         	    		merged_segment_list.add(merged_compression_length);
-        	    		merged_segment_list.add(clipped_segment);
+        	    		merged_segment_list.add(t_segment);
         	    
         	    		current_list.add(merged_segment_list);
             	        
@@ -2427,6 +2433,10 @@ public class DeltaMapper
         	    	for(int j = 0; j < byte_length; j++)
         	    		merged_segment[j] = string[j + byte_offset];   
         	    	double merged_ratio = getZeroRatio(merged_segment, merged_length);
+        	    	t_segment    = new byte[merged_segment.length + 1];
+                	for(int j = 0; j < merged_segment.length; j++)
+                		t_segment[j] = merged_segment[j];
+                	t_segment[merged_segment.length] = 0;
         	    	
         	    	ArrayList merged_segment_list = new ArrayList();
         	    	merged_segment_list.add(merged_ratio);
@@ -2434,7 +2444,8 @@ public class DeltaMapper
     	    		merged_segment_list.add(current_offset);
     	    		merged_segment_list.add(merged_length);
     	    		merged_segment_list.add(merged_length);
-    	    		merged_segment_list.add(merged_segment);
+    	    		merged_segment_list.add(t_segment);
+    	    		
     	    		current_list.add(merged_segment_list);
     	    		i++;
         	    }
