@@ -2066,6 +2066,8 @@ public class DeltaMapper
     	 return w;
     }
     
+ 
+    
     public static double getZeroOneRatio(int [] code, int [] length, int [] frequency)
     {
     	int    n     = code.length;
@@ -2092,7 +2094,6 @@ public class DeltaMapper
     	
     	return ratio;
     }
-    
     public static double getShannonLimit(int [] weight)
     {
     	int sum = 0;
@@ -2128,7 +2129,74 @@ public class DeltaMapper
     	
     	return cost;
     }
-     
+    
+    public static ArrayList getStringData(int [] delta)
+    {
+    	ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
+	   
+
+		int [] histogram            = (int[])histogram_list.get(1);
+		int [] string_table = DeltaMapper.getRankTable(histogram);
+		
+		
+		int    number_of_values = 0;
+		int    predicted_bit_length = 0;
+		double predicted_zero_ratio = 0;
+		int    min_value = Integer.MAX_VALUE;
+		
+		for(int j = 0; j < histogram.length; j++)
+		{
+			number_of_values += histogram[j];
+			if(histogram.length == 1)
+			{
+			    predicted_bit_length = number_of_values;
+			    predicted_zero_ratio = 1.;
+			}
+			else if(histogram.length == 2)
+			{
+			    predicted_bit_length += histogram[j];
+			    if(j == 1)
+			    {
+			    	if(histogram[0] > histogram[1])
+			    	    predicted_zero_ratio = histogram[0];
+			    	else
+			    		predicted_zero_ratio = histogram[1];
+			    	predicted_zero_ratio /= number_of_values;
+			    }
+			}
+			else
+			{
+				int k = string_table[j];
+			    if(j < histogram.length - 1)	
+			    {
+			        predicted_bit_length += histogram[j] * (k + 1); 
+			        if(histogram[j] < min_value)
+			        	min_value = histogram[j];
+			    }
+			    else
+			    {
+			    	predicted_bit_length += histogram[j] * (k + 1);
+			    	 if(histogram[j] < min_value)
+				        	min_value = histogram[j];
+			    	
+			    	predicted_zero_ratio  = number_of_values;
+			    	predicted_zero_ratio -= min_value;
+			    	
+			    	predicted_zero_ratio /= predicted_bit_length;
+			    	// Don't understand why the bit length always 
+			    	// seems to be off by a little bit.
+			    	// Works well enough to be useful.
+			    	// We can predict the (approximate) length of a bit string 
+			    	// and whether it's likely to compress further.
+			    }
+			}
+		}
+    	ArrayList data_list = new ArrayList();
+    	data_list.add(predicted_bit_length);
+    	data_list.add(predicted_zero_ratio);
+    	return data_list;
+    }
+    
     public static double getZeroRatio(byte [] string, int bit_length)
     {
     	int byte_length = bit_length / 8;
@@ -2167,6 +2235,112 @@ public class DeltaMapper
     	ratio       /= zero_sum + one_sum;
     	return ratio;
     }
+    
+    
+    public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
+    {
+
+    	int  positive = 0;
+        int  negative = 0;     
+        byte mask     = 1;
+      
+        int byte_length = bit_length / 8;
+        int n           = byte_length;
+        
+        
+        if(transform_type == 0)
+        {
+        	int previous = 1;
+            for(int i = 0; i < n; i++)
+            {
+            	for(int j = 0; j < 8; j++)
+            	{
+            	    int k = string[i] & mask << j;	
+            	    
+            	    if(k != 0 && previous != 0)
+            	    	positive++;
+            	    else if(k != 0 && previous == 0)
+            	        previous = 1;
+            	    else if(k == 0 && previous != 0)
+            	    	previous = 0;
+            	    else if(k == 0 && previous == 0)
+            	    {
+            	        negative++;
+            	        previous = 1;
+            	    }
+            	}
+            }
+           
+        	int remainder = bit_length % 8;
+        	if(remainder != 0)
+        	{
+        		for(int i = 0; i < remainder; i++)
+        		{
+        			int j = string[byte_length] & mask << i;
+        			
+        			if(j != 0 && previous != 0)
+            	    	positive++;
+            	    else if(j != 0 && previous == 0)
+            	        previous = 1;
+            	    else if(j == 0 && previous != 0)
+            	    	previous = 0;
+            	    else if(j == 0 && previous == 0)
+            	    {
+            	        negative++;
+            	        previous = 1;
+            	    }
+        		}
+        	}	
+        }
+        else
+        {
+        	int previous = 0;
+            for(int i = 0; i < n; i++)
+            {
+            	for(int j = 0; j < 8; j++)
+            	{
+            	    int k = string[i] & mask << j;	
+            	    
+            	    if(k == 0 && previous == 0)
+            	    	positive++;
+            	    else if(k == 0 && previous == 1)
+            	        previous = 0;
+            	    else if(k != 0 && previous == 0)
+            	    	previous = 1;
+            	    else if(k != 0 && previous != 0)
+            	    {
+            	        negative++;
+            	        previous = 0;
+            	    }
+            	}
+            }
+           
+        	int remainder = bit_length % 8;
+        	if(remainder != 0)
+        	{
+        		for(int i = 0; i < remainder; i++)
+        		{
+        			int j = string[byte_length] & mask << i;
+        			
+        			if(j == 0 && previous == 0)
+            	    	positive++;
+            	    else if(j == 0 && previous == 1)
+            	        previous = 0;
+            	    else if(j != 0 && previous == 0)
+            	    	previous = 1;
+            	    else if(j != 0 && previous != 0)
+            	    {
+            	        negative++;
+            	        previous = 0;
+            	    }
+        		}
+        	}		
+        }
+       
+    	int total = positive - negative;
+    	return total;
+    }
+    
     
     public static ArrayList getTransformInformation(byte [] string, int length, int minimum_segment_length)
     {
