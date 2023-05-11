@@ -1410,10 +1410,12 @@ public class DeltaMapper
         number_of_bits += current_bit;
         return(number_of_bits);
     }
-   
+    
+
     public static int compressZeroStrings(byte src[], int size, byte dst[])
     {
-        byte[]  temp = new byte[src.length * 2];
+    	
+    	byte[]  temp = new byte[src.length * 2];
         
         int iterations = 1;
         int previous_size        = size;
@@ -1451,24 +1453,7 @@ public class DeltaMapper
         }   
         // else the result is already in dst.
     
-        if(current_size % 8 == 0)
-        {
-            int byte_size      = current_size / 8;
-            dst[byte_size] = (byte) iterations;
-            dst[byte_size] &= 127;
-        }
-        else
-        {
-            int  remainder = current_size % 8;
-            int byte_size = current_size / 8;
-
-            dst[byte_size] |= (byte) (iterations << remainder);
-            byte_size++;
-            dst[byte_size] = 0;
-            if(remainder > 1)
-                dst[byte_size] = (byte) (iterations >> 8 - remainder);
-        }
-        
+       
         int last_byte = current_size / 8;
         if(current_size % 8 != 0)
         	last_byte++;
@@ -1477,7 +1462,135 @@ public class DeltaMapper
         
         return(current_size);
     }
+   
     
+    // This function uses a metric to see if the data will expand or contract.
+    // It duplicates the behavior of the original compress zero strings function,
+    // by returning an expanded string and then stopping.
+    // It's worth noting that sometimes the most compression is achieved by 
+    // huffman encoding the expanded data, but probably not significant
+    // enough to justify all the extra processing.
+    public static int compressZeroStrings2(byte src[], int length, byte dst[])
+    {
+        int amount = getCompressionAmount(src, length, 0);
+    	
+    	if(amount > 0)
+    	{
+    		int current_length = compressZeroBits(src, length, dst);
+    		int iterations     = 1;
+    		int last_byte = current_length / 8;
+            if(current_length % 8 != 0)
+            	last_byte++;
+            dst[last_byte] = (byte)iterations;
+            return(current_length);
+    	}
+    	else
+    	{
+    		int current_length = compressZeroBits(src, length, dst);
+    		int iterations     = 1;
+    		amount             = getCompressionAmount(dst, current_length, 0);
+    		
+    		if(amount >= 0)
+    		{
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                return(current_length);
+    		}
+    		else
+    		{
+    			byte [] temp      = new byte[src.length];  
+    			while(amount < 0)
+    			{
+    				int previous_length = current_length;
+        	        if(iterations % 2 == 1)
+                        current_length = compressZeroBits(dst, previous_length, temp);
+                    else
+                        current_length = compressZeroBits(temp, previous_length, dst);
+                    iterations++; 
+                    amount             = getCompressionAmount(dst, current_length, 0);
+    			}
+    			
+    			if(iterations % 2 == 0) 
+                {
+                	// The last iteration used temp as a destination,
+                	// so we need to copy the data from temp to dst.
+                    int byte_length = current_length / 8;
+                    if(current_length % 8 != 0)
+                        byte_length++; 
+                    for(int i = 0; i < byte_length; i++)
+                        dst[i] = temp[i];
+                }   
+                // else the result is already in dst.
+    			
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                
+                return current_length;
+    		}
+    	}
+    }
+    
+    // This function uses a metric to see if the data will expand or contract, and
+    // saves processing by simply returning the current length.  This breaks the
+    // encoder/decoder programs.
+    public static int compressZeroStrings3(byte src[], int length, byte dst[])
+    {
+        int amount = getCompressionAmount(src, length, 0);
+    	if(amount > 0)
+    	    return length;
+        else
+        {
+    		int current_length = compressZeroBits(src, length, dst);
+    		int iterations     = 1;
+    		amount             = getCompressionAmount(dst, current_length, 0);
+    		
+    		if(amount >= 0)
+    		{
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                return(current_length);
+    		}
+    		else
+    		{
+    			byte [] temp      = new byte[src.length];  
+    			while(amount < 0)
+    			{
+    				int previous_length = current_length;
+        	        if(iterations % 2 == 1)
+                        current_length = compressZeroBits(dst, previous_length, temp);
+                    else
+                        current_length = compressZeroBits(temp, previous_length, dst);
+                    iterations++; 
+                    amount             = getCompressionAmount(dst, current_length, 0);
+    			}
+    			
+    			if(iterations % 2 == 0) 
+                {
+                	// The last iteration used temp as a destination,
+                	// so we need to copy the data from temp to dst.
+                    int byte_length = current_length / 8;
+                    if(current_length % 8 != 0)
+                        byte_length++; 
+                    for(int i = 0; i < byte_length; i++)
+                        dst[i] = temp[i];
+                }   
+                // else the result is already in dst.
+    			
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                
+                return current_length;
+    		}
+    	}
+    }
     public static int decompressZeroStrings(byte src[], int size, byte dst[])
     {
         int  byte_index;
@@ -2130,6 +2243,7 @@ public class DeltaMapper
     	return cost;
     }
     
+    // Still contains a small error.
     public static ArrayList getStringData(int [] delta)
     {
     	ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
@@ -2175,22 +2289,21 @@ public class DeltaMapper
 			    }
 			    else
 			    {
-			    	predicted_bit_length += histogram[j] * (k + 1);
-			    	 if(histogram[j] < min_value)
-				        	min_value = histogram[j];
+			    	//predicted_bit_length += histogram[j] * (k + 1);
+			    	predicted_bit_length += histogram[j] * k;
+			    	if(histogram[j] < min_value)
+				        min_value = histogram[j];
 			    	
 			    	predicted_zero_ratio  = number_of_values;
 			    	predicted_zero_ratio -= min_value;
 			    	
 			    	predicted_zero_ratio /= predicted_bit_length;
-			    	// Don't understand why the bit length always 
-			    	// seems to be off by a little bit.
-			    	// Works well enough to be useful.
-			    	// We can predict the (approximate) length of a bit string 
-			    	// and whether it's likely to compress further.
 			    }
 			}
 		}
+		
+		predicted_bit_length += predicted_bit_length % 8;
+		predicted_bit_length += 8;
     	ArrayList data_list = new ArrayList();
     	data_list.add(predicted_bit_length);
     	data_list.add(predicted_zero_ratio);
