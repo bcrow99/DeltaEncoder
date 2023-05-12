@@ -1253,7 +1253,8 @@ public class DeltaMapper
                    if(current_bit == 8)
                    {
                        current_byte++;
-                       current_bit = dst[current_byte] = 0;
+                       //current_bit = dst[current_byte] = 0;
+                       current_bit = 0;
                    }
                }
                else
@@ -1271,7 +1272,8 @@ public class DeltaMapper
                    if(current_bit == 8)
                    {
                        current_byte++;
-                       current_bit = dst[current_byte] = 0;
+                       //current_bit = dst[current_byte] = 0;
+                       current_bit = 0;
                    }
                }
             }
@@ -1286,7 +1288,8 @@ public class DeltaMapper
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    //current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
             }
             else
@@ -1297,13 +1300,15 @@ public class DeltaMapper
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    //current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
                 current_bit++;
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    //current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
             }
             j++;
@@ -1906,6 +1911,130 @@ public class DeltaMapper
         return current_size;
     }
     
+    public static int compressOneStrings2(byte src[], int length, byte dst[])
+    {
+        int amount = getCompressionAmount(src, length, 1);
+    	
+    	if(amount > 0)
+    	{
+    		int current_length = compressOneBits(src, length, dst);
+    		int iterations     = 1;
+    		int last_byte = current_length / 8;
+            if(current_length % 8 != 0)
+            	last_byte++;
+            dst[last_byte] = (byte)iterations;
+            dst[last_byte] &= 127;
+            return(current_length);
+    	}
+    	else
+    	{
+    		int current_length = compressOneBits(src, length, dst);
+    		int iterations     = 1;
+    		amount             = getCompressionAmount(dst, current_length, 0);
+    		
+    		if(amount >= 0)
+    		{
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                dst[last_byte] &= 127;
+                return(current_length);
+    		}
+    		else
+    		{
+    			byte [] temp      = new byte[src.length];  
+    			while(amount < 0)
+    			{
+    				int previous_length = current_length;
+        	        if(iterations % 2 == 1)
+                        current_length = compressZeroBits(dst, previous_length, temp);
+                    else
+                        current_length = compressZeroBits(temp, previous_length, dst);
+                    iterations++; 
+                    amount             = getCompressionAmount(dst, current_length, 0);
+    			}
+    			
+    			if(iterations % 2 == 0) 
+                {
+                	// The last iteration used temp as a destination,
+                	// so we need to copy the data from temp to dst.
+                    int byte_length = current_length / 8;
+                    if(current_length % 8 != 0)
+                        byte_length++; 
+                    for(int i = 0; i < byte_length; i++)
+                        dst[i] = temp[i];
+                }   
+                // else the result is already in dst.
+    			
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                dst[last_byte] &= 127;
+                return current_length;
+    		}
+    	}
+    }
+    
+    // This function uses a metric to see if the data will expand or contract, and
+    // saves processing by simply returning the current length.  This breaks the
+    // encoder/decoder programs.
+    public static int compressOneStrings3(byte src[], int length, byte dst[])
+    {
+        int amount = getCompressionAmount(src, length, 1);
+    	if(amount > 0)
+    	    return length;
+        else
+        {
+    		int current_length = compressOneBits(src, length, dst);
+    		int iterations     = 1;
+    		amount             = getCompressionAmount(dst, current_length, 0);
+    		
+    		if(amount >= 0)
+    		{
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                dst[last_byte] &= 127;
+                return(current_length);
+    		}
+    		else
+    		{
+    			byte [] temp      = new byte[src.length];  
+    			while(amount < 0)
+    			{
+    				int previous_length = current_length;
+        	        if(iterations % 2 == 1)
+                        current_length = compressOneBits(dst, previous_length, temp);
+                    else
+                        current_length = compressOneBits(temp, previous_length, dst);
+                    iterations++; 
+                    amount             = getCompressionAmount(dst, current_length, 1);
+    			}
+    			
+    			if(iterations % 2 == 0) 
+                {
+                	// The last iteration used temp as a destination,
+                	// so we need to copy the data from temp to dst.
+                    int byte_length = current_length / 8;
+                    if(current_length % 8 != 0)
+                        byte_length++; 
+                    for(int i = 0; i < byte_length; i++)
+                        dst[i] = temp[i];
+                }   
+                // else the result is already in dst.
+    			
+    			int last_byte = current_length / 8;
+                if(current_length % 8 != 0)
+                	last_byte++;
+                dst[last_byte] = (byte)iterations;
+                dst[last_byte] &= 127;
+                return current_length;
+    		}
+    	}
+    }
     
     // Returns string length of packed strings, may include extra trailing bits.
     public static int decompressOneStrings(byte src[], int size, byte dst[])
@@ -2352,12 +2481,22 @@ public class DeltaMapper
     
     public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
     {
-
     	int  positive = 0;
         int  negative = 0;     
         byte mask     = 1;
       
         int byte_length = bit_length / 8;
+        
+        /*
+        if(bit_length % 8 != 0)
+        	byte_length++;
+        if(byte_length > string.length)
+        {
+        	System.out.println("Length of string is longer than array.");
+        	byte_length--;
+        }
+        */
+      
         int n           = byte_length;
         
         
@@ -2449,7 +2588,6 @@ public class DeltaMapper
         		}
         	}		
         }
-       
     	int total = positive - negative;
     	return total;
     }
@@ -2492,7 +2630,7 @@ public class DeltaMapper
             int compression_length = 0;
             int iterations         = 0;
             if(zero_ratio >= .5)
-            	compression_length = compressZeroStrings(segment, minimum_length, compressed_segment);
+            	compression_length = compressZeroStrings2(segment, minimum_length, compressed_segment);
             else
             	compression_length = compressOneStrings(segment, minimum_length, compressed_segment);
             
@@ -2551,7 +2689,7 @@ public class DeltaMapper
         
         double zero_ratio = getZeroRatio(segment, minimum_length + remainder);
         if(zero_ratio >= .5)
-        	compression_length = compressZeroStrings(segment, minimum_length + remainder, compressed_segment);
+        	compression_length = compressZeroStrings2(segment, minimum_length + remainder, compressed_segment);
         else
         	compression_length = compressOneStrings(segment, minimum_length + remainder, compressed_segment);
         if(compression_length > minimum_length + remainder)
@@ -2664,7 +2802,7 @@ public class DeltaMapper
         	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
         	    	int merged_compression_length = 0;
         	    	if(current_type == 0)
-        	    	    merged_compression_length = compressZeroStrings(merged_segment, merged_length, compressed_merged_segment);
+        	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
         	    	else
         	    		merged_compression_length = compressOneStrings(merged_segment, merged_length, compressed_merged_segment);
         	    	int current_compression = (int)current_segment_list.get(4);
@@ -2809,7 +2947,7 @@ public class DeltaMapper
                 {
                     compression_length = 0;
             	    if(zero_ratio >= .5)
-                        compression_length = compressZeroStrings(segment, bit_length, compressed_string);
+                        compression_length = compressZeroStrings2(segment, bit_length, compressed_string);
             	    else
             	    	compression_length = compressOneStrings(segment, bit_length, compressed_string);
             		if(compression_length < bit_length)
@@ -2824,7 +2962,7 @@ public class DeltaMapper
                 {
                 	compression_length = 0;
                 	if(zero_ratio >= .5)
-                		compression_length = compressZeroStrings(segment, bit_length, compressed_string);
+                		compression_length = compressZeroStrings2(segment, bit_length, compressed_string);
                 	else
                 		compression_length = compressOneStrings(segment, bit_length, compressed_string);
                 	ArrayList info = checkStringType(compressed_string, compression_length);
