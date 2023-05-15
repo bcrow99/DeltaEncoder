@@ -288,11 +288,156 @@ public class DeltaMapper
         return dst;
     }
     
+     // These functions use the horizontal, vertical, or diagonal
+    // deltas depending on the result of a convolution. 
+    public static int getPaethSum(int src[], int xdim, int ydim)
+    {
+    	int[] dst          = new int[xdim * ydim];
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        
+        int sum            = 0;
+        int horizontal     = 0;
+    	int vertical       = 0;
+    	int diagonal       = 0;
+        int k              = 0;
+        
+        // We're checking to see how close the paeth filter comes to an
+        // ideal delta set--which is not very close, but it can still produce
+        // a better result than just using horizontal or vertical deltas.
+        int horizontal_sum = 0;
+        int vertical_sum   = 0;
+        int diagonal_sum   = 0;
+        int limit_sum      = 0;
+        
+        for(int i = 1; i < ydim; i++)
+        {
+        	for(int j = 1; j < xdim; j++)
+        	{
+        		
+        		int horizontal_delta = Math.abs(src[i * xdim + j] - src[i * xdim + j - 1]);
+        		horizontal_sum  += horizontal_delta;
+        		
+        		int vertical_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j]);
+        		vertical_sum += vertical_delta;
+        		
+        		int diagonal_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j - 1]);
+        		diagonal_sum += diagonal_delta;
+        		
+        		if(horizontal_delta <= vertical_delta && horizontal_delta <= diagonal_delta)
+        			limit_sum += horizontal_delta;
+        		else if(vertical_delta <= diagonal_delta)
+        			limit_sum += vertical_delta;
+        		else
+        			limit_sum += diagonal_delta;
+        	}
+        }
+         
+        k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 2 to mark the delta type paeth.
+            			dst[k++] = 2;
+            	    }
+            		else
+            		{
+            			// We don't have an upper or upper diagonal delta to check
+            			// in the first row, so we just use horizontal deltas.
+            		    delta     = src[k] - value;
+                        value     += delta;
+                        dst[k++]  = delta;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta or diagonal delta for our paeth filter,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	dst[k++]   = delta;
+            	        sum += Math.abs(delta);
+            	    }
+            	    else
+            	    {
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = a + b - c;
+            	    	
+            	    	
+            	    	// Prediction deltas.
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	
+            	    	// Actual deltas.
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
+            	    	
+            	    	
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	{
+            	    	    delta = horizontal_delta;
+            	    	    horizontal++;
+            	    	    
+            	    	    if(Math.abs(vertical_delta) < Math.abs(horizontal_delta))
+            	    	    {
+            	    	    	//System.out.println("Assigned vertical delta but absolute value of horizontal is smaller.");
+            	    	    }
+            	    	}
+            	    	else if(delta_b <= delta_c)
+            	    	{
+            	    	    delta = vertical_delta;
+            	    	    vertical++;
+            	    	    
+            	    	    if(Math.abs(diagonal_delta) < Math.abs(vertical_delta))
+            	    	    {
+            	    	    	//System.out.println("Assigned horizontal delta but absolute value of diagonal is smaller.");	
+            	    	    }
+            	    	}
+            	    	else
+            	    	{
+            	    	    delta = diagonal_delta;
+            	    	    diagonal++;
+            	    	    
+            	    	    if(vertical_delta < diagonal_delta || horizontal_delta < diagonal_delta)
+            	    	    {
+            	    	    	//System.out.println("Assigned diagonal delta but absolute value of orthogonal is smaller.");		
+            	    	    }
+            	    	}
+            	    	dst[k++] = delta;
+            	    	
+            	    	
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+        
+        return sum;
+    }
+
     // These functions use the horizontal, vertical, or diagonal
     // deltas depending on the result of a convolution. 
     public static ArrayList getDeltasFromValues3(int src[], int xdim, int ydim)
     {
-        int[] dst          = new int[xdim * ydim];
+    	int[] dst          = new int[xdim * ydim];
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
@@ -432,7 +577,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
-        return result;
+        return result;    
     }
 
     public static int[] getValuesFromDeltas3(int src[], int xdim, int ydim, int init_value)
@@ -1737,7 +1882,7 @@ public class DeltaMapper
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
             }
             else
@@ -1748,13 +1893,13 @@ public class DeltaMapper
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
                 current_bit++;
                 if(current_bit == 8)
                 {
                     current_byte++;
-                    current_bit = dst[current_byte] = 0;
+                    current_bit = 0;
                 }
             }
             j++;
@@ -2402,12 +2547,66 @@ public class DeltaMapper
 		int [] histogram            = (int[])histogram_list.get(1);
 		int [] string_table = DeltaMapper.getRankTable(histogram);
 		
-		
 		int    number_of_values = 0;
 		int    predicted_bit_length = 0;
 		double predicted_zero_ratio = 0;
 		int    min_value = Integer.MAX_VALUE;
+		int    min_index = 0;
 		
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			number_of_values += histogram[i];
+			if(histogram[i] < min_value)
+			{
+				min_value = histogram[i];
+				min_index = i;
+			}
+		}
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			if(histogram.length == 1)
+			{
+				predicted_bit_length = number_of_values;
+			    predicted_zero_ratio = 1.;   	
+			}
+			else if(histogram.length == 2)
+			{
+				predicted_bit_length += histogram[i];
+			    if(i == 1)
+			    {
+			    	if(histogram[0] > histogram[1])
+			    	    predicted_zero_ratio = histogram[0];
+			    	else
+			    		predicted_zero_ratio = histogram[1];
+			    	predicted_zero_ratio /= number_of_values;
+			    }	
+			}
+			else
+			{
+				int j = string_table[i];
+				predicted_bit_length += histogram[i] * (j + 1); 
+				
+				
+				
+				/*
+				if(i != min_index)
+				{
+					predicted_bit_length += histogram[i] * (j + 1); 	
+				}
+				else
+				{
+					predicted_bit_length += histogram[i] * j;     	
+				}
+				*/
+			}
+			predicted_zero_ratio  = number_of_values;
+	    	predicted_zero_ratio -= min_value;
+	    	predicted_zero_ratio /= predicted_bit_length;
+		}
+		
+		/*
 		for(int j = 0; j < histogram.length; j++)
 		{
 			number_of_values += histogram[j];
@@ -2450,9 +2649,9 @@ public class DeltaMapper
 			    }
 			}
 		}
-		
-		predicted_bit_length += predicted_bit_length % 8;
-		predicted_bit_length += 8;
+		*/
+		//predicted_bit_length += predicted_bit_length % 8;
+		//predicted_bit_length += 8;
     	ArrayList data_list = new ArrayList();
     	data_list.add(predicted_bit_length);
     	data_list.add(predicted_zero_ratio);
@@ -2507,6 +2706,8 @@ public class DeltaMapper
       
         int byte_length = bit_length / 8;
         
+        // For some reason, this breaks the compress strings function.
+        // Seems like we're neglecting odd bits.
         /*
         if(bit_length % 8 != 0)
         	byte_length++;
@@ -2516,6 +2717,7 @@ public class DeltaMapper
         	byte_length--;
         }
         */
+        
       
         int n           = byte_length;
         
@@ -2611,6 +2813,8 @@ public class DeltaMapper
     	int total = positive - negative;
     	return total;
     }
+    
+    
     public static ArrayList getTransformInformation(byte [] string, int length, int minimum_segment_length)
     {
     	boolean debug = true;
@@ -3375,8 +3579,7 @@ public class DeltaMapper
                 		compression_length = compressZeroStrings3(segment, bit_length, compressed_string);
                 	else
                 		compression_length = compressOneStrings3(segment, bit_length, compressed_string);
-                	ArrayList info = checkStringType(compressed_string, compression_length);
-                    int current_iterations = (int)info.get(1);
+                    int current_iterations = getIterations(compressed_string, compression_length);;
                     if(current_iterations != iterations)
                         System.out.println("Current iterations does not agree with iterations on the list.");
                     if(t_length != compression_length)
@@ -3391,8 +3594,8 @@ public class DeltaMapper
             System.out.println("Adaptive length produced from merged list is " + adaptive_length2);
         }
         
-        data_list.add(string_list);
-        data_list.add(adaptive_length1);
+        data_list.add(current_list);
+        data_list.add(adaptive_length2);
         return data_list;
     }
 }
