@@ -288,51 +288,14 @@ public class DeltaMapper
         return dst;
     }
     
-     // These functions use the horizontal, vertical, or diagonal
-    // deltas depending on the result of a convolution. 
     public static int getPaethSum(int src[], int xdim, int ydim)
     {
-    	int[] dst          = new int[xdim * ydim];
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
         
         int sum            = 0;
-        int horizontal     = 0;
-    	int vertical       = 0;
-    	int diagonal       = 0;
         int k              = 0;
-        
-        // We're checking to see how close the paeth filter comes to an
-        // ideal delta set--which is not very close, but it can still produce
-        // a better result than just using horizontal or vertical deltas.
-        int horizontal_sum = 0;
-        int vertical_sum   = 0;
-        int diagonal_sum   = 0;
-        int limit_sum      = 0;
-        
-        for(int i = 1; i < ydim; i++)
-        {
-        	for(int j = 1; j < xdim; j++)
-        	{
-        		
-        		int horizontal_delta = Math.abs(src[i * xdim + j] - src[i * xdim + j - 1]);
-        		horizontal_sum  += horizontal_delta;
-        		
-        		int vertical_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j]);
-        		vertical_sum += vertical_delta;
-        		
-        		int diagonal_delta = Math.abs(src[i * xdim + j] - src[(i - 1) * xdim + j - 1]);
-        		diagonal_sum += diagonal_delta;
-        		
-        		if(horizontal_delta <= vertical_delta && horizontal_delta <= diagonal_delta)
-        			limit_sum += horizontal_delta;
-        		else if(vertical_delta <= diagonal_delta)
-        			limit_sum += vertical_delta;
-        		else
-        			limit_sum += diagonal_delta;
-        	}
-        }
          
         k = 0;
         for(int i = 0; i < ydim; i++)
@@ -343,16 +306,13 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            		    // Setting the first value to 2 to mark the delta type paeth.
-            			dst[k++] = 2;
+            			k++;
             	    }
             		else
             		{
-            			// We don't have an upper or upper diagonal delta to check
-            			// in the first row, so we just use horizontal deltas.
             		    delta     = src[k] - value;
                         value     += delta;
-                        dst[k++]  = delta;
+                        k++;
                         sum      += Math.abs(delta);
             		}
             	}
@@ -363,11 +323,9 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            	    	// We dont have a horizontal delta or diagonal delta for our paeth filter,
-            	    	// so we just use a vertical delta, and reset our init value.
             	    	delta      = src[k] - init_value;
             	    	init_value = src[k];
-            	    	dst[k++]   = delta;
+            	    	k++;
             	        sum += Math.abs(delta);
             	    }
             	    else
@@ -390,46 +348,56 @@ public class DeltaMapper
             	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
             	    	
             	    	
-            	    	
             	    	if(delta_a <= delta_b && delta_a <= delta_c)
             	    	{
             	    	    delta = horizontal_delta;
-            	    	    horizontal++;
-            	    	    
-            	    	    if(Math.abs(vertical_delta) < Math.abs(horizontal_delta))
-            	    	    {
-            	    	    	//System.out.println("Assigned vertical delta but absolute value of horizontal is smaller.");
-            	    	    }
+            	    	
             	    	}
             	    	else if(delta_b <= delta_c)
             	    	{
             	    	    delta = vertical_delta;
-            	    	    vertical++;
-            	    	    
-            	    	    if(Math.abs(diagonal_delta) < Math.abs(vertical_delta))
-            	    	    {
-            	    	    	//System.out.println("Assigned horizontal delta but absolute value of diagonal is smaller.");	
-            	    	    }
             	    	}
             	    	else
             	    	{
             	    	    delta = diagonal_delta;
-            	    	    diagonal++;
-            	    	    
-            	    	    if(vertical_delta < diagonal_delta || horizontal_delta < diagonal_delta)
-            	    	    {
-            	    	    	//System.out.println("Assigned diagonal delta but absolute value of orthogonal is smaller.");		
-            	    	    }
             	    	}
-            	    	dst[k++] = delta;
-            	    	
-            	    	
+            	    	k++;
             	    	sum += Math.abs(delta);
             	    }
                 }
         	}
         }
-        
+        return sum;
+    }
+
+    public static int getPaethSum2(int src[], int xdim, int ydim, int interval)
+    {
+        int sum            = 0;
+        for(int i = 1; i < ydim; i++)
+        {
+        	int k = i * xdim + 1;
+        	for(int j = 1; j < xdim; j += interval)
+            {
+                int a = src[k - 1];
+            	int b = src[k - xdim];
+            	int c = src[k - xdim - 1];
+            	int d = a + b - c;
+            	int e = src[k];
+            	
+            	int delta_a = Math.abs(a - d);
+            	int delta_b = Math.abs(b - d);
+            	int delta_c = Math.abs(c - d);
+            	    	   	
+            	if(delta_a <= delta_b && delta_a <= delta_c)
+            		sum += Math.abs(e - a);
+            	else if(delta_b <= delta_c)
+            	    sum += Math.abs(e - b);
+            	else
+            	    sum += Math.abs(e - c);
+            	
+            	k += interval;  	
+        	}
+        }
         return sum;
     }
 
@@ -451,6 +419,8 @@ public class DeltaMapper
         // We're checking to see how close the paeth filter comes to an
         // ideal delta set--which is not very close, but it can still produce
         // a better result than just using horizontal or vertical deltas.
+        
+        /*
         int horizontal_sum = 0;
         int vertical_sum   = 0;
         int diagonal_sum   = 0;
@@ -478,7 +448,8 @@ public class DeltaMapper
         			limit_sum += diagonal_delta;
         	}
         }
-         
+        */
+        
         k = 0;
         for(int i = 0; i < ydim; i++)
         {

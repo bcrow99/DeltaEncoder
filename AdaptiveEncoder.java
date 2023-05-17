@@ -461,12 +461,26 @@ public class AdaptiveEncoder
 		    channel_src.add(shifted_red_green);
 		    channel_src.add(shifted_red_blue);
 		    
+		    
+		    
+		    
+		    long start_time = System.nanoTime();
+		    for(int i = 0; i < 6; i++)
+		    {
+		    	int [] src = (int [])channel_src.get(i);
+		    	channel_sum[i] = DeltaMapper.getPaethSum2(src, xdim, ydim, 20);
+		    }
+		    long stop_time = System.nanoTime();
+		    System.out.println("It took " + ((stop_time - start_time)/ 1000000) + " ms to get the paeth sum for all six channels.");
+		    
 		    for(int i = 0; i < 6; i++)
 		    {
 		    	int [] src = (int [])channel_src.get(i);
 		    	int [] delta = new int[xdim * ydim];
-		    	ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
-		    	channel_sum[i]   = (int)result.get(0);
+		    	
+		    	
+			    ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
+				
 			    delta = (int [])result.get(1);
 			    ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[i] = (int)histogram_list.get(0);
@@ -489,16 +503,18 @@ public class AdaptiveEncoder
 				int compression_amount = 0;
 				if(zero_ratio >= .5)
 				{
-					long start_time = System.nanoTime();
+
+					start_time = System.nanoTime();
 					for(int j = 0; j < 100; j++)
 				        compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 0);
-				    long stop_time = System.nanoTime();
-				    
+				    stop_time = System.nanoTime();
 				    System.out.println("It took an average " + ((stop_time - start_time)/ 100000000) + " ms to see if the string would compress.");
-				    
+					//compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 0);
 				    if(compression_amount < 0)
 				    {
 				    	int compression_length = 0;
+				    	
+				    	/*
 				    	start_time = System.nanoTime();
 				    	for(int j = 0; j < 100; j++)
 				    	    compression_length = DeltaMapper.compressZeroStrings3(string, channel_length[i], compression_string);
@@ -506,6 +522,8 @@ public class AdaptiveEncoder
 				    	System.out.println("It took an average " + ((stop_time - start_time)/ 100000000) + " ms to actually compress.");		
 		        	    int iterations = DeltaMapper.getIterations(compression_string, compression_length);	
 		        	    System.out.println("There were " + iterations + " iterations of the bitwise compression.");	
+		        	    */
+				    	compression_length = DeltaMapper.compressZeroStrings3(string, channel_length[i], compression_string);
 		        	    channel_compressed_length[i] = compression_length;
 				    }
 				    else
@@ -514,14 +532,17 @@ public class AdaptiveEncoder
 				}
 				else
 				{
+					/*
 					long start_time = System.nanoTime();
 					for(int j = 0; j < 100; j++)
 				        compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 1);
 				    long stop_time = System.nanoTime();
-				    
 				    System.out.println("It took an average " + ((stop_time - start_time)/ 1000000) + " ms to see if the string would compress.");
+				    */
 				    if(compression_amount < 0)
 				    {
+				    	int compression_length = 0;
+				    	/*
 				    	start_time = System.nanoTime();
 				    	int compression_length = 0;
 				    	for(int j = 0; j < 100; j++)
@@ -530,6 +551,8 @@ public class AdaptiveEncoder
 				    	System.out.println("It took " + ((stop_time - start_time)/ 100000000) + " ms to actually compress.");		
 		        	    int iterations = DeltaMapper.getIterations(compression_string, compression_length);	
 		        	    System.out.println("There were " + iterations + " iterations of the bitwise compression.");	
+		        	    */
+				    	compression_length = DeltaMapper.compressOneStrings3(string, channel_length[i], compression_string);
 		        	    channel_compressed_length[i] = compression_length;
 				    }
 				    else
