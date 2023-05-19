@@ -51,7 +51,7 @@ public class AdaptiveEncoder
 	
 	double  file_ratio;
 	int     min_set_id = 0;
-	int     pixel_shift = 3;
+	int     pixel_shift = 6;
 	long    file_length = 0;
 	boolean initialized = false;
 	
@@ -134,8 +134,6 @@ public class AdaptiveEncoder
 			    	}
 			    }
                
-			    
-			    
 			    JFrame frame = new JFrame("AdaptiveEncoder");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
@@ -531,7 +529,7 @@ public class AdaptiveEncoder
 				    channel_compression_type[j] = 0;
 				    data_list.add(string);
 				}
-				channel_rate[j]    = channel_min_length[i];
+				channel_rate[j]    = channel_min_length[j];
 				channel_rate[j]   /= pixel_length;
 			}
 		  
@@ -644,10 +642,10 @@ public class AdaptiveEncoder
 				apply_item.doClick();
 			
 			System.out.println("Saving " + set_string[min_set_id]);
-			System.out.println("Set rate  is " + String.format("%.2f", set_rate[min_set_id]));
-			System.out.println("RGB rate  is " + String.format("%.2f", set_rate[0]));
-			System.out.println("File rate is " + String.format("%.2f", file_ratio));
-			System.out.println("Shift is     " + pixel_shift);
+			//System.out.println("Set rate  is " + String.format("%.2f", set_rate[min_set_id]));
+			//System.out.println("RGB rate  is " + String.format("%.2f", set_rate[0]));
+			//System.out.println("File rate is " + String.format("%.2f", file_ratio));
+			//System.out.println("Shift is     " + pixel_shift);
 		    
 			System.out.println();
 			
@@ -667,6 +665,7 @@ public class AdaptiveEncoder
 		        
 		        for(int i = 0; i < 3; i++)
 		        {
+		        	
 		        	int j = channel[i];
 		            
 		        	System.out.println("Saving " + channel_string[j] + " channel.");
@@ -692,17 +691,21 @@ public class AdaptiveEncoder
 		            
 		            System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
 		            System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
-		            System.out.println();
+		            
 		            // The length of the table used for string packing/unpacking.
-		            int [] string_table = (int[])channel_table.get(j);
+		           
+		            
+		            // We're only saving tables for selected channels,
+		            // so we use i instead of j.
+		            int [] string_table = (int[])channel_table.get(i);
 		            out.writeShort(string_table.length);
 		            //System.out.println("String table length is " + string_table.length);
-		        
+		       
 		            // The table itself.
 		            for(int k = 0; k < string_table.length; k++)
 		                out.writeInt(string_table[k]);
 		       
-		            // The lengths of the packed and compressed bitstrings.
+		            // The lengths of the packed or compressed bitstrings.
 		            
 		            int byte_length = 0;
 		            if(channel_length[j] <= channel_compressed_length[j])
@@ -715,20 +718,14 @@ public class AdaptiveEncoder
 		            else
 		            {
 		            	out.writeInt(channel_compressed_length[j]);
-		            	byte_length = channel_length[j] / 8;
-		                if(channel_length[j] % 8 != 0)
+		            	byte_length = channel_compressed_length[j] / 8 + 1;
+		                if(channel_compressed_length[j] % 8 != 0)
 		                	byte_length++;
 		            }
-		            System.out.println();
-		       
-
+		            
+		            // The data itself.
 		            ArrayList data_list = (ArrayList)channel_data.get(j);
 		            byte[] data = (byte[])data_list.get(0);
-		        
-		            // The length of the data.
-		            out.writeInt(byte_length);
-		        
-		            // The data itself.
 		            out.write(data, 0, byte_length);
 		        } 
 		        out.flush();
