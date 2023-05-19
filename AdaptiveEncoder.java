@@ -461,122 +461,13 @@ public class AdaptiveEncoder
 		    channel_src.add(shifted_red_green);
 		    channel_src.add(shifted_red_blue);
 		    
-		    
-		    
-		    
-		    long start_time = System.nanoTime();
 		    for(int i = 0; i < 6; i++)
 		    {
 		    	int [] src = (int [])channel_src.get(i);
 		    	channel_sum[i] = DeltaMapper.getPaethSum2(src, xdim, ydim, 20);
 		    }
-		    long stop_time = System.nanoTime();
-		    System.out.println("It took " + ((stop_time - start_time)/ 1000000) + " ms to get the paeth sum for all six channels.");
 		    
-		    for(int i = 0; i < 6; i++)
-		    {
-		    	int [] src = (int [])channel_src.get(i);
-		    	int [] delta = new int[xdim * ydim];
-		    	
-		    	
-			    ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
-				
-			    delta = (int [])result.get(1);
-			    ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
-			    channel_delta_min[i] = (int)histogram_list.get(0);
-		
-				int [] histogram            = (int[])histogram_list.get(1);
-				int [] string_table = DeltaMapper.getRankTable(histogram);
-				channel_table.add(string_table);
-				
-				ArrayList data_list = (ArrayList)channel_data.get(i);
-				data_list.clear();
-				
-				
-				
-				for(int j = 1; j < delta.length; j++)
-					delta[j] -= channel_delta_min[i];
-				byte [] string         = new byte[xdim * ydim * 2];
-				byte [] compression_string = new byte[xdim * ydim * 2];
-				channel_length[i]      = DeltaMapper.packStrings2(delta, string_table, string);
-				double zero_ratio      = DeltaMapper.getZeroRatio(string, channel_length[i]);
-				int compression_amount = 0;
-				if(zero_ratio >= .5)
-				{
-
-					start_time = System.nanoTime();
-					for(int j = 0; j < 100; j++)
-				        compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 0);
-				    stop_time = System.nanoTime();
-				    System.out.println("It took an average " + ((stop_time - start_time)/ 100000000) + " ms to see if the string would compress.");
-					//compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 0);
-				    if(compression_amount < 0)
-				    {
-				    	int compression_length = 0;
-				    	
-				    	/*
-				    	start_time = System.nanoTime();
-				    	for(int j = 0; j < 100; j++)
-				    	    compression_length = DeltaMapper.compressZeroStrings3(string, channel_length[i], compression_string);
-				    	stop_time = System.nanoTime();
-				    	System.out.println("It took an average " + ((stop_time - start_time)/ 100000000) + " ms to actually compress.");		
-		        	    int iterations = DeltaMapper.getIterations(compression_string, compression_length);	
-		        	    System.out.println("There were " + iterations + " iterations of the bitwise compression.");	
-		        	    */
-				    	compression_length = DeltaMapper.compressZeroStrings3(string, channel_length[i], compression_string);
-		        	    channel_compressed_length[i] = compression_length;
-				    }
-				    else
-				    	channel_compressed_length[i] = channel_length[i] + compression_amount;
-				    
-				}
-				else
-				{
-					/*
-					long start_time = System.nanoTime();
-					for(int j = 0; j < 100; j++)
-				        compression_amount = DeltaMapper.getCompressionAmount(string, channel_length[i], 1);
-				    long stop_time = System.nanoTime();
-				    System.out.println("It took an average " + ((stop_time - start_time)/ 1000000) + " ms to see if the string would compress.");
-				    */
-				    if(compression_amount < 0)
-				    {
-				    	int compression_length = 0;
-				    	/*
-				    	start_time = System.nanoTime();
-				    	int compression_length = 0;
-				    	for(int j = 0; j < 100; j++)
-				    	    compression_length = DeltaMapper.compressOneStrings3(string, channel_length[i], compression_string);
-				    	stop_time = System.nanoTime();
-				    	System.out.println("It took " + ((stop_time - start_time)/ 100000000) + " ms to actually compress.");		
-		        	    int iterations = DeltaMapper.getIterations(compression_string, compression_length);	
-		        	    System.out.println("There were " + iterations + " iterations of the bitwise compression.");	
-		        	    */
-				    	compression_length = DeltaMapper.compressOneStrings3(string, channel_length[i], compression_string);
-		        	    channel_compressed_length[i] = compression_length;
-				    }
-				    else
-				    	channel_compressed_length[i] = channel_length[i] + compression_amount;
-				}
-				
-				if(channel_compressed_length[i] < channel_length[i])
-				{
-				    channel_min_length[i] = channel_compressed_length[i];
-				    channel_compression_type[i] = 1;
-				}
-				else
-				{
-					channel_min_length[i] = channel_length[i];
-				    channel_compression_type[i] = 0;	
-				}
-				channel_rate[i]    = channel_min_length[i];
-				channel_rate[i]   /= pixel_length;
-		    }
-		    
-		    
-			//System.out.println("************************************************************************");
-		   
-			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
+		    set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 			set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
 			set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
 			set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
@@ -586,7 +477,65 @@ public class AdaptiveEncoder
 			set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
 			set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
 			set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+		    
+			int min_index     = 0;
+			int min_delta_sum = Integer.MAX_VALUE;
+			for(int i = 0; i < 10; i++)
+			{
+				if(set_sum[i] < min_delta_sum)
+				{
+				    min_delta_sum = set_sum[i];
+				    min_index = i;
+				}
+			}
+		    
+			min_set_id = min_index;
+			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
+			System.out.println();
 			
+			int [] channel = DeltaMapper.getChannels(min_set_id);
+		    
+			for(int i = 0; i < 3; i++)
+			{
+				int       j      = channel[i];
+				int []    src    = (int [])channel_src.get(j);
+				ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
+				int []    delta  = (int [])result.get(1);
+				
+				ArrayList histogram_list = DeltaMapper.getHistogram(delta);
+			    channel_delta_min[j]     = (int)histogram_list.get(0);
+			    int [] histogram         = (int[])histogram_list.get(1);
+				int [] string_table = DeltaMapper.getRankTable(histogram);
+				channel_table.add(string_table);
+				ArrayList data_list = (ArrayList)channel_data.get(j);
+				data_list.clear();
+				for(int k = 1; k < delta.length; k++)
+					delta[k] -= channel_delta_min[j];
+				byte [] string         = new byte[xdim * ydim * 2];
+				byte [] compression_string = new byte[xdim * ydim * 2];
+				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
+				double zero_ratio      = DeltaMapper.getZeroRatio(string, channel_length[j]);
+				if(zero_ratio >= .5)
+					channel_compressed_length[j] = DeltaMapper.compressZeroStrings3(string, channel_length[j], compression_string);
+				else
+					channel_compressed_length[j] = DeltaMapper.compressOneStrings3(string, channel_length[j], compression_string);	
+				if(channel_compressed_length[j] < channel_length[j])
+				{
+				    channel_min_length[j] = channel_compressed_length[j];
+				    channel_compression_type[j] = 1;
+				    data_list.add(compression_string);
+				}
+				else
+				{
+					channel_min_length[j] = channel_length[j];
+				    channel_compression_type[j] = 0;
+				    data_list.add(string);
+				}
+				channel_rate[j]    = channel_min_length[i];
+				channel_rate[j]   /= pixel_length;
+			}
+		  
+			/*
 			set_rate[0] = (channel_rate[0] + channel_rate[1] + channel_rate[2]) / 3;
 			set_rate[1] = (channel_rate[0] + channel_rate[4] + channel_rate[2]) / 3;
 			set_rate[2] = (channel_rate[0] + channel_rate[3] + channel_rate[2]) / 3;
@@ -598,23 +547,14 @@ public class AdaptiveEncoder
 			set_rate[8] = (channel_rate[5] + channel_rate[1] + channel_rate[4]) / 3;
 			set_rate[9] = (channel_rate[5] + channel_rate[4] + channel_rate[2]) / 3;
 			
-			int min_index     = 0;
-			int min_delta_sum = Integer.MAX_VALUE;
-			for(int i = 0; i < 10; i++)
-			{
-				if(set_sum[i] < min_delta_sum)
-				{
-				    min_delta_sum = set_sum[i];
-				    min_index = i;
-				}
-			}
+			
 			
 			min_set_id = min_index;
 			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
 			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
 			System.out.println();
 			
-			int [] channel = DeltaMapper.getChannels(min_set_id);
+			
 			
 			double rate = 1;
 			for(int i = 0; i < 3; i++)
@@ -632,6 +572,7 @@ public class AdaptiveEncoder
 				System.out.println();
 			}
 			
+			*/
 	    	
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
@@ -762,20 +703,33 @@ public class AdaptiveEncoder
 		                out.writeInt(string_table[k]);
 		       
 		            // The lengths of the packed and compressed bitstrings.
-		            out.writeInt(channel_length[j]);
-		        	out.writeInt(channel_compressed_length[j]);
+		            
+		            int byte_length = 0;
+		            if(channel_length[j] <= channel_compressed_length[j])
+		            {	
+		                out.writeInt(channel_length[j]);
+		                byte_length = channel_length[j] / 8;
+		                if(channel_length[j] % 8 != 0)
+		                	byte_length++;
+		            }
+		            else
+		            {
+		            	out.writeInt(channel_compressed_length[j]);
+		            	byte_length = channel_length[j] / 8;
+		                if(channel_length[j] % 8 != 0)
+		                	byte_length++;
+		            }
 		            System.out.println();
 		       
-		            /*
+
 		            ArrayList data_list = (ArrayList)channel_data.get(j);
-		            byte[] data = (byte[])data_list.get(channel_compression_type[j]);
+		            byte[] data = (byte[])data_list.get(0);
 		        
 		            // The length of the data.
-		            out.writeInt(data.length);
+		            out.writeInt(byte_length);
 		        
 		            // The data itself.
-		            out.write(data, 0, data.length);
-		            */
+		            out.write(data, 0, byte_length);
 		        } 
 		        out.flush();
 		        out.close();
