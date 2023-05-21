@@ -505,72 +505,34 @@ public class AdaptiveEncoder
 			    int [] histogram         = (int[])histogram_list.get(1);
 				int [] string_table = DeltaMapper.getRankTable(histogram);
 				channel_table.add(string_table);
-				ArrayList data_list = (ArrayList)channel_data.get(j);
-				data_list.clear();
+				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
 				byte [] string         = new byte[xdim * ydim * 2];
 				byte [] compression_string = new byte[xdim * ydim * 2];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
-				double zero_ratio      = DeltaMapper.getZeroRatio(string, channel_length[j]);
-				if(zero_ratio >= .5)
-					channel_compressed_length[j] = DeltaMapper.compressZeroStrings3(string, channel_length[j], compression_string);
-				else
-					channel_compressed_length[j] = DeltaMapper.compressOneStrings3(string, channel_length[j], compression_string);	
-				if(channel_compressed_length[j] < channel_length[j])
-				{
-				    channel_min_length[j] = channel_compressed_length[j];
-				    channel_compression_type[j] = 1;
-				    data_list.add(compression_string);
-				}
-				else
-				{
-					channel_min_length[j] = channel_length[j];
-				    channel_compression_type[j] = 0;
-				    data_list.add(string);
-				}
-				channel_rate[j]    = channel_min_length[j];
-				channel_rate[j]   /= pixel_length;
+				
+				int minimum_segment_length = 64 + segment_length * 8;
+			    //ArrayList transform_list = DeltaMapper.getTransformInformation2(string, channel_length[j], minimum_segment_length);
+				//ArrayList string_list = (ArrayList)transform_list.get(0);
+				
+				ArrayList segment_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
+				
+				// The list of bit string lengths--the actual length of a the segment data is 1 or 2 bytes more than
+				// the bit length / 8, 1 if it divides evenly, and 2 if there are any odd bits.
+				ArrayList segment_length  = (ArrayList)segment_list.get(0);
+				ArrayList segment_data    = (ArrayList)segment_list.get(1);		;
+				
+				int n = segment_data.size();
+				
+				
+				
+				ArrayList data_list = (ArrayList)channel_data.get(j);
+				data_list.clear();
+				data_list.add(segment_length);
+				data_list.add(segment_data);
 			}
 		  
-			/*
-			set_rate[0] = (channel_rate[0] + channel_rate[1] + channel_rate[2]) / 3;
-			set_rate[1] = (channel_rate[0] + channel_rate[4] + channel_rate[2]) / 3;
-			set_rate[2] = (channel_rate[0] + channel_rate[3] + channel_rate[2]) / 3;
-			set_rate[3] = (channel_rate[0] + channel_rate[1] + channel_rate[4]) / 3;
-			set_rate[4] = (channel_rate[0] + channel_rate[3] + channel_rate[5]) / 3;
-			set_rate[5] = (channel_rate[3] + channel_rate[1] + channel_rate[2]) / 3;
-			set_rate[6] = (channel_rate[3] + channel_rate[4] + channel_rate[2]) / 3;
-			set_rate[7] = (channel_rate[3] + channel_rate[1] + channel_rate[4]) / 3;
-			set_rate[8] = (channel_rate[5] + channel_rate[1] + channel_rate[4]) / 3;
-			set_rate[9] = (channel_rate[5] + channel_rate[4] + channel_rate[2]) / 3;
-			
-			
-			
-			min_set_id = min_index;
-			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			System.out.println("Set rate is " + String.format("%.4f", set_rate[min_index]));
-			System.out.println();
-			
-			
-			
-			double rate = 1;
-			for(int i = 0; i < 3; i++)
-			{
-				int channel_id = channel[i];
-				System.out.println(channel_string[channel_id] + ":");
-				
-				rate  = channel_min_length[channel_id];
-				rate /= pixel_length;
-				if(channel_compression_type[i] == 0)
-				    System.out.println("Packed string rate is " + String.format("%.4f", rate));
-				else
-					System.out.println("Compressed string rate is " + String.format("%.4f", rate));
-				
-				System.out.println();
-			}
-			
-			*/
 	    	
 			// This code produces an image that should be exactly the same
 		    // as the processed image.  
@@ -684,17 +646,15 @@ public class AdaptiveEncoder
 		            //System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
 		        
 		            // Compression type 0/1.
-		            out.writeByte(channel_compression_type[j]);
+		            //out.writeByte(channel_compression_type[j]);
 		            
 		            // Bit type.
-		            out.writeByte(channel_bit_type[j]);
+		            //out.writeByte(channel_bit_type[j]);
 		            
-		            System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
-		            System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
+		            //System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
+		            //System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
 		            
 		            // The length of the table used for string packing/unpacking.
-		           
-		            
 		            // We're only saving tables for selected channels,
 		            // so we use i instead of j.
 		            int [] string_table = (int[])channel_table.get(i);
@@ -705,28 +665,46 @@ public class AdaptiveEncoder
 		            for(int k = 0; k < string_table.length; k++)
 		                out.writeInt(string_table[k]);
 		       
-		            // The lengths of the packed or compressed bitstrings.
-		            
-		            int byte_length = 0;
-		            if(channel_length[j] <= channel_compressed_length[j])
-		            {	
-		                out.writeInt(channel_length[j]);
-		                byte_length = channel_length[j] / 8;
-		                if(channel_length[j] % 8 != 0)
-		                	byte_length++;
-		            }
-		            else
-		            {
-		            	out.writeInt(channel_compressed_length[j]);
-		            	byte_length = channel_compressed_length[j] / 8 + 1;
-		                if(channel_compressed_length[j] % 8 != 0)
-		                	byte_length++;
-		            }
+		            // The length of the packed strings concatenated.
+		            out.writeInt(channel_length[j]);
 		            
 		            // The data itself.
 		            ArrayList data_list = (ArrayList)channel_data.get(j);
-		            byte[] data = (byte[])data_list.get(0);
-		            out.write(data, 0, byte_length);
+		            
+		            ArrayList segment_length = (ArrayList)data_list.get(0);
+		            ArrayList segment_data   = (ArrayList)data_list.get(1);
+		            
+		            int n = segment_length.size();
+		            
+		            // Number of segments.
+		            out.writeInt(n);
+		            
+		            for(int k = 0; k < n; k++)
+		            {
+		            	int bit_length = (int)segment_length.get(k);
+		            	byte [] segment = (byte [])segment_data.get(k);
+		            	out.writeInt(bit_length);
+		            	out.writeInt(segment.length);
+		            	out.write(segment, 0, segment.length);
+		            	
+		            	int iterations = DeltaMapper.getIterations(segment, bit_length);
+		            	int string_type = DeltaMapper.getStringType(segment, bit_length);
+		            	
+		            	if(iterations == 0)
+		            	{
+		            		System.out.println("Segment is uncompressed.");
+		            	}
+		            	else
+		            	{
+		            		 byte [] string = new byte[2 * iterations * segment.length];
+					         int string_length = 0;
+					         if(string_type == 0)
+					    	       string_length = DeltaMapper.decompressZeroStrings(segment, bit_length, string);
+					          else
+					    	       string_length = DeltaMapper.decompressOneStrings(segment, bit_length, string);
+					          System.out.println("Decompressed string length is " + string_length);
+		            	}		
+		            }
 		        } 
 		        out.flush();
 		        out.close();
