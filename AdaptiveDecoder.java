@@ -117,10 +117,10 @@ public class AdaptiveDecoder
 			   int delta_min  = in.readInt();
 			   System.out.println("Init value is " + init_value + ", delta minimum is " + delta_min);
 			    
-			   int compression = in.readByte();
-			   System.out.println("Compression type is " + compression_string[compression]);
+			   //int compression = in.readByte();
+			   //System.out.println("Compression type is " + compression_string[compression]);
 			        
-			   byte compression_bit_type = in.readByte();
+			   //byte compression_bit_type = in.readByte();
 			    
 			   int table_length = 0;
 			    
@@ -132,21 +132,68 @@ public class AdaptiveDecoder
 			   {
 			    	string_table[j] = in.readInt();
 			   }
-			   //System.out.println("Read string table.");
+			   System.out.println("Read string table.");
 			   
-			   int bit_length = in.readInt();
-			   int byte_length = bit_length / 8;
-			   if(bit_length % 8 != 0)
-			   {
+			   // We can use this to check the length of the concatenated segments.
+			   int channel_bit_length = in.readInt();
+			   System.out.println("Bit length of packed strings is " + channel_bit_length);
+			   
+			   // Number of segments
+			   int n = in.readInt(); 
+			   
+			   System.out.println("There are " + n + " segments.");
+		       
+			   int byte_length = channel_bit_length / 8;
+			   if(channel_bit_length % 8 != 0)
 				   byte_length++;
+			   byte [] string = new byte[byte_length * 2];
+			   int offset = 0;
+			   for(int j = 0; j < n; j++)
+			   {
+				   int  segment_byte_length = in.readInt();
+				   byte extra_bits          = in.readByte();
+				   byte [] segment = new byte[segment_byte_length];
+			       in.read(segment, 0, segment_byte_length);
+			       
+			       int segment_bit_length = segment_byte_length * 8 - extra_bits;
+			       
+			       
+			       int iterations         = DeltaMapper.getIterations(segment, segment_bit_length);
+			       int string_type        = DeltaMapper.getStringType(segment, segment_bit_length);
+			       if(iterations == 0)
+			       {
+			    	   for(int k = 0; k < segment.length - 1; k++) 
+			    	       string[offset + k] = segment[k];
+			    	   offset += segment.length - 1;
+			       }
+			       else
+			       {
+			    	   byte [] decompressed_segment = new byte[iterations * segment_bit_length * 2];
+			    	   
+			    	   int decompression_length = 0;
+			    	   if(string_type == 0)
+			    		   decompression_length = DeltaMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);      
+			    	   else
+			    		   decompression_length = DeltaMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
+			    	   byte_length = decompression_length / 8;
+			    	   if(decompression_length % 8 != 0)
+			    	   {
+			    		   if(j == n - 1)
+			    			   byte_length++;
+			    		   else
+			    			   System.out.println("Uneven segment.");
+			    	   }
+			    	   for(int k = 0; k < byte_length; k++) 
+			    	       string[offset + k] = decompressed_segment[k];
+			    	   offset += byte_length;
+			    	   
+			       }
+			       
 			   }
-			   if(compression == 1)
-				   byte_length++;   
-			  
 			   
-			   byte [] data = new byte[byte_length];
-		       in.read(data, 0, byte_length);
-			   
+			   System.out.println("Finished reading segments.");
+			   System.out.println();
+		       /*
 			    if(compression == 0)
 			    {
 			    	int number_unpacked = DeltaMapper.unpackStrings2(data, string_table, delta);
@@ -188,11 +235,16 @@ public class AdaptiveDecoder
 					System.out.println("Putting data for " + channel_string[channel] + " in image table.");
 			    }
 			    System.out.println();
+			    */
+		       
 			        
 			} 
 		    in.close();
 		    
+		    
+		    
 		   // Figure out what channels we have.
+		    /*
 		    if(image_table.containsKey(0))
 		    {
 		        blue = image_table.get(0);	
@@ -364,12 +416,14 @@ public class AdaptiveDecoder
 		        else
        	        System.out.println("Table does not contain complete set.");
 		    }
-		    
+		    */
 	    }
 		catch(Exception e)
 	    {
 	    	System.out.println(e.toString());
 	    }
+	   
+		
 		image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 	
 		for(int i = 0; i < ydim; i++)

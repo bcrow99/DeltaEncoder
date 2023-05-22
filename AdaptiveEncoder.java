@@ -513,24 +513,45 @@ public class AdaptiveEncoder
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
 				
 				int minimum_segment_length = 64 + segment_length * 8;
-			    //ArrayList transform_list = DeltaMapper.getTransformInformation2(string, channel_length[j], minimum_segment_length);
-				//ArrayList string_list = (ArrayList)transform_list.get(0);
-				
-				ArrayList segment_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
-				
-				// The list of bit string lengths--the actual length of a the segment data is 1 or 2 bytes more than
-				// the bit length / 8, 1 if it divides evenly, and 2 if there are any odd bits.
-				ArrayList segment_length  = (ArrayList)segment_list.get(0);
-				ArrayList segment_data    = (ArrayList)segment_list.get(1);		;
-				
-				int n = segment_data.size();
-				
-				
-				
-				ArrayList data_list = (ArrayList)channel_data.get(j);
-				data_list.clear();
-				data_list.add(segment_length);
-				data_list.add(segment_data);
+			   
+				ArrayList segment_list = DeltaMapper.getMergedSegments(string, channel_length[j], minimum_segment_length);
+				int number_of_segments = segment_list.size();
+				ArrayList compression_length = new ArrayList();
+				ArrayList compression_data   = new ArrayList();
+				for(int k = 0; k < number_of_segments; k++)
+				{
+					
+				    ArrayList segment_data = (ArrayList)segment_list.get(k);
+				    
+				    double    zero_ratio   = (double)segment_data.get(0);
+				    int       iterations   = (int)segment_data.get(1);
+				    int       bit_offset   = (int)segment_data.get(2);
+				    int       bit_length   = (int)segment_data.get(3);
+				    int       t_length     = (int)segment_data.get(4);
+				    byte[]    data         = (byte [])segment_data.get(5);
+				   
+				    compression_length.add(t_length);
+				    compression_data.add(data);
+				    if(iterations != 0)
+				    {
+				        int byte_length = bit_length / 8;
+				        if(bit_length % 8 != 0)
+				    	    byte_length++;
+				        byte [] processed_segment = new byte[2 * byte_length];
+				        int d_length = 0;
+				        if(zero_ratio >= .5)
+				    	    d_length = DeltaMapper.decompressZeroStrings(data, t_length, processed_segment);
+				        else
+				        	d_length = DeltaMapper.decompressOneStrings(data, t_length, processed_segment);
+				        if(d_length != bit_length)
+				        
+				        System.out.println("Decompressed length different from original length."); 
+				    }  
+				    ArrayList data_list = (ArrayList)channel_data.get(j);
+					data_list.clear();
+					data_list.add(compression_length);
+					data_list.add(compression_data);
+				}
 			}
 		  
 	    	
@@ -681,29 +702,14 @@ public class AdaptiveEncoder
 		            
 		            for(int k = 0; k < n; k++)
 		            {
-		            	int bit_length = (int)segment_length.get(k);
+		            	int bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
-		            	out.writeInt(bit_length);
+		            	byte extra_bits = 8;
+		            	extra_bits     += bit_length % 8;
+		            	
 		            	out.writeInt(segment.length);
+		            	out.writeByte(extra_bits);
 		            	out.write(segment, 0, segment.length);
-		            	
-		            	int iterations = DeltaMapper.getIterations(segment, bit_length);
-		            	int string_type = DeltaMapper.getStringType(segment, bit_length);
-		            	
-		            	if(iterations == 0)
-		            	{
-		            		System.out.println("Segment is uncompressed.");
-		            	}
-		            	else
-		            	{
-		            		 byte [] string = new byte[2 * iterations * segment.length];
-					         int string_length = 0;
-					         if(string_type == 0)
-					    	       string_length = DeltaMapper.decompressZeroStrings(segment, bit_length, string);
-					          else
-					    	       string_length = DeltaMapper.decompressOneStrings(segment, bit_length, string);
-					          System.out.println("Decompressed string length is " + string_length);
-		            	}		
 		            }
 		        } 
 		        out.flush();
