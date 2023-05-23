@@ -515,7 +515,7 @@ public class AdaptiveEncoder
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
 				
-				ArrayList segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
+				ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
 				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
 				ArrayList compression_data   = (ArrayList)segment_data_list.get(1);
 				ArrayList data_list = (ArrayList)channel_data.get(j);

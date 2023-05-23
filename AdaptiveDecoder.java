@@ -117,10 +117,7 @@ public class AdaptiveDecoder
 			   int delta_min  = in.readInt();
 			   System.out.println("Init value is " + init_value + ", delta minimum is " + delta_min);
 			    
-			   //int compression = in.readByte();
-			   //System.out.println("Compression type is " + compression_string[compression]);
-			        
-			   //byte compression_bit_type = in.readByte();
+			  
 			    
 			   int table_length = 0;
 			    
@@ -207,50 +204,6 @@ public class AdaptiveDecoder
 						result[j] += channel_min;
 				image_table.put(channel, result);
 				System.out.println("Putting data for " + channel_string[channel] + " in image table.");
-		       /*
-			    if(compression == 0)
-			    {
-			    	int number_unpacked = DeltaMapper.unpackStrings2(data, string_table, delta);
-				    if(number_unpacked != xdim * ydim)
-				    	System.out.println("Number of values unpacked does not agree with image dimensions.");	
-				    else
-				    	System.out.println("Unpacked strings.");
-				    for(int j = 1; j < delta.length; j++)
-					     delta[j] += delta_min;
-				    int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
-					if(channel > 2)
-						for(int j = 0; j < result.length; j++)
-							result[j] += channel_min;
-					
-					image_table.put(channel, result);
-					System.out.println("Putting data for " + channel_string[channel] + " in image table.");
-			    }
-			    else if(compression == 1)
-			    {
-			        byte [] string = new byte[xdim * ydim * 8];
-			        int string_length = 0;
-			        if(compression_bit_type == 0)
-			        	string_length = DeltaMapper.decompressZeroStrings(data, bit_length, string);	
-			        else
-			        	string_length = DeltaMapper.decompressOneStrings(data, bit_length, string);
-			        int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
-				    if(number_unpacked != xdim * ydim)
-				    	System.out.println("Number of values unpacked does not agree with image dimensions.");	
-				    else
-				    	System.out.println("Unpacked strings.");
-				    for(int j = 1; j < delta.length; j++)
-					     delta[j] += delta_min;
-				    int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
-					if(channel > 2)
-						for(int j = 0; j < result.length; j++)
-							result[j] += channel_min;
-					
-					image_table.put(channel, result);
-					System.out.println("Putting data for " + channel_string[channel] + " in image table.");
-			    }
-			    System.out.println();
-			    */
-		       
 			        
 			} 
 		    in.close();
