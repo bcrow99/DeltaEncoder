@@ -150,7 +150,7 @@ public class AdaptiveDecoder
 			   int offset = 0;
 			   for(int j = 0; j < n; j++)
 			   {
-				   int  segment_byte_length = in.readInt();
+				   int  segment_byte_length = in.readShort();
 				   byte extra_bits          = in.readByte();
 				   byte [] segment = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
@@ -193,6 +193,20 @@ public class AdaptiveDecoder
 			   
 			   System.out.println("Finished reading segments.");
 			   System.out.println();
+			   
+			   int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
+			    if(number_unpacked != xdim * ydim)
+			    	System.out.println("Number of values unpacked does not agree with image dimensions.");	
+			    else
+			    	System.out.println("Unpacked strings.");
+			    for(int j = 1; j < delta.length; j++)
+				     delta[j] += delta_min;
+			    int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
+				if(channel > 2)
+					for(int j = 0; j < result.length; j++)
+						result[j] += channel_min;
+				image_table.put(channel, result);
+				System.out.println("Putting data for " + channel_string[channel] + " in image table.");
 		       /*
 			    if(compression == 0)
 			    {
@@ -244,7 +258,7 @@ public class AdaptiveDecoder
 		    
 		    
 		   // Figure out what channels we have.
-		    /*
+		  
 		    if(image_table.containsKey(0))
 		    {
 		        blue = image_table.get(0);	
@@ -416,7 +430,7 @@ public class AdaptiveDecoder
 		        else
        	        System.out.println("Table does not contain complete set.");
 		    }
-		    */
+		    
 	    }
 		catch(Exception e)
 	    {

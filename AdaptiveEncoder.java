@@ -514,8 +514,12 @@ public class AdaptiveEncoder
 				
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
-				ArrayList segment_list = DeltaMapper.getMergedSegments(string, channel_length[j], minimum_segment_length);
-				int number_of_segments = segment_list.size();
+				
+				//ArrayList segment_list = DeltaMapper.getMergedSegments(string, channel_length[j], minimum_segment_length);
+				//ArrayList segment_list = DeltaMapper.getTransformInformation2(string, channel_length[j], minimum_segment_length);
+				//int number_of_segments = segment_list.size();
+				
+				/*
 				ArrayList compression_length = new ArrayList();
 				ArrayList compression_data   = new ArrayList();
 				for(int k = 0; k < number_of_segments; k++)
@@ -547,11 +551,15 @@ public class AdaptiveEncoder
 				        
 				        System.out.println("Decompressed length different from original length."); 
 				    }  
-				    ArrayList data_list = (ArrayList)channel_data.get(j);
-					data_list.clear();
-					data_list.add(compression_length);
-					data_list.add(compression_data);
 				}
+				*/
+				ArrayList segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
+				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
+				ArrayList compression_data   = (ArrayList)segment_data_list.get(1);
+				ArrayList data_list = (ArrayList)channel_data.get(j);
+				data_list.clear();
+				data_list.add(compression_length);
+				data_list.add(compression_data);
 			}
 		  
 	    	
@@ -705,9 +713,10 @@ public class AdaptiveEncoder
 		            	int bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
 		            	byte extra_bits = 8;
-		            	extra_bits     += bit_length % 8;
+		            	if(bit_length % 8 != 0)
+		            	    extra_bits     += 8 - (bit_length % 8);
 		            	
-		            	out.writeInt(segment.length);
+		            	out.writeShort(segment.length);
 		            	out.writeByte(extra_bits);
 		            	out.write(segment, 0, segment.length);
 		            }
