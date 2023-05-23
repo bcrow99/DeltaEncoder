@@ -51,7 +51,7 @@ public class AdaptiveEncoder
 	
 	double  file_ratio;
 	int     min_set_id = 0;
-	int     pixel_shift = 6;
+	int     pixel_shift = 1;
 	long    file_length = 0;
 	boolean initialized = false;
 	
@@ -515,44 +515,6 @@ public class AdaptiveEncoder
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
 				
-				//ArrayList segment_list = DeltaMapper.getMergedSegments(string, channel_length[j], minimum_segment_length);
-				//ArrayList segment_list = DeltaMapper.getTransformInformation2(string, channel_length[j], minimum_segment_length);
-				//int number_of_segments = segment_list.size();
-				
-				/*
-				ArrayList compression_length = new ArrayList();
-				ArrayList compression_data   = new ArrayList();
-				for(int k = 0; k < number_of_segments; k++)
-				{
-					
-				    ArrayList segment_data = (ArrayList)segment_list.get(k);
-				    
-				    double    zero_ratio   = (double)segment_data.get(0);
-				    int       iterations   = (int)segment_data.get(1);
-				    int       bit_offset   = (int)segment_data.get(2);
-				    int       bit_length   = (int)segment_data.get(3);
-				    int       t_length     = (int)segment_data.get(4);
-				    byte[]    data         = (byte [])segment_data.get(5);
-				   
-				    compression_length.add(t_length);
-				    compression_data.add(data);
-				    if(iterations != 0)
-				    {
-				        int byte_length = bit_length / 8;
-				        if(bit_length % 8 != 0)
-				    	    byte_length++;
-				        byte [] processed_segment = new byte[2 * byte_length];
-				        int d_length = 0;
-				        if(zero_ratio >= .5)
-				    	    d_length = DeltaMapper.decompressZeroStrings(data, t_length, processed_segment);
-				        else
-				        	d_length = DeltaMapper.decompressOneStrings(data, t_length, processed_segment);
-				        if(d_length != bit_length)
-				        
-				        System.out.println("Decompressed length different from original length."); 
-				    }  
-				}
-				*/
 				ArrayList segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
 				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
 				ArrayList compression_data   = (ArrayList)segment_data_list.get(1);

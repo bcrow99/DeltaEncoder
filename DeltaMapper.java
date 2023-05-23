@@ -2009,8 +2009,7 @@ public class DeltaMapper
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
-                dst[last_byte] = (byte)iterations;
-                dst[last_byte] &= 127;
+                dst[last_byte] = (byte)-iterations;
                 return current_length;
     		}
     	}
@@ -2045,8 +2044,7 @@ public class DeltaMapper
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
-                dst[last_byte] = (byte)iterations;
-                dst[last_byte] &= 127;
+                dst[last_byte] = (byte)-iterations;
                 return(current_length);
     		}
     		else
@@ -2078,8 +2076,7 @@ public class DeltaMapper
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
-                dst[last_byte] = (byte)iterations;
-                dst[last_byte] &= 127;
+                dst[last_byte] = (byte)-iterations;
                 return current_length;
     		}
     	}
@@ -2100,7 +2097,7 @@ public class DeltaMapper
         if(iterations > 0)
         	System.out.println("Is not one type string.");
         else
-        	iterations += 256;
+        	iterations = -iterations;
         
         // If it was not compressed, we copy src to dst.
         if(iterations == 0)
@@ -2159,7 +2156,7 @@ public class DeltaMapper
         	last_byte++;
         int iterations  = string[last_byte];
         if(iterations < 0)
-            iterations += 256;
+            iterations = -iterations;
         return iterations;
     }
     
@@ -2455,126 +2452,6 @@ public class DeltaMapper
     	return cost;
     }
     
-    // Still contains a small error.
-    public static ArrayList getStringData(int [] delta)
-    {
-    	ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
-	   
-
-		int [] histogram            = (int[])histogram_list.get(1);
-		int [] string_table = DeltaMapper.getRankTable(histogram);
-		
-		int    number_of_values = 0;
-		int    predicted_bit_length = 0;
-		double predicted_zero_ratio = 0;
-		int    min_value = Integer.MAX_VALUE;
-		int    min_index = 0;
-		
-		
-		for(int i = 0; i < histogram.length; i++)
-		{
-			number_of_values += histogram[i];
-			if(histogram[i] < min_value)
-			{
-				min_value = histogram[i];
-				min_index = i;
-			}
-		}
-		
-		for(int i = 0; i < histogram.length; i++)
-		{
-			if(histogram.length == 1)
-			{
-				predicted_bit_length = number_of_values;
-			    predicted_zero_ratio = 1.;   	
-			}
-			else if(histogram.length == 2)
-			{
-				predicted_bit_length += histogram[i];
-			    if(i == 1)
-			    {
-			    	if(histogram[0] > histogram[1])
-			    	    predicted_zero_ratio = histogram[0];
-			    	else
-			    		predicted_zero_ratio = histogram[1];
-			    	predicted_zero_ratio /= number_of_values;
-			    }	
-			}
-			else
-			{
-				int j = string_table[i];
-				predicted_bit_length += histogram[i] * (j + 1); 
-				
-				
-				
-				/*
-				if(i != min_index)
-				{
-					predicted_bit_length += histogram[i] * (j + 1); 	
-				}
-				else
-				{
-					predicted_bit_length += histogram[i] * j;     	
-				}
-				*/
-			}
-			predicted_zero_ratio  = number_of_values;
-	    	predicted_zero_ratio -= min_value;
-	    	predicted_zero_ratio /= predicted_bit_length;
-		}
-		
-		/*
-		for(int j = 0; j < histogram.length; j++)
-		{
-			number_of_values += histogram[j];
-			if(histogram.length == 1)
-			{
-			    predicted_bit_length = number_of_values;
-			    predicted_zero_ratio = 1.;
-			}
-			else if(histogram.length == 2)
-			{
-			    predicted_bit_length += histogram[j];
-			    if(j == 1)
-			    {
-			    	if(histogram[0] > histogram[1])
-			    	    predicted_zero_ratio = histogram[0];
-			    	else
-			    		predicted_zero_ratio = histogram[1];
-			    	predicted_zero_ratio /= number_of_values;
-			    }
-			}
-			else
-			{
-				int k = string_table[j];
-			    if(j < histogram.length - 1)	
-			    {
-			        predicted_bit_length += histogram[j] * (k + 1); 
-			        if(histogram[j] < min_value)
-			        	min_value = histogram[j];
-			    }
-			    else
-			    {
-			    	predicted_bit_length += histogram[j] * k;
-			    	if(histogram[j] < min_value)
-				        min_value = histogram[j];
-			    	
-			    	predicted_zero_ratio  = number_of_values;
-			    	predicted_zero_ratio -= min_value;
-			    	
-			    	predicted_zero_ratio /= predicted_bit_length;
-			    }
-			}
-		}
-		*/
-		//predicted_bit_length += predicted_bit_length % 8;
-		//predicted_bit_length += 8;
-    	ArrayList data_list = new ArrayList();
-    	data_list.add(predicted_bit_length);
-    	data_list.add(predicted_zero_ratio);
-    	return data_list;
-    }
-    
     public static double getZeroRatio(byte [] string, int bit_length)
     {
     	int byte_length = bit_length / 8;
@@ -2756,15 +2633,15 @@ public class DeltaMapper
                 segment[j] = string[i * segment_byte_length + j];
             
             double zero_ratio = getZeroRatio(segment, segment_bit_length);
-            
+            //System.out.println("Segment bit length is " + segment_bit_length);
             if(zero_ratio >= .5)
             {
             	int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
             	if(compression_amount < 0)
             	{
             		int compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
-            		System.out.println("Segment bit length is " + segment_bit_length);
-            		System.out.println("Compression length is " + compression_length);
+            		
+            		System.out.println("Compression length 0 is " + compression_length);
             		int byte_length = compression_length / 8 + 1;
             		if(compression_length % 8 != 0)
             			byte_length++;
@@ -2777,7 +2654,7 @@ public class DeltaMapper
         			
         			int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
         			
-        			System.out.println("Decompression length is " + decompression_length);
+        			System.out.println("Decompression length 0 is " + decompression_length);
         			
         			
         			boolean same_string = true;
@@ -2786,9 +2663,7 @@ public class DeltaMapper
         				if(segment[j] != processed_segment[j])
         					same_string = false;
         			}
-        			if(same_string)
-        			    System.out.println("Processed data is same as original data.");
-        			else
+        			if(!same_string)
         				System.out.println("Processed data is not the same as original data.");
         			System.out.println();
             	}
@@ -2808,6 +2683,7 @@ public class DeltaMapper
             	if(compression_amount < 0)
             	{
             		int compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
+            		System.out.println("Compression length 1 is " + compression_length);
             		int byte_length = compression_length / 8 + 1;
             		if(compression_length % 8 != 0)
             			byte_length++;
@@ -2816,6 +2692,21 @@ public class DeltaMapper
             			clipped_string[j] = compressed_segment[j];
             		compressed_length.add(compression_length);
         			compressed_data.add(clipped_string);
+        			
+        			
+        			int string_type = getStringType(compressed_segment, compression_length);
+                    int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
+        			
+        			System.out.println("Decompression length 1 is " + decompression_length);
+        			boolean same_string = true;
+        			for(int j = 0; j < segment.length; j++)
+        			{
+        				if(segment[j] != processed_segment[j])
+        					same_string = false;
+        			}
+        			if(!same_string)
+        				System.out.println("Processed data is not the same as original data.");
+        			System.out.println();
             	}
             	else
             	{
