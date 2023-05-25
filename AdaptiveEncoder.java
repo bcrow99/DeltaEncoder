@@ -51,7 +51,7 @@ public class AdaptiveEncoder
 	
 	double  file_ratio;
 	int     min_set_id = 0;
-	int     pixel_shift = 1;
+	int     pixel_shift = 4;
 	long    file_length = 0;
 	boolean initialized = false;
 	
@@ -500,6 +500,8 @@ public class AdaptiveEncoder
 				ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 				int []    delta  = (int [])result.get(1);
 				
+				
+				
 				ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[j]     = (int)histogram_list.get(0);
 			    int [] histogram         = (int[])histogram_list.get(1);
@@ -508,9 +510,25 @@ public class AdaptiveEncoder
 				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
-				byte [] string         = new byte[xdim * ydim * 2];
-				byte [] compression_string = new byte[xdim * ydim * 2];
+				
+				// We have to do another histogram inside the function after 
+				// we subtract the min to get an exact result.
+				// Seems like we shouldn't have to do that, but
+				// don't want to change something that is probably
+				// reverse engineered somewhere else.
+				// Might be worth just allocating a conservative amount
+				// of memory and save on processing, or live with
+				// some kind of fudge factor.
+				int predicted_length = DeltaMapper.getStringLength(delta);
+				
+				int string_byte_length = predicted_length / 8;
+				if(predicted_length % 8 != 0)
+					string_byte_length++;
+				
+				byte [] string         = new byte[string_byte_length];
+				byte [] compression_string = new byte[string_byte_length];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
+				
 				
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
@@ -685,6 +703,14 @@ public class AdaptiveEncoder
 		        } 
 		        out.flush();
 		        out.close();
+		        
+		        File file              = new File("foo");
+		        long foo_length        = file.length(); 
+		        double foo_ratio = foo_length;
+		        foo_ratio       /= (3 * xdim * ydim);
+		        System.out.println("Compression ratio is " + String.format("%.4f", foo_ratio));
+		        System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
+		        System.out.println();
 		    }
 		    catch(Exception e)
 		    {

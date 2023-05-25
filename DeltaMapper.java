@@ -105,22 +105,6 @@ public class DeltaMapper
 	    return random_lut;
 	}
 	
-	public static int[] extract(int[] src, int src_xdim, int xoffset, int yoffset, int xdim, int ydim)
-	{
-	    int src_ydim = src.length / src_xdim;
-	   
-	    int [] dst = new int[ydim * xdim];
-	    
-	    for(int i = 0; i < ydim; i++)
-	    {
-	    	for(int j = 0; j < xdim; j++)
-	    	{
-	    	    dst[i * xdim + j] = src[(i + yoffset) * src_xdim + j + xoffset];	
-	    	}
-	    }
-	    return(dst); 
-	}
-	
 	
     public static int[] getValuesFromDeltas(int src[], int xdim, int ydim, int init_value)
     {
@@ -1277,6 +1261,118 @@ public class DeltaMapper
             }
         }
         return(number_unpacked);
+    }
+    
+    public static ArrayList getStringData(int [] delta)
+    {
+    	ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
+	   
+
+		int [] histogram            = (int[])histogram_list.get(1);
+		int [] string_table = DeltaMapper.getRankTable(histogram);
+		
+		int    number_of_values = 0;
+		int    predicted_bit_length = 0;
+		double predicted_zero_ratio = 0;
+		int    min_value = Integer.MAX_VALUE;
+		int    min_index = 0;
+		
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			number_of_values += histogram[i];
+			if(histogram[i] < min_value)
+			{
+				min_value = histogram[i];
+				min_index = i;
+			}
+		}
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			if(histogram.length == 1)
+			{
+				predicted_bit_length = number_of_values;
+			    predicted_zero_ratio = 1.;   	
+			}
+			else if(histogram.length == 2)
+			{
+				predicted_bit_length += histogram[i];
+			    if(i == 1)
+			    {
+			    	if(histogram[0] > histogram[1])
+			    	    predicted_zero_ratio = histogram[0];
+			    	else
+			    		predicted_zero_ratio = histogram[1];
+			    	predicted_zero_ratio /= number_of_values;
+			    }	
+			}
+			else
+			{
+				int j = string_table[i];
+				if(i != min_index)
+				{
+					predicted_bit_length += histogram[i] * (j + 1); 	
+				}
+				else
+				{
+					predicted_bit_length += histogram[i] * j;     	
+				} 
+			}
+			predicted_zero_ratio  = number_of_values;
+	    	predicted_zero_ratio -= min_value;
+	    	predicted_zero_ratio /= predicted_bit_length;
+		}
+		
+    	ArrayList data_list = new ArrayList();
+    	data_list.add(predicted_bit_length);
+    	data_list.add(predicted_zero_ratio);
+    	return data_list;
+    }
+    
+    public static int getStringLength(int [] delta)
+    {
+    	ArrayList histogram_list       = DeltaMapper.getHistogram(delta);
+		int [] histogram            = (int[])histogram_list.get(1);
+		int [] string_table = DeltaMapper.getRankTable(histogram);
+		
+		int    number_of_values = 0;
+		int    predicted_bit_length = 0;
+		int    min_value = Integer.MAX_VALUE;
+		int    min_index = 0;
+		
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			number_of_values += histogram[i];
+			if(histogram[i] < min_value)
+			{
+				min_value = histogram[i];
+				min_index = i;
+			}
+		}
+		
+		for(int i = 0; i < histogram.length; i++)
+		{
+			if(histogram.length == 1)
+			{
+				predicted_bit_length = number_of_values;
+			}
+			else if(histogram.length == 2)
+			{
+				predicted_bit_length += histogram[i];
+			}
+			else
+			{
+				int j = string_table[i];
+				if(i != min_index)
+					predicted_bit_length += histogram[i] * (j + 1); 	
+				else
+					predicted_bit_length += histogram[i] * j;     	 
+			}
+		}
+		
+    	return predicted_bit_length;
     }
     
     public static int compressZeroBits(byte src[], int size, byte dst[])
@@ -2991,17 +3087,12 @@ public class DeltaMapper
     		    segment_list = (ArrayList)current_list.get(i);
     		    previous_list.add(segment_list);
     	    }
-    	    // Previous list now has current list data.
-    	    
-    	    System.out.println("Current offset is " + current_offset);
+    	    // Previous list now has current list data.  
         }
-    	
-    	
-        
-        
         
 		System.out.println("Init list had " + init_list.size() + " segments.");
 		System.out.println("Merged list had " + current_list.size() + " segments.");
+		System.out.println();
 		
 		
 		compressed_length.clear();
@@ -3302,8 +3393,6 @@ public class DeltaMapper
     		    previous_list.add(segment_list);
     	    }
     	    // Previous list now has current list data.
-    	    
-    	    System.out.println("Current offset is " + current_offset);
         }
     	
     	
@@ -3312,7 +3401,7 @@ public class DeltaMapper
         
 		System.out.println("Init list had " + init_list.size() + " segments.");
 		System.out.println("Merged list had " + current_list.size() + " segments.");
-		
+		System.out.println();
 		
 		compressed_length.clear();
 		compressed_data.clear();
