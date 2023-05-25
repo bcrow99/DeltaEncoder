@@ -208,10 +208,9 @@ public class AdaptiveDecoder
 			} 
 		    in.close();
 		    
-		    
-		    
-		   // Figure out what channels we have.
-		  
+		   
+		    // Figure out what channels we have.
+	
 		    if(image_table.containsKey(0))
 		    {
 		        blue = image_table.get(0);	
