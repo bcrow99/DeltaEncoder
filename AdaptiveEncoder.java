@@ -529,6 +529,9 @@ public class AdaptiveEncoder
 				byte [] compression_string = new byte[string_byte_length];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
 				
+				double string_rate = predicted_length;
+				string_rate       /= pixel_length;
+				System.out.println("The packed string rate is " + String.format("%.4f", string_rate));
 				
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
@@ -540,6 +543,9 @@ public class AdaptiveEncoder
 				data_list.clear();
 				data_list.add(compression_length);
 				data_list.add(compression_data);
+				
+				
+				
 			}
 		  
 	    	
