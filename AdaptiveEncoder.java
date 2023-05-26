@@ -50,10 +50,11 @@ public class AdaptiveEncoder
 	ArrayList channel_table, channel_data, channel_src;
 	
 	double  file_ratio;
-	int     min_set_id = 0;
+	int     min_set_id  = 0;
 	int     pixel_shift = 4;
 	long    file_length = 0;
 	boolean initialized = false;
+	boolean merge       = true;
 	
 	int     segment_length = 0;
 	
@@ -254,6 +255,31 @@ public class AdaptiveEncoder
 				segment_dialog.add(segment_panel);
 				
 				settings_menu.add(segment_item);
+				
+				JCheckBoxMenuItem merge_item = new JCheckBoxMenuItem("Merge");
+				ActionListener merge_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(merge == true)
+						{
+		            		merge = false;
+							item.setState(false);
+						}
+						else
+						{
+							merge = true;
+							item.setState(true);
+						}
+		            }   	
+				};
+				merge_item.addActionListener(merge_handler);
+				if(merge)
+					merge_item.setState(true);
+				else
+					merge_item.setState(false);
+				settings_menu.add(merge_item);
 				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
@@ -535,8 +561,11 @@ public class AdaptiveEncoder
 				
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
-				
-				ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+				ArrayList segment_data_list = new ArrayList();
+				if(merge)
+				    segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+				else
+					segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
 				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
 				ArrayList compression_data   = (ArrayList)segment_data_list.get(1);
 				ArrayList data_list = (ArrayList)channel_data.get(j);
