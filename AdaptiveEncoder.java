@@ -51,12 +51,13 @@ public class AdaptiveEncoder
 	
 	double  file_ratio;
 	int     min_set_id  = 0;
-	int     pixel_shift = 4;
+	int     pixel_shift = 0;
 	long    file_length = 0;
 	boolean initialized = false;
 	boolean merge       = true;
+	boolean recompress  = true;
 	
-	int     segment_length = 0;
+	int     segment_length = 100;
 	
 	public static void main(String[] args)
 	{
@@ -280,6 +281,31 @@ public class AdaptiveEncoder
 				else
 					merge_item.setState(false);
 				settings_menu.add(merge_item);
+				
+				JCheckBoxMenuItem recompress_item = new JCheckBoxMenuItem("Recompress");
+				ActionListener recompress_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e) 
+		            {
+		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
+		            	if(recompress == true)
+						{
+		            		recompress = false;
+							item.setState(false);
+						}
+						else
+						{
+							recompress = true;
+							item.setState(true);
+						}
+		            }   	
+				};
+				recompress_item.addActionListener(recompress_handler);
+				if(recompress)
+					recompress_item.setState(true);
+				else
+					recompress_item.setState(false);
+				settings_menu.add(recompress_item);
 				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
@@ -551,8 +577,8 @@ public class AdaptiveEncoder
 				if(predicted_length % 8 != 0)
 					string_byte_length++;
 				
-				byte [] string         = new byte[string_byte_length];
-				byte [] compression_string = new byte[string_byte_length];
+				byte [] string         = new byte[2 * string_byte_length];
+				byte [] compression_string = new byte[2 * string_byte_length];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
 				
 				double string_rate = predicted_length;
@@ -563,7 +589,12 @@ public class AdaptiveEncoder
 			   
 				ArrayList segment_data_list = new ArrayList();
 				if(merge)
-				    segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+				{
+					if(recompress)
+				        segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+					else
+						segment_data_list = DeltaMapper.getSegmentData3(string, channel_length[j], minimum_segment_length);
+				}
 				else
 					segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
 				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
@@ -572,9 +603,7 @@ public class AdaptiveEncoder
 				data_list.clear();
 				data_list.add(compression_length);
 				data_list.add(compression_data);
-				
-				
-				
+			
 			}
 		  
 	    	
@@ -632,8 +661,7 @@ public class AdaptiveEncoder
 		    	for(int j = 0; j < ydim; j++)
 		    	{
 		    		image.setRGB(i, j, original_pixel[j * xdim + i]);
-		    	}
-		    	
+		    	}	
 		    } 
 			System.out.println("Reloaded original image.");
 			image_canvas.repaint();
@@ -689,14 +717,6 @@ public class AdaptiveEncoder
 		            out.writeInt(channel_delta_min[j]);
 		            //System.out.println("Minimum value for deltas is " + channel_delta_min[j]);
 		        
-		            // Compression type 0/1.
-		            //out.writeByte(channel_compression_type[j]);
-		            
-		            // Bit type.
-		            //out.writeByte(channel_bit_type[j]);
-		            
-		            //System.out.println("Type of compression is " + type_string[channel_compression_type[j]] + " bit type " + channel_bit_type[j]);
-		            //System.out.println("Compression rate is " + String.format("%.2f", channel_rate[j]));
 		            
 		            // The length of the table used for string packing/unpacking.
 		            // We're only saving tables for selected channels,
@@ -711,6 +731,7 @@ public class AdaptiveEncoder
 		       
 		            // The length of the packed strings concatenated.
 		            out.writeInt(channel_length[j]);
+		            System.out.println("Bit length is " + channel_length[j]);
 		            
 		            // The data itself.
 		            ArrayList data_list = (ArrayList)channel_data.get(j);
@@ -719,6 +740,7 @@ public class AdaptiveEncoder
 		            ArrayList segment_data   = (ArrayList)data_list.get(1);
 		            
 		            int n = segment_length.size();
+		            System.out.println("There are " + n + " segments.");
 		            
 		            // Number of segments.
 		            out.writeInt(n);

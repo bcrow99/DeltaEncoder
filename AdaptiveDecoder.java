@@ -151,12 +151,14 @@ public class AdaptiveDecoder
 				   byte extra_bits          = in.readByte();
 				   byte [] segment = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
+			       System.out.println("Read segment.");
 			       
 			       int segment_bit_length = segment_byte_length * 8 - extra_bits;
 			       
 			       
 			       int iterations         = DeltaMapper.getIterations(segment, segment_bit_length);
 			       int string_type        = DeltaMapper.getStringType(segment, segment_bit_length);
+			       System.out.println("Iterations is " + iterations + ", string type is " + string_type);
 			       if(iterations == 0)
 			       {
 			    	   for(int k = 0; k < segment.length - 1; k++) 
@@ -165,13 +167,15 @@ public class AdaptiveDecoder
 			       }
 			       else
 			       {
-			    	   byte [] decompressed_segment = new byte[iterations * segment_bit_length * 2];
+			    	   System.out.println("Got here.");
+			    	   int decompression_length = channel_bit_length;
+			    	   byte [] decompressed_segment = new byte[decompression_length];
 			    	   
-			    	   int decompression_length = 0;
 			    	   if(string_type == 0)
 			    		   decompression_length = DeltaMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);      
 			    	   else
 			    		   decompression_length = DeltaMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
+			    	   System.out.println("Decompressed segment.");
 			    	   byte_length = decompression_length / 8;
 			    	   if(decompression_length % 8 != 0)
 			    	   {
