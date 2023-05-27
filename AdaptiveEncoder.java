@@ -577,9 +577,9 @@ public class AdaptiveEncoder
 				if(predicted_length % 8 != 0)
 					string_byte_length++;
 				
-				byte [] string         = new byte[2 * string_byte_length];
+				byte [] string             = new byte[2 * string_byte_length];
 				byte [] compression_string = new byte[2 * string_byte_length];
-				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
+				channel_length[j]          = DeltaMapper.packStrings2(delta, string_table, string);
 				
 				double string_rate = predicted_length;
 				string_rate       /= pixel_length;
@@ -675,13 +675,12 @@ public class AdaptiveEncoder
 			if(!initialized)
 				apply_item.doClick();
 			
-			System.out.println("Saving " + set_string[min_set_id]);
+			//System.out.println("Saving " + set_string[min_set_id]);
 			//System.out.println("Set rate  is " + String.format("%.2f", set_rate[min_set_id]));
 			//System.out.println("RGB rate  is " + String.format("%.2f", set_rate[0]));
 			//System.out.println("File rate is " + String.format("%.2f", file_ratio));
 			//System.out.println("Shift is     " + pixel_shift);
-		    
-			System.out.println();
+			//System.out.println();
 			
 			int channel[] = DeltaMapper.getChannels(min_set_id);
 			System.out.println();
@@ -742,6 +741,8 @@ public class AdaptiveEncoder
 		            int n = segment_length.size();
 		            System.out.println("There are " + n + " segments.");
 		            
+		            
+		            
 		            // Number of segments.
 		            out.writeInt(n);
 		            
@@ -749,6 +750,9 @@ public class AdaptiveEncoder
 		            {
 		            	int bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
+		            	
+		            	int iterations = DeltaMapper.getIterations(segment, bit_length);
+		            	System.out.println("Iterations is " + iterations);
 		            	byte extra_bits = 8;
 		            	if(bit_length % 8 != 0)
 		            	    extra_bits     += 8 - (bit_length % 8);

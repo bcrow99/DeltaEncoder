@@ -3146,7 +3146,7 @@ public class DeltaMapper
         }
         
         int current_offset = 0;
-        while(current_number_of_segments != previous_number_of_segments && current_number_of_segments > 2)
+        while(current_number_of_segments != previous_number_of_segments && current_number_of_segments > 1)
         {
         	System.out.println("Current number of segments is " + current_number_of_segments);
         	previous_number_of_segments = previous_list.size();
