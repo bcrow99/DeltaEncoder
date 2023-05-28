@@ -739,7 +739,8 @@ public class AdaptiveEncoder
 		            ArrayList segment_data   = (ArrayList)data_list.get(1);
 		            
 		            int n = segment_length.size();
-		            System.out.println("There are " + n + " segments.");
+		            if(i == 0)
+		                System.out.println("There are " + n + " segments.");
 		            
 		            
 		            
@@ -748,16 +749,32 @@ public class AdaptiveEncoder
 		            
 		            for(int k = 0; k < n; k++)
 		            {
+		            	
 		            	int bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
 		            	
+		            	
+		            	
+		            	
+		            	
 		            	int iterations = DeltaMapper.getIterations(segment, bit_length);
-		            	System.out.println("Iterations is " + iterations);
+		            	if(i == 0)
+		            	    System.out.println("Iterations is " + iterations);
 		            	byte extra_bits = 8;
 		            	if(bit_length % 8 != 0)
 		            	    extra_bits     += 8 - (bit_length % 8);
+		            	int calculated_length = segment.length * 8 - extra_bits;
 		            	
-		            	out.writeShort(segment.length);
+		            	if(i == 0)
+		            	{
+		            		System.out.println("Segment " + k + " has bit length " + bit_length);
+		            		System.out.println("Calculated bit length is " + calculated_length);
+		            		System.out.println("Byte length is " + segment.length);
+		            		System.out.println("Extra bits is " + extra_bits);
+		            	}
+		            	
+		            	
+		            	out.writeInt(segment.length);
 		            	out.writeByte(extra_bits);
 		            	out.write(segment, 0, segment.length);
 		            }
