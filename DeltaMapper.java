@@ -1609,11 +1609,18 @@ public class DeltaMapper
     			{
     				int previous_length = current_length;
         	        if(iterations % 2 == 1)
+        	        {
                         current_length = compressZeroBits(dst, previous_length, temp);
+                        amount         = getCompressionAmount(temp, current_length, 0);
+                        
+        	        }
                     else
+                    {
                         current_length = compressZeroBits(temp, previous_length, dst);
+                        amount             = getCompressionAmount(dst, current_length, 0);
+                    }
                     iterations++; 
-                    amount             = getCompressionAmount(dst, current_length, 0);
+                    
     			}
     			
     			if(iterations % 2 == 0) 
@@ -1654,12 +1661,6 @@ public class DeltaMapper
     		for(int i = 0; i < byte_length; i++)
     			dst[i] = src[i];
     		dst[byte_length] = 0;
-    		if(debug)
-    		{
-    		    System.out.println("Current length is " + length);
-    		    System.out.println("Current amount is " + amount);
-    		    System.out.println();
-    		}
     	    return length;
     	}
         else
@@ -1668,12 +1669,7 @@ public class DeltaMapper
     		int iterations     = 1;
     		amount             = getCompressionAmount(dst, current_length, 0);
     		
-    		if(debug)
-    		{
-    		    System.out.println("Current length is " + current_length);
-    		    System.out.println("Current amount is " + amount);
-                System.out.println();
-    		}
+    		
     		if(amount >= 0)
     		{
     			int last_byte = current_length / 8;
@@ -1701,13 +1697,8 @@ public class DeltaMapper
                     }
                     iterations++; 
                     
-                    if(debug)
-                    {
-                        System.out.println("Current length is " + current_length);
-                        System.out.println("Current amount is " + amount);
-                    }
     			}
-    			System.out.println();
+    			
     			if(iterations % 2 == 0) 
                 {
                 	// The last iteration used temp as a destination,
@@ -2021,7 +2012,7 @@ public class DeltaMapper
     	{
     		int current_length = compressOneBits(src, length, dst);
     		int iterations     = 1;
-    		amount             = getCompressionAmount(dst, current_length, 0);
+    		amount             = getCompressionAmount(dst, current_length, 1);
     		
     		if(amount >= 0)
     		{
@@ -2043,7 +2034,7 @@ public class DeltaMapper
                     else
                         current_length = compressOneBits(temp, previous_length, dst);
                     iterations++; 
-                    amount             = getCompressionAmount(dst, current_length, 0);
+                    amount             = getCompressionAmount(dst, current_length, 1);
     			}
     			
     			if(iterations % 2 == 0) 
@@ -2089,7 +2080,7 @@ public class DeltaMapper
         {
     		int current_length = compressOneBits(src, length, dst);
     		int iterations     = 1;
-    		amount             = getCompressionAmount(dst, current_length, 0);
+    		amount             = getCompressionAmount(dst, current_length, 1);
     		
     		if(amount >= 0)
     		{
@@ -2636,7 +2627,9 @@ public class DeltaMapper
     // This function returns a segment list with regular intervals.
     public static ArrayList getSegmentData(byte [] string, int string_bit_length, int segment_bit_length)
     {
-    	boolean debug = false;
+    	
+    	boolean debug1  = false;
+    	boolean debug2 = true;
     	
     	int number_of_segments       = string_bit_length / segment_bit_length;
     	int segment_byte_length      = segment_bit_length / 8;
@@ -2650,10 +2643,7 @@ public class DeltaMapper
     	ArrayList compressed_length = new ArrayList();
     	ArrayList compressed_data   = new ArrayList();
     	
-    	double zero_ratio_max = 0.;
-    	double zero_ratio_min = 1.;
-    	int    max_iterations = 0;
-    	int    min_iterations = Integer.MAX_VALUE;
+    	
     	
     	for(int i = 0; i < number_of_segments - 1; i++)
         {
@@ -2669,6 +2659,7 @@ public class DeltaMapper
             if(zero_ratio >= .5)
             {
             	int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
+            	
             	if(compression_amount < 0)
             	{
             		int compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
@@ -2680,28 +2671,6 @@ public class DeltaMapper
             			clipped_string[j] = compressed_segment[j];
             		compressed_length.add(compression_length);
         			compressed_data.add(clipped_string);
-        			
-        			int iterations = getIterations(compressed_segment, compression_length);
-        			if(iterations > max_iterations)
-        				max_iterations = iterations;
-        			if(iterations < min_iterations)
-        				min_iterations = iterations;
-        			
-        			if(debug)
-        			{
-        			    System.out.println("Compression length 0 is " + compression_length);
-        			    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
-        			    System.out.println("Decompression length 0 is " + decompression_length);
-        			    boolean same_string = true;
-        			    for(int j = 0; j < segment.length; j++)
-        			    {
-        				    if(segment[j] != processed_segment[j])
-        					    same_string = false;
-        			    }
-        			    if(!same_string)
-        				    System.out.println("Processed data is not the same as original data.");
-        			    System.out.println();
-        			}
             	}
             	else
             	{
@@ -2716,6 +2685,7 @@ public class DeltaMapper
             else
             {
             	int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
+            	
             	if(compression_amount < 0)
             	{
             		int compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
@@ -2728,27 +2698,6 @@ public class DeltaMapper
             		compressed_length.add(compression_length);
         			compressed_data.add(clipped_string);
         			
-        			int iterations = getIterations(compressed_segment, compression_length);
-        			if(iterations > max_iterations)
-        				max_iterations = iterations;
-        			if(iterations < min_iterations)
-        				min_iterations = iterations;
-        			
-        			if(debug)
-        			{
-        				System.out.println("Compression length 1 is " + compression_length);
-                        int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
-        			    System.out.println("Decompression length 1 is " + decompression_length);
-        			    boolean same_string = true;
-        			    for(int j = 0; j < segment.length; j++)
-        			    {
-        				    if(segment[j] != processed_segment[j])
-        					    same_string = false;
-        			    }
-        			    if(!same_string)
-        				    System.out.println("Processed data is not the same as original data.");
-        			    System.out.println();
-        			}
             	}
             	else
             	{
@@ -2788,7 +2737,7 @@ public class DeltaMapper
         		compressed_length.add(compression_length);
     			compressed_data.add(clipped_string);
     			
-    			if(debug)
+    			if(debug1)
     			{
     			    System.out.println("Compression length 0 is " + compression_length);
     			    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
@@ -2829,7 +2778,7 @@ public class DeltaMapper
         		compressed_length.add(compression_length);
     			compressed_data.add(clipped_string);
     			
-    			if(debug)
+    			if(debug1)
     			{
     				System.out.println("Compression length 1 is " + compression_length);
                     int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
@@ -2856,48 +2805,49 @@ public class DeltaMapper
         	}	
         }
     	
-        
-        zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		int number_of_compressed_segments = 0;
+        if(debug2)
+        {
+            double zero_ratio_min = 1;
+		    double zero_ratio_max = 0.;
+		    int    min_iterations = Integer.MAX_VALUE;
+		    int    max_iterations = 0;
+		    int    number_of_zero_segments = 0;
+		    int    number_of_one_segments  = 0;
+		    int    number_of_compressed_segments = 0;
 		
-		for(i = 0; i < compressed_data.size(); i++)
-		{
-			int length   = (int)compressed_length.get(i);
-			byte [] data = (byte [])compressed_data.get(i);
+		    for(i = 0; i < compressed_data.size(); i++)
+		    {
+			    int length   = (int)compressed_length.get(i);
+			    byte [] data = (byte [])compressed_data.get(i);
 			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
+			    zero_ratio = getZeroRatio(data, length);
+			    if(zero_ratio < zero_ratio_min)
+				    zero_ratio_min = zero_ratio;
+			    if(zero_ratio > zero_ratio_max)
+				    zero_ratio_max = zero_ratio;
+			    if(zero_ratio >= .5)
+				    number_of_zero_segments++;
+			    else
+				    number_of_one_segments++;
+			    int iterations = getIterations(data, length);
+			    if(iterations > max_iterations)
+				    max_iterations = iterations;
+			    if(iterations < min_iterations)
+			        min_iterations = iterations;
+			    if(iterations > 0)
+			        number_of_compressed_segments++;
+			    }
+	
+		    System.out.println("Number of segments in regular segment list is " + compressed_data.size());
+		    System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		    System.out.println("Number of zero segments is " + number_of_zero_segments);
+		    System.out.println("Number of one segments is " + number_of_one_segments);
+		    System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
+		    System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
+		    System.out.println("Minimum iterations is " + min_iterations);
+		    System.out.println("Maximum iterations is " + max_iterations);
+		    System.out.println();
         }
-       
-		System.out.println("Number of segments in regular segment list is " + compressed_data.size());
-        System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-        System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-        System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        System.out.println();
-        
         
     	ArrayList segment_data = new ArrayList();
     	segment_data.add(compressed_length);
@@ -2907,13 +2857,11 @@ public class DeltaMapper
     
 
     // This function merges adjacent segments with the same bit type if they both compress, or if 
-    // both don't compress regardless of bit_type.  It then checks to see if merged segments that didn't 
-    // compress separately, compress after being merged.  This happens fairly frequently, but 
-    // presumably is a single iteration with a modest amount of compression--worth looking into,
-    // especially since it is not intuitive that that could happen.
+    // both don't compress regardless of bit_type.
     public static ArrayList getSegmentData2(byte [] string, int string_bit_length, int segment_bit_length)
     {
-    	boolean debug = false;
+    	boolean debug1 = false;
+    	boolean debug2 = true;
     	
     	int number_of_segments       = string_bit_length / segment_bit_length;
     	int segment_byte_length      = segment_bit_length / 8;
@@ -2924,94 +2872,122 @@ public class DeltaMapper
     		last_segment_byte_length++;   
     	
     	ArrayList init_list        = new ArrayList();
-    	ArrayList compressed_length = new ArrayList();
-    	ArrayList compressed_data   = new ArrayList();
+    	
     	byte [] processed_segment  = new byte[2 * last_segment_byte_length];
         byte [] compressed_segment = new byte[2 * last_segment_byte_length];
         
-        double zero_ratio_max = 0.;
-    	double zero_ratio_min = 1.;
-    	int    max_iterations = 0;
-    	int    min_iterations = Integer.MAX_VALUE;
-    	
-        //  Process all the regular segments.
-        
+    
+
         for(int i = 0; i < number_of_segments - 1; i++)
         {
             byte [] segment = new byte[segment_byte_length];	
+           
+            
             for(int j = 0; j < segment_byte_length; j++)
                 segment[j] = string[i * segment_byte_length + j];
-            double zero_ratio = getZeroRatio(segment, segment_bit_length);  
             
-            int compression_length = segment_bit_length;
-    		if(zero_ratio >= .5)
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
-    			if(compression_amount < 0)
-    				compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
-    		}
-    		else
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
+            double zero_ratio = getZeroRatio(segment, segment_bit_length);
+           
+            if(zero_ratio >= .5)
+            {
+            	int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
+            	
             	if(compression_amount < 0)
-            		compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
-    		}
-    		
-    		int byte_length = segment_byte_length + 1;
-    		if(compression_length != segment_bit_length)
-    		{
-    			byte_length = compression_length / 8 + 1;
-    			if(compression_length % 8 != 0)
-        			byte_length++;
-    		}
-    		
-    		byte [] segment_string = new byte[byte_length];
-    		
-    		if(compression_length == segment_bit_length)
-    		{
-    			for(int j = 0; j < segment_byte_length; j++)
-        			segment_string[j] = segment[j];	
-    			segment_string[segment_byte_length] = 0;
-    		}
-    		else
-    		{
-    			for(int j = 0; j < byte_length; j++)
-        			segment_string[j] = compressed_segment[j];	
-    		}
-    		
-    		ArrayList segment_list = new ArrayList();   
-    	
-    		segment_list.add(segment_bit_length);
-    		segment_list.add(compression_length);
-    		segment_list.add(segment_string);
-    		
-    		init_list.add(segment_list);
-    		
-    		compressed_length.add(compression_length);
-    		compressed_data.add(segment_string);
+            	{
+            		int compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
+            		int byte_length = compression_length / 8 + 1;
+            		if(compression_length % 8 != 0)
+            			byte_length++;
+            		byte [] clipped_string = new byte[byte_length];
+            		for(int j = 0; j < byte_length; j++)
+            			clipped_string[j] = compressed_segment[j];
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(compression_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}
+            	else
+            	{
+            		byte [] clipped_string = new byte[segment_byte_length + 1];
+            		for(int j = 0; j < segment_byte_length; j++)
+            			clipped_string[j] = segment[j];
+            		clipped_string[segment_byte_length] = 0;
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}
+            }
+            else
+            {
+            	int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
+            	
+            	if(compression_amount < 0)
+            	{
+            		int compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
+            		int byte_length = compression_length / 8 + 1;
+            		if(compression_length % 8 != 0)
+            			byte_length++;
+            		byte [] clipped_string = new byte[byte_length];
+            		for(int j = 0; j < byte_length; j++)
+            			clipped_string[j] = compressed_segment[j];
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(compression_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+        			
+            	}
+            	else
+            	{
+            		byte [] clipped_string = new byte[segment_byte_length + 1];
+            		for(int j = 0; j < segment_byte_length; j++)
+            			clipped_string[j] = segment[j];
+            		clipped_string[segment_byte_length] = 0;
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}	
+            }
         }
     	
-        // Pick up the last segment that probably has an odd length.
-        int index = number_of_segments - 1;
-        byte [] segment = new byte[last_segment_byte_length];	
-        for(int i = 0; i < last_segment_byte_length; i++)
-            segment[i] = string[index * segment_byte_length + i];
-        double zero_ratio = getZeroRatio(segment, last_segment_bit_length);  
+    	int i = number_of_segments - 1;
+    	byte [] segment = new byte[last_segment_byte_length];	
+    
         
-        int compression_length = segment_bit_length;
-		if(zero_ratio >= .5)
-		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 0);
-			if(compression_amount < 0)
-			{
-				compression_length = compressZeroStrings2(segment, last_segment_bit_length, compressed_segment);
-				/*
-				if(debug)
+        for(int j = 0; j < last_segment_byte_length; j++)
+            segment[j] = string[i * segment_byte_length + j];
+        
+        double zero_ratio = getZeroRatio(segment, last_segment_bit_length);
+       
+        if(zero_ratio >= .5)
+        {
+        	int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 0);
+        	if(compression_amount < 0)
+        	{
+        		int compression_length = compressZeroStrings2(segment, last_segment_bit_length, compressed_segment);
+        		
+        		int byte_length = compression_length / 8 + 1;
+        		if(compression_length % 8 != 0)
+        			byte_length++;
+        		byte [] clipped_string = new byte[byte_length];
+        		for(int j = 0; j < byte_length; j++)
+        			clipped_string[j] = compressed_segment[j];
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(compression_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+    			
+    			if(debug1)
     			{
-					System.out.println("Original length is " + last_segment_bit_length);
-    				System.out.println("Compression length 0 is " + compression_length);
-                    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
-    			    System.out.println("Decompression length 1 is " + decompression_length);
+    			    System.out.println("Compression length 0 is " + compression_length);
+    			    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
+    			    System.out.println("Decompression length 0 is " + decompression_length);
     			    boolean same_string = true;
     			    for(int j = 0; j < segment.length; j++)
     			    {
@@ -3022,19 +2998,40 @@ public class DeltaMapper
     				    System.out.println("Processed data is not the same as original data.");
     			    System.out.println();
     			}
-    			*/
-			}
-		}
-		else
-		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 1);
+        	}
+        	else
+        	{
+        		byte [] clipped_string = new byte[last_segment_byte_length + 1];
+        		for(int j = 0; j < last_segment_byte_length; j++)
+        			clipped_string[j] = segment[j];
+        		clipped_string[last_segment_byte_length] = 0;
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+        	}
+        }
+        else
+        {
+        	int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 1);
         	if(compression_amount < 0)
         	{
-        		compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);	
-        		/*
-        		if(debug)
+        		int compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);
+        		int byte_length = compression_length / 8 + 1;
+        		if(compression_length % 8 != 0)
+        			byte_length++;
+        		byte [] clipped_string = new byte[byte_length];
+        		for(int j = 0; j < byte_length; j++)
+        			clipped_string[j] = compressed_segment[j];
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(compression_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+    			
+    			if(debug1)
     			{
-        			System.out.println("Original length is " + last_segment_bit_length);
     				System.out.println("Compression length 1 is " + compression_length);
                     int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
     			    System.out.println("Decompression length 1 is " + decompression_length);
@@ -3048,88 +3045,80 @@ public class DeltaMapper
     				    System.out.println("Processed data is not the same as original data.");
     			    System.out.println();
     			}
-    			*/
         	}
-		}
-		
-		int byte_length = last_segment_byte_length + 1;
-		if(compression_length != segment_bit_length)
-		{
-			byte_length = compression_length / 8 + 1;
-			if(compression_length % 8 != 0)
-    			byte_length++;
-		}
-		
-		byte [] segment_string = new byte[byte_length];
-		
-		if(compression_length == segment_bit_length)
-		{
-			for(int j = 0; j < last_segment_byte_length; j++)
-    			segment_string[j] = segment[j];	
-			segment_string[last_segment_byte_length] = 0;
-		}
-		else
-		{
-			for(int j = 0; j < byte_length; j++)
-    			segment_string[j] = compressed_segment[j];	
-		}
-		
-		ArrayList segment_list = new ArrayList();   
-	
-		segment_list.add(segment_bit_length);
-		segment_list.add(compression_length);
-		segment_list.add(segment_string);
-		
-		init_list.add(segment_list);
-		
-		
-	
-		
-		zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		int number_of_compressed_segments = 0;
-		
-		for(int i = 0; i < init_list.size(); i++)
-        {
-			segment_list = (ArrayList)init_list.get(i);	
-			
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
+        	else
+        	{
+        		byte [] clipped_string = new byte[last_segment_byte_length + 1];
+        		for(int j = 0; j < last_segment_byte_length; j++)
+        			clipped_string[j] = segment[j];
+        		clipped_string[last_segment_byte_length] = 0;
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+        	}	
         }
     	
-		System.out.println("Initial list has " + init_list.size() + " segments.");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-        System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        System.out.println();
+		if(debug2)
+		{
+		    double zero_ratio_min = 1;
+		    double zero_ratio_max = 0.;
+		    int    min_iterations = Integer.MAX_VALUE;
+		    int    max_iterations = 0;
+		    int    number_of_zero_segments = 0;
+		    int    number_of_one_segments  = 0;
+		    int    number_of_compressed_segments = 0;
+		    int    max_string_type = -1;
+		    int    min_string_type = -1;
 		
+		    for(i = 0; i < init_list.size(); i++)
+            {
+			    ArrayList segment_list = (ArrayList)init_list.get(i);	
+			
+			    int length   = (int)segment_list.get(1);
+			    byte [] data = (byte [])segment_list.get(2);
+			
+			
+			    zero_ratio = getZeroRatio(data, length);
+			    if(zero_ratio < zero_ratio_min)
+				    zero_ratio_min = zero_ratio;
+			    if(zero_ratio > zero_ratio_max)
+			        zero_ratio_max = zero_ratio;
+			    if(zero_ratio >= .5)
+			        number_of_zero_segments++;
+			    else
+			        number_of_one_segments++;
+			    int iterations = getIterations(data, length);
+			    int string_type = getStringType(data, length);
+			    if(iterations > max_iterations)
+			    {
+			        max_iterations = iterations;
+			        max_string_type = string_type;
+			    }
+			    if(iterations < min_iterations)
+			    {
+			        min_iterations = iterations;
+			        min_string_type = string_type;
+			    }
+			    if(iterations > 0)
+			        number_of_compressed_segments++;
+			}
+    	
+		    System.out.println("Initial list has " + init_list.size() + " segments.");
+		    System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		    System.out.println("Number of zero segments is " + number_of_zero_segments);
+		    System.out.println("Number of one segments is " + number_of_one_segments);
+		    System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
+		    System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
+		    System.out.println("Minimum iterations is " + min_iterations);
+		    System.out.println("Minimum string type is " + min_string_type);
+		    System.out.println("Maximum iterations is " + max_iterations);
+		    System.out.println("Maximum string type is " + max_string_type);
+		    System.out.println();
+		}
 		
+      
     	// Finished constructing the initial list.
     	
         // Merge similar segments that are adjacent.
@@ -3139,20 +3128,19 @@ public class DeltaMapper
         int       current_number_of_segments  = init_list.size();
         int       previous_number_of_segments = 0;
        
-        for(int i = 0; i < init_list.size(); i++)
+        for(i = 0; i < init_list.size(); i++)
         {
-        	segment_list = (ArrayList)init_list.get(i);
+        	ArrayList segment_list = (ArrayList)init_list.get(i);
         	previous_list.add(segment_list);
         }
         
         int current_offset = 0;
-        while(current_number_of_segments != previous_number_of_segments && current_number_of_segments > 1)
+        while(current_number_of_segments != previous_number_of_segments)
         {
-        	System.out.println("Current number of segments is " + current_number_of_segments);
         	previous_number_of_segments = previous_list.size();
         	current_list.clear();
         
-            int i = 0;
+            i = 0;
             current_offset = 0;
             
         	for(i = 0; i < previous_number_of_segments - 1; i++)
@@ -3177,7 +3165,496 @@ public class DeltaMapper
         	    	int merged_length  = current_length + next_length;
         	    	
         	    	int byte_offset = current_offset / 8;
+        	    	int byte_length = merged_length / 8;
+        	    	if(merged_length % 8 != 0)
+        	    		byte_length++;
+        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
+        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
+        	    	
+        	    	byte [] merged_segment = new byte[byte_length];
+        	    	for(int j = 0; j < byte_length; j++)
+        	    		merged_segment[j] = string[j + byte_offset];
+        	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
+        	    	int merged_compression_length = 0;
+        	    	if(current_type == 0)
+        	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
+        	    	else
+        	    		merged_compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
+        	    	
+        	    	if(merged_compression_length <= current_t_length + next_t_length)
+        	    	{
+        	    		int compressed_byte_length = merged_compression_length / 8;
+        				if(merged_compression_length % 8 != 0)
+        				    compressed_byte_length++;
+        				compressed_byte_length++;
+        				byte [] segment_string = new byte[compressed_byte_length];
+        				for(int j = 0; j < compressed_byte_length; j++)
+        					segment_string[j] = compressed_merged_segment[j];
+        	    		
+        	    		ArrayList merged_segment_list = new ArrayList();
+        	    		merged_segment_list.add(merged_length);
+        	    		merged_segment_list.add(merged_compression_length);
+        	    		merged_segment_list.add(segment_string);
+        	    
+        	    		current_list.add(merged_segment_list);
+        	    		
+        	    		current_offset += merged_length;
+            	        
+        	    		i++;
+        	    	}
+        	    	else
+        	    	{
+        	    		current_list.add(current_segment_list);
+        	    		current_offset += current_length;
+        	    	}
+        	    }
+        	    else if(current_iterations == 0 && next_iterations == 0)
+        	    {
+        	    	int merged_length  = current_length + next_length;
+        	    	
+        	    	int byte_offset = current_offset / 8;
+        	    	int byte_length = merged_length / 8;
+        	    	if(merged_length % 8 != 0)
+        	    		byte_length++;
+        	    	
+        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
+        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
+        	    	byte [] merged_segment = new byte[byte_length];
+        	    	for(int j = 0; j < byte_length; j++)
+        	    		merged_segment[j] = string[j + byte_offset];   
+        	    	
         	    	byte_length = merged_length / 8;
+    	    		if(merged_length % 8 != 0)
+    	    			byte_length++;
+    	    		byte_length++;
+    	    	    byte [] segment_string    = new byte[byte_length];
+            	    for(int j = 0; j < byte_length - 1; j++)
+            		    segment_string[j] = merged_segment[j];
+            	    segment_string[merged_segment.length] = 0;
+            	    
+            	    ArrayList merged_segment_list = new ArrayList();
+    	    		merged_segment_list.add(merged_length);
+    	    		merged_segment_list.add(merged_length);
+    	    		merged_segment_list.add(segment_string);
+    	    		
+    	    		current_list.add(merged_segment_list);
+    	    		
+    	    		current_offset += merged_length;
+    	    		i++;
+        	    }
+        	    else
+        	    {
+        	    	current_list.add(current_segment_list);
+        	    	current_offset += current_length;
+        	    }
+        	}
+        	
+    	    if(i == previous_number_of_segments - 1)
+    	    {
+    		    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
+    		    current_list.add(current_segment_list);
+    	    }
+    	
+    	    previous_list.clear();
+    	   
+    	    current_number_of_segments = current_list.size();
+    	   
+    	    for(i = 0; i < current_number_of_segments; i++)
+    	    {
+    		    ArrayList segment_list = (ArrayList)current_list.get(i);
+    		    previous_list.add(segment_list);
+    	    }
+    	    // Previous list now has current list data.  
+        }
+        
+		ArrayList compressed_length = new ArrayList();
+    	ArrayList compressed_data   = new ArrayList();
+		for(i = 0; i < current_list.size(); i++)
+		{
+			ArrayList segment_list = (ArrayList)current_list.get(i);
+			int length   = (int)segment_list.get(1);
+			byte [] data = (byte [])segment_list.get(2);
+			compressed_length.add(length);
+			compressed_data.add(data);
+		}
+		
+		if(debug2)
+		{
+		    double zero_ratio_min = 1;
+		    double zero_ratio_max = 0.;
+		    int min_iterations = Integer.MAX_VALUE;
+		    int max_iterations = 0;
+		    int number_of_zero_segments = 0;
+		    int number_of_one_segments  = 0;
+		    int number_of_compressed_segments = 0;
+		    int max_string_type = -1;
+		    int min_string_type = -1;
+		    for(i = 0; i < current_list.size(); i++)
+		    {
+		        ArrayList segment_list = (ArrayList)current_list.get(i);
+		        int length   = (int)segment_list.get(1);
+		        byte [] data = (byte [])segment_list.get(2);
+			
+			
+		        zero_ratio = getZeroRatio(data, length);
+		        if(zero_ratio < zero_ratio_min)
+		            zero_ratio_min = zero_ratio;
+		        if(zero_ratio > zero_ratio_max)
+		            zero_ratio_max = zero_ratio;
+		        if(zero_ratio >= .5)
+		            number_of_zero_segments++;
+		        else
+		            number_of_one_segments++;
+		        int iterations  = getIterations(data, length);
+		        int string_type = getStringType(data, length);
+		        if(iterations > max_iterations)
+		        {
+		            max_iterations = iterations;
+		            max_string_type = string_type;
+		        }
+		        if(iterations < min_iterations)
+		        {
+		            min_iterations = iterations;
+		            min_string_type = string_type;
+		        }
+		        if(iterations > 0)
+		            number_of_compressed_segments++;	
+		    }
+	
+		    System.out.println("Merged list has " + current_list.size() + " segments");
+		    System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		    System.out.println("Number of zero segments is " + number_of_zero_segments);
+		    System.out.println("Number of one segments is " + number_of_one_segments);
+		    System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
+		    System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
+		    System.out.println("Minimum iterations is " + min_iterations);
+		    System.out.println("Minimum string type is " + min_string_type);
+		    System.out.println("Maximum iterations is " + max_iterations);
+		    System.out.println("Maximum string type is " + max_string_type);
+		    System.out.println();
+		}
+        
+		ArrayList segment_data = new ArrayList();
+    	segment_data.add(compressed_length);
+    	segment_data.add(compressed_data);
+    	return segment_data;
+    }
+    
+    
+
+    // This function merges adjacent segments with the same bit type if they both compress, or if 
+    // both don't compress regardless of bit_type.  It then checks to see if merged segments that didn't 
+    // compress separately, compress after being merged.  This happens fairly frequently, but 
+    // presumably is a single iteration with a modest amount of compression--worth looking into,
+    // especially since it is not intuitive that that could happen.
+    public static ArrayList getSegmentData3(byte [] string, int string_bit_length, int segment_bit_length)
+    {
+    	boolean debug1 = false;
+    	boolean debug2 = true;
+    	
+    	int number_of_segments       = string_bit_length / segment_bit_length;
+    	int segment_byte_length      = segment_bit_length / 8;
+    	int remainder                = string_bit_length % segment_bit_length;
+    	int last_segment_bit_length  = segment_bit_length + remainder;
+    	int last_segment_byte_length = segment_byte_length + remainder / 8;
+    	if(remainder % 8 != 0)
+    		last_segment_byte_length++;   
+    	
+    	ArrayList init_list        = new ArrayList();
+    	
+    
+        for(int i = 0; i < number_of_segments - 1; i++)
+        {
+            byte [] segment = new byte[segment_byte_length];	
+            byte [] processed_segment  = new byte[2 * segment_byte_length];
+            byte [] compressed_segment = new byte[2 * segment_byte_length];
+            
+            for(int j = 0; j < segment_byte_length; j++)
+                segment[j] = string[i * segment_byte_length + j];
+            
+            double zero_ratio = getZeroRatio(segment, segment_bit_length);
+           
+            if(zero_ratio >= .5)
+            {
+            	int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
+            	
+            	if(compression_amount < 0)
+            	{
+            		int compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
+            		int byte_length = compression_length / 8 + 1;
+            		if(compression_length % 8 != 0)
+            			byte_length++;
+            		byte [] clipped_string = new byte[byte_length];
+            		for(int j = 0; j < byte_length; j++)
+            			clipped_string[j] = compressed_segment[j];
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(compression_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}
+            	else
+            	{
+            		byte [] clipped_string = new byte[segment_byte_length + 1];
+            		for(int j = 0; j < segment_byte_length; j++)
+            			clipped_string[j] = segment[j];
+            		clipped_string[segment_byte_length] = 0;
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}
+            }
+            else
+            {
+            	int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
+            	
+            	if(compression_amount < 0)
+            	{
+            		int compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
+            		int byte_length = compression_length / 8 + 1;
+            		if(compression_length % 8 != 0)
+            			byte_length++;
+            		byte [] clipped_string = new byte[byte_length];
+            		for(int j = 0; j < byte_length; j++)
+            			clipped_string[j] = compressed_segment[j];
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(compression_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+        			
+            	}
+            	else
+            	{
+            		byte [] clipped_string = new byte[segment_byte_length + 1];
+            		for(int j = 0; j < segment_byte_length; j++)
+            			clipped_string[j] = segment[j];
+            		clipped_string[segment_byte_length] = 0;
+            		ArrayList segment_list = new ArrayList();
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(segment_bit_length);
+            		segment_list.add(clipped_string);
+            		init_list.add(segment_list);
+            	}	
+            }
+        }
+    	
+    	int i = number_of_segments - 1;
+    	byte [] segment = new byte[last_segment_byte_length];	
+        byte [] compressed_segment = new byte[2 * last_segment_byte_length];
+        byte [] processed_segment  = new byte[2 * last_segment_byte_length];
+        
+        for(int j = 0; j < last_segment_byte_length; j++)
+            segment[j] = string[i * segment_byte_length + j];
+        
+        double zero_ratio = getZeroRatio(segment, last_segment_bit_length);
+       
+        if(zero_ratio >= .5)
+        {
+        	int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 0);
+        	if(compression_amount < 0)
+        	{
+        		int compression_length = compressZeroStrings2(segment, last_segment_bit_length, compressed_segment);
+        		
+        		int byte_length = compression_length / 8 + 1;
+        		if(compression_length % 8 != 0)
+        			byte_length++;
+        		byte [] clipped_string = new byte[byte_length];
+        		for(int j = 0; j < byte_length; j++)
+        			clipped_string[j] = compressed_segment[j];
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(compression_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+    			
+    			if(debug1)
+    			{
+    			    System.out.println("Compression length 0 is " + compression_length);
+    			    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
+    			    System.out.println("Decompression length 0 is " + decompression_length);
+    			    boolean same_string = true;
+    			    for(int j = 0; j < segment.length; j++)
+    			    {
+    				    if(segment[j] != processed_segment[j])
+    					    same_string = false;
+    			    }
+    			    if(!same_string)
+    				    System.out.println("Processed data is not the same as original data.");
+    			    System.out.println();
+    			}
+        	}
+        	else
+        	{
+        		byte [] clipped_string = new byte[last_segment_byte_length + 1];
+        		for(int j = 0; j < last_segment_byte_length; j++)
+        			clipped_string[j] = segment[j];
+        		clipped_string[last_segment_byte_length] = 0;
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(segment_bit_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+        	}
+        }
+        else
+        {
+        	int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 1);
+        	if(compression_amount < 0)
+        	{
+        		int compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);
+        		int byte_length = compression_length / 8 + 1;
+        		if(compression_length % 8 != 0)
+        			byte_length++;
+        		byte [] clipped_string = new byte[byte_length];
+        		for(int j = 0; j < byte_length; j++)
+        			clipped_string[j] = compressed_segment[j];
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(compression_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+    			
+    			if(debug1)
+    			{
+    				System.out.println("Compression length 1 is " + compression_length);
+                    int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
+    			    System.out.println("Decompression length 1 is " + decompression_length);
+    			    boolean same_string = true;
+    			    for(int j = 0; j < segment.length; j++)
+    			    {
+    				    if(segment[j] != processed_segment[j])
+    					    same_string = false;
+    			    }
+    			    if(!same_string)
+    				    System.out.println("Processed data is not the same as original data.");
+    			    System.out.println();
+    			}
+        	}
+        	else
+        	{
+        		byte [] clipped_string = new byte[last_segment_byte_length + 1];
+        		for(int j = 0; j < last_segment_byte_length; j++)
+        			clipped_string[j] = segment[j];
+        		clipped_string[last_segment_byte_length] = 0;
+        		ArrayList segment_list = new ArrayList();
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(last_segment_bit_length);
+        		segment_list.add(clipped_string);
+        		init_list.add(segment_list);
+        	}	
+        }
+    	
+		if(debug2)
+		{
+		    double zero_ratio_min = 1;
+		    double zero_ratio_max = 0.;
+		    int    min_iterations = Integer.MAX_VALUE;
+		    int    max_iterations = 0;
+		    int    number_of_zero_segments = 0;
+		    int    number_of_one_segments  = 0;
+		    int    number_of_compressed_segments = 0;
+		    int    max_string_type = -1;
+		    int    min_string_type = -1;
+		
+		    for(i = 0; i < init_list.size(); i++)
+            {
+			    ArrayList segment_list = (ArrayList)init_list.get(i);	
+			
+			    int length   = (int)segment_list.get(1);
+			    byte [] data = (byte [])segment_list.get(2);
+			
+			
+			    zero_ratio = getZeroRatio(data, length);
+			    if(zero_ratio < zero_ratio_min)
+				    zero_ratio_min = zero_ratio;
+			    if(zero_ratio > zero_ratio_max)
+			        zero_ratio_max = zero_ratio;
+			    if(zero_ratio >= .5)
+			        number_of_zero_segments++;
+			    else
+			        number_of_one_segments++;
+			    int iterations = getIterations(data, length);
+			    int string_type = getStringType(data, length);
+			    if(iterations > max_iterations)
+			    {
+			        max_iterations = iterations;
+			        max_string_type = string_type;
+			    }
+			    if(iterations < min_iterations)
+			    {
+			        min_iterations = iterations;
+			        min_string_type = string_type;
+			    }
+			    if(iterations > 0)
+			        number_of_compressed_segments++;
+			}
+    	
+		    System.out.println("Initial list has " + init_list.size() + " segments.");
+		    System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		    System.out.println("Number of zero segments is " + number_of_zero_segments);
+		    System.out.println("Number of one segments is " + number_of_one_segments);
+		    System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
+		    System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
+		    System.out.println("Minimum iterations is " + min_iterations);
+		    System.out.println("Minimum string type is " + min_string_type);
+		    System.out.println("Maximum iterations is " + max_iterations);
+		    System.out.println("Maximum string type is " + max_string_type);
+		    System.out.println();
+		}
+		
+		
+    	// Finished constructing the initial list.
+    	
+        // Merge similar segments that are adjacent.
+        
+        ArrayList previous_list               = new ArrayList();
+        ArrayList current_list                = new ArrayList();
+        int       current_number_of_segments  = init_list.size();
+        int       previous_number_of_segments = 0;
+       
+        for(i = 0; i < init_list.size(); i++)
+        {
+        	ArrayList segment_list = (ArrayList)init_list.get(i);
+        	previous_list.add(segment_list);
+        }
+        
+        int current_offset = 0;
+        while(current_number_of_segments != previous_number_of_segments && current_number_of_segments > 1)
+        {
+        	if(debug1)
+        	    System.out.println("Current number of segments is " + current_number_of_segments);
+        	previous_number_of_segments = previous_list.size();
+        	current_list.clear();
+        
+            i = 0;
+            current_offset = 0;
+            
+        	for(i = 0; i < previous_number_of_segments - 1; i++)
+        	{
+        	    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
+        	    ArrayList next_segment_list    = (ArrayList)previous_list.get(i + 1);
+        	    
+        	    int     current_length   = (int)    current_segment_list.get(0);
+        	    int     next_length      = (int)    next_segment_list.get(0);
+        	    int     current_t_length = (int)    current_segment_list.get(1);
+        	    int     next_t_length    = (int)    next_segment_list.get(1);
+        	    byte [] current_string   = (byte [])current_segment_list.get(2);
+        	    byte [] next_string      = (byte [])next_segment_list.get(2);
+        	    
+        	    int current_type       = getStringType(current_string, current_t_length);
+        	    int next_type          = getStringType(next_string,    next_t_length);
+        	    int current_iterations = getIterations(current_string, current_t_length);
+        	    int next_iterations    = getIterations(next_string,    next_t_length);
+        	    
+        	    if(current_type == next_type && current_iterations > 0 && next_iterations > 0)
+        	    {
+        	    	int merged_length  = current_length + next_length;
+        	    	
+        	    	int byte_offset = current_offset / 8;
+        	    	int byte_length = merged_length / 8;
         	    	if(merged_length % 8 != 0)
         	    		byte_length++;
         	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
@@ -3192,7 +3669,7 @@ public class DeltaMapper
         	    	if(current_type == 0)
         	    	{
         	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	    if(debug)
+        	    	    if(debug1)
             			{
                 			System.out.println("Original length is " + merged_length);
             				System.out.println("Compression length 0 is " + merged_compression_length);
@@ -3214,7 +3691,7 @@ public class DeltaMapper
         	    	else
         	    	{
         	    		merged_compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    		if(debug)
+        	    		if(debug1)
             			{
                 			System.out.println("Original length is " + merged_length);
             				System.out.println("Compression length 1 is " + merged_compression_length);
@@ -3240,7 +3717,7 @@ public class DeltaMapper
         				if(merged_compression_length % 8 != 0)
         				    compressed_byte_length++;
         				compressed_byte_length++;
-        				segment_string = new byte[compressed_byte_length];
+        				byte [] segment_string = new byte[compressed_byte_length];
         				for(int j = 0; j < compressed_byte_length; j++)
         					segment_string[j] = compressed_merged_segment[j];
         	    		
@@ -3267,7 +3744,7 @@ public class DeltaMapper
         	    	int merged_length  = current_length + next_length;
         	    	
         	    	int byte_offset = current_offset / 8;
-        	    	byte_length = merged_length / 8;
+        	    	int byte_length = merged_length / 8;
         	    	if(merged_length % 8 != 0)
         	    		byte_length++;
         	    	
@@ -3280,7 +3757,7 @@ public class DeltaMapper
         	    	// Test to see if the merged segments compress.
         	    	double merged_ratio = getZeroRatio(merged_segment, merged_length);
         	    	byte [] compressed_merged_segment = new byte[merged_segment.length * 2];
-        	    	compression_length = 0;
+        	    	int compression_length = 0;
         	    	if(merged_ratio >= .5)
         	    		compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
         	    	else
@@ -3288,16 +3765,26 @@ public class DeltaMapper
         	    	
         	    	if(compression_length < merged_length)
         	    	{
-        	    		//System.out.println("Merged segments that did not compress, compress after merging.");
+        	    		if(debug1)
+        	    		    System.out.println("Merged segments that did not compress, compress after merging.");
         	    		
         	    		int compressed_byte_length = compression_length / 8;
         				if(compression_length % 8 != 0)
         				    compressed_byte_length++;
         				compressed_byte_length++;
         				
-        				segment_string = new byte[compressed_byte_length];
+        				byte [] segment_string = new byte[compressed_byte_length];
         				for(int j = 0; j < compressed_byte_length; j++)
         					segment_string[j] = compressed_merged_segment[j];
+        				
+        				ArrayList merged_segment_list = new ArrayList();
+        	    		merged_segment_list.add(merged_length);
+        	    		merged_segment_list.add(compression_length);
+        	    		merged_segment_list.add(segment_string);
+        	    		
+        	    		current_list.add(merged_segment_list);
+        	    		current_offset += merged_length;
+        	    		i++;
         				
         	    	}
         	    	else
@@ -3309,21 +3796,24 @@ public class DeltaMapper
         	    		if(merged_length % 8 != 0)
         	    			byte_length++;
         	    		byte_length++;
-        	    	    segment_string    = new byte[byte_length];
+        	    	    byte [] segment_string    = new byte[byte_length];
                 	    for(int j = 0; j < byte_length - 1; j++)
                 		    segment_string[j] = merged_segment[j];
                 	    segment_string[merged_segment.length] = 0;
+                	    
+                	    ArrayList merged_segment_list = new ArrayList();
+        	    		merged_segment_list.add(merged_length);
+        	    		merged_segment_list.add(compression_length);
+        	    		merged_segment_list.add(segment_string);
+        	    		
+        	    		current_list.add(merged_segment_list);
+        	    		current_offset += merged_length;
+        	    		i++;
         	    	}
         	    	
-        	    	ArrayList merged_segment_list = new ArrayList();
-    	    		merged_segment_list.add(merged_length);
-    	    		merged_segment_list.add(compression_length);
-    	    		merged_segment_list.add(segment_string);
+        	    	
     	    		
-    	    		current_list.add(merged_segment_list);
     	    		
-    	    		current_offset += merged_length;
-    	    		i++;
         	    }
         	    else
         	    {
@@ -3345,961 +3835,85 @@ public class DeltaMapper
     	   
     	    for(i = 0; i < current_number_of_segments; i++)
     	    {
-    		    segment_list = (ArrayList)current_list.get(i);
+    		    ArrayList segment_list = (ArrayList)current_list.get(i);
     		    previous_list.add(segment_list);
     	    }
     	    // Previous list now has current list data.  
         }
         
-		zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		number_of_zero_segments = 0;
-		number_of_one_segments  = 0;
-		number_of_compressed_segments = 0;
-		
-		compressed_length.clear();
-		compressed_data.clear();
-		for(int i = 0; i < current_list.size(); i++)
-		{
-			segment_list = (ArrayList)current_list.get(i);
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			compressed_length.add(length);
-			compressed_data.add(data);
-		}
-		
-		
-		for(int i = 0; i < current_list.size(); i++)
-		{
-			segment_list = (ArrayList)current_list.get(i);
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;	
-		}
-		
-		System.out.println("Merged list has " + current_list.size() + " segments");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        
-        System.out.println();
-		
-		ArrayList segment_data = new ArrayList();
-    	segment_data.add(compressed_length);
-    	segment_data.add(compressed_data);
-    	return segment_data;
-    }
-    
-    // This function merges adjacent segments with the same bit type if they both compress, or if 
-    // both don't compress regardless of bit_type.
-    public static ArrayList getSegmentData3(byte [] string, int string_bit_length, int segment_bit_length)
-    {
-    	boolean debug = false;
-    	
-    	int number_of_segments       = string_bit_length / segment_bit_length;
-    	int segment_byte_length      = segment_bit_length / 8;
-    	int remainder                = string_bit_length % segment_bit_length;
-    	int last_segment_bit_length  = segment_bit_length + remainder;
-    	int last_segment_byte_length = segment_byte_length + remainder / 8;
-    	if(remainder % 8 != 0)
-    		last_segment_byte_length++;   
-    	
-    	ArrayList init_list        = new ArrayList();
-    	ArrayList compressed_length = new ArrayList();
+        ArrayList compressed_length = new ArrayList();
     	ArrayList compressed_data   = new ArrayList();
-    	byte [] processed_segment  = new byte[2 * last_segment_byte_length];
-        byte [] compressed_segment = new byte[2 * last_segment_byte_length];
-        
-        double zero_ratio_max = 0.;
-    	double zero_ratio_min = 1.;
-    	int    max_iterations = 0;
-    	int    min_iterations = Integer.MAX_VALUE;
-    	
-        //  Process all the regular segments.
-        
-        for(int i = 0; i < number_of_segments - 1; i++)
-        {
-            byte [] segment = new byte[segment_byte_length];	
-            for(int j = 0; j < segment_byte_length; j++)
-                segment[j] = string[i * segment_byte_length + j];
-            double zero_ratio = getZeroRatio(segment, segment_bit_length);  
-            
-            if(zero_ratio > zero_ratio_max)
-            	zero_ratio_max = zero_ratio;
-            if(zero_ratio < zero_ratio_min)
-            	zero_ratio_min = zero_ratio;
-            
-            int compression_length = segment_bit_length;
-    		if(zero_ratio >= .5)
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
-    			if(compression_amount < 0)
-    			{
-    				compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
-    			    int iterations = getIterations(compressed_segment, compression_length);
-    			    if(iterations > max_iterations)
-    				    max_iterations = iterations;
-    			    if(iterations < min_iterations)
-        				min_iterations = iterations;
-    			}
-    		}
-    		else
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
-            	if(compression_amount < 0)
-            	{
-            		compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);	
-            	    int iterations = getIterations(compressed_segment, compression_length);
-    			    if(iterations > max_iterations)
-    				    max_iterations = iterations;
-    			    if(iterations < min_iterations)
-        				min_iterations = iterations;
-    			}
-    		}
-    		
-    		int byte_length = segment_byte_length + 1;
-    		if(compression_length != segment_bit_length)
-    		{
-    			byte_length = compression_length / 8 + 1;
-    			if(compression_length % 8 != 0)
-        			byte_length++;
-    		}
-    		
-    		byte [] segment_string = new byte[byte_length];
-    		
-    		if(compression_length == segment_bit_length)
-    		{
-    			for(int j = 0; j < segment_byte_length; j++)
-        			segment_string[j] = segment[j];	
-    			segment_string[segment_byte_length] = 0;
-    		}
-    		else
-    		{
-    			for(int j = 0; j < byte_length; j++)
-        			segment_string[j] = compressed_segment[j];	
-    		}
-    		
-    		ArrayList segment_list = new ArrayList();   
-    	
-    		segment_list.add(segment_bit_length);
-    		segment_list.add(compression_length);
-    		segment_list.add(segment_string);
-    		
-    		init_list.add(segment_list);
-    		
-    		compressed_length.add(compression_length);
-    		compressed_data.add(segment_string);
-        }
-    	
-        // Pick up the last segment that probably has an odd length.
-        int index = number_of_segments - 1;
-        byte [] segment = new byte[last_segment_byte_length];	
-        for(int i = 0; i < last_segment_byte_length; i++)
-            segment[i] = string[index * segment_byte_length + i];
-        double zero_ratio = getZeroRatio(segment, last_segment_bit_length);  
-        
-        int compression_length = segment_bit_length;
-		if(zero_ratio >= .5)
+		//compressed_length.clear();
+		//compressed_data.clear();
+		for(i = 0; i < current_list.size(); i++)
 		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 0);
-			if(compression_amount < 0)
-				compression_length = compressZeroStrings2(segment, last_segment_bit_length, compressed_segment);
-		}
-		else
-		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 1);
-        	if(compression_amount < 0)
-        		compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);	
-		}
-		
-		int byte_length = last_segment_byte_length + 1;
-		if(compression_length != segment_bit_length)
-		{
-			byte_length = compression_length / 8 + 1;
-			if(compression_length % 8 != 0)
-    			byte_length++;
-		}
-		
-		byte [] segment_string = new byte[byte_length];
-		
-		if(compression_length == segment_bit_length)
-		{
-			for(int j = 0; j < last_segment_byte_length; j++)
-    			segment_string[j] = segment[j];	
-			segment_string[last_segment_byte_length] = 0;
-		}
-		else
-		{
-			for(int j = 0; j < byte_length; j++)
-    			segment_string[j] = compressed_segment[j];	
-		}
-		
-		ArrayList segment_list = new ArrayList();   
-	
-		segment_list.add(segment_bit_length);
-		segment_list.add(compression_length);
-		segment_list.add(segment_string);
-		
-		init_list.add(segment_list);
-		
-		
-		
-		
-		
-		
-		compressed_length.add(compression_length);
-		compressed_data.add(segment_string);
-		
-		zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		int number_of_compressed_segments = 0;
-		
-		for(int i = 0; i < init_list.size(); i++)
-        {
-			segment_list = (ArrayList)init_list.get(i);	
-			
+			ArrayList segment_list = (ArrayList)current_list.get(i);
 			int length   = (int)segment_list.get(1);
 			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
-        }
-    	
-		System.out.println("Initial list has " + init_list.size() + " segments.");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-        System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        System.out.println();
-		
-		
-    	// Finished constructing the initial list.
-    	
-        // Merge similar segments that are adjacent.
-        
-        ArrayList previous_list               = new ArrayList();
-        ArrayList current_list                = new ArrayList();
-        int       current_number_of_segments  = init_list.size();
-        int       previous_number_of_segments = 0;
-       
-        for(int i = 0; i < init_list.size(); i++)
-        {
-        	segment_list = (ArrayList)init_list.get(i);
-        	previous_list.add(segment_list);
-        }
-        
-        int current_offset = 0;
-        while(current_number_of_segments != previous_number_of_segments)
-        {
-        	previous_number_of_segments = previous_list.size();
-        	current_list.clear();
-        
-            int i = 0;
-            current_offset = 0;
-            
-        	for(i = 0; i < previous_number_of_segments - 1; i++)
-        	{
-        	    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
-        	    ArrayList next_segment_list    = (ArrayList)previous_list.get(i + 1);
-        	    
-        	    int     current_length   = (int)    current_segment_list.get(0);
-        	    int     next_length      = (int)    next_segment_list.get(0);
-        	    int     current_t_length = (int)    current_segment_list.get(1);
-        	    int     next_t_length    = (int)    next_segment_list.get(1);
-        	    byte [] current_string   = (byte [])current_segment_list.get(2);
-        	    byte [] next_string      = (byte [])next_segment_list.get(2);
-        	    
-        	    int current_type       = getStringType(current_string, current_t_length);
-        	    int next_type          = getStringType(next_string,    next_t_length);
-        	    int current_iterations = getIterations(current_string, current_t_length);
-        	    int next_iterations    = getIterations(next_string,    next_t_length);
-        	    
-        	    if(current_type == next_type && current_iterations > 0 && next_iterations > 0)
-        	    {
-        	    	int merged_length  = current_length + next_length;
-        	    	
-        	    	int byte_offset = current_offset / 8;
-        	    	byte_length = merged_length / 8;
-        	    	if(merged_length % 8 != 0)
-        	    		byte_length++;
-        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
-        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
-        	    	
-        	    	byte [] merged_segment = new byte[byte_length];
-        	    	for(int j = 0; j < byte_length; j++)
-        	    		merged_segment[j] = string[j + byte_offset];
-        	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
-        	    	int merged_compression_length = 0;
-        	    	if(current_type == 0)
-        	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	else
-        	    		merged_compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	
-        	    	if(merged_compression_length <= current_t_length + next_t_length)
-        	    	{
-        	    		int compressed_byte_length = merged_compression_length / 8;
-        				if(merged_compression_length % 8 != 0)
-        				    compressed_byte_length++;
-        				compressed_byte_length++;
-        				segment_string = new byte[compressed_byte_length];
-        				for(int j = 0; j < compressed_byte_length; j++)
-        					segment_string[j] = compressed_merged_segment[j];
-        	    		
-        	    		ArrayList merged_segment_list = new ArrayList();
-        	    		merged_segment_list.add(merged_length);
-        	    		merged_segment_list.add(merged_compression_length);
-        	    		merged_segment_list.add(segment_string);
-        	    
-        	    		current_list.add(merged_segment_list);
-        	    		
-        	    		current_offset += merged_length;
-            	        
-        	    		i++;
-        	    	}
-        	    	else
-        	    	{
-        	    		current_list.add(current_segment_list);
-        	    		current_offset += current_length;
-        	    	}
-        	    }
-        	    else if(current_iterations == 0 && next_iterations == 0)
-        	    {
-        	    	int merged_length  = current_length + next_length;
-        	    	
-        	    	int byte_offset = current_offset / 8;
-        	    	byte_length = merged_length / 8;
-        	    	if(merged_length % 8 != 0)
-        	    		byte_length++;
-        	    	
-        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
-        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
-        	    	byte [] merged_segment = new byte[byte_length];
-        	    	for(int j = 0; j < byte_length; j++)
-        	    		merged_segment[j] = string[j + byte_offset];   
-        	    	
-        	    	
-        	    	
-        	    	// Test to see if the merged segments compress.
-        	    	double merged_ratio = getZeroRatio(merged_segment, merged_length);
-        	    	byte [] compressed_merged_segment = new byte[merged_segment.length * 2];
-        	    	compression_length = 0;
-        	    	if(merged_ratio >= .5)
-        	    		compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	else
-        	    		compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	
-        	    	if(compression_length < merged_length)
-        	    	{
-        	    		//System.out.println("Merged segments that did not compress, compress after merging.");
-        	    		
-        	    		int compressed_byte_length = compression_length / 8;
-        				if(compression_length % 8 != 0)
-        				    compressed_byte_length++;
-        				compressed_byte_length++;
-        				
-        				segment_string = new byte[compressed_byte_length];
-        				for(int j = 0; j < compressed_byte_length; j++)
-        					segment_string[j] = compressed_merged_segment[j];
-        	    	}
-        	    	else
-        	    	{
-        	    		if(compression_length > merged_length)
-        	    			System.out.println("Compression length is an unexpected value.");
-        	    		
-        	    		byte_length = merged_length / 8;
-        	    		if(merged_length % 8 != 0)
-        	    			byte_length++;
-        	    		byte_length++;
-        	    	    segment_string    = new byte[byte_length];
-                	    for(int j = 0; j < byte_length - 1; j++)
-                		    segment_string[j] = merged_segment[j];
-                	    segment_string[merged_segment.length] = 0;
-        	    	}
-        	    	
-        	    	ArrayList merged_segment_list = new ArrayList();
-    	    		merged_segment_list.add(merged_length);
-    	    		merged_segment_list.add(compression_length);
-    	    		merged_segment_list.add(segment_string);
-    	    		
-    	    		current_list.add(merged_segment_list);
-    	    		
-    	    		current_offset += merged_length;
-    	    		i++;
-        	    }
-        	    else
-        	    {
-        	    	current_list.add(current_segment_list);
-        	    	current_offset += current_length;
-        	    }
-        	}
-        	
-
-    	    if(i == previous_number_of_segments - 1)
-    	    {
-    		    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
-    		    current_list.add(current_segment_list);
-    	    }
-    	
-    	    previous_list.clear();
-    	   
-    	    current_number_of_segments = current_list.size();
-    	   
-    	    for(i = 0; i < current_number_of_segments; i++)
-    	    {
-    		    segment_list = (ArrayList)current_list.get(i);
-    		    previous_list.add(segment_list);
-    	    }
-    	    // Previous list now has current list data.  
-        }
-        
-		zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		number_of_zero_segments = 0;
-		number_of_one_segments  = 0;
-		number_of_compressed_segments = 0;
-		
-		compressed_length.clear();
-		compressed_data.clear();
-		
-		for(int i = 0; i < current_list.size(); i++)
-		{
-			segment_list = (ArrayList)current_list.get(i);
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
-			
-			
 			compressed_length.add(length);
 			compressed_data.add(data);
 		}
 		
-		System.out.println("Merged list has " + current_list.size() + " segments");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
+		if(debug2)
+		{
+		    double zero_ratio_min = 1;
+		    double zero_ratio_max = 0.;
+		    int min_iterations = Integer.MAX_VALUE;
+		    int max_iterations = 0;
+		    int number_of_zero_segments = 0;
+		    int number_of_one_segments  = 0;
+		    int number_of_compressed_segments = 0;
+		    int max_string_type = -1;
+		    int min_string_type = -1;
+		    for(i = 0; i < current_list.size(); i++)
+		    {
+		        ArrayList segment_list = (ArrayList)current_list.get(i);
+		        int length   = (int)segment_list.get(1);
+		        byte [] data = (byte [])segment_list.get(2);
+			
+			
+		        zero_ratio = getZeroRatio(data, length);
+		        if(zero_ratio < zero_ratio_min)
+		            zero_ratio_min = zero_ratio;
+		        if(zero_ratio > zero_ratio_max)
+		            zero_ratio_max = zero_ratio;
+		        if(zero_ratio >= .5)
+		            number_of_zero_segments++;
+		        else
+		            number_of_one_segments++;
+		        int iterations  = getIterations(data, length);
+		        int string_type = getStringType(data, length);
+		        if(iterations > max_iterations)
+		        {
+		            max_iterations = iterations;
+		            max_string_type = string_type;
+		        }
+		        if(iterations < min_iterations)
+		        {
+		            min_iterations = iterations;
+		            min_string_type = string_type;
+		        }
+		        if(iterations > 0)
+		            number_of_compressed_segments++;	
+		    }
+	
+		    System.out.println("Merged list has " + current_list.size() + " segments");
+		    System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		    System.out.println("Number of zero segments is " + number_of_zero_segments);
+		    System.out.println("Number of one segments is " + number_of_one_segments);
+		    System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
+		    System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
+		    System.out.println("Minimum iterations is " + min_iterations);
+		    System.out.println("Minimum string type is " + min_string_type);
+		    System.out.println("Maximum iterations is " + max_iterations);
+		    System.out.println("Maximum string type is " + max_string_type);
+		    System.out.println();
+		}
         
-        System.out.println();
-		
 		ArrayList segment_data = new ArrayList();
     	segment_data.add(compressed_length);
     	segment_data.add(compressed_data);
     	return segment_data;
     }
     
-    
-    public static ArrayList getSegmentData4(byte [] string, int string_bit_length, int segment_bit_length)
-    {
-    	boolean debug = true;
-    	
-    	int number_of_segments       = string_bit_length / segment_bit_length;
-    	int segment_byte_length      = segment_bit_length / 8;
-    	int remainder                = string_bit_length % segment_bit_length;
-    	int last_segment_bit_length  = segment_bit_length + remainder;
-    	int last_segment_byte_length = segment_byte_length + remainder / 8;
-    	if(remainder % 8 != 0)
-    		last_segment_byte_length++;   
-    	
-    	ArrayList init_list        = new ArrayList();
-    	ArrayList compressed_length = new ArrayList();
-    	ArrayList compressed_data   = new ArrayList();
-    	byte [] processed_segment  = new byte[2 * last_segment_byte_length];
-        byte [] compressed_segment = new byte[2 * last_segment_byte_length];
-    	
-        //  Process all the regular segments.
-        
-        for(int i = 0; i < number_of_segments - 1; i++)
-        {
-            byte [] segment = new byte[segment_byte_length];	
-            for(int j = 0; j < segment_byte_length; j++)
-                segment[j] = string[i * segment_byte_length + j];
-            double zero_ratio = getZeroRatio(segment, segment_bit_length);  
-            
-            int compression_length = segment_bit_length;
-    		if(zero_ratio >= .5)
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 0);
-    			if(compression_amount < 0)
-    				compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
-    		}
-    		else
-    		{
-    			int compression_amount = getCompressionAmount(segment, segment_bit_length, 1);
-            	if(compression_amount < 0)
-            		compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);	
-    		}
-    		
-    		int byte_length = segment_byte_length + 1;
-    		if(compression_length != segment_bit_length)
-    		{
-    			byte_length = compression_length / 8 + 1;
-    			if(compression_length % 8 != 0)
-        			byte_length++;
-    		}
-    		
-    		byte [] segment_string = new byte[byte_length];
-    		
-    		if(compression_length == segment_bit_length)
-    		{
-    			for(int j = 0; j < segment_byte_length; j++)
-        			segment_string[j] = segment[j];	
-    			segment_string[segment_byte_length] = 0;
-    		}
-    		else
-    		{
-    			for(int j = 0; j < byte_length; j++)
-        			segment_string[j] = compressed_segment[j];	
-    		}
-    		
-    		ArrayList segment_list = new ArrayList();   
-    	
-    		segment_list.add(segment_bit_length);
-    		segment_list.add(compression_length);
-    		segment_list.add(segment_string);
-    		
-    		init_list.add(segment_list);
-    		
-    		compressed_length.add(compression_length);
-    		compressed_data.add(segment_string);
-        }
-    	
-        // Pick up the last segment that probably has an odd length.
-        int index = number_of_segments - 1;
-        byte [] segment = new byte[last_segment_byte_length];	
-        for(int i = 0; i < last_segment_byte_length; i++)
-            segment[i] = string[index * segment_byte_length + i];
-        double zero_ratio = getZeroRatio(segment, last_segment_bit_length);  
-        
-        int compression_length = segment_bit_length;
-		if(zero_ratio >= .5)
-		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 0);
-			if(compression_amount < 0)
-				compression_length = compressZeroStrings2(segment, last_segment_bit_length, compressed_segment);
-		}
-		else
-		{
-			int compression_amount = getCompressionAmount(segment, last_segment_bit_length, 1);
-        	if(compression_amount < 0)
-        		compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);	
-		}
-		
-		int byte_length = last_segment_byte_length + 1;
-		if(compression_length != segment_bit_length)
-		{
-			byte_length = compression_length / 8 + 1;
-			if(compression_length % 8 != 0)
-    			byte_length++;
-		}
-		
-		byte [] segment_string = new byte[byte_length];
-		
-		if(compression_length == segment_bit_length)
-		{
-			for(int j = 0; j < last_segment_byte_length; j++)
-    			segment_string[j] = segment[j];	
-			segment_string[last_segment_byte_length] = 0;
-		}
-		else
-		{
-			for(int j = 0; j < byte_length; j++)
-    			segment_string[j] = compressed_segment[j];	
-		}
-		
-		ArrayList segment_list = new ArrayList();   
-	
-		segment_list.add(segment_bit_length);
-		segment_list.add(compression_length);
-		segment_list.add(segment_string);
-		
-		init_list.add(segment_list);
-		
-		double zero_ratio_min = 1;
-		double zero_ratio_max = 0.;
-		int min_iterations = Integer.MAX_VALUE;
-		int max_iterations = 0;
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		int number_of_compressed_segments = 0;
-		
-		for(int i = 0; i < init_list.size(); i++)
-        {
-			segment_list = (ArrayList)init_list.get(i);	
-			
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-				max_iterations = iterations;
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
-        }
-    	
-		System.out.println("Initial list has " + init_list.size() + " segments.");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-        System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        System.out.println();
-		
-		compressed_length.add(compression_length);
-		compressed_data.add(segment_string);
-    	
-    	// Finished constructing the initial list.
-    	
-        // Merge similar segments that are adjacent.
-        
-        ArrayList previous_list               = new ArrayList();
-        ArrayList current_list                = new ArrayList();
-        int       current_number_of_segments  = init_list.size();
-        int       previous_number_of_segments = 0;
-       
-        for(int i = 0; i < init_list.size(); i++)
-        {
-        	segment_list = (ArrayList)init_list.get(i);
-        	previous_list.add(segment_list);
-        }
-        
-        int current_offset = 0;
-        while(current_number_of_segments != previous_number_of_segments)
-        {
-        	previous_number_of_segments = previous_list.size();
-        	current_list.clear();
-        
-            int i = 0;
-            current_offset = 0;
-        	for(i = 0; i < previous_number_of_segments - 1; i++)
-        	{
-        	    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
-        	    ArrayList next_segment_list    = (ArrayList)previous_list.get(i + 1);
-        	    
-        	    int     current_length   = (int)    current_segment_list.get(0);
-        	    int     next_length      = (int)    next_segment_list.get(0);
-        	    int     current_t_length = (int)    current_segment_list.get(1);
-        	    int     next_t_length    = (int)    next_segment_list.get(1);
-        	    byte [] current_string   = (byte [])current_segment_list.get(2);
-        	    byte [] next_string      = (byte [])next_segment_list.get(2);
-        	    
-        	    int current_type       = getStringType(current_string, current_t_length);
-        	    int next_type          = getStringType(next_string,    next_t_length);
-        	    int current_iterations = getIterations(current_string, current_t_length);
-        	    int next_iterations    = getIterations(next_string,    next_t_length);
-        	    
-        	    if(current_type == next_type && current_iterations > 0 && next_iterations > 0)
-        	    {
-        	    	int merged_length  = current_length + next_length;
-        	    	
-        	    	int byte_offset = current_offset / 8;
-        	    	byte_length = merged_length / 8;
-        	    	if(merged_length % 8 != 0)
-        	    		byte_length++;
-        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
-        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
-        	    	
-        	    	byte [] merged_segment = new byte[byte_length];
-        	    	for(int j = 0; j < byte_length; j++)
-        	    		merged_segment[j] = string[j + byte_offset];
-        	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
-        	    	int merged_compression_length = 0;
-        	    	if(current_type == 0)
-        	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	else
-        	    		merged_compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	
-        	    	if(merged_compression_length <= current_t_length + next_t_length)
-        	    	{
-        	    		int compressed_byte_length = merged_compression_length / 8;
-        				if(merged_compression_length % 8 != 0)
-        				    compressed_byte_length++;
-        				compressed_byte_length++;
-        				segment_string = new byte[compressed_byte_length];
-        				for(int j = 0; j < compressed_byte_length; j++)
-        					segment_string[j] = compressed_merged_segment[j];
-        	    		
-        	    		ArrayList merged_segment_list = new ArrayList();
-        	    		merged_segment_list.add(merged_length);
-        	    		merged_segment_list.add(merged_compression_length);
-        	    		merged_segment_list.add(segment_string);
-        	    
-        	    		current_list.add(merged_segment_list);
-        	    		
-        	    		current_offset += merged_length;
-            	        
-        	    		i++;
-        	    	}
-        	    	else
-        	    	{
-        	    		current_list.add(current_segment_list);
-        	    		current_offset += current_length;
-        	    	}
-        	    }
-        	    /*
-        	    if(current_type == next_type && current_iterations > 0 && next_iterations > 0)
-        	    {
-        	    	int merged_length  = current_length + next_length;
-        	    	
-        	    	int byte_offset = current_offset / 8;
-        	    	byte_length = merged_length / 8;
-        	    	if(merged_length % 8 != 0)
-        	    		byte_length++;
-        	    	if(merged_length % 8 != 0  && i != previous_number_of_segments - 2)
-        	    		System.out.println("Merged length not evenly divisible by 8 at index = " + i);
-        	    	
-        	    	byte [] merged_segment = new byte[byte_length];
-        	    	for(int j = 0; j < byte_length; j++)
-        	    		merged_segment[j] = string[j + byte_offset];
-        	    	byte [] compressed_merged_segment = new byte[2 * byte_length];
-        	    	int merged_compression_length = 0;
-        	    	if(current_type == 0)
-        	    	    merged_compression_length = compressZeroStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	else
-        	    		merged_compression_length = compressOneStrings2(merged_segment, merged_length, compressed_merged_segment);
-        	    	
-        	    	if(merged_compression_length <= current_t_length + next_t_length)
-        	    	{
-        	    		int compressed_byte_length = merged_compression_length / 8;
-        				if(merged_compression_length % 8 != 0)
-        				    compressed_byte_length++;
-        				compressed_byte_length++;
-        				segment_string = new byte[compressed_byte_length];
-        				for(int j = 0; j < compressed_byte_length; j++)
-        					segment_string[j] = compressed_merged_segment[j];
-        	    		
-        	    		ArrayList merged_segment_list = new ArrayList();
-        	    		merged_segment_list.add(merged_length);
-        	    		merged_segment_list.add(merged_compression_length);
-        	    		merged_segment_list.add(segment_string);
-        	    		
-        	    		if(debug)
-        	    		{
-        	    			int iterations = getIterations(segment_string, merged_compression_length);
-        	    			if(iterations > 8)
-        	    				System.out.println("Merged segment has " + iterations + " iterations.");
-        	    		}
-        	    
-        	    		current_list.add(merged_segment_list);
-        	    		
-        	    		current_offset += merged_length;
-            	        
-        	    		i++;
-        	    	}
-        	    	else
-        	    	{
-        	    		current_list.add(current_segment_list);
-        	    		current_offset += current_length;
-        	    	}
-        	    }
-        	    */
-        	    
-        	    else if(current_iterations == 0 && next_iterations == 0)
-        	    {
-        	    	int merged_length  = current_length + next_length;
-        	    	
-        	    	int byte_offset = current_offset / 8;
-        	    	
-        	    	
-        	    	byte_length = merged_length / 8;
-        	    	if(merged_length % 8 != 0)
-        	    	{
-        	    		byte_length++;
-        	    		if(i != previous_number_of_segments - 2)
-        	    			System.out.println("Merged length not evenly divisible by 8 at index = " + i);	
-        	    	}
-        	    	byte_length++;
-        	    	
-        	    	segment_string = new byte[byte_length];
-        	    	
-        	    	for(int j = 0; j < byte_length - 1; j++)
-        	    		segment_string[j] = string[j + byte_offset];
-        	    	segment_string[byte_length - 1] = 0;
-        	    	
-        	    	if(debug)
-        	    	{
-        	    		int iterations = getIterations(segment_string, merged_length);
-        	    		if(iterations > 0)
-        	    		{
-        	    			System.out.println("Uncompressed segment has non-zero iterations = " + iterations);
-        	    		}
-        	    	}
-        	    	
-        	    	
-        	    	ArrayList merged_segment_list = new ArrayList();
-    	    		merged_segment_list.add(merged_length);
-    	    		merged_segment_list.add(compression_length);
-    	    		merged_segment_list.add(segment_string);
-    	    		
-    	    		current_list.add(merged_segment_list);
-    	    		
-    	    		current_offset += merged_length;
-    	    		i++;
-        	    }
-        	    else
-        	    {
-        	    	current_list.add(current_segment_list);
-        	    	current_offset += current_length;
-        	    }
-        	}
-        	
-
-    	    if(i == previous_number_of_segments - 1)
-    	    {
-    		    ArrayList current_segment_list = (ArrayList)previous_list.get(i);
-    		    current_list.add(current_segment_list);
-    		    
-    	    }
-    	
-    	    previous_list.clear();
-    	   
-    	    current_number_of_segments = current_list.size();
-    	   
-    	    for(i = 0; i < current_number_of_segments; i++)
-    	    {
-    		    segment_list = (ArrayList)current_list.get(i);
-    		    previous_list.add(segment_list);
-    	    }
-    	    // Previous list now has current list data.
-        }
-    	
-		compressed_length.clear();
-		compressed_data.clear();
-		
-		zero_ratio_min = 1;
-		zero_ratio_max = 0.;
-		min_iterations = Integer.MAX_VALUE;
-		max_iterations = 0;
-		number_of_zero_segments = 0;
-		number_of_one_segments  = 0;
-		number_of_compressed_segments = 0;
-		
-		for(int i = 0; i < current_list.size(); i++)
-		{
-			segment_list = (ArrayList)current_list.get(i);
-			int length   = (int)segment_list.get(1);
-			byte [] data = (byte [])segment_list.get(2);
-			
-			
-			zero_ratio = getZeroRatio(data, length);
-			if(zero_ratio < zero_ratio_min)
-				zero_ratio_min = zero_ratio;
-			if(zero_ratio > zero_ratio_max)
-				zero_ratio_max = zero_ratio;
-			if(zero_ratio >= .5)
-				number_of_zero_segments++;
-			else
-				number_of_one_segments++;
-			int iterations = getIterations(data, length);
-			if(iterations > max_iterations)
-			{
-				max_iterations = iterations;
-				if(iterations > 7)
-					System.out.println("Large number of iterations " + iterations + " at index " + i);
-			}
-			if(iterations < min_iterations)
-				min_iterations = iterations;
-			if(iterations > 0)
-				number_of_compressed_segments++;
-			
-			
-			compressed_length.add(length);
-			compressed_data.add(data);
-		}
-		
-		System.out.println("Merged list has " + current_list.size() + " segments");
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-        System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Minimum zero ratio is " + String.format("%.4f", zero_ratio_min));
-        System.out.println("Maximum zero ratio is " + String.format("%.4f", zero_ratio_max));
-        System.out.println("Minimum iterations is " + min_iterations);
-        System.out.println("Maximum iterations is " + max_iterations);
-        
-        System.out.println();
-		ArrayList segment_data = new ArrayList();
-    	segment_data.add(compressed_length);
-    	segment_data.add(compressed_data);
-    	return segment_data;
-    }
 }

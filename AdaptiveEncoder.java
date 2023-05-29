@@ -56,6 +56,7 @@ public class AdaptiveEncoder
 	boolean initialized = false;
 	boolean merge       = true;
 	boolean recompress  = true;
+	boolean debug       = false;
 	
 	int     segment_length = 100;
 	
@@ -267,11 +268,13 @@ public class AdaptiveEncoder
 						{
 		            		merge = false;
 							item.setState(false);
+							apply_item.doClick();
 						}
 						else
 						{
 							merge = true;
 							item.setState(true);
+							apply_item.doClick();
 						}
 		            }   	
 				};
@@ -292,11 +295,13 @@ public class AdaptiveEncoder
 						{
 		            		recompress = false;
 							item.setState(false);
+							apply_item.doClick();
 						}
 						else
 						{
 							recompress = true;
 							item.setState(true);
+							apply_item.doClick();
 						}
 		            }   	
 				};
@@ -437,9 +442,9 @@ public class AdaptiveEncoder
 		    	data_list.clear();
 		    }
 			
-			System.out.println("Pixel shift is " + pixel_shift);
+			//System.out.println("Pixel shift is " + pixel_shift);
 		    //System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
-		    System.out.println();
+		    //System.out.println();
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
@@ -540,8 +545,8 @@ public class AdaptiveEncoder
 			}
 		    
 			min_set_id = min_index;
-			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			System.out.println();
+			//System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
+			//System.out.println();
 			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 		    
@@ -588,22 +593,31 @@ public class AdaptiveEncoder
 				int minimum_segment_length = 64 + segment_length * 8;
 			   
 				ArrayList segment_data_list = new ArrayList();
+				
+				//ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+				
+				
+				
 				if(merge)
 				{
 					if(recompress)
-				        segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
+				        segment_data_list = DeltaMapper.getSegmentData3(string, channel_length[j], minimum_segment_length);
 					else
-						segment_data_list = DeltaMapper.getSegmentData3(string, channel_length[j], minimum_segment_length);
+						segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
 				}
 				else
 					segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
+				
+				
 				ArrayList compression_length = (ArrayList)segment_data_list.get(0);
 				ArrayList compression_data   = (ArrayList)segment_data_list.get(1);
 				ArrayList data_list = (ArrayList)channel_data.get(j);
 				data_list.clear();
 				data_list.add(compression_length);
 				data_list.add(compression_data);
-			
+				
+				System.out.println("Finished " + channel_string[j]);
+				System.out.println();
 			}
 		  
 	    	
@@ -683,7 +697,10 @@ public class AdaptiveEncoder
 			//System.out.println();
 			
 			int channel[] = DeltaMapper.getChannels(min_set_id);
-			System.out.println();
+			//System.out.println();
+			
+			
+			
 			
 		    try
 		    {
@@ -739,11 +756,8 @@ public class AdaptiveEncoder
 		            ArrayList segment_data   = (ArrayList)data_list.get(1);
 		            
 		            int n = segment_length.size();
-		            if(i == 0)
+		            if(debug)
 		                System.out.println("There are " + n + " segments.");
-		            
-		            
-		            
 		            // Number of segments.
 		            out.writeInt(n);
 		            
@@ -752,25 +766,20 @@ public class AdaptiveEncoder
 		            	
 		            	int bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
-		            	
-		            	
-		            	
-		            	
-		            	
-		            	int iterations = DeltaMapper.getIterations(segment, bit_length);
-		            	if(i == 0)
-		            	    System.out.println("Iterations is " + iterations);
 		            	byte extra_bits = 8;
 		            	if(bit_length % 8 != 0)
 		            	    extra_bits     += 8 - (bit_length % 8);
-		            	int calculated_length = segment.length * 8 - extra_bits;
 		            	
-		            	if(i == 0)
+		            	if(debug)
 		            	{
+		            		int calculated_length = segment.length * 8 - extra_bits;
+		            		int iterations = DeltaMapper.getIterations(segment, bit_length);
+		            		System.out.println("Iterations is " + iterations);
 		            		System.out.println("Segment " + k + " has bit length " + bit_length);
 		            		System.out.println("Calculated bit length is " + calculated_length);
 		            		System.out.println("Byte length is " + segment.length);
 		            		System.out.println("Extra bits is " + extra_bits);
+		            		System.out.println();
 		            	}
 		            	
 		            	
@@ -788,7 +797,7 @@ public class AdaptiveEncoder
 		        foo_ratio       /= (3 * xdim * ydim);
 		        System.out.println("Compression ratio is " + String.format("%.4f", foo_ratio));
 		        System.out.println("File compression rate is " + String.format("%.4f", file_ratio));
-		        System.out.println();
+		        //System.out.println();
 		    }
 		    catch(Exception e)
 		    {
