@@ -102,7 +102,12 @@ public class AdaptiveEncoder
 		    red                    = new int[xdim * ydim];
 		    
 		    // PNG files do not always have this raster type.
-			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
+		    
+			if(raster_type != BufferedImage.TYPE_3BYTE_BGR)
+			{
+				System.out.println("File raster type not supported.");
+			}
+			else	
 			{
 				int[]          pixel = new int[xdim * ydim];
 				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, original_pixel, 0, xdim);
@@ -285,32 +290,6 @@ public class AdaptiveEncoder
 					merge_item.setState(false);
 				settings_menu.add(merge_item);
 				
-				JCheckBoxMenuItem recompress_item = new JCheckBoxMenuItem("Recompress");
-				ActionListener recompress_handler = new ActionListener()
-				{
-					public void actionPerformed(ActionEvent e) 
-		            {
-		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
-		            	if(recompress == true)
-						{
-		            		recompress = false;
-							item.setState(false);
-							apply_item.doClick();
-						}
-						else
-						{
-							recompress = true;
-							item.setState(true);
-							apply_item.doClick();
-						}
-		            }   	
-				};
-				recompress_item.addActionListener(recompress_handler);
-				if(recompress)
-					recompress_item.setState(true);
-				else
-					recompress_item.setState(false);
-				settings_menu.add(recompress_item);
 				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
@@ -598,13 +577,8 @@ public class AdaptiveEncoder
 				
 				
 				
-				if(merge)
-				{
-					if(recompress)
-				        segment_data_list = DeltaMapper.getSegmentData3(string, channel_length[j], minimum_segment_length);
-					else
-						segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
-				}
+				if(merge)	
+				    segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
 				else
 					segment_data_list = DeltaMapper.getSegmentData(string, channel_length[j], minimum_segment_length);
 				
