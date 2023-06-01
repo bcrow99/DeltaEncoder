@@ -2444,25 +2444,39 @@ public class DeltaMapper
     	
     	return ratio;
     }
-    public static double getShannonLimit(int [] weight)
+    
+    public static double log2(double value)
     {
+    	double result = (Math.log(value)/Math.log(2.));
+    	return result;
+    }
+    
+    // Somewhere we are passing histograms with holes in
+    // them.  Tricky problem that also hampers deflate.
+    // We'll filter the zero values--room to improve
+    // efficiency although it shouldn't affect final
+    // result, unlike deflate.
+    public static double getShannonLimit(int [] frequency)
+    {
+    	int n   = frequency.length;
     	int sum = 0;
-    	int n   = weight.length;
-    	
     	for(int i = 0; i < n; i++)
-    	    sum += weight[i];
+    	    sum += frequency[i];
+    	double [] weight = new double[n];
+    	for(int i = 0; i < n; i++)
+    	{
+    	    weight[i]  = frequency[i];
+    	    weight[i] /= sum;
+    	}
     	
     	double limit = 0;
     	for(int i = 0; i < n; i++)
     	{
-    		double exponent = weight[i];
-    		exponent       /= sum;
-    		
-    		double factor = Math.pow(2, exponent);
-    		limit          += weight[i] * factor;
+    		if(weight[i] != 0)
+    	        limit += frequency[i] * log2(weight[i]);
     	}
     	
-    	return limit;
+        return -limit;
     }
 
     // We'll refer to integer values as frequencies,
