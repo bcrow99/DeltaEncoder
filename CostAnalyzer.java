@@ -448,6 +448,7 @@ public class CostAnalyzer
 		    
 			min_set_id = min_index;
 			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
+			System.out.println("Pixel shift is " + pixel_shift);
 			System.out.println();
 			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
@@ -470,6 +471,27 @@ public class CostAnalyzer
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
 				
+				// If pixel shift is 0, this will produce an inaccurate result,
+				// but still useful for our purposes, a basic measure of
+				// how much compression to expect from byte values that haven't
+				// been turned into unary strings.  The problem is the
+				// range of unquantized delta values can be larger than 256.
+				
+				byte [] delta_bytes = new byte[xdim * ydim];
+				for(int k = 0; k < delta.length; k++)
+					delta_bytes[k] = (byte)delta[k];
+				byte [] zipped_bytes = new byte[xdim * ydim * 2];
+			    Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+		    	deflater.setInput(delta_bytes);
+		    	deflater.finish();
+		    	int zipped_byte_length = deflater.deflate(zipped_bytes);
+		    	deflater.end();
+				
+		    	double byte_rate = zipped_byte_length * 8;
+		    	byte_rate /= pixel_length;
+		    	System.out.println("The zipped delta byte rate is " + String.format("%.4f", byte_rate));
+				
+				
 				int predicted_length = DeltaMapper.getStringLength(delta);
 				
 				int string_byte_length = predicted_length / 8;
@@ -482,11 +504,9 @@ public class CostAnalyzer
 				
 				double string_rate = predicted_length;
 				string_rate       /= pixel_length;
-				System.out.println("The predicted packed string rate is " + String.format("%.4f", string_rate));
+				//System.out.println("The predicted packed string rate is " + String.format("%.4f", string_rate));
 				
-				string_rate = channel_length[j];
-				string_rate /= pixel_length;
-				System.out.println("The actual packed string rate is " + String.format("%.4f", string_rate));
+				
 				
 				double zero_ratio = xdim * ydim;
 		        if(histogram.length > 1)
@@ -499,10 +519,10 @@ public class CostAnalyzer
 		        }	
 			    zero_ratio  /= channel_length[j];
 			    
-			    System.out.println("The zero ratio calculated from histogram is " + String.format("%.4f", zero_ratio));
+			   
 			    
-			    zero_ratio = DeltaMapper.getZeroRatio(string, channel_length[j]);
-			    System.out.println("The zero ratio by scanning string is " + String.format("%.4f", zero_ratio));	
+			    //zero_ratio = DeltaMapper.getZeroRatio(string, channel_length[j]);
+			    //System.out.println("The zero ratio by scanning string is " + String.format("%.4f", zero_ratio));	
 			    
 			    if(zero_ratio > .5)
 				{
@@ -515,70 +535,81 @@ public class CostAnalyzer
 					channel_bit_type[j] = 1;	
 			    }
 			    
-			    if(channel_length[j] == channel_compressed_length[j])
-			    	System.out.println("String did not compress.");
-			    else
-			    {
-			    	string_rate  = channel_compressed_length[j];
-					string_rate /= pixel_length;
-					System.out.println("The compressed packed string rate is " + String.format("%.4f", string_rate));	
-			    }
-			    
-			    
 			    ArrayList frequency_list = new ArrayList();
-			    int n = histogram.length;
+			    int       n              = histogram.length;
 			    for(int k = 0; k < n; k++)
-			    {
 			    	frequency_list.add(histogram[k]);
-			    }
 			    Collections.sort(frequency_list, Comparator.reverseOrder());
 			    
 			    int [] frequency = new int[n];
-			    
 			    for(int k = 0; k < n; k++)
 			    {
-			    	System.out.println(k + "->" + (int)frequency_list.get(k));
+			    	//System.out.println(k + "->" + (int)frequency_list.get(k));
 			    	frequency[k] = (int)frequency_list.get(k);
 			    }
 			    
 			    int [] length = DeltaMapper.getHuffmanLength(frequency);
 			    
 			    int huffman_cost = DeltaMapper.getCost(length, frequency);
-			    System.out.println("The huffman cost is " + huffman_cost);
+			    //System.out.println("The huffman cost is " + huffman_cost);
 			    string_rate = huffman_cost;
 			    string_rate /= pixel_length;
-			    //System.out.println("The expected huffman rate is " + String.format("%.2f", string_rate));
+			    System.out.println("The huffman rate from cost function is " + String.format("%.4f", string_rate));
 			    
 			    length = DeltaMapper.getUnaryLength(n);
 			    int unary_cost = DeltaMapper.getCost(length, frequency);
-			    System.out.println("The unary cost is " + unary_cost);
+			    
+			    //System.out.println("The unary cost is " + unary_cost);
 			    string_rate = unary_cost;
 			    string_rate /= pixel_length;
-			    //System.out.println("The expected unary string rate is " + String.format("%.2f", string_rate));
-			    
-			    double shannon_limit = DeltaMapper.getShannonLimit(frequency);
-			    System.out.println("The shannon limit is " + String.format("%.2f", shannon_limit));
-			    
-			    
-			    
-			    
-			    /*
-			    int [] ordered_rank = new int[n];
-				for(int k = 0; k < n; k++)
-				{
-					int m = string_table[k];
-					ordered_rank[k] = m;
-				}
+			    //System.out.println("The expected packed string rate from cost function is " + String.format("%.4f", string_rate));
+			    string_rate = channel_length[j];
+				string_rate /= pixel_length;
+				System.out.println("The string rate is " + String.format("%.4f", string_rate));
+				System.out.println("The zero ratio is " + String.format("%.4f", zero_ratio));
 				
-				int [] frequency = new int[n];
-				for(int k = 0; k < n; k++)
-				{
-					int m = ordered_rank[k];
-					frequency[k] = histogram[m];
-					System.out.println("Frequency " + k + " is " + frequency[k]);
-				}
-				*/
+				int byte_length = channel_length[j] / 8;
+				if(channel_length[j] % 8 != 0)
+					byte_length++;
+				deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+		    	deflater.setInput(string, 0, byte_length);
+		    	deflater.finish();
+		    	int zipped_string_length = deflater.deflate(zipped_bytes);
+		    	deflater.end();
+		    	string_rate = zipped_string_length * 8;
+		    	string_rate /= pixel_length;
+		    	System.out.println("The zipped string rate is " + String.format("%.4f", string_rate));
 				
+				if(channel_length[j] == channel_compressed_length[j])
+			    	System.out.println("String did not compress.");
+			    else
+			    {
+			    	string_rate  = channel_compressed_length[j];
+					string_rate /= pixel_length;
+					System.out.println("The compressed string rate is " + String.format("%.4f", string_rate));	
+					
+					byte_length = channel_compressed_length[j] / 8;
+					if(channel_compressed_length[j] % 8 != 0)
+						byte_length++;
+					deflater = new Deflater(Deflater.BEST_COMPRESSION);	
+					deflater.setInput(compressed_string, 0, byte_length);
+			    	deflater.finish();
+			    	zipped_string_length = deflater.deflate(zipped_bytes);
+			    	deflater.end();
+			    	string_rate = zipped_string_length * 8;
+			    	string_rate /= pixel_length;
+			    	System.out.println("The zipped compressed string rate is " + String.format("%.4f", string_rate));
+					
+					
+					
+					
+			    }
+			    
+				double shannon_limit = DeltaMapper.getShannonLimit(frequency);
+			    string_rate = shannon_limit;
+			    string_rate /= pixel_length;
+			    System.out.println("The shannon rate is " + String.format("%.4f", string_rate));
+			    
 				System.out.println("Finished " + channel_string[j]);
 				System.out.println();
 			}
