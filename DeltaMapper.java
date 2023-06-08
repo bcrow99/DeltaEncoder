@@ -50,7 +50,6 @@ public class DeltaMapper
 	    return histogram;
 	}
 	
-
 	public static ArrayList getHistogram(int value[])
 	{  
 	    int value_min = value[0];
@@ -410,8 +409,10 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            		    // Setting the first value to 2 to mark the delta type paeth.
-            			dst[k++] = 2;
+            		    // Setting the first value to 0 to mark the delta type paeth.
+            	    	// Since we're only using one type of delta, we don't really
+            	    	// have a use for the first delta as a code word.
+            			dst[k++] = 0;
             	    }
             		else
             		{
@@ -483,7 +484,7 @@ public class DeltaMapper
         int value = init_value;
 
         
-        if(src[0] != 2)
+        if(src[0] != 0)
         	System.out.println("Wrong code.");
         
         for(int i = 1; i < xdim; i++)
@@ -528,7 +529,6 @@ public class DeltaMapper
             	}
             }
         }
-        
         return dst;
     }
     
@@ -958,11 +958,72 @@ public class DeltaMapper
         return dst;
     }
     
+    public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
+    {
+    	int current_bit = 0;
+    	int _current_bit = 0;
+    	
+    	for(int i = 0; i < src.length; i++)
+    	{
+    	    int j = src[i];
+    	    int k = table[j];
+    	    
+    	    
+    	    int code_word   = code[k];
+    	    int code_length = length[k];
+    	    int bit_span    = current_bit + code_length;
+    	    int byte_span   = bit_span / 8;
+    	    if(bit_span % 8 != 0)
+    	    	byte_span++;
+    	    
+    	    int shift = current_bit % 8;
+    	    
+    	    
+    	    for(int m = 0; m < byte_span; m++)
+    	    {
+    	    	/*
+    	        int shifted_code_word = code_word << shift;
+    	        shifted_code_word   >>= shift;
+    	        shift += 8;
+    	        
+    	        byte code_byte = (byte)(shifted_code_word & 0x00FF);
+    	        
+    	        int current_byte = current_bit / 8;
+    	        if(current_bit % 8 != 1)
+    	        	current_byte++;
+    	        dst[current_byte] &= code_byte;
+    	        */
+    	    	if(m != byte_span - 1)
+    	            current_bit += 8;
+    	    	else
+    	    		current_bit += code_length % byte_span;
+    	    }
+    	    
+    	    _current_bit += code_length;
+    	}
+    	
+    	System.out.println("current_bit = " + current_bit + ", _current_bit = " + _current_bit);
+    	int bit_length = _current_bit;
+    	return bit_length;
+    }
     
-    // These packing/unpacking functions represent int values
-    // as unary strings.
-    // This set of functions makes no assumptions about the 
-    // the maxiumum length of an individual string.
+    public static int unpackCode(byte src[], int table[], int [] code, int [] length, int dst[])
+    {
+    	int current_bit = 0;
+    	
+    	for(int i = 0; i < src.length; i++)
+    	{
+    		
+    	}
+    	
+    	int bit_length = current_bit;
+    	return bit_length;
+    }
+    
+    // These packing/unpacking functions represent int values as unary strings.
+    // This set of functions makes no assumptions about the maxiumum length of 
+    // an individual string, which makes it useful compressing data that 
+    // cannot be scanned beforehand.
     public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
@@ -2454,7 +2515,7 @@ public class DeltaMapper
     // Somewhere we are passing histograms with holes in
     // them.  Tricky problem that also hampers deflate.
     // We'll filter the zero values--room to improve
-    // efficiency although it shouldn't affect final
+    // efficiency although it shouldn't effect final
     // result, unlike deflate.
     public static double getShannonLimit(int [] frequency)
     {
@@ -2473,14 +2534,14 @@ public class DeltaMapper
     	for(int i = 0; i < n; i++)
     	{
     		if(weight[i] != 0)
-    	        limit += frequency[i] * log2(weight[i]);
+    	        limit -= frequency[i] * log2(weight[i]);
     	}
     	
-        return -limit;
+        return limit;
     }
 
     // We'll refer to integer values as frequencies,
-    // and fractions as weights.
+    // and fractions (or probabilities) as weights.
     public static int getCost(int [] length, int [] frequency)
     {
     	int n    = length.length;
@@ -2490,7 +2551,6 @@ public class DeltaMapper
     	{
     	    cost += length[i] * frequency[i];
     	}
-    	
     	return cost;
     }
     
@@ -3824,10 +3884,6 @@ public class DeltaMapper
         	    		current_offset += merged_length;
         	    		i++;
         	    	}
-        	    	
-        	    	
-    	    		
-    	    		
         	    }
         	    else
         	    {
@@ -3857,8 +3913,7 @@ public class DeltaMapper
         
         ArrayList compressed_length = new ArrayList();
     	ArrayList compressed_data   = new ArrayList();
-		//compressed_length.clear();
-		//compressed_data.clear();
+	
 		for(i = 0; i < current_list.size(); i++)
 		{
 			ArrayList segment_list = (ArrayList)current_list.get(i);
