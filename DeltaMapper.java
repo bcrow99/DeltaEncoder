@@ -958,52 +958,106 @@ public class DeltaMapper
         return dst;
     }
     
-    public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
+    public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
+    	boolean debug1 = false;
+    	boolean debug2 = false;
+    	boolean debug3 = false;
+    	boolean debug4 = false;
+    	
     	int current_bit = 0;
-    	int _current_bit = 0;
+    	
     	
     	for(int i = 0; i < src.length; i++)
     	{
     	    int j = src[i];
     	    int k = table[j];
     	    
+    	    long code_word   = code[k];
+    	    int code_length  = length[k];
     	    
-    	    int code_word   = code[k];
-    	    int code_length = length[k];
-    	    int bit_span    = current_bit + code_length;
-    	    int byte_span   = bit_span / 8;
-    	    if(bit_span % 8 != 0)
-    	    	byte_span++;
+    	    if(debug1)
+    	    {
+    	    	int mask = 1;
+    	    	for(int m = 0; m < code_length; m++)
+    	    	{
+    	    	    if((code_word & (mask << m)) != 0)
+    	    	    	System.out.print("1");
+    	    	    else
+    	    	    	System.out.print("0");		
+    	    	}
+    	    	System.out.println();
+    	    }
     	    
     	    int shift = current_bit % 8;
     	    
+    	    code_word <<= shift;
     	    
-    	    for(int m = 0; m < byte_span; m++)
+    	    int or_length = code_length + shift;
+    	    
+    	    if(debug2)
     	    {
-    	    	/*
-    	        int shifted_code_word = code_word << shift;
-    	        shifted_code_word   >>= shift;
-    	        shift += 8;
-    	        
-    	        byte code_byte = (byte)(shifted_code_word & 0x00FF);
-    	        
-    	        int current_byte = current_bit / 8;
-    	        if(current_bit % 8 != 1)
-    	        	current_byte++;
-    	        dst[current_byte] &= code_byte;
-    	        */
-    	    	if(m != byte_span - 1)
-    	            current_bit += 8;
-    	    	else
-    	    		current_bit += code_length % byte_span;
+    	    	int mask = 1;
+    	    	for(int m = 0; m < or_length; m++)
+    	    	{
+    	    	    if((code_word & (mask << m)) != 0)
+    	    	    	System.out.print("1");
+    	    	    else
+    	    	    	System.out.print("0");		
+    	    	}
+    	    	System.out.println();
     	    }
     	    
-    	    _current_bit += code_length;
+    	    int number_of_bytes = or_length / 8;
+    	    if(or_length % 8 != 0)
+    	        number_of_bytes++;
+    	   
+    	    int current_byte = current_bit / 8;
+    	    shift            = 0;
+    	    
+    	    
+    	    if(debug3)
+    	    {
+    	    	System.out.println("Number of bytes is " + number_of_bytes);
+    	    	System.out.println("Or length is " + or_length);
+    	    }
+    	    for(int m = 0; m < number_of_bytes; m++)
+    	    {
+    	        long shifted_code_word = code_word >> shift;
+    	        byte code_byte        = (byte)(shifted_code_word &= 0x00ff);
+    	        
+    	        if(debug3)
+    	        {
+    	        	System.out.print("Code byte " + m + " = ");
+    	        	byte mask = 1;
+    	        	for(int n = 0; n < 8; n++)
+    	        	{
+    	        	    if((code_byte & (mask << n))!= 0)	
+    	        	        System.out.print("1");
+    	        	    else
+    	        	    	System.out.print("0");	
+    	        	}
+                    System.out.println();
+    	        }
+    	        dst[current_byte]     |= code_byte;
+    	        current_byte++;
+    	        shift += 8;
+    	    }
+    	    
+    	    
+    	    current_bit += code_length;
+    	    if(debug4)
+    	    {
+    	    	System.out.println("Current byte is " + current_byte);
+    	    	int last_bit = current_byte * 8;
+    	    	last_bit -= or_length % 8;
+    	    	System.out.println("Last bit is " + last_bit);
+    	    	System.out.println("Current bit is " + current_bit);
+    	    }
+    	    
     	}
     	
-    	System.out.println("current_bit = " + current_bit + ", _current_bit = " + _current_bit);
-    	int bit_length = _current_bit;
+    	int bit_length = current_bit;
     	return bit_length;
     }
     
@@ -2348,12 +2402,12 @@ public class DeltaMapper
     	return channel;
     }
     
-    public static int[] getCanonicalCode(int [] length)
+    public static long[] getCanonicalCode(int [] length)
     {
     	int n = length.length;
     	
-        int [] code         = new int[n];
-        int [] shifted_code = new int[n];
+        long [] code         = new long[n];
+        long [] shifted_code = new long[n];
         int max_length = length[n - 1];
         
         code[0] = 0;
@@ -2367,14 +2421,14 @@ public class DeltaMapper
         return shifted_code;
     }
     
-    public static int[] getUnaryCode(int n)
+    public static long[] getUnaryCode(int n)
     {
-        int [] code         = new int[n];
+        long [] code         = new long[n];
        
         code[0] = 0;
 	    for(int i = 1; i < n; i++)
 	    {
-	    	code[i] = code[i - 1] + (int)Math.pow(2, i);
+	    	code[i] = code[i - 1] + (long)Math.pow(2, i);
 	    }
 	    code[n - 1]++;
         return code;
