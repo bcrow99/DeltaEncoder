@@ -1,6 +1,7 @@
 import java.util.*;
 import java.util.zip.*;
 import java.lang.Math.*;
+import java.math.*;
 
 public class DeltaMapper
 {
@@ -2431,6 +2432,20 @@ public class DeltaMapper
 	    	code[i] = code[i - 1] + (long)Math.pow(2, i);
 	    }
 	    code[n - 1]++;
+        return code;
+    }
+    public static BigInteger[] getUnaryCode(int n, boolean useBigInteger)
+    {
+        BigInteger [] code         = new BigInteger[n];
+       
+        code[0] = BigInteger.ZERO;
+	    for(int i = 1; i < n; i++)
+	    {
+	    	double value = Math.pow(2, i);
+	    	code[i] = code[i - 1];
+	    	code[i].add(BigDecimal.valueOf(value).toBigInteger());
+	    }
+	    code[n - 1] = code[n - 1].add(BigInteger.ONE);
         return code;
     }
     

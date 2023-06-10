@@ -486,9 +486,8 @@ public class TestCodePacker
 				
 				string_rate = channel_length[j];
 				string_rate       /= pixel_length;
-				//System.out.println("The packed string rate is " + String.format("%.4f", string_rate));
+				System.out.println("The packed string rate from packStrings is " + String.format("%.4f", string_rate));
 				
-			    
 			    ArrayList frequency_list = new ArrayList();
 			    int       n              = histogram.length;
 			    for(int k = 0; k < n; k++)
@@ -502,52 +501,65 @@ public class TestCodePacker
 			    	frequency[k] = (int)frequency_list.get(k);
 			    }
 			    
-
-			    int [] h_length = DeltaMapper.getHuffmanLength(frequency);
-			    
-			    int max_length = h_length[n - 1];
-			    System.out.println("The maximum length for a huffman code is " + max_length);
-			    long [] h_code   = DeltaMapper.getCanonicalCode(h_length);
-			  
-			    
-			    int [] length = DeltaMapper.getUnaryLength(n);
-			    long [] code   = DeltaMapper.getUnaryCode(n); 
-			    
-			    /*
-			    System.out.println("Unary codes:");
-			    long mask = 1;
-			    for(int k = 0; k < n; k++)
-			    {
-			        for(int m = 0; m < length[k]; m++)
-			        {
-			        	if((code[k] & (mask << m)) != 0)
-			        		System.out.print("1");
-			        	else
-			        		System.out.print("0");
-			        }
-			        System.out.println();
-			    }
-			    System.out.println();
-			    */
+			    int [] length  = DeltaMapper.getUnaryLength(n);
+			    int max_length = length[n - 1];
+			    System.out.println("The maximum length for a unary code is " + max_length);
 			    int unary_cost = DeltaMapper.getCost(length, frequency);
-			    
-			    
-			    System.out.println("The unary length from cost function is " + unary_cost);
 			    string_rate = unary_cost;
 			    string_rate /= pixel_length;
 			    System.out.println("The unary rate from cost function is " + String.format("%.4f", string_rate));
 			    
-			    int bit_length =  DeltaMapper.packCode(delta, string_table, h_code, h_length, compressed_string);
-			    System.out.println("The huffman length from pack function is " + bit_length);
-			 
-			    string_rate = bit_length;
-			    string_rate /= pixel_length;
-			    System.out.println("The huffman rate from pack function is " + String.format("%.4f", string_rate));
-			    zero_ratio = DeltaMapper.getZeroRatio(compressed_string, bit_length);
+			    if(max_length > 64)
+			    {
+			    	System.out.println("Long type will not contain maximum length code.");	
+			    }
+			    else
+			    {
+			    	long [] code   = DeltaMapper.getUnaryCode(n);
+			    	System.out.println("Unary codes:");
+				    long mask = 1;
+				    for(int k = 0; k < n; k++)
+				    {
+				        for(int m = 0; m < length[k]; m++)
+				        {
+				        	if((code[k] & (mask << m)) != 0)
+				        		System.out.print("1");
+				        	else
+				        		System.out.print("0");
+				        }
+				        System.out.println();
+				    }
+				    System.out.println();
+				    
+				    int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, compressed_string);
+				    string_rate     = bit_length;
+				    string_rate    /= pixel_length;
+				    System.out.println("The unary rate from pack function is " + String.format("%.4f", string_rate));
+				    zero_ratio      = DeltaMapper.getZeroRatio(compressed_string, bit_length);
+				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
+			    }
 			    
+				
+                int [] h_length = DeltaMapper.getHuffmanLength(frequency);
 			    
-				System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
+			    max_length = h_length[n - 1];
+			    System.out.println("The maximum length for a huffman code is " + max_length);
 			    
+			    if(max_length > 64)
+			    {
+			        System.out.println("Long type will not contain maximum length code.");	
+			    }
+			    else
+			    {
+			    	long [] h_code  = DeltaMapper.getCanonicalCode(h_length);  
+			    	int bit_length  =  DeltaMapper.packCode(delta, string_table, h_code, h_length, compressed_string);
+			    	string_rate     = bit_length;
+				    string_rate    /= pixel_length;
+				    System.out.println("The huffman rate from pack function is " + String.format("%.4f", string_rate));
+				    zero_ratio      = DeltaMapper.getZeroRatio(compressed_string, bit_length);
+				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
+			    }
+			   
 			   
 			    
 				double shannon_limit = DeltaMapper.getShannonLimit(frequency);
