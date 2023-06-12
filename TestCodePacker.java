@@ -8,6 +8,8 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import java.math.*;
+import java.lang.Math.*;
 
 public class TestCodePacker
 {
@@ -509,27 +511,45 @@ public class TestCodePacker
 			    string_rate /= pixel_length;
 			    System.out.println("The unary rate from cost function is " + String.format("%.4f", string_rate));
 			    
+			    boolean debug1 = true;
+			    boolean debug2 = false;
 			    if(max_length > 64)
 			    {
-			    	System.out.println("Long type will not contain maximum length code.");	
+			        boolean useBigIntegers = true;
+			    	BigInteger [] code = DeltaMapper.getUnaryCode(n, useBigIntegers);
+			    	if(debug1)
+			    	{
+			    		System.out.println("Got here.");
+			    		
+			    	}
+			    	int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, compressed_string);
+				    string_rate     = bit_length;
+				    string_rate    /= pixel_length;
+				    System.out.println("The unary rate from pack function with BigIntegers is " + String.format("%.4f", string_rate));
+				    zero_ratio      = DeltaMapper.getZeroRatio(compressed_string, bit_length);
+				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
 			    }
 			    else
 			    {
 			    	long [] code   = DeltaMapper.getUnaryCode(n);
-			    	System.out.println("Unary codes:");
-				    long mask = 1;
-				    for(int k = 0; k < n; k++)
-				    {
-				        for(int m = 0; m < length[k]; m++)
+			    	
+			    	if(debug2)
+			    	{
+			    	    System.out.println("Unary codes:");
+				        long mask = 1;
+				        for(int k = 0; k < n; k++)
 				        {
-				        	if((code[k] & (mask << m)) != 0)
-				        		System.out.print("1");
-				        	else
-				        		System.out.print("0");
+				            for(int m = 0; m < length[k]; m++)
+				            {
+				        	    if((code[k] & (mask << m)) != 0)
+				        		    System.out.print("1");
+				        	    else
+				        		    System.out.print("0");
+				            }
+				            System.out.println();
 				        }
 				        System.out.println();
-				    }
-				    System.out.println();
+			    	}
 				    
 				    int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, compressed_string);
 				    string_rate     = bit_length;
