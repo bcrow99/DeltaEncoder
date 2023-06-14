@@ -1830,44 +1830,21 @@ public class DeltaMapper
         BigInteger [] code         = new BigInteger[n];
        
         code[0] = BigInteger.ZERO;
+        BigInteger addend = BigInteger.TWO;
 	    for(int i = 1; i < n; i++)
 	    {
 	    	
-	    	BigDecimal value = BigDecimal.TWO;
-	    	value            = value.pow(i);
-	   
-	    	BigInteger zero = BigInteger.ZERO;
-	    	
-	    	
-	    	code[i] = BigInteger.ZERO;
-	    	/*
-	    	for(int j = 2; j < i; j++)
-	    	    code[i] = code[i].setBit(j);
-	    	*/
-	    	
-	    	
-	    	
-	    	int lowest_set_bit = code[i].getLowestSetBit();
-	    	System.out.println("Lowest set bit is " + lowest_set_bit);
-	    	
-	    	/*
-	    	BigInteger mask = BigInteger.ONE;
-	    	for(int j = 0; j < i; j++)
-	    	{
-	    	    if((code[i].and(mask.shiftLeft(j))) != BigInteger.ZERO)
-	    	    	System.out.print("1");
-	    	    else
-	    	    	System.out.print("0");		
-	    	}
-	    	System.out.println();
-	    	*/
-	    	
+	    	BigInteger value = code[i - 1];
+	    	value = value.add(addend);
+	    	code[i] = value;
+	    	addend = addend.multiply(BigInteger.TWO);
 	    }
 	    code[n - 1] = code[n - 1].add(BigInteger.ONE);
 	    
+	    int lowest_set_bit = code[1].getLowestSetBit();
+	    lowest_set_bit = code[n - 1].getLowestSetBit();
         return code;
     }
-    
     
     public static int packCode(int src[], int table[], BigInteger [] code, int [] length, byte dst[])
     {
@@ -1884,38 +1861,37 @@ public class DeltaMapper
     	    
     	    BigInteger code_word = code[k];
     	    int code_length      = length[k];
-    	    
+    	  
     	    if(debug1)
     	    {
-    	    	BigInteger mask = BigInteger.ONE;
-    	    	for(int m = 0; m < code_length; m++)
-    	    	{
-    	    		
-    	    	    if((code_word.and(mask.shiftLeft(m))) != BigInteger.ZERO)
-    	    	    	System.out.print("1");
-    	    	    else
-    	    	    	System.out.print("0");		
-    	    	}
-    	    	System.out.println();
+    	    	BigInteger mask      = BigInteger.ONE;
+    	    	mask                 = mask.shiftLeft(code_length - 1);
+    	    	BigInteger bit_value = code_word.and(mask);
+    	    	System.out.println("Value of code word is " + code_word);
+	    		System.out.println("Bit value is " + bit_value);
+	    		System.out.println();
     	    }
     	    
     	    int shift = current_bit % 8;
     	    
-    	    code_word.shiftLeft(shift);
+    	    code_word = code_word.shiftLeft(shift);
     	    
     	    int or_length = code_length + shift;
     	    
     	    if(debug2)
     	    {
-    	    	BigInteger mask = BigInteger.ONE;
-    	    	for(int m = 0; m < or_length; m++)
-    	    	{
-    	    	    if((code_word.and(mask.shiftLeft(m))) != BigInteger.ZERO)
-    	    	    	System.out.print("1");
-    	    	    else
-    	    	    	System.out.print("0");		
-    	    	}
-    	    	System.out.println();
+	    		for(int m = or_length - 1; m >= 0; m--)
+	    		{
+	    			BigInteger mask = BigInteger.ONE;
+	    			mask            = mask.shiftLeft(m);
+	    			BigInteger bit_value = code_word.and(mask);
+	    			
+	    			if(bit_value.compareTo(BigInteger.ZERO) != 0)
+	    	    	    System.out.print("1");
+	    	        else
+	    	    	    System.out.print("0");	
+	    		}
+	    		System.out.println();
     	    }
     	    
     	    int number_of_bytes = or_length / 8;
@@ -1935,17 +1911,16 @@ public class DeltaMapper
     	    {
     	        BigInteger shifted_code_word = code_word.shiftRight(shift);
     	        
+    	        long mask_value = 255;
     	        BigInteger mask = BigInteger.ONE;
-    	        for(int n = 1; n < 8; n++)
-    	        	mask.setBit(n);
-    	        
+    	        mask = mask.valueOf(mask_value);
     	        shifted_code_word = shifted_code_word.and(mask);
     	        try
     	        {
-    	            byte code_byte        = shifted_code_word.byteValueExact();
-    	       
+    	            /*
     	            if(debug3)
     	            {
+    	                byte code_byte        = shifted_code_word.byteValueExact();
     	        	    System.out.print("Code byte " + m + " = ");
     	        	    byte byte_mask = 1;
     	        	    for(int n = 0; n < 8; n++)
@@ -1957,13 +1932,35 @@ public class DeltaMapper
     	        	    }
                         System.out.println();
     	            }
-    	            dst[current_byte] |= code_byte;
+    	            */
+    	        	mask_value = 1;
+    	        	for(int n = 0; n < 8; n++)
+    	        	{
+    	        		mask = mask.valueOf(mask_value);
+    	        	    BigInteger bit_value = shifted_code_word.and(mask);
+    	        	    if(bit_value.compareTo(BigInteger.ZERO) != 0)
+    	        	    {
+    	        	    	byte byte_mask = (byte)mask_value;
+    	        	    	dst[current_byte] |= byte_mask;
+    	        	    	if(debug3)
+    	        	    	    System.out.print("1");
+    	        	    }
+    	        	    else
+    	        	    {
+    	        	    	if(debug3)
+    	        	    	    System.out.print("0");	
+    	        	    }
+    	        	    mask_value *= 2;
+    	        	}
+    	        	if(debug3)
+    	        	    System.out.println();
     	            current_byte++;
         	        shift += 8;
     	        }
     	        catch(Exception e)
     	        {
     	        	System.out.println(e.toString());
+    	        	
     	            current_byte++;
     	            shift += 8;
     	        }

@@ -511,17 +511,13 @@ public class TestCodePacker
 			    string_rate /= pixel_length;
 			    System.out.println("The unary rate from cost function is " + String.format("%.4f", string_rate));
 			    
+			   
 			    boolean debug1 = true;
 			    boolean debug2 = false;
 			    if(max_length > 64)
 			    {
 			        boolean useBigIntegers = true;
 			    	BigInteger [] code = DeltaMapper.getUnaryCode(n, useBigIntegers);
-			    	if(debug1)
-			    	{
-			    		System.out.println("Got here.");
-			    		
-			    	}
 			    	int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, compressed_string);
 				    string_rate     = bit_length;
 				    string_rate    /= pixel_length;
@@ -558,14 +554,13 @@ public class TestCodePacker
 				    zero_ratio      = DeltaMapper.getZeroRatio(compressed_string, bit_length);
 				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
 			    }
-			    
 				
                 int [] h_length = DeltaMapper.getHuffmanLength(frequency);
 			    
 			    max_length = h_length[n - 1];
 			    System.out.println("The maximum length for a huffman code is " + max_length);
 			    
-			    if(max_length > 64)
+			    if(max_length > 32)
 			    {
 			        System.out.println("Long type will not contain maximum length code.");	
 			    }
@@ -580,8 +575,6 @@ public class TestCodePacker
 				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
 			    }
 			   
-			   
-			    
 				double shannon_limit = DeltaMapper.getShannonLimit(frequency);
 			    string_rate = shannon_limit;
 			    string_rate /= pixel_length;
