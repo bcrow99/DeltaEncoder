@@ -573,6 +573,8 @@ public class TestCodePacker
 				    System.out.println("The huffman rate from pack function is " + String.format("%.4f", string_rate));
 				    zero_ratio      = DeltaMapper.getZeroRatio(compressed_string, bit_length);
 				    System.out.println("The zero ratio of the string produced by packCode is " + String.format("%.4f", zero_ratio));
+				    
+				    int number_unpacked = DeltaMapper.unpackCode(compressed_string, string_table, h_code, h_length, bit_length, delta);
 			    }
 			   
 				double shannon_limit = DeltaMapper.getShannonLimit(frequency);

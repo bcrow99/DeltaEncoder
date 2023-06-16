@@ -455,11 +455,67 @@ public class DeltaMapper
     	return bit_length;
     }
   
-    public static int unpackCode(byte src[], int table[], int [] code, int [] length, int dst[])
+    public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
     {
-    	int current_bit = 0;
-    	int bit_length = current_bit;
-    	return bit_length;
+    	int current_bit     = 0;
+    	int number_unpacked = 0;
+    	int max_bytes       = code_length[code_length.length - 1] / 8;
+    	if(code_length[code_length.length - 1] % 8 != 0)
+    		max_bytes++;
+    	
+    	while(current_bit < string_length - 1)
+    	{ 
+    		int current_byte = current_bit / 8;
+	        int offset       = current_bit % 8;
+    	    for(int i = 0; i < code.length; i++) 
+    	    {
+    	        int length     = code_length[i];
+    	        long code_word = code[i];
+    	        boolean match  = true;
+    	        
+    	        long source_word = 0;
+    	        int  shift       = 0;
+    	        for(int j = 0; j < max_bytes; j++)
+    	        {
+    	        	int byte_value = (int)src[current_byte + j];
+    	        	if(byte_value < 0)
+    	        		byte_value += 256;
+    	        	byte_value >>= offset;
+    	        	byte_value <<= shift;
+    	        	source_word += byte_value;
+    	        	
+    	        	shift += 8;
+    	        }
+    	        
+    	        long mask = 1;
+    	        for(int j = 0; j < length; j++)
+    	        {
+    	            long shifted_mask = mask << j;
+    	            
+    	            long code_value = shifted_mask & code_word;
+    	            long src_value  = shifted_mask & source_word;
+    	            if(code_value != src_value)
+    	            {
+    	            	match = false;
+    	            	j     = length;
+    	            }
+    	        }
+    	        
+    	        if(match)
+    	        {
+    	        	System.out.println("Code " + i + " matches segment from source string.");
+    	        	i = code_length.length;
+    	        }
+    	        
+    	        
+    	        
+    	    }
+    	}
+    	
+    	
+    	
+    	
+    	return number_unpacked;
     }
     
     // These packing/unpacking functions represent int values as unary strings.
@@ -1824,7 +1880,6 @@ public class DeltaMapper
         return code;
     }
     
-    
     public static BigInteger[] getUnaryCode(int n, boolean useBigInteger)
     {
         BigInteger [] code         = new BigInteger[n];
@@ -1840,9 +1895,6 @@ public class DeltaMapper
 	    	addend = addend.multiply(BigInteger.TWO);
 	    }
 	    code[n - 1] = code[n - 1].add(BigInteger.ONE);
-	    
-	    int lowest_set_bit = code[1].getLowestSetBit();
-	    lowest_set_bit = code[n - 1].getLowestSetBit();
         return code;
     }
     
@@ -1917,22 +1969,6 @@ public class DeltaMapper
     	        shifted_code_word = shifted_code_word.and(mask);
     	        try
     	        {
-    	            /*
-    	            if(debug3)
-    	            {
-    	                byte code_byte        = shifted_code_word.byteValueExact();
-    	        	    System.out.print("Code byte " + m + " = ");
-    	        	    byte byte_mask = 1;
-    	        	    for(int n = 0; n < 8; n++)
-    	        	    {
-    	        	        if((code_byte & (byte_mask << n))!= 0)	
-    	        	            System.out.print("1");
-    	        	    else
-    	        	    	System.out.print("0");	
-    	        	    }
-                        System.out.println();
-    	            }
-    	            */
     	        	mask_value = 1;
     	        	for(int n = 0; n < 8; n++)
     	        	{
@@ -1982,10 +2018,6 @@ public class DeltaMapper
     	int bit_length = current_bit;
     	return bit_length;
     }
-    
-    
-    
-    
     
     public static int[] getUnaryLength(int n)
     {
