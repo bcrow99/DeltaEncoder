@@ -474,7 +474,7 @@ public class TestPack
 				
 				byte [] string    = new byte[2 * string_byte_length];
 				byte [] string2   = new byte[2 * string_byte_length];
-				channel_length[j] = DeltaMapper.packStrings2(delta, string_table, string2);
+				channel_length[j] = DeltaMapper.packStrings2(delta, string_table, string);
 				System.out.println("Bit length from pack strings is " + channel_length[j]);
 				
 				
@@ -494,7 +494,7 @@ public class TestPack
 			    int [] length  = DeltaMapper.getUnaryLength(n);
 			    int max_length = length[n - 1];
 			    
-			    if(max_length > 64)
+			    if(max_length > 57)
 			    {
 			    	 boolean useBigIntegers = true;
 				     BigInteger [] code = DeltaMapper.getUnaryCode(n, useBigIntegers);	
@@ -515,7 +515,7 @@ public class TestPack
 			    	
 			    }
 			    
-			    channel_data.add(string2);
+			    channel_data.add(string);
 			}
 		  
 			System.out.println("Set id is " + min_set_id);
