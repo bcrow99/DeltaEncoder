@@ -356,53 +356,151 @@ public class DeltaMapper
     
     public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
-    	boolean debug1 = false;
-    	boolean debug2 = false;
-    	boolean debug3 = false;
-    	boolean debug4 = false;
+    	int n = code.length;
+    	System.out.println("There are " + n + " code words.");
+    	System.out.println();
+    	
+    	for(int i = 0; i < n; i++)
+    	{
+    		int  mask      = 1;
+    		long code_word = code[i];
+    		
+    		
+    		
+    		//System.out.println("Code word is " + code_word);
+    		
+    		for(int j = 0; j < length[i]; j++)
+    		{
+    			if((code_word & (mask << j)) != 0)
+	    	    	System.out.print("1");
+	    	    else
+	    	    	System.out.print("0");           	
+    		}
+    		System.out.println();
+    	}
+    	
+    	byte [] byte_string = new byte[10];
+    	
+    	
     	
     	int current_bit = 0;
+    	int current_byte = 0;
+    	
+    	n = 2;
+    	long test_word = code[n];
+    	for(int i = 0; i < 3; i++)
+    	{
+    		if(current_bit + length[n] < 8)
+    		{
+    			byte_string[current_byte] |= (byte)test_word << current_bit;
+    			System.out.println("Byte string 0 is " + byte_string[0]);
+    		}
+    		else
+    		{
+    			int  prefix_length = 8 - current_bit;
+    			System.out.println("Prefix length is " + prefix_length);
+    			
+    			long mask   = 1;
+    			int  addend = 2;
+    			for(int j = 1; j < prefix_length; j++)
+    			{
+    				mask += addend;
+    				addend *= 2;
+    			}
+    			long prefix = test_word & mask;
+    			System.out.println("Prefix is " + prefix);
+    			byte_string[current_byte] |= (byte)(prefix << current_bit);
+    			System.out.println("Byte string 0 is " + byte_string[0]);
+    			
+    			long suffix = test_word << prefix_length;
+    			
+    			
+    			current_byte++;
+    			byte_string[current_byte] |= (byte)suffix;
+    		}
+    		current_bit += length[n];
+    		
+    	}
+    
+    	System.out.println();
     	
     	
+    	current_bit = 0;
     	for(int i = 0; i < src.length; i++)
     	{
     	    int j = src[i];
     	    int k = table[j];
     	    
     	    long code_word   = code[k];
-    	    int code_length  = length[k];
+    	    int  code_length = length[k];
     	    
-    	    if(debug1)
+    	    int offset = current_bit % 8;
+    	    
+    	    code_word <<= offset;
+    	    
+    	    
+    	    int or_length = code_length + offset;
+    	    int number_of_bytes = or_length / 8;
+    	    if(or_length % 8 != 0)
+    	        number_of_bytes++;
+    	   
+    	    current_byte = current_bit / 8;
+    	   
+    	    
+    	    
+    	    
+    	    if(number_of_bytes == 1)
     	    {
-    	    	int mask = 1;
-    	    	for(int m = 0; m < code_length; m++)
-    	    	{
-    	    	    if((code_word & (mask << m)) != 0)
-    	    	    	System.out.print("1");
-    	    	    else
-    	    	    	System.out.print("0");		
-    	    	}
-    	    	System.out.println();
+    	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
+    	    	
+    	    	
+    	    	
+    	    	/*
+    	    	byte mask = (byte)0xff;
+    	    	System.out.println("Mask is " + mask);
+    	    	mask <<= offset;
+    	    	System.out.println("Mask is " + mask);
+    	    	int last_bit = offset + or_length;
+    	    	byte and_bits = (byte) (0xff >> last_bit);
+    	    	and_bits = (byte) (~and_bits);
+    	    	mask &= and_bits;
+    	    	*/
+    	    	
+    	    	
+    	    }
+    	    else
+    	    {
+    	    	for(int m = 0; m < number_of_bytes; m++)
+        	    {
+        	        dst[current_byte]      |= (byte)(code_word & 0x00ff);
+        	        current_byte++;
+        	        code_word >>= 8;
+        	    }	
     	    }
     	    
+    	    current_bit += code_length;
+    	}
+    	
+    	int bit_length = current_bit;
+    	return bit_length;
+    }
+  
+    public static int packCode(int src[], int table[], BigInteger [] code, int [] length, byte dst[])
+    {
+    	int current_bit = 0;
+    	for(int i = 0; i < src.length; i++)
+    	{
+    	    int j = src[i];
+    	    int k = table[j];
+    	    
+    	    BigInteger code_word = code[k];
+    	    int code_length      = length[k];
+    	  
     	    int shift = current_bit % 8;
     	    
-    	    code_word <<= shift;
+    	    code_word = code_word.shiftLeft(shift);
     	    
     	    int or_length = code_length + shift;
-    	    
-    	    if(debug2)
-    	    {
-    	    	int mask = 1;
-    	    	for(int m = 0; m < or_length; m++)
-    	    	{
-    	    	    if((code_word & (mask << m)) != 0)
-    	    	    	System.out.print("1");
-    	    	    else
-    	    	    	System.out.print("0");		
-    	    	}
-    	    	System.out.println();
-    	    }
     	    
     	    int number_of_bytes = or_length / 8;
     	    if(or_length % 8 != 0)
@@ -410,51 +508,48 @@ public class DeltaMapper
     	   
     	    int current_byte = current_bit / 8;
     	    shift            = 0;
-    	    
-    	    
-    	    if(debug3)
-    	    {
-    	    	System.out.println("Number of bytes is " + number_of_bytes);
-    	    	System.out.println("Or length is " + or_length);
-    	    }
+  
     	    for(int m = 0; m < number_of_bytes; m++)
     	    {
-    	        long shifted_code_word = code_word >> shift;
-    	        byte code_byte        = (byte)(shifted_code_word &= 0x00ff);
+    	        BigInteger shifted_code_word = code_word.shiftRight(shift);
     	        
-    	        if(debug3)
+    	        long mask_value = 255;
+    	        BigInteger mask = BigInteger.ONE;
+    	        mask = mask.valueOf(mask_value);
+    	        shifted_code_word = shifted_code_word.and(mask);
+    	        try
     	        {
-    	        	System.out.print("Code byte " + m + " = ");
-    	        	byte mask = 1;
+    	        	mask_value = 1;
     	        	for(int n = 0; n < 8; n++)
     	        	{
-    	        	    if((code_byte & (mask << n))!= 0)	
-    	        	        System.out.print("1");
-    	        	    else
-    	        	    	System.out.print("0");	
+    	        		mask = mask.valueOf(mask_value);
+    	        	    BigInteger bit_value = shifted_code_word.and(mask);
+    	        	    if(bit_value.compareTo(BigInteger.ZERO) != 0)
+    	        	    {
+    	        	    	byte byte_mask = (byte)mask_value;
+    	        	    	dst[current_byte] |= byte_mask;
+    	        	    }
+    	        	   
+    	        	    mask_value *= 2;
     	        	}
-                    System.out.println();
+    	            current_byte++;
+        	        shift += 8;
     	        }
-    	        dst[current_byte]     |= code_byte;
-    	        current_byte++;
-    	        shift += 8;
+    	        catch(Exception e)
+    	        {
+    	        	System.out.println(e.toString());
+    	        	
+    	            current_byte++;
+    	            shift += 8;
+    	        }
     	    }
-    	    
     	    current_bit += code_length;
-    	    if(debug4)
-    	    {
-    	    	System.out.println("Current byte is " + current_byte);
-    	    	int last_bit = current_byte * 8;
-    	    	last_bit -= or_length % 8;
-    	    	System.out.println("Last bit is " + last_bit);
-    	    	System.out.println("Current bit is " + current_bit);
-    	    }
     	}
     	
     	int bit_length = current_bit;
     	return bit_length;
     }
-  
+    
     public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
     {
     	int current_bit     = 0;
@@ -1898,127 +1993,7 @@ public class DeltaMapper
         return code;
     }
     
-    public static int packCode(int src[], int table[], BigInteger [] code, int [] length, byte dst[])
-    {
-    	boolean debug1 = false;
-    	boolean debug2 = false;
-    	boolean debug3 = false;
-    	boolean debug4 = false;
-    	
-    	int current_bit = 0;
-    	for(int i = 0; i < src.length; i++)
-    	{
-    	    int j = src[i];
-    	    int k = table[j];
-    	    
-    	    BigInteger code_word = code[k];
-    	    int code_length      = length[k];
-    	  
-    	    if(debug1)
-    	    {
-    	    	BigInteger mask      = BigInteger.ONE;
-    	    	mask                 = mask.shiftLeft(code_length - 1);
-    	    	BigInteger bit_value = code_word.and(mask);
-    	    	System.out.println("Value of code word is " + code_word);
-	    		System.out.println("Bit value is " + bit_value);
-	    		System.out.println();
-    	    }
-    	    
-    	    int shift = current_bit % 8;
-    	    
-    	    code_word = code_word.shiftLeft(shift);
-    	    
-    	    int or_length = code_length + shift;
-    	    
-    	    if(debug2)
-    	    {
-	    		for(int m = or_length - 1; m >= 0; m--)
-	    		{
-	    			BigInteger mask = BigInteger.ONE;
-	    			mask            = mask.shiftLeft(m);
-	    			BigInteger bit_value = code_word.and(mask);
-	    			
-	    			if(bit_value.compareTo(BigInteger.ZERO) != 0)
-	    	    	    System.out.print("1");
-	    	        else
-	    	    	    System.out.print("0");	
-	    		}
-	    		System.out.println();
-    	    }
-    	    
-    	    int number_of_bytes = or_length / 8;
-    	    if(or_length % 8 != 0)
-    	        number_of_bytes++;
-    	   
-    	    int current_byte = current_bit / 8;
-    	    shift            = 0;
-    	    
-    	    
-    	    if(debug3)
-    	    {
-    	    	System.out.println("Number of bytes is " + number_of_bytes);
-    	    	System.out.println("Or length is " + or_length);
-    	    }
-    	    for(int m = 0; m < number_of_bytes; m++)
-    	    {
-    	        BigInteger shifted_code_word = code_word.shiftRight(shift);
-    	        
-    	        long mask_value = 255;
-    	        BigInteger mask = BigInteger.ONE;
-    	        mask = mask.valueOf(mask_value);
-    	        shifted_code_word = shifted_code_word.and(mask);
-    	        try
-    	        {
-    	        	mask_value = 1;
-    	        	for(int n = 0; n < 8; n++)
-    	        	{
-    	        		mask = mask.valueOf(mask_value);
-    	        	    BigInteger bit_value = shifted_code_word.and(mask);
-    	        	    if(bit_value.compareTo(BigInteger.ZERO) != 0)
-    	        	    {
-    	        	    	byte byte_mask = (byte)mask_value;
-    	        	    	dst[current_byte] |= byte_mask;
-    	        	    	if(debug3)
-    	        	    	    System.out.print("1");
-    	        	    }
-    	        	    else
-    	        	    {
-    	        	    	if(debug3)
-    	        	    	    System.out.print("0");	
-    	        	    }
-    	        	    mask_value *= 2;
-    	        	}
-    	        	if(debug3)
-    	        	    System.out.println();
-    	            current_byte++;
-        	        shift += 8;
-    	        }
-    	        catch(Exception e)
-    	        {
-    	        	System.out.println(e.toString());
-    	        	
-    	            current_byte++;
-    	            shift += 8;
-    	        }
-    	    }
-    	    
-    	    
-    	    current_bit += code_length;
-    	    if(debug4)
-    	    {
-    	    	System.out.println("Current byte is " + current_byte);
-    	    	int last_bit = current_byte * 8;
-    	    	last_bit -= or_length % 8;
-    	    	System.out.println("Last bit is " + last_bit);
-    	    	System.out.println("Current bit is " + current_bit);
-    	    }
-    	    
-    	}
-    	
-    	int bit_length = current_bit;
-    	return bit_length;
-    }
-    
+  
     public static int[] getUnaryLength(int n)
     {
     	int [] length = new int[n];
