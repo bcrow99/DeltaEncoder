@@ -49,7 +49,7 @@ public class TestPack
 	int    [] shifted_blue, shifted_green, shifted_red;
 	int    [] shifted_blue_green, shifted_red_green, shifted_red_blue;
 	
-	ArrayList channel_table, channel_data, channel_src;
+	ArrayList channel_table, channel_data, channel_src, channel_string_length;
 	
 	double  file_ratio;
 	int     min_set_id  = 0;
@@ -180,7 +180,7 @@ public class TestPack
 						Point location_point = frame.getLocation();
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
-						x += xdim;
+						y -= 50;
 						shift_dialog.setLocation(x, y);
 						shift_dialog.pack();
 						shift_dialog.setVisible(true);
@@ -275,16 +275,18 @@ public class TestPack
 		    // The look up tables used to pack/unpack strings.
 		    channel_table = new ArrayList();
 		    
-		    // Different compression results.
+		    // The actual strings.
 		    channel_data = new ArrayList();
 		    
+		    // The lengths of the strings.
+		    channel_string_length = new ArrayList();
+		    
+		    // The original channel data.
 		    channel_src  = new ArrayList();
+		    
+		    
 		   
-		    for(int i = 0; i < 6; i++)
-		    {
-		    	ArrayList data_list = new ArrayList();
-		    	channel_data.add(data_list);
-		    }
+		   
 		    
 		    // The input for the delta values.
 		    channel_init = new int[6];
@@ -446,6 +448,9 @@ public class TestPack
 			System.out.println("Pixel shift is " + pixel_shift);
 			System.out.println();
 			
+			
+			//min_set_id = 7;
+			
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			channel_table.clear();
 			channel_data.clear();
@@ -456,15 +461,18 @@ public class TestPack
 				int []    src    = (int [])channel_src.get(j);
 				ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
 				int []    delta  = (int [])result.get(1);
+			
 				
 				ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[j]     = (int)histogram_list.get(0);
 			    int [] histogram         = (int[])histogram_list.get(1);
+			    int value_range          = (int)histogram_list.get(2);
 				int [] string_table = DeltaMapper.getRankTable(histogram);
 				channel_table.add(string_table);
 				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
+				//delta[0] = value_range / 2;
 				
 				int predicted_length = DeltaMapper.getStringLength(delta);
 				
@@ -475,7 +483,7 @@ public class TestPack
 				byte [] string    = new byte[2 * string_byte_length];
 				byte [] string2   = new byte[2 * string_byte_length];
 				channel_length[j] = DeltaMapper.packStrings2(delta, string_table, string);
-				System.out.println("Bit length from pack strings is " + channel_length[j]);
+				//System.out.println("Bit length from pack strings is " + channel_length[j]);
 				
 				
 				ArrayList frequency_list = new ArrayList();
@@ -499,37 +507,60 @@ public class TestPack
 			    	 boolean useBigIntegers = true;
 				     BigInteger [] code = DeltaMapper.getUnaryCode(n, useBigIntegers);	
 				     int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string2);
+				     channel_string_length.add(bit_length);
 				     
 				     System.out.println("Using big integers.");
-				     System.out.println("Bit length from pack code is " + bit_length);
+				     //System.out.println("Bit length from pack code is " + bit_length);
 				     System.out.println();
 			    }
 			    else
 			    {
 			    	long [] code   = DeltaMapper.getUnaryCode(n);
+			    	
 			    	int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string2);
+			    	channel_string_length.add(bit_length);
 			    	
 			    	System.out.println("Using longs.");
-			    	System.out.println("Bit length from pack code is " + bit_length);
+			    	//System.out.println("Bit length from pack code is " + bit_length);
 			    	System.out.println();
 			    	
 			    }
 			    
-			    channel_data.add(string);
+			    channel_data.add(string2);
 			}
-		  
-			System.out.println("Set id is " + min_set_id);
-			System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			System.out.println("Pixel shift is " + pixel_shift);
-			System.out.println();
+		 
+			
+			/*
+			set_string[0] = new String("blue, green, and red.");
+		    set_string[1] = new String("blue, red, and red-green.");
+		    set_string[2] = new String("blue, red, and blue-green.");
+		    set_string[3] = new String("blue, blue-green, and red-green.");
+		    set_string[4] = new String("blue, blue-green, and red-blue.");
+		    set_string[5] = new String("green, red, and blue-green.");
+		    set_string[6] = new String("red, blue-green, and red-green.");
+		    set_string[7] = new String("green, blue-green, and red-green.");
+		    set_string[8] = new String("green, red-green, and red-blue.");
+		    set_string[9] = new String("red, red-green, red-blue.");
+			*/
+
+			
 			
 
 			if(min_set_id == 0)
 			{
 				byte [] string       = (byte [])channel_data.get(0);
 				int  [] string_table = (int [])channel_table.get(0);
+				int  string_length   = (int)channel_string_length.get(0);
 				int  [] delta        =  new int[xdim * ydim];
+				
+				int n = string_table.length;
+				int [] length = DeltaMapper.getUnaryLength(n);
+				long [] code  = DeltaMapper.getUnaryCode(n);
+				
+				
+				
 				int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta);
+				//int number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
 				for(int j = 1; j < delta.length; j++)
 				     delta[j] += channel_delta_min[0];
 			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
@@ -766,6 +797,40 @@ public class TestPack
 			    	shifted_red_green[j] += channel_min[4];
 			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
 			}
+			else if(min_set_id == 8)
+			{
+				byte [] string       = (byte [])channel_data.get(0);
+				int  [] string_table = (int [])channel_table.get(0);
+				int  [] delta        =  new int[xdim * ydim];
+				int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta);
+				for(int j = 1; j < delta.length; j++)
+				     delta[j] += channel_delta_min[1];
+			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
+			    
+			    string          = (byte [])channel_data.get(1);
+				string_table    = (int [])channel_table.get(1);
+				number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
+				for(int j = 1; j < delta.length; j++)
+				     delta[j] += channel_delta_min[4];
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_red_green.length; j++)
+			    	shifted_red_green[j] += channel_min[4];
+			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
+			    
+
+			    string          = (byte [])channel_data.get(2);
+				string_table    = (int [])channel_table.get(2);
+				number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
+				for(int j = 1; j < delta.length; j++)
+				     delta[j] += channel_delta_min[5];
+			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[5]);
+			    for(int j = 0; j < shifted_red_blue.length; j++)
+			    {
+			    	shifted_red_blue[j] += channel_min[5];
+			    	shifted_red_blue[j] = -shifted_red_blue[j];
+			    }
+			    shifted_blue  = DeltaMapper.getSum(shifted_red, shifted_red_blue);
+			}
 			else if(min_set_id == 9)
 			{
 				byte [] string       = (byte [])channel_data.get(0);
@@ -802,9 +867,207 @@ public class TestPack
 			    }
 			    shifted_blue = DeltaMapper.getSum(shifted_red, shifted_red_blue);
 			}
-	    	
-			// This code produces an image that should be exactly the same
-		    // as the processed image.  
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			/*
+			
+			int  [] delta0 =  new int[xdim * ydim];
+			int  [] delta1 =  new int[xdim * ydim];
+			int  [] delta2 =  new int[xdim * ydim];
+			
+			byte [] string       = (byte [])channel_data.get(0);
+			int  [] string_table = (int [])channel_table.get(0);
+			int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta0);
+			for(int j = 1; j < delta0.length; j++)
+			     delta0[j] += channel_delta_min[0];
+			delta0[0] = 0;
+			
+			string       = (byte [])channel_data.get(1);
+			string_table = (int [])channel_table.get(1);
+			number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta1);
+			for(int j = 1; j < delta1.length; j++)
+			     delta1[j] += channel_delta_min[1];
+			delta1[0] = 0;
+			
+			string       = (byte [])channel_data.get(2);
+			string_table = (int [])channel_table.get(2);
+			number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta2);
+			for(int j = 1; j < delta1.length; j++)
+			     delta2[j] += channel_delta_min[2];
+			delta2[0] = 0;
+			
+			
+			if(min_set_id == 0)
+			{
+			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[0]);
+			    
+			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[1]);
+			    
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[2]);
+			}
+			else if(min_set_id == 1)
+			{
+			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[0]);
+			    
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[2]);
+			  
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[4]);
+			    
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    {
+			    	shifted_red_green[j] += channel_min[4];
+			    	shifted_red_green[j] = -shifted_red_green[j];
+			    }
+			    
+			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
+			}
+			else if(min_set_id == 2)
+			{
+				
+			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[0]);
+			    
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[2]);
+			  
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    {
+			    	shifted_blue_green[j] += channel_min[4];
+			    	shifted_blue_green[j] = -shifted_blue_green[j];
+			    }
+			    shifted_green = DeltaMapper.getSum(shifted_blue, shifted_blue_green);
+			}
+			else if(min_set_id == 3)
+			{
+				
+			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[0]);
+			    
+			   
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[3]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    {
+			    	shifted_blue_green[j] += channel_min[3];
+			    	shifted_blue_green[j]  = -shifted_blue_green[j]; 
+			    }
+			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
+			    
+			   
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_red_green[j] += channel_min[4];
+			    shifted_red = DeltaMapper.getSum(shifted_red_green, shifted_green);	
+			}
+			else if(min_set_id == 4)
+			{
+			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[0]);
+			    
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[3]);
+			    
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    {
+			    	shifted_blue_green[j] += channel_min[3];
+			    	shifted_blue_green[j]  = -shifted_blue_green[j]; 
+			    }
+			    shifted_green = DeltaMapper.getSum(shifted_blue, shifted_blue_green);
+			    
+			
+			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[5]);
+			    
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_red_blue[j] += channel_min[5];
+			    shifted_red = DeltaMapper.getSum(shifted_blue, shifted_red_blue);
+			}
+			else if(min_set_id == 5)
+			{
+			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[1]);
+			    
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[2]);
+			    
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[3]);
+			    
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_blue_green[j] += channel_min[3];
+			    shifted_blue = DeltaMapper.getSum(shifted_blue_green, shifted_green);	
+			}
+			else if(min_set_id == 6)
+			{
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[2]);
+			    
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[3]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_blue_green[j] += channel_min[3];
+			    
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_red_green[j] += channel_min[4];
+			    for(int j = 0; j < shifted_red_green.length; j++)
+			    	shifted_red_green[j] = -shifted_red_green[j];
+			    
+			    shifted_green = DeltaMapper.getSum(shifted_red_green, shifted_red);
+			    shifted_blue = DeltaMapper.getSum(shifted_blue_green, shifted_green);	
+			}
+			else if(min_set_id == 7)
+			{
+			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[1]);
+			    
+			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[3]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    	shifted_blue_green[j] += channel_min[3];
+			    
+			    shifted_blue = DeltaMapper.getSum(shifted_green, shifted_blue_green);
+			    
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_red_green.length; j++)
+			    	shifted_red_green[j] += channel_min[4];
+			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
+			}
+			else if(min_set_id == 8)
+			{
+                shifted_green = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[1]);
+			    
+                shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_red_green.length; j++)
+			    	shifted_red_green[j] += channel_min[4];
+			    shifted_red  = DeltaMapper.getSum(shifted_red_green, shifted_green);
+			    
+			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[5]);
+			    for(int j = 0; j < shifted_red_blue.length; j++)
+			    {
+			    	shifted_red_blue[j] += channel_min[5];
+			    	shifted_red_blue[j] = -shifted_red_blue[j];
+			    }
+			    shifted_blue  = DeltaMapper.getSum(shifted_red_blue, shifted_red_blue);
+			}
+			else if(min_set_id == 9)
+			{
+			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta0, xdim , ydim, channel_init[2]);
+			    
+			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta1, xdim , ydim, channel_init[4]);
+			    for(int j = 0; j < shifted_red_green.length; j++)
+			    {
+			    	shifted_red_green[j] += channel_min[4];
+			    	shifted_red_green[j] = -shifted_red_green[j];
+			    }
+			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
+			    
+			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta2, xdim , ydim, channel_init[5]);
+			    for(int j = 0; j < shifted_blue_green.length; j++)
+			    {	
+			    	shifted_red_blue[j] += channel_min[5];
+			    	shifted_red_blue[j] = -shifted_red_blue[j];
+			    }
+			    shifted_blue = DeltaMapper.getSum(shifted_red, shifted_red_blue);
+			}
+			 */
+			
 		    for(int i = 0; i < xdim * ydim; i++)
 			{
 		    	shifted_blue[i]  <<= pixel_shift;
