@@ -62,6 +62,7 @@ public class DeltaMapper
 	    ArrayList histogram_list = new ArrayList();
 	    histogram_list.add(value_min);
 	    histogram_list.add(histogram);
+	    histogram_list.add(value_range);
 	    return histogram_list;
 	}
 	
@@ -305,9 +306,10 @@ public class DeltaMapper
         dst[0]    = init_value;
         int value = init_value;
 
-        // The first int is alway 0.  Opportunity to use a code to switch delta types.
+        // The first int is always 0.  Opportunity to use a code to switch delta types.
+        // To maximize compression it should be eliminated or replaced with a single bit.
         if(src[0] != 0)
-        	System.out.println("Wrong code.");
+        	System.out.println("Wrong code at beginning of delta array.");
         
         for(int i = 1; i < xdim; i++)
         {
@@ -357,75 +359,8 @@ public class DeltaMapper
     public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
     	int n = code.length;
-    	System.out.println("There are " + n + " code words.");
-    	System.out.println();
-    	
-    	for(int i = 0; i < n; i++)
-    	{
-    		int  mask      = 1;
-    		long code_word = code[i];
-    		
-    		
-    		
-    		//System.out.println("Code word is " + code_word);
-    		
-    		for(int j = 0; j < length[i]; j++)
-    		{
-    			if((code_word & (mask << j)) != 0)
-	    	    	System.out.print("1");
-	    	    else
-	    	    	System.out.print("0");           	
-    		}
-    		System.out.println();
-    	}
-    	
-    	byte [] byte_string = new byte[10];
-    	
-    	
-    	
-    	int current_bit = 0;
-    	int current_byte = 0;
-    	
-    	n = 2;
-    	long test_word = code[n];
-    	for(int i = 0; i < 3; i++)
-    	{
-    		if(current_bit + length[n] < 8)
-    		{
-    			byte_string[current_byte] |= (byte)test_word << current_bit;
-    			System.out.println("Byte string 0 is " + byte_string[0]);
-    		}
-    		else
-    		{
-    			int  prefix_length = 8 - current_bit;
-    			System.out.println("Prefix length is " + prefix_length);
-    			
-    			long mask   = 1;
-    			int  addend = 2;
-    			for(int j = 1; j < prefix_length; j++)
-    			{
-    				mask += addend;
-    				addend *= 2;
-    			}
-    			long prefix = test_word & mask;
-    			System.out.println("Prefix is " + prefix);
-    			byte_string[current_byte] |= (byte)(prefix << current_bit);
-    			System.out.println("Byte string 0 is " + byte_string[0]);
-    			
-    			long suffix = test_word << prefix_length;
-    			
-    			
-    			current_byte++;
-    			byte_string[current_byte] |= (byte)suffix;
-    		}
-    		current_bit += length[n];
-    		
-    	}
     
-    	System.out.println();
-    	
-    	
-    	current_bit = 0;
+    	int current_bit = 0;
     	for(int i = 0; i < src.length; i++)
     	{
     	    int j = src[i];
@@ -434,48 +369,32 @@ public class DeltaMapper
     	    long code_word   = code[k];
     	    int  code_length = length[k];
     	    
-    	    int offset = current_bit % 8;
     	    
-    	    code_word <<= offset;
-    	    
-    	    
+    	    int offset = current_bit % 8;  
+    	    code_word <<= offset; 
     	    int or_length = code_length + offset;
     	    int number_of_bytes = or_length / 8;
     	    if(or_length % 8 != 0)
     	        number_of_bytes++;
     	   
-    	    current_byte = current_bit / 8;
+    	    int current_byte = current_bit / 8;
     	   
-    	    
     	    
     	    
     	    if(number_of_bytes == 1)
     	    {
     	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
     	    	
-    	    	
-    	    	
-    	    	/*
-    	    	byte mask = (byte)0xff;
-    	    	System.out.println("Mask is " + mask);
-    	    	mask <<= offset;
-    	    	System.out.println("Mask is " + mask);
-    	    	int last_bit = offset + or_length;
-    	    	byte and_bits = (byte) (0xff >> last_bit);
-    	    	and_bits = (byte) (~and_bits);
-    	    	mask &= and_bits;
-    	    	*/
-    	    	
-    	    	
     	    }
     	    else
     	    {
-    	    	for(int m = 0; m < number_of_bytes; m++)
+    	    	for(int m = 0; m < number_of_bytes - 1; m++)
         	    {
-        	        dst[current_byte]      |= (byte)(code_word & 0x00ff);
+        	        dst[current_byte] |= (byte)(code_word & 0x00ff);
         	        current_byte++;
         	        code_word >>= 8;
         	    }	
+    	    	dst[current_byte] = (byte)(code_word & 0x00ff);
     	    }
     	    
     	    current_bit += code_length;
@@ -595,20 +514,8 @@ public class DeltaMapper
     	            	j     = length;
     	            }
     	        }
-    	        
-    	        if(match)
-    	        {
-    	        	System.out.println("Code " + i + " matches segment from source string.");
-    	        	i = code_length.length;
-    	        }
-    	        
-    	        
-    	        
     	    }
     	}
-    	
-    	
-    	
     	
     	return number_unpacked;
     }
@@ -914,6 +821,7 @@ public class DeltaMapper
                 src_byte++;
             }
         }
+        
         return(number_unpacked);
     }
     
@@ -1965,13 +1873,13 @@ public class DeltaMapper
         long [] code         = new long[n];
        
         code[0] = 0;
+        
+        long addend = 1;
 	    for(int i = 1; i < n; i++)
 	    {
-	    	code[i] = code[i - 1] + (long)Math.pow(2, i);
+	    	code[i] = code[i - 1] + addend;
+	    	addend *= 2;
 	    }
-	    code[n - 1]++;
-	    
-	   
         return code;
     }
     
@@ -1980,16 +1888,15 @@ public class DeltaMapper
         BigInteger [] code         = new BigInteger[n];
        
         code[0] = BigInteger.ZERO;
-        BigInteger addend = BigInteger.TWO;
+        BigInteger addend = BigInteger.ONE;
 	    for(int i = 1; i < n; i++)
 	    {
-	    	
 	    	BigInteger value = code[i - 1];
 	    	value = value.add(addend);
 	    	code[i] = value;
 	    	addend = addend.multiply(BigInteger.TWO);
 	    }
-	    code[n - 1] = code[n - 1].add(BigInteger.ONE);
+	    
         return code;
     }
     
