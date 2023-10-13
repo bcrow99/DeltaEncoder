@@ -473,45 +473,53 @@ public class DeltaMapper
     {
     	int current_bit     = 0;
     	int number_unpacked = 0;
-    	int max_bytes       = code_length[code_length.length - 1] / 8;
-    	if(code_length[code_length.length - 1] % 8 != 0)
-    		max_bytes++;
+    	
+    	 int number_of_different_values = table.length;
+         int [] inverse_table = new int[number_of_different_values];
+         for(int i = 0; i < number_of_different_values; i++)
+         {
+             int j            = table[i];
+             inverse_table[j] = i;
+         }
     	
     	while(current_bit < string_length - 1)
     	{ 
+    		int dst_byte     = 0;
     		int current_byte = current_bit / 8;
 	        int offset       = current_bit % 8;
-    	    for(int i = 0; i < code.length; i++) 
+	        long code_word   = 0;
+	      
+	        outer: for(int i = 0; i < code.length; i++) 
     	    {
-    	        int length     = code_length[i];
-    	        long code_word = code[i];
-    	        boolean match  = true;
+    	        code_word = code[i];
     	        
-    	        long source_word = 0;
-    	        int  shift       = 0;
-    	        for(int j = 0; j < max_bytes; j++)
+    	        for(int j = 0; j < code_length[i]; j++)
     	        {
-    	        	int byte_value = (int)src[current_byte + j];
-    	        	if(byte_value < 0)
-    	        		byte_value += 256;
-    	        	byte_value >>= offset;
-    	        	byte_value <<= shift;
-    	        	source_word += byte_value;
-    	        	
-    	        	shift += 8;
-    	        }
-    	        
-    	        long mask = 1;
-    	        for(int j = 0; j < length; j++)
-    	        {
-    	            long shifted_mask = mask << j;
+    	            long code_mask = 1;
+    	            code_mask <<= j;
+    	            long code_bit = code_mask & code_word;
     	            
-    	            long code_value = shifted_mask & code_word;
-    	            long src_value  = shifted_mask & source_word;
-    	            if(code_value != src_value)
+    	            int parse_byte = current_byte;
+    	            int addend = j + offset;
+    	            addend     /= 8;
+    	            if((j + offset) % 8 != 0)
+    	                addend++;
+    	            parse_byte += addend;
+    	            int parse_offset = (current_bit + j) % 8;
+    	             
+    	            byte src_mask = 1;
+    	            src_mask <<= parse_offset;
+    	            int src_bit = src_mask & src[parse_byte];
+    	            
+    	            if(!((code_bit == 0 && src_bit == 0) || (code_bit != 0 && src_bit != 0)))
+    	            	break;
+    	            else if(j == code_length[i] - 1)
     	            {
-    	            	match = false;
-    	            	j     = length;
+    	            	dst[dst_byte++] = inverse_table[i];
+    	                number_unpacked++;
+    	                current_bit += code_length[i];
+    	            	
+    	                break outer;
     	            }
     	        }
     	    }
