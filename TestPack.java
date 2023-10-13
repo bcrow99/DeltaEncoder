@@ -543,9 +543,6 @@ public class TestPack
 		    set_string[9] = new String("red, red-green, red-blue.");
 			*/
 
-			
-			
-
 			if(min_set_id == 0)
 			{
 				byte [] string       = (byte [])channel_data.get(0);
@@ -557,10 +554,8 @@ public class TestPack
 				int [] length = DeltaMapper.getUnaryLength(n);
 				long [] code  = DeltaMapper.getUnaryCode(n);
 				
-				
-				
-				int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta);
-				//int number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+				//int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta);
+				int number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
 				for(int j = 1; j < delta.length; j++)
 				     delta[j] += channel_delta_min[0];
 			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
