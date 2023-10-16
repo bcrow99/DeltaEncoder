@@ -471,6 +471,10 @@ public class DeltaMapper
     
     public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
     {
+    	boolean debug = false;
+    	
+    
+    	
     	int number_of_different_values = table.length;
         int [] inverse_table = new int[number_of_different_values];
         for(int i = 0; i < number_of_different_values; i++)
@@ -479,11 +483,6 @@ public class DeltaMapper
             inverse_table[j] = i;
         }
         
-        /*
-        System.out.println("The number of codes is " + code.length);
-        */
-        
-        
         int number_of_codes = code.length;
         int max_length      = code_length[code.length - 1];
         int max_bytes       = max_length / 8;
@@ -491,10 +490,38 @@ public class DeltaMapper
         	max_bytes++;
         
         
-        int n = max_bytes + 1;
-        System.out.println("First " + n + " bytes of delta string:");
-        for(int i = 0; i < n; i++)
+        if(debug)
         {
+        // Segment of the string bytes we want to debug.
+        int start = 0;
+        int stop  = 10;	
+        
+        System.out.println("Prefix free code:");
+        for(int i = 0; i < code.length; i++)
+        {
+            for(int j = 0; j < code_length[i]; j++)
+            {
+                long mask = 1;
+                mask <<= j;
+                if((code[i] & mask) == 0)
+                    System.out.print(0);
+                else
+                	System.out.print(1);
+            }
+            System.out.println();
+        }
+        System.out.println();
+        
+        System.out.println("Look-up table:");
+        for(int i = 0; i < table.length; i++)
+        	System.out.println(i + " -> " + table[i]);;
+        System.out.println();
+        
+        System.out.println("Bytes from delta string:");
+        
+        for(int i = start; i < stop; i++)
+        {
+        	System.out.print(i + "  ");
             for(int j = 0; j < 8; j++)
             {
         	    byte src_mask = 1;	
@@ -508,27 +535,27 @@ public class DeltaMapper
             System.out.println();
         }
         System.out.println();
-    
+        }
+        
         int current_bit     = 0;
         int offset          = 0;
         int current_byte    = 0;
     	int number_unpacked = 0;
     	int dst_byte        = 0;
-        
     	
-        //for(int i = 0; i < dst.length; i++)
-    	n = 9;
-    	for(int i = 0; i < n; i++)
+        for(int i = 0; i < dst.length; i++)
         {
-    	    long src_word       = 0;
+        	long src_word       = 0;
     	
             for(int j = 0; j < max_bytes; j++)
             {
           	    long src_byte = (long)src[current_byte + j];
           	    if(src_byte < 0)
           		    src_byte += 256;
-          	    src_byte >>= offset;
-          	    src_byte <<= j * 8;
+          	    if(j == 0)
+          	        src_byte >>= offset;
+          	    else
+          	        src_byte <<= j * 8 - offset;
           	    src_word += src_byte;
             }
 
@@ -538,6 +565,8 @@ public class DeltaMapper
           	    if(src_byte < 0)
           		    src_byte += 256;
           	
+          	    // Shouldn't have to do this, since we mask the source word later.
+          	    /*
           	    int  addend = 2;
           	    long mask = 1;
           	    for(int j = 1; j < offset; j++)
@@ -546,7 +575,8 @@ public class DeltaMapper
           		    addend *= 2;
           	    }
           	    src_byte &= mask;
-          	    src_byte <<= max_bytes * 8 - (offset + 1);
+          	    */
+          	    src_byte <<= max_bytes * 8 - offset;
           	    src_word += src_byte;
             }
       	
@@ -564,11 +594,6 @@ public class DeltaMapper
           	
           	    if(code_word == masked_src_word)
           	    {
-          		    System.out.println("Code " + j + " matches segment " + i);
-          		    //System.out.println("Code word is " + code_word);
-          		    //System.out.println("Masked source word is " + masked_src_word);
-          	    	System.out.println();
-          	    	
           	    	dst[dst_byte++] = inverse_table[j];
 	                number_unpacked++;
           		    current_bit += code_length[j];
@@ -585,132 +610,13 @@ public class DeltaMapper
         }  
         
         
-        
-        
-        /*
-        src_word       = 0;
-    	
-        for(int i = 0; i < 8; i++)
+        if(debug)
         {
-          	long src_byte = (long)src[current_byte + i];
-          	if(src_byte < 0)
-          		src_byte += 256;
-          	src_byte >>= offset;
-          	src_byte <<= i * 8;
-          	src_word += src_byte;
+            System.out.println("The length of the original bit string was " + string_length);
+            System.out.println("Bits unpacked was " + current_bit);
+            System.out.println();
         }
-        if(offset != 0)
-        {
-          	long src_byte = (long)src[current_byte + 8];
-          	if(src_byte < 0)
-          		src_byte += 256;
-          	
-          	int  addend = 2;
-          	long mask = 1;
-          	for(int i = 1; i < offset; i++)
-          	{
-          		mask   += addend;
-          		addend *= 2;
-          	}
-          	src_byte &= mask;
-          	
-          	src_byte <<= 63 - offset;
-          	src_word += src_byte;
-        }
-      	
        
-        for(int i = 0; i < code.length; i++)
-        {
-          	long code_word = code[i];
-          	long mask      = 1;
-          	int  addend    = 2;
-          	for(int j = 1; j < code_length[i]; j++)
-          	{
-          		mask   += addend;
-          		addend *= 2;
-          	}
-          	long masked_src_word = src_word & mask;
-          	
-          	if(code_word == masked_src_word)
-          	{
-          		
-          		System.out.println("Code " + i + " matches next segment string.");
-          		System.out.println("Code word is " + code_word);
-          		System.out.println("Masked source word is " + masked_src_word);
-          		current_bit += code_length[i];
-          		current_byte = current_bit / 8;
-          		offset       = current_bit % 8;
-          		System.out.println();
-          		break;
-          	}
-          	else if(i == code.length - 1)
-          	{
-          		System.out.println("No match for prefix-free code.");
-          	}
-        }  
-        
-        */
-        
-        /*
-        while(current_bit < string_length - 1)
-    	{ 
-    		int dst_byte     = 0;
-    		current_byte = current_bit / 8;
-	        offset       = current_bit % 8;
-	        long code_word   = 0;
-	      
-	        outer: for(int i = 0; i < code.length; i++) 
-    	    {
-    	        code_word = code[i];
-    	        
-    	        inner: for(int j = 0; j < code_length[i]; j++)
-    	        {
-    	            long code_mask = 1;
-    	            code_mask <<= j;
-    	            long code_bit = code_mask & code_word;
-    	            
-    	            int parse_byte = current_byte;
-    	            int addend = j + 8 - offset;
-    	            addend     /= 8;
-    	            if((j + 8 - offset) % 8 != 0)
-    	                addend++;
-    	            parse_byte += addend;
-    	            int parse_offset = (current_bit + j) % 8;
-    	             
-    	            byte src_mask = 1;
-    	            src_mask <<= parse_offset;
-    	            int src_bit = src_mask & src[parse_byte];
-    	            
-    	            
-    	            if((code_bit == 0 && src_bit == 0) || (code_bit != 0 && src_bit != 0))
-    	            {
-    	            	if(j == code_length[i] - 1)	
-    	            	{
-    	            		dst[dst_byte++] = inverse_table[i];
-        	                number_unpacked++;
-        	                current_bit += code_length[i];
-        	                if(number_unpacked < 12)
-        	                {
-        	                	System.out.println("Code " + i + " matched segment " + (number_unpacked - 1));
-        	                }
-        	                break outer;
-    	            	}
-    	            }
-    	            else
-    	            {
-    	            	if(number_unpacked < 12)
-    	            	{
-    	            		System.out.println("Code " + i + " did not match.");
-    	            	}
-    	            	break inner;
-    	            }
-    	        }
-    	    }
-    	}
-    	*/
-        
-        System.out.println("The length of the delta string was " + string_length);
-        System.out.println("Bits unpacked was " + current_bit);
     	return number_unpacked;
     }
     
