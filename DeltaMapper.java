@@ -473,8 +473,6 @@ public class DeltaMapper
     {
     	boolean debug = false;
     	
-    
-    	
     	int number_of_different_values = table.length;
         int [] inverse_table = new int[number_of_different_values];
         for(int i = 0; i < number_of_different_values; i++)
@@ -614,6 +612,124 @@ public class DeltaMapper
         {
             System.out.println("The length of the original bit string was " + string_length);
             System.out.println("Bits unpacked was " + current_bit);
+            System.out.println();
+        }
+       
+    	return number_unpacked;
+    }
+    
+    
+    public static int unpackCode(byte src[], int table[], BigInteger [] code, int [] code_length, int string_length, int dst[])
+    {
+    	boolean debug = false;
+    	
+    	int number_of_different_values = table.length;
+        int [] inverse_table = new int[number_of_different_values];
+        for(int i = 0; i < number_of_different_values; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = i;
+        }
+        
+        int number_of_codes = code.length;
+        int max_length      = code_length[code.length - 1];
+        int max_bytes       = max_length / 8;
+        if(max_length % 8 != 0)
+        	max_bytes++;
+        
+        if(debug)
+        {
+            // Segment of the string bytes we want to debug.
+            int start = 0;
+            int stop  = 10;
+            System.out.println("Bytes from delta string:");
+            for(int i = start; i < stop; i++)
+            {
+        	    System.out.print(i + "  ");
+                for(int j = 0; j < 8; j++)
+                {
+        	        byte src_mask = 1;	
+        	        src_mask <<= j;
+        	        int src_bit = src_mask & src[i];
+        	        if(src_bit == 0)
+        		        System.out.print("0");
+        	        else
+        		        System.out.print("1");
+                }
+                System.out.println();
+            }
+            System.out.println();
+            
+        }
+        
+        int current_bit     = 0;
+        int offset          = 0;
+        int current_byte    = 0;
+    	int number_unpacked = 0;
+    	int dst_byte        = 0;
+    	
+        for(int i = 0; i < dst.length; i++)
+        {
+        	BigInteger src_word = BigInteger.ZERO;
+    	
+            for(int j = 0; j < max_bytes; j++)
+            {
+          	    long src_byte = (long)src[current_byte + j];
+          	    if(src_byte < 0)
+          		    src_byte += 256;
+          	    
+          	    BigInteger addend = BigInteger.valueOf(src_byte);
+          	    if(j == 0)
+          	        addend = addend.shiftRight(offset);
+          	    else
+          	    	addend = addend.shiftLeft(j * 8 - offset);
+          	    src_word = src_word.add(addend);
+            }
+            
+            if(offset != 0)
+            {
+          	    long src_byte = (long)src[current_byte + max_bytes];
+          	    if(src_byte < 0)
+          		    src_byte += 256;
+          	    BigInteger addend = BigInteger.valueOf(src_byte);
+          	    addend = addend.shiftLeft(max_bytes * 8 - offset);
+        	    src_word = src_word.add(addend);
+            }
+      	
+            for(int j = 0; j < code.length; j++)
+            {
+          	    BigInteger code_word = code[j];
+          	    BigInteger mask      = BigInteger.ONE;
+          	    BigInteger addend    = BigInteger.TWO;
+          	    for(int k = 1; k < code_length[j]; k++)
+          	    {
+          		    mask = mask.add(addend);
+          		    addend = addend.multiply(BigInteger.TWO);
+          	    }
+          	    BigInteger masked_src_word = src_word.and(mask);
+          	
+          	    if(code_word.compareTo(masked_src_word) == 0)
+          	    {
+          	    	dst[dst_byte++] = inverse_table[j];
+	                number_unpacked++;
+          		    current_bit += code_length[j];
+          		    current_byte = current_bit / 8;
+          		    offset       = current_bit % 8;
+          		    
+          		    break;
+          	    }
+          	    else if(j == code.length - 1)
+          	    {
+          		    System.out.println("No match for prefix-free code.");
+          	    }
+            }
+        }  
+
+        if(debug)
+        {
+            System.out.println("The length of the original bit string was " + string_length);
+            System.out.println("Bits unpacked was " + current_bit);
+            System.out.println("Number of bytes was " + current_byte);
             System.out.println();
         }
        
@@ -2001,7 +2117,6 @@ public class DeltaMapper
         return code;
     }
     
-  
     public static int[] getUnaryLength(int n)
     {
     	int [] length = new int[n];

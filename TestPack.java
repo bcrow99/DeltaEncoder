@@ -778,15 +778,30 @@ public class TestPack
 			{
 				byte [] string       = (byte [])channel_data.get(0);
 				int  [] string_table = (int [])channel_table.get(0);
+				int  string_length   = (int)channel_string_length.get(0);
 				int  [] delta        =  new int[xdim * ydim];
-				int number_unpacked  = DeltaMapper.unpackStrings2(string, string_table, delta);
+				
+				int n = string_table.length;
+				int [] length = DeltaMapper.getUnaryLength(n);
+
+				if(n > 64)
+				{
+				    BigInteger [] code  = DeltaMapper.getUnaryCode(n, true);
+				    int number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+				}
+				else
+				{
+					long [] code  = DeltaMapper.getUnaryCode(n);
+					int number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+				}
+				
 				for(int j = 1; j < delta.length; j++)
 				     delta[j] += channel_delta_min[1];
 			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
 			    
 			    string          = (byte [])channel_data.get(1);
 				string_table    = (int [])channel_table.get(1);	
-				number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
+				int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
 				for(int j = 1; j < delta.length; j++)
 				     delta[j] += channel_delta_min[3];
 			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
