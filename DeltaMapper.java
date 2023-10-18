@@ -494,7 +494,6 @@ public class DeltaMapper
             int start = 0;
             int stop  = 10;	
         
-            /*
             System.out.println("Prefix free code:");
             for(int i = 0; i < code.length; i++)
             {
@@ -510,7 +509,6 @@ public class DeltaMapper
                 System.out.println();
             }
             System.out.println();
-            */
         
             System.out.println("Look-up table:");
             for(int i = 0; i < table.length; i++)
@@ -575,9 +573,6 @@ public class DeltaMapper
             for(int j = 0; j < code.length; j++)
             {
           	    long code_word = code[j];
-          	    
-          	    boolean current_match = true;
-          	    
           	    long mask = -1;
           	    mask <<= code_length[j];
           	    mask = ~mask;
@@ -585,16 +580,6 @@ public class DeltaMapper
           	    long masked_src_word = src_word & mask;
           	    long masked_code_word = code_word & mask;
           	    
-          	    /*
-          	    long code_mask = 1;
-          	    for(int k = 0; k < code_length[j]; k++)
-		        {
-		        	long src_result = (code_mask << k) & src_word;
-		        	long code_result = (code_mask << k) & code_word;
-		        	if(src_result != code_result)
-		        		current_match = false;
-		        }
-		        */
           	    if(masked_src_word == masked_code_word)
           	    {
           	    	dst[dst_byte++] = inverse_table[j];
@@ -606,6 +591,7 @@ public class DeltaMapper
           	    }
           	    else if(j == code.length - 1)
           	    {
+          	    	/*
           	    	System.out.println("No match for prefix-free code at byte " + current_byte);
           	    	if(debug)
           	    	{
@@ -621,6 +607,7 @@ public class DeltaMapper
           		        }
           		        System.out.println();
           	    	}
+          	    	*/
           	    }
             }
         }  
@@ -2098,7 +2085,28 @@ public class DeltaMapper
         	int shift = max_length - length[i];
         	shifted_code[i] = code[i] >> shift;
         }
-        return shifted_code;
+        
+        long [] reversed_code = new long[n];
+        reversed_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	long code_word = shifted_code[i];
+        	int  code_length = length[i];
+        	long code_mask = 1;
+        
+        	
+        	for(int j = 0; j < code_length; j++)
+        	{
+        		long result = code_word & (code_mask << j);
+        		if(result != 0)
+        		{
+        			int shift = (code_length - 1) - j;
+        			reversed_code[i] |= code_mask << shift;
+        		}
+        	}
+        }
+      
+        return reversed_code;
     }
     
     public static long[] getUnaryCode(int n)

@@ -472,18 +472,35 @@ public class TestPack
 				int [] string_table = DeltaMapper.getRankTable(histogram);
 				channel_table.add(string_table);
 				
-				for(int k = 1; k < delta.length; k++)
-					delta[k] -= channel_delta_min[j];
-				//delta[0] = value_range / 2;
-				
-				
-				byte [] string    = new byte[2 * delta.length];
-				byte [] string2   = new byte[2 * delta.length];
-			
 				
 				
 				int n = histogram.length;
+				ArrayList frequency_list = new ArrayList();
+			    for(int k = 0; k < n; k++)
+			    	frequency_list.add(histogram[k]);
+			    Collections.sort(frequency_list, Comparator.reverseOrder());
+			    int [] frequency = new int[n];
+			    for(int k = 0; k < n; k++)
+			    {
+			    	frequency[k] = (int)frequency_list.get(k);
+			    }
+			    channel_frequency.add(frequency);
+			    
+			   
+				for(int k = 1; k < delta.length; k++)
+					delta[k] -= channel_delta_min[j];
+				//delta[0] = value_range / 2;
 			
+				byte [] string    = new byte[2 * delta.length];
+				
+			    int [] length = DeltaMapper.getHuffmanLength(frequency);
+			    long[] code = DeltaMapper.getCanonicalCode(length);
+			    int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string); 
+			    channel_string_length.add(bit_length);
+			    channel_data.add(string);
+				
+				
+				/*
 			    int [] length  = DeltaMapper.getUnaryLength(n);
                 int max_length = length[n - 1];
 			    
@@ -492,36 +509,24 @@ public class TestPack
 			    {
 			    	 boolean useBigIntegers = true;
 				     BigInteger [] code = DeltaMapper.getUnaryCode(n, useBigIntegers);	
-				     int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string2);
+				     int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string);
 				     channel_string_length.add(bit_length);
+				     channel_data.add(string);
 				     System.out.println("Using big integers.");
 				     System.out.println();
 			    }
 			    else
 			    {
 			    	long [] code   = DeltaMapper.getUnaryCode(n);
-			    	int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string2);
+			    	int bit_length =  DeltaMapper.packCode(delta, string_table, code, length, string);
 			    	channel_string_length.add(bit_length);
+			    	channel_data.add(string);
 			    	System.out.println("Using longs.");
 			    	System.out.println();
 			    }
-			    channel_data.add(string2);
+                */
 			}
 		 
-			
-			/*
-			set_string[0] = new String("blue, green, and red.");
-		    set_string[1] = new String("blue, red, and red-green.");
-		    set_string[2] = new String("blue, red, and blue-green.");
-		    set_string[3] = new String("blue, blue-green, and red-green.");
-		    set_string[4] = new String("blue, blue-green, and red-blue.");
-		    set_string[5] = new String("green, red, and blue-green.");
-		    set_string[6] = new String("red, blue-green, and red-green.");
-		    set_string[7] = new String("green, blue-green, and red-green.");
-		    set_string[8] = new String("green, red-green, and red-blue.");
-		    set_string[9] = new String("red, red-green, red-blue.");
-			*/
-
 			ArrayList channel_delta = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
@@ -531,14 +536,24 @@ public class TestPack
 				int  string_length   = (int)channel_string_length.get(i);
 				int  [] delta        =  new int[xdim * ydim];
 				int  number_unpacked = 0;
+				
+				
+				
+				int  [] frequency    = (int [])channel_frequency.get(i); 
+				int [] length = DeltaMapper.getHuffmanLength(frequency);
+			    long[] code = DeltaMapper.getCanonicalCode(length);
+			    number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+			    channel_delta.add(delta);
+				
+				/*
 				int  n               = string_table.length;
 				int  [] length       = DeltaMapper.getUnaryLength(n);
-				
 				if(n <= 64)
 				{
 					System.out.println("Using longs.");
 				    long [] code     = DeltaMapper.getUnaryCode(n);
 				    number_unpacked  =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+				    delta[0] = 0;
 				    channel_delta.add(delta);
 				}
 				else
@@ -546,8 +561,11 @@ public class TestPack
 					System.out.println("Using BigIntegers.");
 				    BigInteger [] code = DeltaMapper.getUnaryCode(n, true);	
 				    number_unpacked    =  DeltaMapper.unpackCode(string, string_table, code, length, string_length, delta);
+				    delta[0] = 0;
 				    channel_delta.add(delta);
 				}
+				*/
+				
 			}
 			
 			if(min_set_id == 0)
@@ -558,6 +576,7 @@ public class TestPack
 			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
 			    
 			    delta = (int [])channel_delta.get(1);
+			    
 				for(int i = 1; i < delta.length; i++)
 				     delta[i] += channel_delta_min[1];
 			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
