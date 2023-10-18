@@ -490,49 +490,51 @@ public class DeltaMapper
         
         if(debug)
         {
-        // Segment of the string bytes we want to debug.
-        int start = 0;
-        int stop  = 10;	
+            // Segment of the string bytes we want to debug.
+            int start = 0;
+            int stop  = 10;	
         
-        System.out.println("Prefix free code:");
-        for(int i = 0; i < code.length; i++)
-        {
-            for(int j = 0; j < code_length[i]; j++)
+            /*
+            System.out.println("Prefix free code:");
+            for(int i = 0; i < code.length; i++)
             {
-                long mask = 1;
-                mask <<= j;
-                if((code[i] & mask) == 0)
-                    System.out.print(0);
-                else
-                	System.out.print(1);
+                for(int j = 0; j < code_length[i]; j++)
+                {
+                    long mask = 1;
+                    mask <<= j;
+                    if((code[i] & mask) == 0)
+                        System.out.print(0);
+                    else
+                	    System.out.print(1);
+                }
+                System.out.println();
             }
             System.out.println();
-        }
-        System.out.println();
+            */
         
-        System.out.println("Look-up table:");
-        for(int i = 0; i < table.length; i++)
-        	System.out.println(i + " -> " + table[i]);;
-        System.out.println();
+            System.out.println("Look-up table:");
+            for(int i = 0; i < table.length; i++)
+        	    System.out.println(i + " -> " + table[i]);;
+            System.out.println();
         
-        System.out.println("Bytes from delta string:");
+            System.out.println("Bytes from delta string:");
         
-        for(int i = start; i < stop; i++)
-        {
-        	System.out.print(i + "  ");
-            for(int j = 0; j < 8; j++)
+            for(int i = start; i < stop; i++)
             {
-        	    byte src_mask = 1;	
-        	    src_mask <<= j;
-        	    int src_bit = src_mask & src[i];
-        	    if(src_bit == 0)
-        		    System.out.print("0");
-        	    else
-        		    System.out.print("1");
+        	    System.out.print(i + "  ");
+                for(int j = 0; j < 8; j++)
+                {
+        	        byte src_mask = 1;	
+        	        src_mask <<= j;
+        	        int src_bit = src_mask & src[i];
+        	        if(src_bit == 0)
+        		        System.out.print("0");
+        	        else
+        		        System.out.print("1");
+                }
+                System.out.println();
             }
             System.out.println();
-        }
-        System.out.println();
         }
         
         int current_bit     = 0;
@@ -540,6 +542,8 @@ public class DeltaMapper
         int current_byte    = 0;
     	int number_unpacked = 0;
     	int dst_byte        = 0;
+    	
+    	boolean matched = true;
     	
         for(int i = 0; i < dst.length; i++)
         {
@@ -554,7 +558,7 @@ public class DeltaMapper
           	        src_byte >>= offset;
           	    else
           	        src_byte <<= j * 8 - offset;
-          	    src_word += src_byte;
+          	    src_word |= src_byte;
             }
 
             if(offset != 0)
@@ -562,47 +566,61 @@ public class DeltaMapper
           	    long src_byte = (long)src[current_byte + max_bytes];
           	    if(src_byte < 0)
           		    src_byte += 256;
-          	
-          	    // Shouldn't have to do this, since we mask the source word later.
-          	    /*
-          	    int  addend = 2;
-          	    long mask = 1;
-          	    for(int j = 1; j < offset; j++)
-          	    {
-          		    mask   += addend;
-          		    addend *= 2;
-          	    }
-          	    src_byte &= mask;
-          	    */
+          	    
           	    src_byte <<= max_bytes * 8 - offset;
-          	    src_word += src_byte;
+          	   
+          	    src_word |= src_byte;
             }
       	
             for(int j = 0; j < code.length; j++)
             {
           	    long code_word = code[j];
-          	    long mask      = 1;
-          	    int  addend    = 2;
-          	    for(int k = 1; k < code_length[j]; k++)
-          	    {
-          		    mask += addend;
-          		    addend *= 2;
-          	    }
+          	    
+          	    boolean current_match = true;
+          	    
+          	    long mask = -1;
+          	    mask <<= code_length[j];
+          	    mask = ~mask;
+          	    
           	    long masked_src_word = src_word & mask;
-          	
-          	    if(code_word == masked_src_word)
+          	    long masked_code_word = code_word & mask;
+          	    
+          	    /*
+          	    long code_mask = 1;
+          	    for(int k = 0; k < code_length[j]; k++)
+		        {
+		        	long src_result = (code_mask << k) & src_word;
+		        	long code_result = (code_mask << k) & code_word;
+		        	if(src_result != code_result)
+		        		current_match = false;
+		        }
+		        */
+          	    if(masked_src_word == masked_code_word)
           	    {
           	    	dst[dst_byte++] = inverse_table[j];
 	                number_unpacked++;
           		    current_bit += code_length[j];
           		    current_byte = current_bit / 8;
           		    offset       = current_bit % 8;
-          		    
           		    break;
           	    }
           	    else if(j == code.length - 1)
           	    {
-          		    System.out.println("No match for prefix-free code.");
+          	    	System.out.println("No match for prefix-free code at byte " + current_byte);
+          	    	if(debug)
+          	    	{
+          		        long code_mask = 1;
+          		        System.out.println("Source word:");
+          		        for(int k = 0; k < code_length[j]; k++)
+          		        {
+          		        	long src_result = (code_mask << k) & src_word;
+          		        	if(src_result == 0)
+          		        		System.out.print(0);
+          		        	else
+          		        		System.out.print(1);
+          		        }
+          		        System.out.println();
+          	    	}
           	    }
             }
         }  
@@ -1037,8 +1055,6 @@ public class DeltaMapper
                 src_byte++;
             }
         }
-        
-        
         return(number_unpacked);
     }
     
