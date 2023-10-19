@@ -2068,47 +2068,7 @@ public class DeltaMapper
     	}
     	return channel;
     }
-    
-    public static long[] getCanonicalCode(int [] length)
-    {
-    	int n = length.length;
-    	
-        long [] code         = new long[n];
-        long [] shifted_code = new long[n];
-        int max_length = length[n - 1];
-        
-        code[0] = 0;
-        shifted_code[0] = 0;
-        for(int i = 1; i < n; i++)
-        {
-        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
-        	int shift = max_length - length[i];
-        	shifted_code[i] = code[i] >> shift;
-        }
-        
-        long [] reversed_code = new long[n];
-        reversed_code[0] = 0;
-        for(int i = 1; i < n; i++)
-        {
-        	long code_word = shifted_code[i];
-        	int  code_length = length[i];
-        	long code_mask = 1;
-        
-        	
-        	for(int j = 0; j < code_length; j++)
-        	{
-        		long result = code_word & (code_mask << j);
-        		if(result != 0)
-        		{
-        			int shift = (code_length - 1) - j;
-        			reversed_code[i] |= code_mask << shift;
-        		}
-        	}
-        }
-      
-        return reversed_code;
-    }
-    
+  
     public static long[] getUnaryCode(int n)
     {
         long [] code         = new long[n];
@@ -2124,7 +2084,7 @@ public class DeltaMapper
         return code;
     }
     
-    public static BigInteger[] getUnaryCode(int n, boolean useBigInteger)
+    public static BigInteger[] getBigUnaryCode(int n)
     {
         BigInteger [] code         = new BigInteger[n];
        
@@ -2239,7 +2199,91 @@ public class DeltaMapper
     	
     	 return w;
     }
+     
+    
+    public static long[] getCanonicalCode(int [] length)
+    {
+    	int n = length.length;
+    	
+        long [] code         = new long[n];
+        long [] shifted_code = new long[n];
+        int max_length = length[n - 1];
+        
+        code[0] = 0;
+        shifted_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+        	int shift = max_length - length[i];
+        	shifted_code[i] = code[i] >> shift;
+        }
+        
+        long [] reversed_code = new long[n];
+        reversed_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	long code_word = shifted_code[i];
+        	int  code_length = length[i];
+        	long code_mask = 1;
+        	
+        	for(int j = 0; j < code_length; j++)
+        	{
+        		long result = code_word & (code_mask << j);
+        		if(result != 0)
+        		{
+        			int shift = (code_length - 1) - j;
+        			reversed_code[i] |= code_mask << shift;
+        		}
+        	}
+        }
+        return reversed_code;
+    }
+ 
+    public static BigInteger [] getBigCanonicalCode(int [] length)
+    {
+    	int n = length.length;
+    	
+        BigInteger [] code         = new BigInteger[n];
+        BigInteger [] shifted_code = new BigInteger[n];
+        int max_length = length[n - 1];
+        
+        code[0] = BigInteger.ZERO;
+        shifted_code[0] = BigInteger.ZERO;
+        for(int i = 1; i < n; i++)
+        {
+        	//code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+        	code[i] = code[i - 1];
+        	int j = (int)(Math.pow(2, max_length - length[i - 1]));
+        	BigInteger addend = BigInteger.valueOf(j);
+        	code[i] = code[i].add(addend);
+        	
+        	int shift = max_length - length[i];
+        	shifted_code[i] = code[i].shiftRight(shift);
+        }
+        
+        BigInteger [] reversed_code = new BigInteger[n];
+        reversed_code[0] = BigInteger.ZERO;
+        for(int i = 1; i < n; i++)
+        {
+        	BigInteger code_word = shifted_code[i];
+        	int  code_length = length[i];
+        	BigInteger code_mask = BigInteger.ONE;
+        
+        	
+        	for(int j = 0; j < code_length; j++)
+        	{
+        		BigInteger result = code_word.and(code_mask.shiftLeft(j));
+        		if(result.compareTo(BigInteger.ZERO) != 0)
+        		{
+        			int shift = (code_length - 1) - j;
+        			reversed_code[i] = reversed_code[i].or(code_mask.shiftLeft(shift));
+        		}
+        	}
+        }
       
+        return reversed_code;
+    }
+    
     public static double getZeroRatio(int [] code, int [] length, int [] frequency)
     {
     	int    n     = code.length;
