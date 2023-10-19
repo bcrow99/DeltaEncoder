@@ -2268,7 +2268,7 @@ public class DeltaMapper
         	BigInteger code_word = shifted_code[i];
         	int  code_length = length[i];
         	BigInteger code_mask = BigInteger.ONE;
-        
+            reversed_code[i] = BigInteger.ZERO;
         	
         	for(int j = 0; j < code_length; j++)
         	{
