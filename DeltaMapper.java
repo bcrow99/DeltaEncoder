@@ -1271,9 +1271,12 @@ public class DeltaMapper
         int j = 0;
         int k = 0;
       
+        try
+    	{
         for(int i = 0; i < size; i++)
         {
-            if(((src[k] & (mask << j)) != 0) && i < size - 1)
+        	
+            if((src[k] & (mask << j)) != 0 && i < size - 1)
             {
                 i++;
                 j++;
@@ -1343,7 +1346,13 @@ public class DeltaMapper
                 j = 0;
                 k++;
             }
-        }    
+        } 
+    	}
+        catch(Exception e)
+        {
+        	System.out.println(e.toString());
+        }
+        
        
         int number_of_bits = current_byte * 8;
         number_of_bits += current_bit;
@@ -1503,6 +1512,7 @@ public class DeltaMapper
     	}
     }
     
+    
     public static int decompressZeroStrings(byte src[], int length, byte dst[])
     {
         // Getting the number of iterations appended to
@@ -1573,6 +1583,77 @@ public class DeltaMapper
         return(current_length);
     }
    
+    /*
+    public static int decompressZeroStrings(byte src[], int length, byte dst[])
+    {
+        // Getting the number of iterations appended to
+        // the end of the string. 
+        int last_byte = length / 8;
+        if(length % 8 != 0)
+        	last_byte++;
+        int iterations = src[last_byte];
+        
+        // If it's not a zero type string, we'll still process it.
+        // This might actually compress a one type string.
+        if(iterations < 0)
+        {
+        	System.out.println("Not zero type string.");
+        	iterations = -iterations;
+        }
+        
+        // If it was not compressed, we copy src to dst.
+        if(iterations == 0)
+        {
+        	int byte_length = length / 8;
+        	if(length % 8 != 0)
+        		byte_length++;
+        	for(int i = 0; i < byte_length; i++)
+        		dst[i] = src[i];
+        	return length;
+        }
+        
+        
+        byte[]  temp = new byte[dst.length];
+        int current_length = 0;
+        if(iterations == 1)
+        {
+        	
+            current_length = decompressZeroBits(src, length, dst);
+            iterations--;
+        }
+        else if(iterations % 2 == 0)
+        {
+            current_length = decompressZeroBits(src, length, temp);
+            iterations--;
+            while(iterations > 0)
+            {
+            	
+                int previous_length = current_length;
+                if(iterations % 2 == 0)
+                    current_length = decompressZeroBits(dst, previous_length, temp);
+                else
+                    current_length = decompressZeroBits(temp, previous_length, dst);
+                iterations--;
+            }
+        }
+        else
+        {
+            current_length = decompressZeroBits(src, length, dst);
+            iterations--;
+            while(iterations > 0)
+            {
+                int previous_length = current_length;
+                if(iterations % 2 == 0)
+                    current_length = decompressZeroBits(dst, previous_length, temp);
+                else
+                    current_length = decompressZeroBits(temp, previous_length, dst);
+                iterations--;
+            }
+        }
+       
+        return(current_length);
+    }
+   */
     public static int compressOneBits(byte src[], int size, byte dst[])
     {
         for(int i = 0; i < dst.length; i++)
@@ -2741,7 +2822,7 @@ public class DeltaMapper
     public static ArrayList getSegmentData2(byte [] string, int string_bit_length, int segment_bit_length)
     {
     	boolean debug1 = false;
-    	boolean debug2 = true;
+    	boolean debug2 = false;
     	
     	int number_of_segments       = string_bit_length / segment_bit_length;
     	int segment_byte_length      = segment_bit_length / 8;
