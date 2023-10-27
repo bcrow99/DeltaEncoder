@@ -475,18 +475,15 @@ public class AdaptiveTester2
 			}
 		    
 			min_set_id = min_index;
-			//System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			//System.out.println();
-			
-			
-			min_set_id = 4;
+	        System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
+			System.out.println();
+			//min_set_id = 9;
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			
 			
 			ArrayList channel_id = new ArrayList();
 			ArrayList channel_table = new ArrayList();
 			ArrayList channel_data = new ArrayList();
-			
 			ArrayList channel_bitlength = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
@@ -511,13 +508,12 @@ public class AdaptiveTester2
 				byte [] compression_string = new byte[xdim * ydim * 2];
 				int bitlength              = DeltaMapper.packStrings2(delta, string_table, string);
 				channel_bitlength.add(bitlength);
-			
 				
 				//int minimum_segment_length = 64 + segment_length * 8;
-			    int minimum_segment_length = 2000;
+			    int minimum_segment_length = 864;
 				
-				//ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, channel_length[j], minimum_segment_length);
-				ArrayList segment_data_list = DeltaMapper.getSegmentData(string, bitlength, minimum_segment_length);
+				ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, bitlength, minimum_segment_length);
+				//ArrayList segment_data_list = DeltaMapper.getSegmentData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
 			}
 			
@@ -526,8 +522,6 @@ public class AdaptiveTester2
 			for(int i = 0; i < 3; i++)
 			{
 				ArrayList segment_data_list = (ArrayList)channel_data.get(i);
-				
-				
 				ArrayList segment_length = (ArrayList)segment_data_list.get(0);
 				ArrayList segment_string = (ArrayList)segment_data_list.get(1);
 				
@@ -546,8 +540,8 @@ public class AdaptiveTester2
 				System.out.println();
 				for(int j = 0; j < n; j++)
 				{
-					if(j % 10 == 0)
-			    	     System.out.println("Processing segment " + j);
+					//if(j % 10 == 0)
+			    	//     System.out.println("Processing segment " + j);
 					int length = (int)segment_length.get(j);
 					byte [] string = (byte [])segment_string.get(j);
 					
@@ -607,16 +601,20 @@ public class AdaptiveTester2
 				    	 offset += byte_length; 
 				    	
 					}
+					
 					if(j % 10 == 0)
 					{
 			    	    System.out.println("Processed segment " + j);
 			    	    System.out.println();
 					}
+					
 				}
+				
 				
 				int  [] string_table    = (int [])channel_table.get(i);
 				int  [] delta           =  new int[xdim * ydim];
 				int     number_unpacked = DeltaMapper.unpackStrings2(channel_string, string_table, delta);	
+				
 				channel_delta.add(delta);
 				
 				System.out.println("Finished channel " + i);
@@ -675,6 +673,7 @@ public class AdaptiveTester2
 				     delta[i] += channel_delta_min[2];
 			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
 			    
+			    delta = (int [])channel_delta.get(2);
 			    for(int i = 1; i < delta.length; i++)
 				     delta[i] += channel_delta_min[3];
 			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
@@ -693,19 +692,22 @@ public class AdaptiveTester2
 			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
 			    
 			    delta = (int [])channel_delta.get(1);
+			    for(int i = 1; i < delta.length; i++)
+				    delta[i] += channel_delta_min[3];
 			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
 			    {
 			    	shifted_blue_green[i] += channel_min[3];
 			    	shifted_blue_green[i]  = -shifted_blue_green[i]; 
 			    }
+			
 			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
 			    
 			    delta = (int [])channel_delta.get(2);
 				for(int i = 1; i < delta.length; i++)
 				     delta[i] += channel_delta_min[4];
 			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
+			    for(int i = 0; i < shifted_red_green.length; i++)
 			    	shifted_red_green[i] += channel_min[4];
 			    shifted_red = DeltaMapper.getSum(shifted_red_green, shifted_green);
 			}
@@ -717,6 +719,8 @@ public class AdaptiveTester2
 			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
 			    
 			    delta = (int [])channel_delta.get(1);
+			    for(int i = 1; i < delta.length; i++)
+				    delta[i] += channel_delta_min[3];
 			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
 			    {
@@ -729,7 +733,7 @@ public class AdaptiveTester2
 				for(int i = 1; i < delta.length; i++)
 				     delta[i] += channel_delta_min[5];
 			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[5]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
+			    for(int i = 0; i < shifted_red_blue.length; i++)
 			    	shifted_red_blue[i] += channel_min[5];
 			    shifted_red = DeltaMapper.getSum(shifted_blue, shifted_red_blue);
 			}
