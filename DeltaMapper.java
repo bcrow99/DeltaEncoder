@@ -2585,7 +2585,7 @@ public class DeltaMapper
     	return total;
     }
     
-    // This function returns a segment list with regular intervals.
+    // This function returns a segment list with regular lengths.
     public static ArrayList getSegmentData(byte [] string, int string_bit_length, int segment_bit_length)
     {
     	
@@ -2624,17 +2624,28 @@ public class DeltaMapper
             	if(compression_amount < 0)
             	{
             		int compression_length = compressZeroStrings2(segment, segment_bit_length, compressed_segment);
-            		int byte_length = compression_length / 8 + 1;
+            		
+            		
+            		int byte_length = compression_length / 8;
             		if(compression_length % 8 != 0)
             			byte_length++;
+            		// This might be a bug related to recursion.  We should
+            		// only have to increment the byte length by 1.
+            		// This seems like a lot of extra trailing bits.
+            		// It mostly happens with binary images.
+            		byte_length += 3;
             		byte [] clipped_string = new byte[byte_length];
             		for(int j = 0; j < byte_length; j++)
             			clipped_string[j] = compressed_segment[j];
+            		compressed_data.add(clipped_string);
+            		
+            		//compressed_data.add(compressed_segment);
             		compressed_length.add(compression_length);
-        			compressed_data.add(clipped_string);
+        			
             	}
             	else
             	{
+            		// Add 0 iterations to uncompressed segment.
             		byte [] clipped_string = new byte[segment_byte_length + 1];
             		for(int j = 0; j < segment_byte_length; j++)
             			clipped_string[j] = segment[j];
@@ -2650,18 +2661,30 @@ public class DeltaMapper
             	if(compression_amount < 0)
             	{
             		int compression_length = compressOneStrings2(segment, segment_bit_length, compressed_segment);
-            		int byte_length = compression_length / 8 + 1;
+            		
+            		int byte_length = compression_length / 8;
             		if(compression_length % 8 != 0)
             			byte_length++;
+            		
+            		// This might be a bug related to recursion.  We should
+            		// only have to increment the byte length by 1,
+            		// and that works most of the time.
+            		// This seems like a lot of extra trailing bits.
+            		// It mostly happens with binary images.
+            		byte_length += 3;
             		byte [] clipped_string = new byte[byte_length];
             		for(int j = 0; j < byte_length; j++)
             			clipped_string[j] = compressed_segment[j];
+            		compressed_data.add(clipped_string);
+            		
+            		//compressed_data.add(compressed_segment);
             		compressed_length.add(compression_length);
-        			compressed_data.add(clipped_string);
+        			
         			
             	}
             	else
             	{
+            		// Add 0 iterations to uncompressed segment.
             		byte [] clipped_string = new byte[segment_byte_length + 1];
             		for(int j = 0; j < segment_byte_length; j++)
             			clipped_string[j] = segment[j];
@@ -2692,6 +2715,9 @@ public class DeltaMapper
         		int byte_length = compression_length / 8 + 1;
         		if(compression_length % 8 != 0)
         			byte_length++;
+        		// Should not need to do this.
+        		// Only seems to matter with binary images.
+        		byte_length += 2;
         		byte [] clipped_string = new byte[byte_length];
         		for(int j = 0; j < byte_length; j++)
         			clipped_string[j] = compressed_segment[j];
@@ -2700,9 +2726,9 @@ public class DeltaMapper
     			
     			if(debug1)
     			{
-    			    System.out.println("Compression length 0 is " + compression_length);
+    			    //System.out.println("Compression length 0 is " + compression_length);
     			    int decompression_length = decompressZeroStrings(compressed_segment, compression_length, processed_segment);
-    			    System.out.println("Decompression length 0 is " + decompression_length);
+    			    //System.out.println("Decompression length 0 is " + decompression_length);
     			    boolean same_string = true;
     			    for(int j = 0; j < segment.length; j++)
     			    {
@@ -2716,6 +2742,7 @@ public class DeltaMapper
         	}
         	else
         	{
+        		// Add 0 iterations to uncompressed segment.
         		byte [] clipped_string = new byte[last_segment_byte_length + 1];
         		for(int j = 0; j < last_segment_byte_length; j++)
         			clipped_string[j] = segment[j];
@@ -2730,20 +2757,26 @@ public class DeltaMapper
         	if(compression_amount < 0)
         	{
         		int compression_length = compressOneStrings2(segment, last_segment_bit_length, compressed_segment);
+        		
         		int byte_length = compression_length / 8 + 1;
         		if(compression_length % 8 != 0)
         			byte_length++;
+        		// Should not need to do this.
+        		// Only seems to matter with binary images.
+        		byte_length += 2;
         		byte [] clipped_string = new byte[byte_length];
         		for(int j = 0; j < byte_length; j++)
         			clipped_string[j] = compressed_segment[j];
-        		compressed_length.add(compression_length);
+        		
     			compressed_data.add(clipped_string);
-    			
+        		//compressed_data.add(compressed_segment);
+        		
+        		compressed_length.add(compression_length);
     			if(debug1)
     			{
-    				System.out.println("Compression length 1 is " + compression_length);
+    				//System.out.println("Compression length 1 is " + compression_length);
                     int decompression_length = decompressOneStrings(compressed_segment, compression_length, processed_segment);
-    			    System.out.println("Decompression length 1 is " + decompression_length);
+    			    //System.out.println("Decompression length 1 is " + decompression_length);
     			    boolean same_string = true;
     			    for(int j = 0; j < segment.length; j++)
     			    {
@@ -2837,7 +2870,7 @@ public class DeltaMapper
     	byte [] processed_segment  = new byte[2 * last_segment_byte_length];
         byte [] compressed_segment = new byte[2 * last_segment_byte_length];
         
-    
+        System.out.println("Number of segments is " + number_of_segments);
 
         for(int i = 0; i < number_of_segments - 1; i++)
         {
@@ -2916,12 +2949,17 @@ public class DeltaMapper
             }
         }
     	
+        System.out.println("Last segment byte length is " + last_segment_byte_length);
     	int i = number_of_segments - 1;
+    	System.out.println("Index is " + i);
     	byte [] segment = new byte[last_segment_byte_length];	
     
         
         for(int j = 0; j < last_segment_byte_length; j++)
+        {
+        	
             segment[j] = string[i * segment_byte_length + j];
+        }
         
         double zero_ratio = getZeroRatio(segment, last_segment_bit_length);
        
