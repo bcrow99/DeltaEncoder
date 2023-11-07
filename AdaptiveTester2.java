@@ -68,9 +68,13 @@ public class AdaptiveTester2
 	    String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		String java_version = System.getProperty("java.version");
+		
+		
+		
+		
 	
-		System.out.println("Current java version is " + java_version);
-		AdaptiveTester2 encoder = new AdaptiveTester2(prefix + filename);
+		//System.out.println("Current java version is " + java_version);
+		AdaptiveTester2 encoder_decoder = new AdaptiveTester2(prefix + filename);
 	}
 
 	public AdaptiveTester2(String _filename)
@@ -191,7 +195,7 @@ public class AdaptiveTester2
 						Point location_point = frame.getLocation();
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
-						x += xdim;
+						y -= 40;
 						shift_dialog.setLocation(x, y);
 						shift_dialog.pack();
 						shift_dialog.setVisible(true);
@@ -233,7 +237,7 @@ public class AdaptiveTester2
 						Point location_point = frame.getLocation();
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
-						x += xdim;
+						y -= 100;
 						segment_dialog.setLocation(x, y);
 						segment_dialog.pack();
 						segment_dialog.setVisible(true);
@@ -244,7 +248,7 @@ public class AdaptiveTester2
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(100);
+				segment_slider.setMaximum(300);
 				segment_slider.setValue(segment_length);
 				segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -274,7 +278,7 @@ public class AdaptiveTester2
 				frame.setJMenuBar(menu_bar);
 				
 				frame.pack();
-				frame.setLocation(400, 200);
+				frame.setLocation(10, 400);
 				frame.setVisible(true);
 			} 
 		} 
@@ -364,6 +368,8 @@ public class AdaptiveTester2
 		    pixel_length = xdim * ydim * 8;
 		    file_ratio   = file_length * 8;
 		    file_ratio  /= pixel_length * 3;
+		    
+		    System.out.println("Orginal compression was " + String.format("%.2f", file_ratio));
 		}
 		
 		public void actionPerformed(ActionEvent event)
@@ -504,16 +510,26 @@ public class AdaptiveTester2
 				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
-				byte [] string         = new byte[xdim * ydim * 2];
-				byte [] compression_string = new byte[xdim * ydim * 2];
-				int bitlength              = DeltaMapper.packStrings2(delta, string_table, string);
+				
+				
+				int predicted_bit_length = DeltaMapper.getStringLength(delta);
+				int predicted_byte_length = predicted_bit_length / 8;
+				// The predicted bit length seems to be off sometimes, always less than it actually is, but close.
+				// Adding a fudge factor.  
+			    predicted_byte_length += 8;
+				
+				byte [] string         = new byte[predicted_byte_length];
+			
+				
+				int bitlength               = DeltaMapper.packStrings2(delta, string_table, string);
+				//System.out.println("Predicted bit length is " + predicted_bit_length);
+				//System.out.println("Actual bit length is " + bitlength);
 				channel_bitlength.add(bitlength);
 				
-				//int minimum_segment_length = 64 + segment_length * 8;
-			    int minimum_segment_length = 864;
+				int minimum_segment_length = 64 + segment_length * 8;
+			    //int minimum_segment_length = 864;
 				
-				ArrayList segment_data_list = DeltaMapper.getSegmentData2(string, bitlength, minimum_segment_length);
-				//ArrayList segment_data_list = DeltaMapper.getSegmentData(string, bitlength, minimum_segment_length);
+				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
 			}
 			
@@ -524,24 +540,25 @@ public class AdaptiveTester2
 				ArrayList segment_data_list = (ArrayList)channel_data.get(i);
 				ArrayList segment_length = (ArrayList)segment_data_list.get(0);
 				ArrayList segment_string = (ArrayList)segment_data_list.get(1);
+				int       max_segment_byte_length = (int)segment_data_list.get(2);
 				
-				int id = (int)channel_id.get(i);
 				int bit_length = (int) channel_bitlength.get(i);
 				int byte_length = bit_length / 8;
+				
 				if(bit_length % 8 != 0)
 					byte_length++;
 				
 				byte [] channel_string = new byte[byte_length];
 				int offset = 0;
 				
-				
 				int n = segment_string.size();
 				System.out.println("There are " + n + " segments.");
 				System.out.println();
+				
+				// This only works with regular segments.
+				int decompression_length = bit_length / n + bit_length % n + 1;
 				for(int j = 0; j < n; j++)
 				{
-					//if(j % 10 == 0)
-			    	//     System.out.println("Processing segment " + j);
 					int length = (int)segment_length.get(j);
 					byte [] string = (byte [])segment_string.get(j);
 					
@@ -550,28 +567,28 @@ public class AdaptiveTester2
 					{
 						// We do not copy the last byte containing the iterations value.
 						for(int k = 0; k < string.length - 1; k++) 
-				    	       channel_string[offset + k] = string[k];
-				    	   offset += string.length - 1;	
+				    	    channel_string[offset + k] = string[k];
+				    	offset += string.length - 1;	
 				    	//System.out.println("Not compressed.");
 					}
 					else
 					{
-						// We create a decompression buffer that can handle the 
-						// maximum possible result, length * iterations * 2.
-						int decompression_length = iterations * 4 * string.length;
-				    	byte [] decompressed_segment = new byte[decompression_length];
-						int bitstring_length = 0;
 						int string_type = DeltaMapper.getStringType(string, length);
+						
+					    
+					    // Using the theoretical limits instead of the actual size
+					    // can create memory problems.
+						// decompression_length = (int)(Math.pow(2., (double)iterations) * string.length);
+				    	// byte [] decompressed_segment = new byte[decompression_length];
+						
+						// Instead we keep track of that information in the segmenting process.
+						byte [] decompressed_segment = new byte[max_segment_byte_length];
+						int bitstring_length = 0;
+						
 						if(string_type == 0)
-						{
 				           bitstring_length = DeltaMapper.decompressZeroStrings(string, length, decompressed_segment); 
-				            //System.out.println("Decompressing zero strings.");
-						}
 				    	else
-				    	{
 				    		bitstring_length = DeltaMapper.decompressOneStrings(string, length, decompressed_segment);
-				    		//System.out.println("Decompressing one strings.");
-				    	}
 						byte_length = bitstring_length / 8;
 
 				    	if(bitstring_length % 8 != 0)
@@ -599,15 +616,7 @@ public class AdaptiveTester2
 				    		 System.out.println(e.toString());
 				    	 }
 				    	 offset += byte_length; 
-				    	
 					}
-					
-					if(j % 10 == 0)
-					{
-			    	    System.out.println("Processed segment " + j);
-			    	    System.out.println();
-					}
-					
 				}
 				
 				
