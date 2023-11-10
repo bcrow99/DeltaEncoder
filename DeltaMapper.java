@@ -1175,6 +1175,11 @@ public class DeltaMapper
         int i = 0;
         int j = 0;
         int k = 0;
+        
+        
+        
+        try
+        {
         for(i = 0; i < size; i++)
         {
             if((src[k] & (mask << j)) == 0 && i < size - 1)
@@ -1257,7 +1262,13 @@ public class DeltaMapper
                 j = 0;
                 k++;
             }
-        }    
+        }  
+        }
+        catch(Exception e)
+        {
+        	System.out.println(e.toString());
+        	System.out.println("Exiting compressZeroBits with an exception.");
+        }
         int number_of_bits = current_byte * 8;
         number_of_bits    += current_bit;
         
@@ -1447,8 +1458,14 @@ public class DeltaMapper
     // This breaks the encoder/decoder programs.
     public static int compressZeroStrings2(byte src[], int length, byte dst[])
     {
-    	boolean debug = false;
+    	int current_length = 0;
+    	boolean even_iterations = true;
     	
+    	int string_length = 0;
+    	int input_length  = 0;
+    	int output_length = 0;
+    	try
+    	{
         int amount = getCompressionAmount(src, length, 0);
     	if(amount > 0)
     	{
@@ -1462,10 +1479,9 @@ public class DeltaMapper
     	}
         else
         {
-    		int current_length = compressZeroBits(src, length, dst);
+    		current_length = compressZeroBits(src, length, dst);
     		int iterations     = 1;
     		amount             = getCompressionAmount(dst, current_length, 0);
-    		
     		
     		if(amount >= 0)
     		{
@@ -1484,15 +1500,29 @@ public class DeltaMapper
     				int previous_length = current_length;
         	        if(iterations % 2 == 1)
         	        {
+        	        	string_length = current_length;
+                        input_length  = dst.length;
+                        output_length = temp.length;
+        	        	
+                        even_iterations = true;
+                        iterations++; 
                         current_length = compressZeroBits(dst, previous_length, temp);
                         amount         = getCompressionAmount(temp, current_length, 0);
+                        
         	        }
                     else
                     {
+                    	even_iterations = false;
+                    	iterations++; 
+                    	
+                    	string_length = current_length;
+                        input_length  = temp.length;
+                        output_length = dst.length;
+                        
                         current_length = compressZeroBits(temp, previous_length, dst);
                         amount         = getCompressionAmount(dst, current_length, 0);
                     }
-                    iterations++; 
+                    
                     
     			}
     			
@@ -1503,19 +1533,48 @@ public class DeltaMapper
                     int byte_length = current_length / 8;
                     if(current_length % 8 != 0)
                         byte_length++; 
+                    string_length = byte_length;
+                    input_length  = temp.length;
+                    output_length = dst.length;
+                    
+                    
+                   
                     for(int i = 0; i < byte_length; i++)
                         dst[i] = temp[i];
-                }   
+                } 
+    			else
+    			{
+    				even_iterations = false;
+    				int byte_length = current_length / 8;
+                    if(current_length % 8 != 0)
+                        byte_length++; 
+                    string_length = byte_length;
+                    input_length  = dst.length;
+                    output_length = temp.length;
+    				
+    			}
                 // else the result is already in dst.
     			
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
                 dst[last_byte] = (byte)iterations;
-                
-                return current_length;
     		}
     	}
+    	}
+    	catch(Exception e)
+    	{
+    		System.out.println(e.toString());
+    		System.out.println("Exiting compressZeroStrings2 with an exception.");
+    		if(even_iterations)
+    			System.out.println("The number of iterations was even.");
+    		else
+    			System.out.println("The number of iterations was odd.");
+    		System.out.println("String length was " + string_length);
+    		System.out.println("Input buffer length was " + input_length);
+    		System.out.println("Output buffer length was " + output_length);
+    	}
+    	return current_length;
     }
     
     
@@ -1803,7 +1862,6 @@ public class DeltaMapper
     public static int compressOneStrings(byte src[], int length, byte dst[])
     {
         int amount = getCompressionAmount(src, length, 1);
-    	
     	if(amount > 0)
     	{
     		int current_length = compressOneBits(src, length, dst);
@@ -1867,9 +1925,15 @@ public class DeltaMapper
     
     // This function uses a metric to see if the data will expand or contract, and
     // simply copies src to dst if it will expand.  This breaks the
-    // encoder/decoder programs.
+    // original encoder/decoder programs.
     public static int compressOneStrings2(byte src[], int length, byte dst[])
     {
+    	int current_length = 0;
+    
+    	boolean even_iterations = true;
+    	
+    	try
+    	{
         int amount = getCompressionAmount(src, length, 1);
     	if(amount > 0)
     	{
@@ -1885,7 +1949,7 @@ public class DeltaMapper
     	}
         else
         {
-    		int current_length = compressOneBits(src, length, dst);
+    		current_length = compressOneBits(src, length, dst);
     		int iterations     = 1;
     		amount             = getCompressionAmount(dst, current_length, 1);
     		
@@ -1917,7 +1981,7 @@ public class DeltaMapper
     			}
     			
     			if(iterations % 2 == 0) 
-                {
+    			{
                 	// The last iteration used temp as a destination,
                 	// so we need to copy the data from temp to dst.
                     int byte_length = current_length / 8;
@@ -1925,16 +1989,25 @@ public class DeltaMapper
                         byte_length++; 
                     for(int i = 0; i < byte_length; i++)
                         dst[i] = temp[i];
+                    
                 }   
+    			
                 // else the result is already in dst.
     			
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
                 dst[last_byte] = (byte)-iterations;
-                return current_length;
+                
     		}
     	}
+    	}
+    	catch(Exception e)
+    	{
+    		System.out.println(e.toString());
+    		System.out.println("Exiting compressOneStrings2 with exception.");
+    	}
+    	return current_length;
     }
     
     // Returns string length of packed strings.

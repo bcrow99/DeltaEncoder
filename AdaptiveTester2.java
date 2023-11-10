@@ -195,7 +195,7 @@ public class AdaptiveTester2
 						Point location_point = frame.getLocation();
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
-						y -= 40;
+						y -= 50;
 						shift_dialog.setLocation(x, y);
 						shift_dialog.pack();
 						shift_dialog.setVisible(true);
@@ -575,14 +575,14 @@ public class AdaptiveTester2
 					{
 						int string_type = DeltaMapper.getStringType(string, length);
 						
-					    
 					    // Using the theoretical limits instead of the actual size
 					    // can create memory problems.
 						// decompression_length = (int)(Math.pow(2., (double)iterations) * string.length);
 				    	// byte [] decompressed_segment = new byte[decompression_length];
 						
 						// Instead we keep track of that information in the segmenting process.
-						byte [] decompressed_segment = new byte[max_segment_byte_length];
+						// Looks like we're off sometimes, so we double the buffer.
+						byte [] decompressed_segment = new byte[max_segment_byte_length * 2];
 						int bitstring_length = 0;
 						
 						if(string_type == 0)
@@ -602,6 +602,7 @@ public class AdaptiveTester2
 				    			// mask values when we reconstruct the unsegmented
 				    			// string.  We just print out a warning and
 				    			// ignore it.
+				    			
 				    			System.out.println("Uneven segment.");
 				    		}
 				    	 }
@@ -614,6 +615,11 @@ public class AdaptiveTester2
 				    	 catch(Exception e)
 				    	 {
 				    		 System.out.println(e.toString());
+				    		 System.out.println("Exception writing delta string.");
+				    		 System.out.println("Byte length is " + byte_length);
+				    		 System.out.println("Buffer length is " + decompressed_segment.length);
+				    		 System.out.println("String type is " + string_type);
+				    		 System.out.println();
 				    	 }
 				    	 offset += byte_length; 
 					}
