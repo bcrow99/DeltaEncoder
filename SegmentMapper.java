@@ -114,8 +114,8 @@ public class SegmentMapper
 		if (remainder % 8 != 0)
 			last_segment_byte_length++;
 		
-		System.out.println("Regular bit length is " + segment_bit_length);
-		System.out.println("Last bit length is " + last_segment_bit_length);
+		//System.out.println("Regular bit length is " + segment_bit_length);
+		//System.out.println("Last bit length is " + last_segment_bit_length);
 
 		int max_segment_byte_length = last_segment_byte_length;
 
@@ -174,6 +174,7 @@ public class SegmentMapper
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
 					compressed_byte_length++;
+				
 				// Add the byte for iterations not included in the bit length.
 				compressed_byte_length++;
 
@@ -204,9 +205,8 @@ public class SegmentMapper
 
 		System.out.println("The number of segments in initial list is " + current_number_of_segments);
 		int last_bit_length = (int)segment_length.get(current_number_of_segments - 1);
-		System.out.println("The last segment bit length is " + last_bit_length);
-		System.out.println();
-
+		//System.out.println("The last segment bit length is " + last_bit_length);
+	
 		int iterations = 0;
 		while (current_number_of_segments != previous_number_of_segments) 
 		{
@@ -275,7 +275,7 @@ public class SegmentMapper
 						// For now we'll wait until we actually write and read files,
 						// so we have a good way to evaluate results to show if the separate
 						// files compress separately even with twice the overhead.
-						if (merged_compression_length <= (current_length + next_length + 8)) 
+						if (merged_compression_length <= (current_length + next_length + 12)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
