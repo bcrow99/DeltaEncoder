@@ -271,11 +271,9 @@ public class SegmentMapper
 						}
 						
                         // Do a check to see if the segments compress better when merged.
-						// We should also account for overhead.
-						// For now we'll wait until we actually write and read files,
-						// so we have a good way to evaluate results to show if the separate
-						// files compress separately even with twice the overhead.
-						if (merged_compression_length <= (current_length + next_length + 12)) 
+						// We should also account for the overhead--a short int and byte.
+						
+						if (merged_compression_length <= (current_length + next_length - 24)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
