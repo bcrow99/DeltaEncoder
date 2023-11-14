@@ -528,7 +528,7 @@ public class AdaptiveEncoder2
 				//System.out.println("Actual bit length is " + bitlength);
 				channel_bitlength.add(bitlength);
 				
-				int minimum_segment_length = 64 + segment_length * 8;
+				int minimum_segment_length = 8 + segment_length * 8;
 			    //int minimum_segment_length = 864;
 				
 				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
@@ -602,8 +602,7 @@ public class AdaptiveEncoder2
 				    			// mask values when we reconstruct the unsegmented
 				    			// string.  We just print out a warning and
 				    			// ignore it.
-				    			
-				    			System.out.println("Uneven segment.");
+				    			System.out.println("Uneven segment at index " + j);
 				    		}
 				    	 }
 				    	
@@ -625,11 +624,9 @@ public class AdaptiveEncoder2
 					}
 				}
 				
-				
 				int  [] string_table    = (int [])channel_table.get(i);
 				int  [] delta           =  new int[xdim * ydim];
 				int     number_unpacked = DeltaMapper.unpackStrings2(channel_string, string_table, delta);	
-				
 				channel_delta.add(delta);
 			}
 		  
@@ -921,6 +918,9 @@ public class AdaptiveEncoder2
 		        
 		        System.out.println("Saving " + set_string[min_set_id]);
 		        
+		        out.writeByte(min_set_id);
+		        //System.out.println("Writing byte set id " + min_set_id);
+		        
 		        out.writeShort(xdim);
 		        out.writeShort(ydim);
 		        
@@ -995,28 +995,27 @@ public class AdaptiveEncoder2
 		            	
 		            	byte extra_bits = (byte)(segment.length  * 8 - segment_bit_length);
 		            	
-		            	
-		            	//out.writeInt(segment_bit_length);
                         out.writeByte(extra_bits);
 		            	
 		            	out.writeShort(segment.length);
 		            	
 		            	out.write(segment, 0, segment.length);
 		            	
-		            	
 		            	int expected_byte_length = segment_bit_length / 8;
 		            	expected_byte_length++;
 		            	if(segment_bit_length % 8 != 0)
 		            		expected_byte_length++;
-		            	System.out.println("Expected segment byte length is " + expected_byte_length);
-		            	System.out.println("Segment byte length is " + segment.length);
-		            	
 		            }
-		            System.out.println("Wrote segment data.");
-		            System.out.println();
 		        } 
 		        out.flush();
 		        out.close();
+		        
+                File   compressed_image = new File("foo");
+		        double compressed_ratio = compressed_image.length();
+		        compressed_ratio       /= xdim * ydim * 8 * 3;
+		        System.out.println("Original compression rate is " + String.format("%.4f", file_ratio));
+		        System.out.println("Current compression rate is " + String.format("%.4f", compressed_ratio));
+		        System.out.println();
 		    }
 		    catch(Exception e)
 		    {
