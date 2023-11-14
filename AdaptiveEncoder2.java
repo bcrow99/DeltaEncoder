@@ -57,7 +57,7 @@ public class AdaptiveEncoder2
 	
 	int     segment_length = 0;
 	
-	ArrayList channel_id, channel_table, channel_data, channel_bitlength;
+	ArrayList channel_id, channel_table, channel_data, channel_bitlength, channel_list;
 
 	public static void main(String[] args)
 	{
@@ -373,17 +373,14 @@ public class AdaptiveEncoder2
 		    file_ratio   = file_length * 8;
 		    file_ratio  /= pixel_length * 3;
 		    
-		    System.out.println("Orginal compression was " + String.format("%.2f", file_ratio));
+		    //System.out.println("Orginal compression was " + String.format("%.2f", file_ratio));
 		}
 		
 		public void actionPerformed(ActionEvent event)
 		{
-			// Clear all array lists.
+			// Clear array lists.
 			channel_src.clear();
-		   
-			System.out.println("Pixel shift is " + pixel_shift);
-		    System.out.println();
-		    
+		 
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
 		        shifted_blue[i]  = blue[i]  >> pixel_shift;
@@ -483,9 +480,6 @@ public class AdaptiveEncoder2
 			}
 		    
 			min_set_id = min_index;
-	        System.out.println("A set with the lowest delta sum is " + set_string[min_index]);
-			System.out.println();
-			//min_set_id = 9;
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			
 			
@@ -528,14 +522,14 @@ public class AdaptiveEncoder2
 				//System.out.println("Actual bit length is " + bitlength);
 				channel_bitlength.add(bitlength);
 				
-				int minimum_segment_length = 8 + segment_length * 8;
-			    //int minimum_segment_length = 864;
+				int minimum_segment_length = 16 + segment_length * 8;
 				
 				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
 			}
 			
             ArrayList channel_delta = new ArrayList();
+            ArrayList channel_list  = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
 			{
@@ -555,8 +549,6 @@ public class AdaptiveEncoder2
 				
 				int n = segment_string.size();
 				
-				// This only works with regular segments.
-				int decompression_length = bit_length / n + bit_length % n + 1;
 				for(int j = 0; j < n; j++)
 				{
 					int length = (int)segment_length.get(j);
@@ -569,20 +561,11 @@ public class AdaptiveEncoder2
 						for(int k = 0; k < string.length - 1; k++) 
 				    	    channel_string[offset + k] = string[k];
 				    	offset += string.length - 1;	
-				    	//System.out.println("Not compressed.");
 					}
 					else
 					{
 						int string_type = DeltaMapper.getStringType(string, length);
-						
-					    // Using the theoretical limits instead of the actual size
-					    // can create memory problems.
-						// decompression_length = (int)(Math.pow(2., (double)iterations) * string.length);
-				    	// byte [] decompressed_segment = new byte[decompression_length];
-						
-						// Instead we keep track of that information in the segmenting process.
-						// Looks like we're off sometimes, so we double the buffer.
-						byte [] decompressed_segment = new byte[max_segment_byte_length * 2];
+						byte [] decompressed_segment = new byte[max_segment_byte_length];
 						int bitstring_length = 0;
 						
 						if(string_type == 0)
@@ -590,7 +573,6 @@ public class AdaptiveEncoder2
 				    	else
 				    		bitstring_length = DeltaMapper.decompressOneStrings(string, length, decompressed_segment);
 						byte_length = bitstring_length / 8;
-
 				    	if(bitstring_length % 8 != 0)
 				    	{
 				    		if(j == n - 1)
@@ -624,251 +606,149 @@ public class AdaptiveEncoder2
 					}
 				}
 				
+				
+				int     id              = (int)channel_id.get(i);
 				int  [] string_table    = (int [])channel_table.get(i);
 				int  [] delta           =  new int[xdim * ydim];
 				int     number_unpacked = DeltaMapper.unpackStrings2(channel_string, string_table, delta);	
+				
+				for(int j = 1; j < delta.length; j++)
+				    delta[j] += channel_delta_min[id];
 				channel_delta.add(delta);
+				
+				int [] current_channel = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[id]);
+				if(id > 2)
+					for(int j = 0; j < current_channel.length; j++)
+						current_channel[j] += channel_min[id];
+					
+				channel_list.add(current_channel);
 			}
 		  
 			if(min_set_id == 0)
 			{
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[0];
-			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
+				shifted_blue = (int [])channel_list.get(0);
+				
+				shifted_green = (int [])channel_list.get(1);
 			    
-			    delta = (int [])channel_delta.get(1);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[1];
-			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
-			    
-			    delta = (int [])channel_delta.get(2);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+				shifted_red = (int [])channel_list.get(2);
 			}
 			else if(min_set_id == 1)
 			{ 
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[0];
-			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
+				
+				shifted_blue = (int [])channel_list.get(0);
 			    
-			    delta = (int [])channel_delta.get(1);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+			    shifted_red  = (int [])channel_list.get(1);
 			    
-			    delta = (int [])channel_delta.get(2);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {
-			    	shifted_red_green[i] += channel_min[4];
+			    shifted_red_green = (int [])channel_list.get(2);;
+			    for(int i = 0; i < shifted_red_green.length; i++)
 			    	shifted_red_green[i] = -shifted_red_green[i];
-			    }
+			    
 			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
 			}
 			else if(min_set_id == 2)
 			{ 
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[0];
-			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
+				shifted_blue = (int [])channel_list.get(0);
 			    
-			    delta = (int [])channel_delta.get(1);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+			    shifted_red  = (int [])channel_list.get(1);
 			    
-			    delta = (int [])channel_delta.get(2);
-			    for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
+			    shifted_blue_green = (int [])channel_list.get(2);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {
-			    	shifted_blue_green[i] += channel_min[3];
 			    	shifted_blue_green[i] = -shifted_blue_green[i];
-			    }
+			    
 			    shifted_green = DeltaMapper.getSum(shifted_blue, shifted_blue_green);
 			}
 			else if(min_set_id == 3)
 			{ 
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[0];
-			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
-			    
-			    delta = (int [])channel_delta.get(1);
-			    for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
+			    shifted_blue = (int [])channel_list.get(0);
+			   
+			    shifted_blue_green = (int [])channel_list.get(1);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {
-			    	shifted_blue_green[i] += channel_min[3];
 			    	shifted_blue_green[i]  = -shifted_blue_green[i]; 
-			    }
 			
 			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
 			    
-			    delta = (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_red_green.length; i++)
-			    	shifted_red_green[i] += channel_min[4];
+			    shifted_red_green = (int [])channel_list.get(2);
+			   
 			    shifted_red = DeltaMapper.getSum(shifted_red_green, shifted_green);
 			}
 			else if(min_set_id == 4)
 			{ 
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[0];
-			    shifted_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[0]);
-			    
-			    delta = (int [])channel_delta.get(1);
-			    for(int i = 1; i < delta.length; i++)
-				    delta[i] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
+				shifted_blue = (int [])channel_list.get(0);
+			   
+			    shifted_blue_green = (int [])channel_list.get(1);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {
-			    	shifted_blue_green[i] += channel_min[3];
 			    	shifted_blue_green[i]  = -shifted_blue_green[i]; 
-			    }
+			  
 			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
+			   
+			    shifted_red_blue = (int [])channel_list.get(2);
 			    
-			    delta = (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[5];
-			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[5]);
-			    for(int i = 0; i < shifted_red_blue.length; i++)
-			    	shifted_red_blue[i] += channel_min[5];
 			    shifted_red = DeltaMapper.getSum(shifted_blue, shifted_red_blue);
 			}
 			else if(min_set_id == 5)
 			{
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[1];
-			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
+			    shifted_green = (int [])channel_list.get(0);
 			    
-			    delta = (int [])channel_delta.get(1);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+			    shifted_red = (int [])channel_list.get(1);
 			    
-			    delta = (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i] += channel_min[3];
+			    shifted_blue_green = (int [])channel_list.get(2);
+			    
 			    shifted_blue = DeltaMapper.getSum(shifted_blue_green, shifted_green);	
 			}
 			else if(min_set_id == 6)
 			{
-				int [] delta = (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+			    shifted_red = (int [])channel_list.get(0);
 			    
-			    delta = (int [])channel_delta.get(1);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
+			    shifted_blue_green = (int [])channel_list.get(1);
+			  
+			    shifted_red_green = (int [])channel_list.get(2);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i] += channel_min[3];
-			    
-			    delta = (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {
-			    	shifted_red_green[i] += channel_min[4];
 			    	shifted_red_green[i] = -shifted_red_green[i];
-			    }
+			    
 			    shifted_green = DeltaMapper.getSum(shifted_red_green, shifted_red);
+			    
 			    shifted_blue = DeltaMapper.getSum(shifted_blue_green, shifted_green);	
 			}
 			else if(min_set_id == 7)
 			{
-				int  [] delta =  (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[1];
-			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
+			    shifted_green = (int [])channel_list.get(0);
+			   
+			    shifted_blue_green = (int [])channel_list.get(1);
 			    
-			    delta =  (int [])channel_delta.get(1);
-				for(int j = 1; j < delta.length; j++)
-				     delta[j] += channel_delta_min[3];
-			    shifted_blue_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[3]);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i] += channel_min[3];
 			    shifted_blue = DeltaMapper.getSum(shifted_green, shifted_blue_green);
-			    
-			    delta =  (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_red_green.length; i++)
-			    	shifted_red_green[i] += channel_min[4];
+			  
+			    shifted_red_green = (int [])channel_list.get(2);
+			  
 			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
 			}
 			else if(min_set_id == 8)
 			{
-				int  [] delta =  (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[1];
-			    shifted_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[1]);
+			    shifted_green = (int [])channel_list.get(0);
 			    
-			    delta =  (int [])channel_delta.get(1);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
-			    for(int i = 0; i < shifted_red_green.length; i++)
-			    	shifted_red_green[i] += channel_min[4];
+			    shifted_red_green = (int [])channel_list.get(1);
+			   
 			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
-			    
-
-			    delta =  (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[5];
-			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[5]);
+			   
+			    shifted_red_blue = (int [])channel_list.get(2);
 			    for(int i = 0; i < shifted_red_blue.length; i++)
-			    {
-			    	shifted_red_blue[i] += channel_min[5];
 			    	shifted_red_blue[i] = -shifted_red_blue[i];
-			    }
+
 			    shifted_blue  = DeltaMapper.getSum(shifted_red, shifted_red_blue);
 			}
 			else if(min_set_id == 9)
 			{
-				int  [] delta =  (int [])channel_delta.get(0);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[2];
-			    shifted_red = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[2]);
+			    shifted_red = (int [])channel_list.get(0);
 			    
-			    delta =  (int [])channel_delta.get(1);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[4];
-			    shifted_red_green = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[4]);
+			    shifted_red_green = (int [])channel_list.get(1);
 			    for(int i = 0; i < shifted_red_green.length; i++)
-			    {
-			    	shifted_red_green[i] += channel_min[4];
 			    	shifted_red_green[i] = -shifted_red_green[i];
-			    }
+			   
 			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
 			    
-			    delta =  (int [])channel_delta.get(2);
-				for(int i = 1; i < delta.length; i++)
-				     delta[i] += channel_delta_min[5];
-			    shifted_red_blue = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[5]);
+			    shifted_red_blue = (int [])channel_list.get(2);
 			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    {	
-			    	shifted_red_blue[i] += channel_min[5];
 			    	shifted_red_blue[i] = -shifted_red_blue[i];
-			    }
+			    
 			    shifted_blue = DeltaMapper.getSum(shifted_red, shifted_red_blue);
 			}
 
@@ -924,13 +804,13 @@ public class AdaptiveEncoder2
 		        out.writeShort(xdim);
 		        out.writeShort(ydim);
 		        
-		        System.out.println("Wrote short xdim " + xdim);
-		        System.out.println("Wrote short ydim " + ydim);
+		        //System.out.println("Wrote short xdim " + xdim);
+		        //System.out.println("Wrote short ydim " + ydim);
 		        
 		        out.writeByte(pixel_shift);
 		        
-		        System.out.println("Wrote byte pixel shift " + pixel_shift);
-		        System.out.println();
+		        //System.out.println("Wrote byte pixel shift " + pixel_shift);
+		        //System.out.println();
 		        
 		        for(int i = 0; i < 3; i++)
 		        {
@@ -941,39 +821,39 @@ public class AdaptiveEncoder2
 		        	
 		        	// Channel 0-5.
 		            out.writeByte(j);
-		            System.out.println("Wrote byte channel id " + j);
+		            //System.out.println("Wrote byte channel id " + j);
 		          
 		            // The minimum channel value is only negative for
 		            // difference frames, and is only subtracted from
 		            // difference frames, but we are sending the value
 		            // for reference frames as well.
 		            out.writeInt(channel_min[j]);
-		            System.out.println("Wrote int channel min " + channel_min[j]);
+		            //System.out.println("Wrote int channel min " + channel_min[j]);
 		            
 		            // Init value for deltas.
 		            out.writeInt(channel_init[j]);
-		            System.out.println("Wrote int init value for deltas " + channel_init[j]);
+		            //System.out.println("Wrote int init value for deltas " + channel_init[j]);
 		        
 		            // Minimum_value for deltas.
 		            out.writeInt(channel_delta_min[j]);
-		            System.out.println("Wrote int minimum value for deltas is " + channel_delta_min[j]);
+		            //System.out.println("Wrote int minimum value for deltas is " + channel_delta_min[j]);
 		        
 		            // The length of the table used for string packing/unpacking.
 		            // We're only saving tables for selected channels,
 		            // so we use i instead of j.
 		            int [] string_table = (int[])channel_table.get(i);
 		            out.writeShort(string_table.length);
-		            System.out.println("Wrote short string table length " + string_table.length);
+		            //System.out.println("Wrote short string table length " + string_table.length);
 		       
 		            // The table itself.
 		            for(int k = 0; k < string_table.length; k++)
 		                out.writeInt(string_table[k]);
-		            System.out.println("Wrote int string table values.");
+		            //System.out.println("Wrote int string table values.");
 		       
-		            // The length of the packed string segments concatenated for each channel.
+		            // The length of the string segments concatenated for each channel.
 		            int concatenated_length = (int)channel_bitlength.get(i);
 		            out.writeInt(concatenated_length);
-		            System.out.println("Wrote int channel string length " + concatenated_length);
+		            //System.out.println("Wrote int channel string length " + concatenated_length);
 		            
 		            ArrayList segment_data_list = (ArrayList)channel_data.get(i);
 					ArrayList segment_length = (ArrayList)segment_data_list.get(0);
@@ -983,28 +863,19 @@ public class AdaptiveEncoder2
 		            // Number of segments.
 		            int n = segment_data.size();
 		            out.writeInt(n);
-		            System.out.println("Wrote int number of segments " + n);
+		            //System.out.println("Wrote int number of segments " + n);
 		            
 		            out.writeInt(max_segment_byte_length);
-		            System.out.println("Wrote max segment byte length " + max_segment_byte_length);
+		            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 		            
 		            for(int k = 0; k < n; k++)
 		            {
 		            	int segment_bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
-		            	
 		            	byte extra_bits = (byte)(segment.length  * 8 - segment_bit_length);
-		            	
                         out.writeByte(extra_bits);
-		            	
 		            	out.writeShort(segment.length);
-		            	
 		            	out.write(segment, 0, segment.length);
-		            	
-		            	int expected_byte_length = segment_bit_length / 8;
-		            	expected_byte_length++;
-		            	if(segment_bit_length % 8 != 0)
-		            		expected_byte_length++;
 		            }
 		        } 
 		        out.flush();

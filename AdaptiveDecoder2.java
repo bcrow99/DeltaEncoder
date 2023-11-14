@@ -28,9 +28,13 @@ public class AdaptiveDecoder2
 	String [] set_string;
 	String [] channel_string;
 	
+	ArrayList channel_list = new ArrayList();
+	
 	int    pixel_shift = 3;
 	long   file_length = 0;
 	boolean initialized = false;
+	
+	int [] blue, green, red, blue_green, red_green, red_blue;
 	
 	public static void main(String[] args)
 	{
@@ -66,15 +70,6 @@ public class AdaptiveDecoder2
 		channel_string[4] = new String("red-green");
 		channel_string[5] = new String("red-blue");
 		
-		String [] compression_string = new String[2];
-		compression_string[0] = new String("segmented packed strings");
-		compression_string[1] = new String("segmented compressed strings");
-		
-		
-		Hashtable <Integer, int[]> image_table = new Hashtable<Integer, int[]>();
-	
-		int [] blue, green, red, blue_green, red_green, red_blue;
-		
 		// So the compiler doesn't complain about possible null assignments.
 		blue       = new int[1];
 	    green      = new int[1];
@@ -86,6 +81,10 @@ public class AdaptiveDecoder2
 		{
 			File file              = new File(filename);
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
+			
+			byte set_id = in.readByte();
+			System.out.println("Read byte for set id for " + set_id);
+			
 			xdim = in.readShort();
 			ydim = in.readShort();
 			
@@ -127,9 +126,7 @@ public class AdaptiveDecoder2
 			    
 			   string_table = new int[table_length];
 			   for(int j = 0; j < table_length; j++)
-			   {
 			    	string_table[j] = in.readInt();
-			   }
 			   System.out.println("Read ints string table.");
 			   
 			   // Length of the concatenated segments.
@@ -150,22 +147,21 @@ public class AdaptiveDecoder2
 			   int offset = 0;
 			   for(int j = 0; j < n; j++)
 			   {
-				   //int segment_bit_length = in.readInt();
+				   
 				   byte extra_bits = in.readByte();
-				   //System.out.println("Read int segment bit length " + segment_bit_length);
-				   System.out.println("Read bytes extra bits " + extra_bits);
+				   //System.out.println("Read bytes extra bits " + extra_bits);
 				   
 				   int  segment_byte_length = in.readShort();
-				   System.out.println("Read short segment byte length " + segment_byte_length);
+				   //System.out.println("Read short segment byte length " + segment_byte_length);
 				 
 				   byte [] segment          = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
-			       System.out.println("Read bytes segment data.");
+			       //System.out.println("Read bytes segment data.");
 			       
 			       int segment_bit_length = segment.length * 8 - extra_bits;
 		    	   
-		    	   System.out.println("Calculated segment bit length is " + segment_bit_length);
-			       System.out.println("Segment byte length is " + segment_byte_length);
+		    	   //System.out.println("Calculated segment bit length is " + segment_bit_length);
+			       //System.out.println("Segment byte length is " + segment_byte_length);
 			     
 			       int iterations  = (int)segment[segment_byte_length - 1];
 			       int string_type = 0;
@@ -186,7 +182,6 @@ public class AdaptiveDecoder2
 			    	   int decompression_length = 0;
 			    	   byte [] decompressed_segment = new byte[max_segment_length * 2];
 			    	 
-			    	  
 			    	   if(string_type == 0)
 			    	   {
 			    		   decompression_length = DeltaMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);   
@@ -195,14 +190,14 @@ public class AdaptiveDecoder2
 			    	   {
 			    		   decompression_length = DeltaMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
 			    	   }
-			    	   System.out.println("Finished decompressing segment " + j);
+			    	   
 			    	   byte_length = decompression_length / 8;
 			    	   if(decompression_length % 8 != 0)
 			    	   {
 			    		   if(j == n - 1)
 			    			   byte_length++;
 			    		   else
-			    			   System.out.println("Uneven segment.");
+			    			   System.out.println("Uneven segment at index " + j);
 			    	   }
 			    	   
 			    	   for(int k = 0; k < byte_length; k++) 
@@ -211,227 +206,139 @@ public class AdaptiveDecoder2
 			       }
 			   }
 			   
-			   System.out.println("Finished reading segments.");
-			   System.out.println();
-			   
-			   int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
-			   if(number_unpacked != xdim * ydim)
+			    int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
+			    if(number_unpacked != xdim * ydim)
 			    	System.out.println("Number of values unpacked does not agree with image dimensions.");	
-			    else
-			    	System.out.println("Unpacked strings.");
+			   
 			    for(int j = 1; j < delta.length; j++)
-				     delta[j] += delta_min;
+			       delta[j] += delta_min;
 			    int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
-				if(channel > 2)
-					for(int j = 0; j < result.length; j++)
+			    if(channel > 2)
+			       for(int j = 0; j < result.length; j++)
 						result[j] += channel_min;
-				image_table.put(channel, result);
-				System.out.println("Putting data for " + channel_string[channel] + " in image table.");   
+				channel_list.add(result);
+				System.out.println();
 			} 
 		    in.close();
 		    
 		   
-		    // Figure out what channels we have.
-	
-		    if(image_table.containsKey(0))
-		    {
-		        blue = image_table.get(0);	
-		        if(image_table.containsKey(1))
-		        {
-		        	green = image_table.get(1);
-		        	if(image_table.containsKey(2))
-		        	{
-		        		// Have all the channels we need.
-		        		red = image_table.get(2);
-		        	}
-		        	else
-		        	{
-		        	    if(image_table.contains(4))
-		        	    {
-		        	        red_green = image_table.get(4);	
-		        	        red       = DeltaMapper.getSum(red_green, green);
-		        	    }
-		        	    else if(image_table.contains(5))
-		        	    {
-		        	    	red_blue = image_table.get(5);	
-		        	        red      = DeltaMapper.getSum(red_blue, blue);	
-		        	    }
-		        	    else
-		        	        System.out.println("Table does not contain complete set.");
-		        	}	
-		        }
-		        else
-		        {
-		        	if(image_table.containsKey(2))
-			        {
-		        		// We have a blue and red channel, we need a green channel.
-		        		red = image_table.get(2);	
-		        		if(image_table.containsKey(3))
-		        		{
-		        		    blue_green = image_table.get(3);
-		        		    for(int i = 0; i < blue_green.length; i++)
-		        		    	blue_green[i] = - blue_green[i];
-		        		    green = DeltaMapper.getSum(blue_green, blue);
-		        		}
-		        		else if(image_table.containsKey(4))
-		        		{
-		        			red_green = image_table.get(4);
-		        		    for(int i = 0; i < red_green.length; i++)
-		        		    	red_green[i] = - red_green[i];
-		        		    green = DeltaMapper.getSum(red_green, red);    	
-		        		}
-		        		else
-		        		{
-		        			System.out.println("Image table does not contain complete set.");
-		        			for(int i = 0; i < 6; i++)
-		        			{
-		        				if(image_table.containsKey(i))
-		        				{
-		        					System.out.println("Image table contains " + channel_string[i]);
-		        				}
-		        			}
-		        			System.out.println();	
-		        		}
-			        }
-		        	else
-		        	{
-		        		// Blue, but no red or green channel.
-		        		if(image_table.containsKey(3) && image_table.containsKey(5))
-		        		{
-		        		    blue_green = image_table.get(3);
-		        		    for(int i = 0; i < blue_green.length; i++)
-		        		    	blue_green[i] = -blue_green[i];
-		        		    green = DeltaMapper.getSum(blue_green, blue); 
-		        		    red_blue = image_table.get(5);
-		        		    red   = DeltaMapper.getSum(red_blue, blue); 
-		        		}
-		        		else if(image_table.containsKey(4)&& image_table.containsKey(5) )
-		        		{
-		        		    red_blue = image_table.get(5);
-		        		    red = DeltaMapper.getSum(red_blue, blue);
-		        		    red_green = image_table.get(4);
-		        		    for(int i = 0; i < red_green.length; i++)
-		        		    	red_green[i] = -red_green[i];
-		        		    green = DeltaMapper.getSum(red_green, red);
-		        		}
-		        		else
-		        		{
-		        			System.out.println("Image table does not contain complete set.");
-		        			for(int i = 0; i < 6; i++)
-		        			{
-		        				if(image_table.containsKey(i))
-		        				{
-		        					System.out.println("Image table contains " + channel_string[i]);
-		        				}
-		        			}
-		        			System.out.println();
-		        		}
-		        	}
-		        }
-		    }
-		    else if(image_table.containsKey(1))
-		    {
-		    	// We have the green channel but not the blue channel.
-		        green = image_table.get(1);
-		        if(image_table.containsKey(2))
-		        {
-		        	red = image_table.get(2);	
-		        	if(image_table.containsKey(3))
-		        	{
-		        	    blue_green = image_table.get(3);
-		        	    blue       = DeltaMapper.getSum(blue_green, green);
-		        	  
-		        	}
-		        	else if(image_table.containsKey(5))
-		        	{
-		        		red_blue = image_table.get(5);
-		        		for(int j = 0; j < red_blue.length; j++)
-			            	red_blue[j] = -red_blue[j];
-		        	    blue = DeltaMapper.getSum(red_blue, red);  
-		        	}
-		        	else
-	        	        System.out.println("Table does not contain complete set.");
-		        }
-		        else
-		        {
-		        	// We have the green channel, but not blue or red.
-		        	if(image_table.containsKey(3) && image_table.containsKey(4))
-		        	{
-		        	    blue_green = image_table.get(3);
-		        	    blue       = DeltaMapper.getSum(blue_green, green);
-		        	    red_green  = image_table.get(4);
-		        	    red        = DeltaMapper.getSum(red_green, green);
-		        	}
-		        	else if(image_table.containsKey(4) && image_table.containsKey(5))
-		        	{
-		        	    red_green = image_table.get(4);
-		        	    red  = DeltaMapper.getSum(red_green, green);
-		        	    red_blue  = image_table.get(5);
-		        	    for(int j = 0; j < red_blue.length; j++)
-			            	red_blue[j] = -red_blue[j];
-		        	    blue = DeltaMapper.getSum(red_blue, red);
-		        	   
-		        	}
-		        	else
-		        		System.out.println("Table does not contain complete set.");	
-		        }
-		    }
-		    else if(image_table.containsKey(2))
-		    {
-		        // We have the red channel but not blue or green.
-		        red = image_table.get(2);	
-		        if(image_table.containsKey(3) && image_table.containsKey(4))
-		        {
-		            red_green = image_table.get(4);
-		            for(int j = 0; j < red_green.length; j++)
-		            	red_green[j] = -red_green[j];
-		            green      = DeltaMapper.getSum(red_green, red);
-		            blue_green = 	image_table.get(3);
-		            blue       = DeltaMapper.getSum(blue_green, green);
-		        }
-		        else if(image_table.containsKey(4) && image_table.containsKey(5))
-		        {
-		            red_blue = image_table.get(5);	
-		            for(int j = 0; j < red_blue.length; j++)
-		            	red_blue[j] = -red_blue[j];
-		            blue     = DeltaMapper.getSum(red_blue, red);
-		            
-		            red_green = image_table.get(4);
-		            for(int j = 0; j < red_green.length; j++)
-		            	red_green[j] = -red_green[j];
-		            green      = DeltaMapper.getSum(red_green, red);
-		        }
-		        else
-       	        System.out.println("Table does not contain complete set.");
-		    }
-		    
-	    }
+		    if(set_id == 0)
+			{
+			    blue  = (int [])channel_list.get(0);
+			    green = (int [])channel_list.get(1);
+			    red   = (int [])channel_list.get(2);
+			}
+			else if(set_id == 1)
+			{ 
+				blue      = (int [])channel_list.get(0);
+			    red       = (int [])channel_list.get(1);
+			    red_green = (int [])channel_list.get(2);
+			    for(int i = 0; i < red_green.length; i++)
+			    	red_green[i] = -red_green[i];
+			    green     = DeltaMapper.getSum(red, red_green);
+			}
+			else if(set_id == 2)
+			{ 
+				blue       = (int [])channel_list.get(0);
+			    red        = (int [])channel_list.get(1);
+			    blue_green = (int [])channel_list.get(2);
+			    for(int i = 0; i < blue_green.length; i++)
+			    	blue_green[i] = -blue_green[i];
+			    green      = DeltaMapper.getSum(blue, blue_green);
+			}
+			else if(set_id == 3)
+			{ 
+				blue       = (int [])channel_list.get(0);
+				blue_green = (int [])channel_list.get(1);
+				for(int i = 0; i < blue_green.length; i++)
+			    	blue_green[i] = -blue_green[i];
+				green      = DeltaMapper.getSum(blue_green, blue);
+				red_green  = (int [])channel_list.get(2);
+				red = DeltaMapper.getSum(red_green, green);
+			}
+			else if(set_id == 4)
+			{ 
+				blue       = (int [])channel_list.get(0);
+				blue_green = (int [])channel_list.get(1);
+				for(int i = 0; i < blue_green.length; i++)
+			    	blue_green[i] = -blue_green[i];
+				green      = DeltaMapper.getSum(blue_green, blue);
+			    red_blue   = (int [])channel_list.get(2);
+			    red        = DeltaMapper.getSum(blue, red_blue);
+			}
+			else if(set_id == 5)
+			{
+				green   = (int [])channel_list.get(0);
+				red     = (int [])channel_list.get(1);
+				blue_green = (int [])channel_list.get(2);
+				blue = DeltaMapper.getSum(blue_green, green);
+			}
+			else if(set_id == 6)
+			{
+				red     = (int [])channel_list.get(0);
+				blue_green = (int [])channel_list.get(1);
+			    red_green = (int [])channel_list.get(2);
+			    for(int i = 0; i < red_green.length; i++)
+			    	red_green[i] = -red_green[i];
+			    green = DeltaMapper.getSum(red_green, red);
+			    blue = DeltaMapper.getSum(blue_green, green);	
+			}
+			else if(set_id == 7)
+			{
+				green   = (int [])channel_list.get(0);
+				blue_green = (int [])channel_list.get(1);
+			    blue = DeltaMapper.getSum(green, blue_green);
+			    red_green = (int [])channel_list.get(2);
+			    red  = DeltaMapper.getSum(green, red_green);
+			}
+			else if(set_id == 8)
+			{
+				green     = (int [])channel_list.get(0);
+			    red_green = (int [])channel_list.get(1);
+			    red       = DeltaMapper.getSum(green, red_green);
+			    red_blue  = (int [])channel_list.get(1);
+			    for(int i = 0; i < red_blue.length; i++)
+			    	red_blue[i] = -red_blue[i];
+			    blue      = DeltaMapper.getSum(red, red_blue);
+			}
+			else if(set_id == 9)
+			{
+				red     = (int [])channel_list.get(0);
+			    red_green = (int [])channel_list.get(1);
+			    for(int i = 0; i < red_green.length; i++)
+			    	red_green[i] = -red_green[i];
+			    green = DeltaMapper.getSum(red, red_green);
+			    
+			    red_blue = (int [])channel_list.get(2);
+			    for(int i = 0; i < red_blue.length; i++)	
+			    	red_blue[i] = -red_blue[i];
+			    blue = DeltaMapper.getSum(red, red_blue);
+			}
+		}
 		catch(Exception e)
-	    {
-	    	System.out.println(e.toString());
-	    }
-	   
-		
+		{
+			System.out.println(e.toString());
+		}
+		    
 		image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 	
 		for(int i = 0; i < ydim; i++)
 		{
 			for(int j = 0; j < xdim; j++)
 			{
-			    int _blue = blue[i * xdim + j];
-			    _blue <<= pixel_shift;
+				int k = i * xdim + j;
+				
+				int pixel = 0;
+				
+				blue[k] <<= pixel_shift;
+				pixel |= blue[k] << 16;
+				
+				green[k] <<= pixel_shift;
+				pixel |= green[k] << 8;
+				
+				red[k] <<= pixel_shift;
+				pixel |= red[k];
 			    	
-			    int _green = green[i * xdim + j];
-			    _green <<= pixel_shift;
-			    
-			    int _red   = red[i * xdim + j]; 
-			    _red <<= pixel_shift;
-			    	
-			    int pixel = 0;
-			    pixel |= _blue << 16;
-	            pixel |= _green << 8;    
-	            pixel |= _red;	
-	                
 			    image.setRGB(j, i, pixel);
 			}
 		}
@@ -448,37 +355,7 @@ public class AdaptiveDecoder2
 			    
 		ImageCanvas image_canvas = new ImageCanvas();
 		image_canvas.setSize(xdim, ydim);
-		frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
-		
-		JMenuBar menu_bar = new JMenuBar();
-
-		JMenu     file_menu  = new JMenu("File");
-		
-		
-		JMenuItem reload_item        = new JMenuItem("Reload");
-		ActionListener reload_handler = new ActionListener()
-		{
-			public void actionPerformed(ActionEvent event)
-			{
-				
-				for(int i = 0; i < xdim; i++)
-			    {
-			    	for(int j = 0; j < ydim; j++)
-			    	{
-			    		image.setRGB(i, j, 0);
-			    	}
-			    	
-			    } 
-				System.out.println("Reloaded original image.");
-				image_canvas.repaint();
-			}	
-		};
-		
-		reload_item.addActionListener(reload_handler);
-		file_menu.add(reload_item);
-		menu_bar.add(file_menu);
-		frame.setJMenuBar(menu_bar);
-				
+		frame.getContentPane().add(image_canvas, BorderLayout.CENTER);		
 		frame.pack();
 		frame.setLocation(400, 200);
 		frame.setVisible(true);
