@@ -252,7 +252,7 @@ public class AdaptiveEncoder2
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(300);
+				segment_slider.setMaximum(512);
 				segment_slider.setValue(segment_length);
 				segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -782,15 +782,7 @@ public class AdaptiveEncoder2
 		{
 			if(!initialized)
 				apply_item.doClick();
-			
-			//System.out.println("Saving " + set_string[min_set_id]);
-			//System.out.println("Set rate  is " + String.format("%.2f", set_rate[min_set_id]));
-			//System.out.println("RGB rate  is " + String.format("%.2f", set_rate[0]));
-			//System.out.println("File rate is " + String.format("%.2f", file_ratio));
-			//System.out.println("Shift is     " + pixel_shift);
-			
 			int channel[] = DeltaMapper.getChannels(min_set_id);
-			
 			
 		    try
 		    {
@@ -868,13 +860,18 @@ public class AdaptiveEncoder2
 		            out.writeInt(max_segment_byte_length);
 		            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 		            
+		            if(max_segment_byte_length >= 8192)
+		            	System.out.println("Max segment length too large to pack extra bits.");
+		            
 		            for(int k = 0; k < n; k++)
 		            {
 		            	int segment_bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
-		            	byte extra_bits = (byte)(segment.length  * 8 - segment_bit_length);
-                        out.writeByte(extra_bits);
-		            	out.writeShort(segment.length);
+		            	short extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
+		            	short packed_segment_length = (short)segment.length;
+	            	    packed_segment_length <<= 3;
+	            	    packed_segment_length += extra_bits;
+		            	out.writeShort(packed_segment_length);
 		            	out.write(segment, 0, segment.length);
 		            }
 		        } 

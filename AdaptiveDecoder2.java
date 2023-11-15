@@ -147,18 +147,15 @@ public class AdaptiveDecoder2
 			   int offset = 0;
 			   for(int j = 0; j < n; j++)
 			   {
-				   
-				   byte extra_bits = in.readByte();
-				   //System.out.println("Read bytes extra bits " + extra_bits);
-				   
-				   int  segment_byte_length = in.readShort();
-				   //System.out.println("Read short segment byte length " + segment_byte_length);
+				   short packed_segment_length = in.readShort();
+				   short extra_bits = (short)(packed_segment_length & 0x0007);
+				   short segment_byte_length = (short)(packed_segment_length >> 3);   
 				 
 				   byte [] segment          = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
 			       //System.out.println("Read bytes segment data.");
 			       
-			       int segment_bit_length = segment.length * 8 - extra_bits;
+			       int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
 		    	   
 		    	   //System.out.println("Calculated segment bit length is " + segment_bit_length);
 			       //System.out.println("Segment byte length is " + segment_byte_length);
@@ -170,7 +167,7 @@ public class AdaptiveDecoder2
 			    	   iterations  = -iterations;
 			    	   string_type = 1;
 			       }
-			     
+			       //System.out.println("Iterations was " + iterations);
 			       if(iterations == 0)
 			       {
 			    	   for(int k = 0; k < segment.length - 1; k++) 
@@ -180,16 +177,12 @@ public class AdaptiveDecoder2
 			       else
 			       {
 			    	   int decompression_length = 0;
-			    	   byte [] decompressed_segment = new byte[max_segment_length * 2];
+			    	   byte [] decompressed_segment = new byte[max_segment_length];
 			    	 
 			    	   if(string_type == 0)
-			    	   {
 			    		   decompression_length = DeltaMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);   
-			    	   }
 			    	   else
-			    	   {
 			    		   decompression_length = DeltaMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
-			    	   }
 			    	   
 			    	   byte_length = decompression_length / 8;
 			    	   if(decompression_length % 8 != 0)
