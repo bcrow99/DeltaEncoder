@@ -508,23 +508,17 @@ public class AdaptiveEncoder2
 					delta[k] -= channel_delta_min[j];
 				
 				
-				int predicted_bit_length = DeltaMapper.getStringLength(delta);
-				int predicted_byte_length = predicted_bit_length / 8;
-				// The predicted bit length seems to be off sometimes, always less than it actually is, but close.
-				// Adding a fudge factor.  
-			    predicted_byte_length += 8;
-				
-				byte [] string         = new byte[predicted_byte_length];
+				byte [] string         = new byte[xdim * ydim * 8];
 			
 				
 				int bitlength               = DeltaMapper.packStrings2(delta, string_table, string);
-				//System.out.println("Predicted bit length is " + predicted_bit_length);
-				//System.out.println("Actual bit length is " + bitlength);
+				
 				channel_bitlength.add(bitlength);
 				
 				int minimum_segment_length = 16 + segment_length * 8;
 				
 				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
+				//ArrayList segment_data_list = SegmentMapper.getSegmentedData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
 			}
 			
@@ -868,10 +862,19 @@ public class AdaptiveEncoder2
 		            	int segment_bit_length  = (int)segment_length.get(k);
 		            	byte [] segment = (byte [])segment_data.get(k);
 		            	short extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
-		            	short packed_segment_length = (short)segment.length;
-	            	    packed_segment_length <<= 3;
-	            	    packed_segment_length += extra_bits;
-		            	out.writeShort(packed_segment_length);
+		            	
+		            	if(max_segment_byte_length < 8192)
+		            	{
+		            	    short packed_segment_length = (short)segment.length;
+	            	        packed_segment_length <<= 3;
+	            	        packed_segment_length += extra_bits;
+		            	    out.writeShort(packed_segment_length);
+		            	}
+		            	else
+		            	{
+		            		out.writeShort(segment.length);	
+		            		out.writeByte(extra_bits);
+		            	}
 		            	out.write(segment, 0, segment.length);
 		            }
 		        } 

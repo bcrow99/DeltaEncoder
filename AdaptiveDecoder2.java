@@ -70,7 +70,6 @@ public class AdaptiveDecoder2
 		channel_string[4] = new String("red-green");
 		channel_string[5] = new String("red-blue");
 		
-		// So the compiler doesn't complain about possible null assignments.
 		blue       = new int[1];
 	    green      = new int[1];
 	    red        = new int[1];
@@ -83,7 +82,7 @@ public class AdaptiveDecoder2
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
 			
 			byte set_id = in.readByte();
-			System.out.println("Read byte for set id for " + set_id);
+			//System.out.println("Read byte for set id for " + set_id);
 			
 			xdim = in.readShort();
 			ydim = in.readShort();
@@ -91,7 +90,6 @@ public class AdaptiveDecoder2
 			System.out.println("Read short xdim " + xdim);
 			System.out.println("Read short ydim " + ydim);
 			
-			// Now we initialize them.
 			blue       = new int[xdim * ydim];
 			green      = new int[xdim * ydim];
 			red        = new int[xdim * ydim];
@@ -105,40 +103,43 @@ public class AdaptiveDecoder2
 			    
 			    
 	       pixel_shift = in.readByte();
-		   System.out.println("Read byte pixel shift " + pixel_shift);
-		   System.out.println();
+		   //System.out.println("Read byte pixel shift " + pixel_shift);
+		   //System.out.println();
 			    
 		   for(int i = 0; i < 3; i++)
 		   {
 			   int channel = in.readByte();
-			   System.out.println("Read byte channel id " + channel_string[channel]);
+			   //System.out.println("Read byte channel id " + channel_string[channel]);
 			  
 			   int channel_min = in.readInt();
 			   int init_value = in.readInt();
 			   int delta_min  = in.readInt();
-			   System.out.println("Read in channel min " + channel_min);
-			   System.out.println("Read int init value " + init_value);
-			   System.out.println("Read int delta minimum is " + delta_min); 
+			   //System.out.println("Read in channel min " + channel_min);
+			   //System.out.println("Read int init value " + init_value);
+			   //System.out.println("Read int delta minimum is " + delta_min); 
 			   int table_length = 0;
 			    
 			   table_length = in.readShort();
-			   System.out.println("Read short string table length " +  table_length);
+			   //System.out.println("Read short string table length " +  table_length);
 			    
 			   string_table = new int[table_length];
 			   for(int j = 0; j < table_length; j++)
 			    	string_table[j] = in.readInt();
-			   System.out.println("Read ints string table.");
+			   //System.out.println("Read ints string table.");
 			   
 			   // Length of the concatenated segments.
 			   int channel_bit_length = in.readInt();
-			   System.out.println("Read int bit length of concatenated strings is " + channel_bit_length);
+			   //System.out.println("Read int bit length of concatenated strings is " + channel_bit_length);
 			   
 			   // Number of segments
 			   int n = in.readInt(); 
-			   System.out.println("Read int number of segments " + n );
+			   //System.out.println("Read int number of segments " + n );
 			   
 			   int max_segment_length = in.readInt();
 			   System.out.println("Read int max segment byte length " + max_segment_length);
+			   
+			   if(max_segment_length > 8192)
+				   System.out.println("Max segment length too large to pack extra bits.");
 		       
 			   int byte_length = channel_bit_length / 8;
 			   if(channel_bit_length % 8 != 0)
@@ -147,9 +148,19 @@ public class AdaptiveDecoder2
 			   int offset = 0;
 			   for(int j = 0; j < n; j++)
 			   {
-				   short packed_segment_length = in.readShort();
-				   short extra_bits = (short)(packed_segment_length & 0x0007);
-				   short segment_byte_length = (short)(packed_segment_length >> 3);   
+			       short extra_bits = 0;
+			       short segment_byte_length = 0;
+				   if(max_segment_length < 8192)
+				   {
+				       short packed_segment_length = in.readShort();
+				       extra_bits = (short)(packed_segment_length & 0x0007);
+				       segment_byte_length = (short)(packed_segment_length >> 3); 
+				   }
+				   else
+				   {
+					   segment_byte_length = in.readShort();
+					   extra_bits          = in.readByte();
+				   }
 				 
 				   byte [] segment          = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
@@ -197,7 +208,7 @@ public class AdaptiveDecoder2
 			    	       string[offset + k] = decompressed_segment[k];
 			    	   offset += byte_length; 
 			       }
-			   }
+			    }
 			   
 			    int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
 			    if(number_unpacked != xdim * ydim)
@@ -360,6 +371,5 @@ public class AdaptiveDecoder2
         {
             g.drawImage(image, 0, 0, this);
         }
-    }
-	    
+    }   
 }
