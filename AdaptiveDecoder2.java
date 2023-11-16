@@ -44,23 +44,15 @@ public class AdaptiveDecoder2
 			System.exit(0);
 		}
 	    String prefix      = new String("");
-	    //String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
-		String java_version = System.getProperty("java.version");
-		String os           = System.getProperty("os.name");
-		String os_version   = System.getProperty("os.version");
-		String machine      = System.getProperty("os.arch");
-		//System.out.println("Current java version is " + java_version);
-		//System.out.println("Current os is " + os + " " + os_version + " on " + machine);
-		//System.out.println("Image file is " + filename);
 		AdaptiveDecoder2 Decoder2 = new AdaptiveDecoder2(prefix + filename);
 	}
 	
 	public AdaptiveDecoder2(String _filename)
 	{
 		filename = _filename;
-		xdim = 640;
-		ydim = 480;
+		xdim = 0;
+		ydim = 0;
 		
 		String [] channel_string = new String[6];
 		channel_string[0] = new String("blue");
@@ -178,7 +170,6 @@ public class AdaptiveDecoder2
 			    	   iterations  = -iterations;
 			    	   string_type = 1;
 			       }
-			       //System.out.println("Iterations was " + iterations);
 			       if(iterations == 0)
 			       {
 			    	   for(int k = 0; k < segment.length - 1; k++) 
@@ -201,11 +192,15 @@ public class AdaptiveDecoder2
 			    		   if(j == n - 1)
 			    			   byte_length++;
 			    		   else
+			    		   {
 			    			   System.out.println("Uneven segment at index " + j);
+			    			   System.out.println("Iterations is " + iterations);
+			    			   System.out.println("String type is " + string_type);
+			    			   System.out.println();
+			    		   }
 			    	   }
 			    	   
-			    	   for(int k = 0; k < byte_length; k++) 
-			    	       string[offset + k] = decompressed_segment[k];
+			    	   System.arraycopy(decompressed_segment, 0, string, offset, byte_length);
 			    	   offset += byte_length; 
 			       }
 			    }
@@ -237,26 +232,20 @@ public class AdaptiveDecoder2
 				blue      = (int [])channel_list.get(0);
 			    red       = (int [])channel_list.get(1);
 			    red_green = (int [])channel_list.get(2);
-			    for(int i = 0; i < red_green.length; i++)
-			    	red_green[i] = -red_green[i];
-			    green     = DeltaMapper.getSum(red, red_green);
+			    green     = DeltaMapper.getDifference(red, red_green);
 			}
 			else if(set_id == 2)
 			{ 
 				blue       = (int [])channel_list.get(0);
 			    red        = (int [])channel_list.get(1);
 			    blue_green = (int [])channel_list.get(2);
-			    for(int i = 0; i < blue_green.length; i++)
-			    	blue_green[i] = -blue_green[i];
-			    green      = DeltaMapper.getSum(blue, blue_green);
+			    green      = DeltaMapper.getDifference(blue, blue_green);
 			}
 			else if(set_id == 3)
 			{ 
 				blue       = (int [])channel_list.get(0);
 				blue_green = (int [])channel_list.get(1);
-				for(int i = 0; i < blue_green.length; i++)
-			    	blue_green[i] = -blue_green[i];
-				green      = DeltaMapper.getSum(blue_green, blue);
+				green      = DeltaMapper.getDifference(blue, blue_green);
 				red_green  = (int [])channel_list.get(2);
 				red = DeltaMapper.getSum(red_green, green);
 			}
@@ -264,9 +253,7 @@ public class AdaptiveDecoder2
 			{ 
 				blue       = (int [])channel_list.get(0);
 				blue_green = (int [])channel_list.get(1);
-				for(int i = 0; i < blue_green.length; i++)
-			    	blue_green[i] = -blue_green[i];
-				green      = DeltaMapper.getSum(blue_green, blue);
+				green      = DeltaMapper.getDifference(blue, blue_green);
 			    red_blue   = (int [])channel_list.get(2);
 			    red        = DeltaMapper.getSum(blue, red_blue);
 			}
@@ -301,22 +288,15 @@ public class AdaptiveDecoder2
 			    red_green = (int [])channel_list.get(1);
 			    red       = DeltaMapper.getSum(green, red_green);
 			    red_blue  = (int [])channel_list.get(1);
-			    for(int i = 0; i < red_blue.length; i++)
-			    	red_blue[i] = -red_blue[i];
-			    blue      = DeltaMapper.getSum(red, red_blue);
+			    blue      = DeltaMapper.getDifference(red, red_blue);
 			}
 			else if(set_id == 9)
 			{
-				red     = (int [])channel_list.get(0);
+				red       = (int [])channel_list.get(0);
 			    red_green = (int [])channel_list.get(1);
-			    for(int i = 0; i < red_green.length; i++)
-			    	red_green[i] = -red_green[i];
-			    green = DeltaMapper.getSum(red, red_green);
-			    
-			    red_blue = (int [])channel_list.get(2);
-			    for(int i = 0; i < red_blue.length; i++)	
-			    	red_blue[i] = -red_blue[i];
-			    blue = DeltaMapper.getSum(red, red_blue);
+			    green     = DeltaMapper.getDifference(red, red_green); 
+			    red_blue  = (int [])channel_list.get(2);
+			    blue      = DeltaMapper.getDifference(red, red_blue);
 			}
 		}
 		catch(Exception e)

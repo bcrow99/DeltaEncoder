@@ -28,19 +28,12 @@ public class AdaptiveEncoder2
 	String filename;
 	
 	int [] original_pixel;
-	int [] alpha;
 	int [] red;
 	int [] green;
 	int [] blue;
 	
-	byte   [] delta_bytes, delta_strings, zipped_strings; 
-	byte   [] compressed_strings, zipped_compressed_strings;
-	byte   [] channel_compression_type, channel_bit_type;
 	int    [] channel_init, channel_min;
-	int    [] channel_min_length, channel_length, channel_zipped_length;
-	int    [] channel_compressed_length, channel_zipped_compressed_length;
-	int    [] set_sum, channel_sum,channel_delta_min;
-	double [] set_rate, channel_rate;
+	int    [] set_sum, channel_sum, channel_delta_min;
 	String [] type_string;
 	String [] set_string;
 	String [] channel_string;
@@ -69,10 +62,6 @@ public class AdaptiveEncoder2
 	    
 	    String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
-		String java_version = System.getProperty("java.version");
-		
-		
-		//System.out.println("Current java version is " + java_version);
 		AdaptiveEncoder2 encoder = new AdaptiveEncoder2(prefix + filename);
 	}
 
@@ -92,7 +81,6 @@ public class AdaptiveEncoder2
 			ydim                   = original_image.getHeight();
 			
 		    original_pixel         = new int[xdim * ydim];
-		    alpha                  = new int[xdim * ydim];
 			blue                   = new int[xdim * ydim];
 		    green                  = new int[xdim * ydim];
 		    red                    = new int[xdim * ydim];
@@ -118,11 +106,11 @@ public class AdaptiveEncoder2
 		        
 		        for(int i = 0; i < xdim * ydim; i++)
 				{
-			        alpha[i] = (original_pixel[i] >> 24) & 0xff;
 				    blue[i]  = (original_pixel[i] >> 16) & 0xff;
 				    green[i] = (original_pixel[i] >> 8) & 0xff; 
 		            red[i]   = original_pixel[i] & 0xff; 
 				}
+		        
 			    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 			   
 			    for(int i = 0; i < xdim; i++)
@@ -167,7 +155,6 @@ public class AdaptiveEncoder2
 				{
 					public void actionPerformed(ActionEvent event)
 					{
-						
 						for(int i = 0; i < xdim; i++)
 					    {
 					    	for(int j = 0; j < ydim; j++)
@@ -180,7 +167,6 @@ public class AdaptiveEncoder2
 						image_canvas.repaint();
 					}	
 				};
-				
 				reload_item.addActionListener(reload_handler);
 				file_menu.add(reload_item);
 				
@@ -252,7 +238,7 @@ public class AdaptiveEncoder2
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(512);
+				segment_slider.setMaximum(100);
 				segment_slider.setValue(segment_length);
 				segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -295,19 +281,13 @@ public class AdaptiveEncoder2
 	
 	class ApplyHandler implements ActionListener
 	{
-		int    [] new_alpha, new_blue, new_green, new_red, new_pixel;
-		int       pixel_length;
+		int [] new_pixel;
+		int    pixel_length;
 		
 		public ApplyHandler()
 		{
-			new_alpha    = new int[xdim * ydim]; 
-		    new_blue     = new int[xdim * ydim];
-		    shifted_blue = new int[xdim * ydim];
-		     
-		    new_green    = new int[xdim * ydim];
+		    shifted_blue = new int[xdim * ydim]; 
 		    shifted_green = new int[xdim * ydim];
-		     
-		    new_red     = new int[xdim * ydim];
 		    shifted_red = new int[xdim * ydim];
 		    new_pixel   = new int[xdim * ydim];
 		    
@@ -316,15 +296,7 @@ public class AdaptiveEncoder2
 		    channel_sum  = new int[6];
 		    
 		    // The different compression rates per channel.
-		    channel_rate = new double[6];
-		    
-		    // The lengths of the packed strings.
-		    channel_length            = new int[6];
-		    channel_compressed_length = new int[6];
-		    channel_min_length        = new int[6];
-		    channel_compression_type  = new byte[6];
-		    channel_bit_type          = new byte[6];
-		
+		    //channel_rate = new double[6];
 		    
 		    channel_src  = new ArrayList();
 		    
@@ -356,7 +328,7 @@ public class AdaptiveEncoder2
 		    
 		    // The delta sum for each set of channels that can produce an image.
 		    set_sum       = new int[10];
-		    set_rate      = new double[10];
+		    //set_rate      = new double[10];
 		    set_string    = new String[10]; 
 		    set_string[0] = new String("blue, green, and red.");
 		    set_string[1] = new String("blue, red, and red-green.");
@@ -372,8 +344,6 @@ public class AdaptiveEncoder2
 		    pixel_length = xdim * ydim * 8;
 		    file_ratio   = file_length * 8;
 		    file_ratio  /= pixel_length * 3;
-		    
-		    //System.out.println("Orginal compression was " + String.format("%.2f", file_ratio));
 		}
 		
 		public void actionPerformed(ActionEvent event)
@@ -488,77 +458,92 @@ public class AdaptiveEncoder2
 			channel_data = new ArrayList();
 			channel_bitlength = new ArrayList();
 			
+			System.out.println("Using " + set_string[min_set_id]);
+			System.out.println("Pixel shift is " + pixel_shift);
+			System.out.println("Xdim is " + xdim);
+			System.out.println("Ydim is " + ydim);
+            System.out.println();
+			
 			for(int i = 0; i < 3; i++)
 			{
 				int j = channel[i];
 				
 				channel_id.add(j);
 				
-				int []    src    = (int [])channel_src.get(j);
-				ArrayList result = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
-				int []    delta  = (int [])result.get(1);
+				int []    src            = (int [])channel_src.get(j);
+				ArrayList result         = DeltaMapper.getDeltasFromValues3(src, xdim, ydim);
+				int []    delta          = (int [])result.get(1);
 				ArrayList histogram_list = DeltaMapper.getHistogram(delta);
 			    channel_delta_min[j]     = (int)histogram_list.get(0);
 			    int [] histogram         = (int[])histogram_list.get(1);
-				int [] string_table = DeltaMapper.getRankTable(histogram);
-				
+				int [] string_table      = DeltaMapper.getRankTable(histogram);
 				channel_table.add(string_table);
-				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
-				
-				
-				byte [] string         = new byte[xdim * ydim * 8];
-			
-				
-				int bitlength               = DeltaMapper.packStrings2(delta, string_table, string);
-				
+				byte [] string  = new byte[xdim * ydim * 8];
+				int bitlength            = DeltaMapper.packStrings2(delta, string_table, string);
 				channel_bitlength.add(bitlength);
 				
-				int minimum_segment_length = 16 + segment_length * 8;
+	           
+	            int max_length = bitlength / 2 - 16;
+	            int remainder = max_length % 8;
+	            max_length -= remainder;
+	            
+	            double factor = segment_length;
+	            factor       /= 100;
+	            factor       *= max_length;
+	            
+	            int minimum_segment_length = (int)factor + 16;
+	            remainder = minimum_segment_length % 8;
+	            minimum_segment_length -= remainder;
+				
+				if(minimum_segment_length > max_length)
+					minimum_segment_length = max_length;	
 				
 				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
-				//ArrayList segment_data_list = SegmentMapper.getSegmentedData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
 			}
 			
-            ArrayList channel_delta = new ArrayList();
+			int []    delta         = new int[xdim * ydim];
             ArrayList channel_list  = new ArrayList();
-			
+          
+            int total = 0;
 			for(int i = 0; i < 3; i++)
 			{
 				ArrayList segment_data_list = (ArrayList)channel_data.get(i);
-				ArrayList segment_length = (ArrayList)segment_data_list.get(0);
-				ArrayList segment_string = (ArrayList)segment_data_list.get(1);
-				int       max_segment_byte_length = (int)segment_data_list.get(2);
+				ArrayList segment_length    = (ArrayList)segment_data_list.get(0);
+				ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
+				int max_segment_byte_length = (int)segment_data_list.get(2);
 				
 				int bit_length = (int) channel_bitlength.get(i);
 				int byte_length = bit_length / 8;
-				
 				if(bit_length % 8 != 0)
 					byte_length++;
-				
 				byte [] channel_string = new byte[byte_length];
-				int offset = 0;
+				int     offset         = 0;
 				
 				int n = segment_string.size();
-				
 				for(int j = 0; j < n; j++)
 				{
-					int length = (int)segment_length.get(j);
+					int length     = (int)segment_length.get(j);
 					byte [] string = (byte [])segment_string.get(j);
-					
-					int iterations  = DeltaMapper.getIterations(string, length);
+					int iterations = string[string.length - 1];
 					if(iterations == 0)
 					{
 						// We do not copy the last byte containing the iterations value.
-						for(int k = 0; k < string.length - 1; k++) 
-				    	    channel_string[offset + k] = string[k];
+						System.arraycopy(string, 0, channel_string, offset, string.length - 1);
 				    	offset += string.length - 1;	
+				    	
+				    	total += string.length;
 					}
 					else
 					{
-						int string_type = DeltaMapper.getStringType(string, length);
+						total += length / 8;
+						if(length % 8 != 0)
+							total++;
+						int string_type = 0;
+						if(iterations < 0)
+							string_type = 1;
 						byte [] decompressed_segment = new byte[max_segment_byte_length];
 						int bitstring_length = 0;
 						
@@ -579,13 +564,15 @@ public class AdaptiveEncoder2
 				    			// string.  We just print out a warning and
 				    			// ignore it.
 				    			System.out.println("Uneven segment at index " + j);
+				    			System.out.println("Iterations is " + iterations);
+				    			System.out.println("String type is " + string_type);
+				    			System.out.println();
 				    		}
 				    	 }
 				    	
 				    	 try
 				    	 {
-				    	     for(int k = 0; k < byte_length; k++) 
-				    	         channel_string[offset + k] = decompressed_segment[k];
+				    		 System.arraycopy(decompressed_segment, 0, channel_string, offset, byte_length);
 				    	 }
 				    	 catch(Exception e)
 				    	 {
@@ -600,24 +587,25 @@ public class AdaptiveEncoder2
 					}
 				}
 				
-				
 				int     id              = (int)channel_id.get(i);
 				int  [] string_table    = (int [])channel_table.get(i);
-				int  [] delta           =  new int[xdim * ydim];
 				int     number_unpacked = DeltaMapper.unpackStrings2(channel_string, string_table, delta);	
-				
 				for(int j = 1; j < delta.length; j++)
 				    delta[j] += channel_delta_min[id];
-				channel_delta.add(delta);
-				
 				int [] current_channel = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, channel_init[id]);
 				if(id > 2)
 					for(int j = 0; j < current_channel.length; j++)
-						current_channel[j] += channel_min[id];
-					
+						current_channel[j] += channel_min[id];	
 				channel_list.add(current_channel);
 			}
-		  
+			
+			double compressed_ratio = total;
+		    compressed_ratio       /= xdim * ydim * 3;
+		    System.out.println("Original file compression rate is " + String.format("%.4f", file_ratio));
+		    System.out.println("Current compression rate less overhead is " + String.format("%.4f", compressed_ratio));
+		    System.out.println();
+		    
+		    
 			if(min_set_id == 0)
 			{
 				shifted_blue = (int [])channel_list.get(0);
@@ -633,11 +621,9 @@ public class AdaptiveEncoder2
 			    
 			    shifted_red  = (int [])channel_list.get(1);
 			    
-			    shifted_red_green = (int [])channel_list.get(2);;
-			    for(int i = 0; i < shifted_red_green.length; i++)
-			    	shifted_red_green[i] = -shifted_red_green[i];
+			    shifted_red_green = (int [])channel_list.get(2);
 			    
-			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
+			    shifted_green = DeltaMapper.getDifference(shifted_red, shifted_red_green);
 			}
 			else if(min_set_id == 2)
 			{ 
@@ -646,20 +632,17 @@ public class AdaptiveEncoder2
 			    shifted_red  = (int [])channel_list.get(1);
 			    
 			    shifted_blue_green = (int [])channel_list.get(2);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i] = -shifted_blue_green[i];
 			    
-			    shifted_green = DeltaMapper.getSum(shifted_blue, shifted_blue_green);
+			    shifted_green = DeltaMapper.getDifference(shifted_blue, shifted_blue_green);
+			    
 			}
 			else if(min_set_id == 3)
 			{ 
 			    shifted_blue = (int [])channel_list.get(0);
-			   
+			    
 			    shifted_blue_green = (int [])channel_list.get(1);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i]  = -shifted_blue_green[i]; 
-			
-			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
+			    
+			    shifted_green = DeltaMapper.getDifference(shifted_blue, shifted_blue_green);
 			    
 			    shifted_red_green = (int [])channel_list.get(2);
 			   
@@ -670,10 +653,8 @@ public class AdaptiveEncoder2
 				shifted_blue = (int [])channel_list.get(0);
 			   
 			    shifted_blue_green = (int [])channel_list.get(1);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_blue_green[i]  = -shifted_blue_green[i]; 
-			  
-			    shifted_green = DeltaMapper.getSum(shifted_blue_green, shifted_blue);
+			    
+			    shifted_green = DeltaMapper.getDifference(shifted_blue, shifted_blue_green);
 			   
 			    shifted_red_blue = (int [])channel_list.get(2);
 			    
@@ -696,10 +677,8 @@ public class AdaptiveEncoder2
 			    shifted_blue_green = (int [])channel_list.get(1);
 			  
 			    shifted_red_green = (int [])channel_list.get(2);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_red_green[i] = -shifted_red_green[i];
 			    
-			    shifted_green = DeltaMapper.getSum(shifted_red_green, shifted_red);
+			    shifted_green = DeltaMapper.getDifference(shifted_red, shifted_red_green);
 			    
 			    shifted_blue = DeltaMapper.getSum(shifted_blue_green, shifted_green);	
 			}
@@ -724,26 +703,20 @@ public class AdaptiveEncoder2
 			    shifted_red  = DeltaMapper.getSum(shifted_green, shifted_red_green);
 			   
 			    shifted_red_blue = (int [])channel_list.get(2);
-			    for(int i = 0; i < shifted_red_blue.length; i++)
-			    	shifted_red_blue[i] = -shifted_red_blue[i];
-
-			    shifted_blue  = DeltaMapper.getSum(shifted_red, shifted_red_blue);
+			    
+			    shifted_blue  = DeltaMapper.getDifference(shifted_red, shifted_red_blue);
 			}
 			else if(min_set_id == 9)
 			{
 			    shifted_red = (int [])channel_list.get(0);
 			    
 			    shifted_red_green = (int [])channel_list.get(1);
-			    for(int i = 0; i < shifted_red_green.length; i++)
-			    	shifted_red_green[i] = -shifted_red_green[i];
-			   
-			    shifted_green = DeltaMapper.getSum(shifted_red, shifted_red_green);
+			    
+			    shifted_green = DeltaMapper.getDifference(shifted_red, shifted_red_green);
 			    
 			    shifted_red_blue = (int [])channel_list.get(2);
-			    for(int i = 0; i < shifted_blue_green.length; i++)
-			    	shifted_red_blue[i] = -shifted_red_blue[i];
 			    
-			    shifted_blue = DeltaMapper.getSum(shifted_red, shifted_red_blue);
+			    shifted_blue = DeltaMapper.getDifference(shifted_red, shifted_red_blue);
 			}
 
 		    for(int i = 0; i < xdim * ydim; i++)
@@ -883,7 +856,7 @@ public class AdaptiveEncoder2
 		        
                 File   compressed_image = new File("foo");
 		        double compressed_ratio = compressed_image.length();
-		        compressed_ratio       /= xdim * ydim * 8 * 3;
+		        compressed_ratio       /= xdim * ydim * 3;
 		        System.out.println("Original compression rate is " + String.format("%.4f", file_ratio));
 		        System.out.println("Current compression rate is " + String.format("%.4f", compressed_ratio));
 		        System.out.println();
