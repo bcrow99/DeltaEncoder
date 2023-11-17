@@ -12,29 +12,7 @@ import javax.swing.event.ChangeListener;
 public class AdaptiveDecoder2
 {
 	BufferedImage image;
-	JMenuItem     apply_item;
-	
-	JDialog       shift_dialog;
-	JTextField    shift_value;
-	
 	ImageCanvas   image_canvas;
-	
-	int    xdim, ydim;
-	String filename;
-	int    [] channel_type, set_sum, channel_sum;
-	int    [] channel_min;
-	double [] channel_rate, set_rate;
-	String [] type_string;
-	String [] set_string;
-	String [] channel_string;
-	
-	ArrayList channel_list = new ArrayList();
-	
-	int    pixel_shift = 3;
-	long   file_length = 0;
-	boolean initialized = false;
-	
-	int [] blue, green, red, blue_green, red_green, red_blue;
 	
 	public static void main(String[] args)
 	{
@@ -43,16 +21,15 @@ public class AdaptiveDecoder2
 			System.out.println("Usage: java AdaptiveDecoder2 <filename>");
 			System.exit(0);
 		}
+		
 	    String prefix      = new String("");
 		String filename     = new String(args[0]);
 		AdaptiveDecoder2 Decoder2 = new AdaptiveDecoder2(prefix + filename);
 	}
 	
-	public AdaptiveDecoder2(String _filename)
+	public AdaptiveDecoder2(String filename)
 	{
-		filename = _filename;
-		xdim = 0;
-		ydim = 0;
+		ArrayList channel_list = new ArrayList();
 		
 		String [] channel_string = new String[6];
 		channel_string[0] = new String("blue");
@@ -62,12 +39,17 @@ public class AdaptiveDecoder2
 		channel_string[4] = new String("red-green");
 		channel_string[5] = new String("red-blue");
 		
+        int xdim = 0;
+		int ydim = 0;
+		int pixel_shift = 0;
+		int [] blue, green, red, blue_green, red_green, red_blue;
 		blue       = new int[1];
 	    green      = new int[1];
 	    red        = new int[1];
         blue_green = new int[1];
         red_green  = new int[1]; 
         red_blue   = new int[1];
+        
 		try
 		{
 			File file              = new File(filename);
@@ -79,8 +61,8 @@ public class AdaptiveDecoder2
 			xdim = in.readShort();
 			ydim = in.readShort();
 			
-			System.out.println("Read short xdim " + xdim);
-			System.out.println("Read short ydim " + ydim);
+			System.out.println("Xdim is " + xdim);
+			System.out.println("Ydim is " + ydim);
 			
 			blue       = new int[xdim * ydim];
 			green      = new int[xdim * ydim];
@@ -128,16 +110,15 @@ public class AdaptiveDecoder2
 			   //System.out.println("Read int number of segments " + n );
 			   
 			   int max_segment_length = in.readInt();
-			   System.out.println("Read int max segment byte length " + max_segment_length);
+			   //System.out.println("Read int max segment byte length " + max_segment_length);
 			   
-			   if(max_segment_length > 8192)
-				   System.out.println("Max segment length too large to pack extra bits.");
-		       
 			   int byte_length = channel_bit_length / 8;
 			   if(channel_bit_length % 8 != 0)
 				   byte_length++;
+			   
 			   byte [] string = new byte[byte_length * 2];
-			   int offset = 0;
+			   int     offset = 0;
+			   
 			   for(int j = 0; j < n; j++)
 			   {
 			       short extra_bits = 0;
@@ -159,10 +140,6 @@ public class AdaptiveDecoder2
 			       //System.out.println("Read bytes segment data.");
 			       
 			       int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
-		    	   
-		    	   //System.out.println("Calculated segment bit length is " + segment_bit_length);
-			       //System.out.println("Segment byte length is " + segment_byte_length);
-			     
 			       int iterations  = (int)segment[segment_byte_length - 1];
 			       int string_type = 0;
 			       if(iterations < 0)
@@ -206,20 +183,17 @@ public class AdaptiveDecoder2
 			    }
 			   
 			    int number_unpacked = DeltaMapper.unpackStrings2(string, string_table, delta);
-			    if(number_unpacked != xdim * ydim)
-			    	System.out.println("Number of values unpacked does not agree with image dimensions.");	
-			   
 			    for(int j = 1; j < delta.length; j++)
 			       delta[j] += delta_min;
-			    int [] result = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
+			    int [] current_channel = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init_value);
 			    if(channel > 2)
-			       for(int j = 0; j < result.length; j++)
-						result[j] += channel_min;
-				channel_list.add(result);
-				System.out.println();
+			       for(int j = 0; j < current_channel.length; j++)
+						current_channel[j] += channel_min;
+				channel_list.add(current_channel);
 			} 
 		    in.close();
 		    
+		    System.out.println("Finished reading image.");
 		   
 		    if(set_id == 0)
 			{
