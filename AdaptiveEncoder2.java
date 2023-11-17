@@ -25,7 +25,7 @@ public class AdaptiveEncoder2
 	Canvas   image_canvas;
 	
 	int    xdim, ydim;
-	String filename;
+
 	
 	int [] original_pixel;
 	int [] red;
@@ -34,11 +34,11 @@ public class AdaptiveEncoder2
 	
 	int    [] channel_init, channel_min;
 	int    [] set_sum, channel_sum, channel_delta_min;
-	String [] type_string;
 	String [] set_string;
 	String [] channel_string;
 	int    [] shifted_blue, shifted_green, shifted_red;
 	int    [] shifted_blue_green, shifted_red_green, shifted_red_blue;
+	int    [] new_pixel;
 	
 	ArrayList channel_src;
 	
@@ -65,9 +65,8 @@ public class AdaptiveEncoder2
 		AdaptiveEncoder2 encoder = new AdaptiveEncoder2(prefix + filename);
 	}
 
-	public AdaptiveEncoder2(String _filename)
+	public AdaptiveEncoder2(String filename)
 	{
-		filename = _filename;
 		try
 		{
 			File file              = new File(filename);
@@ -85,6 +84,16 @@ public class AdaptiveEncoder2
 		    green                  = new int[xdim * ydim];
 		    red                    = new int[xdim * ydim];
 		    
+		    shifted_blue           = new int[xdim * ydim];
+		    shifted_green          = new int[xdim * ydim];
+		    shifted_red            = new int[xdim * ydim];
+		    
+		    shifted_blue_green     = new int[xdim * ydim];
+		    shifted_red_green      = new int[xdim * ydim];
+		    shifted_red_blue       = new int[xdim * ydim];
+		    
+		    new_pixel              = new int[xdim * ydim];
+		
 		    // PNG files do not always have this raster type.
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
@@ -281,17 +290,10 @@ public class AdaptiveEncoder2
 	
 	class ApplyHandler implements ActionListener
 	{
-		int [] new_pixel;
 		int    pixel_length;
 		
 		public ApplyHandler()
 		{
-		    shifted_blue = new int[xdim * ydim]; 
-		    shifted_green = new int[xdim * ydim];
-		    shifted_red = new int[xdim * ydim];
-		    new_pixel   = new int[xdim * ydim];
-		    
-		   
 		    // The delta sum for each channel.
 		    channel_sum  = new int[6];
 		    
@@ -313,11 +315,6 @@ public class AdaptiveEncoder2
 		    // least value is 0.
 		    channel_delta_min = new int[6];
 		    
-		    type_string       = new String[2];
-		    type_string[0]    = new String("packed strings");
-		    type_string[1]    = new String("compressed strings");
-		    		
-		    
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
 		    channel_string[1] = new String("green");
@@ -326,9 +323,9 @@ public class AdaptiveEncoder2
 		    channel_string[4] = new String("red-green");
 		    channel_string[5] = new String("red-blue");
 		    
-		    // The delta sum for each set of channels that can produce an image.
+		    // The paeth delta sum for each set of channels that can produce an image.
 		    set_sum       = new int[10];
-		    //set_rate      = new double[10];
+		    
 		    set_string    = new String[10]; 
 		    set_string[0] = new String("blue, green, and red.");
 		    set_string[1] = new String("blue, red, and red-green.");
