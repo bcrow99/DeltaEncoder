@@ -271,9 +271,10 @@ public class SegmentMapper
 						}
 						
                         // Do a check to see if the segments compress better when merged.
-						// We should also account for the overhead--a short int and byte.
+						// We also account for the overhead--usually a short,
+						// sometimes and a short and a byte.
 						
-						if (merged_compression_length <= (current_length + next_length - 24)) 
+						if (merged_compression_length <= (current_length + next_length - 16)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
@@ -292,6 +293,9 @@ public class SegmentMapper
 
 							i++;
 							//System.out.println("Merged segments.");
+							
+							if (compressed_byte_length > max_segment_byte_length)
+								max_segment_byte_length = compressed_byte_length;
 						} 
 						else 
 						{
@@ -310,23 +314,19 @@ public class SegmentMapper
 						int merged_length = current_length + next_length;
 						int merged_uncompressed_length = current_uncompressed_length + next_uncompressed_length;
 
-						if (merged_length != merged_uncompressed_length) 
-						{
-							System.out.println("Uncompressed segment has different length for string.");
-						}
-
 						int byte_offset = current_offset / 8;
 						int byte_length = merged_uncompressed_length / 8;
 						if (merged_uncompressed_length % 8 != 0) 
 						{
 							byte_length++;
-							System.out.println("Uneven segment at index " + (i + 1));
-							System.out.println("Current number of segments is " + previous_number_of_segments);
-							System.out.println("Current iteration is " + iterations);
+							
+							//System.out.println("Uneven segment at index " + (i + 1));
+							//System.out.println("Current number of segments is " + previous_number_of_segments);
+							//System.out.println("Current iteration is " + iterations);
 						}
 
-						if (byte_length > max_segment_byte_length)
-							max_segment_byte_length = byte_length;
+						if (byte_length + 1 > max_segment_byte_length)
+							max_segment_byte_length = byte_length + 1;
 
 						byte[] merged_segment = new byte[byte_length + 1];
 
@@ -368,8 +368,6 @@ public class SegmentMapper
 					current_segment_length.add(current_uncompressed_length);
 					current_compressed_length.add(current_length);
 					current_compressed_data.add(current_string);
-					
-					// Last segment, don't need to increment offset.
 				}
 			}
 
@@ -387,6 +385,8 @@ public class SegmentMapper
 
 		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Number of merged segments was " + previous_compressed_data.size());
+		System.out.println("Minimum segment byte length was " + (segment_bit_length / 8));
+		System.out.println("Maximum segment byte length was " + max_segment_byte_length);
 		System.out.println();
 		ArrayList segment_data = new ArrayList();
 		segment_data.add(previous_compressed_length);
