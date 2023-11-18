@@ -166,6 +166,13 @@ public class SegmentMapper
 
 		// Merging segments.
 
+		int overhead = 0;
+		if(max_segment_byte_length < 80192)
+			overhead = 16;
+		else if(max_segment_byte_length <= Short.MAX_VALUE)
+			overhead = 24;
+		else
+			overhead = 32;
 		ArrayList previous_segment_type = (ArrayList) segment_type.clone();
 		ArrayList previous_segment_length = (ArrayList) segment_length.clone();
 		ArrayList previous_compressed_length = (ArrayList) compressed_length.clone();
@@ -189,6 +196,7 @@ public class SegmentMapper
 		int number_of_one_segments  = 0;
 		int number_of_uncompressed_segments = 0;
 		int number_of_compressed_segments = 0;
+		
 		
 		while (current_number_of_segments != previous_number_of_segments) 
 		{
@@ -269,10 +277,10 @@ public class SegmentMapper
 						}
 						
                         // Do a check to see if the segments compress better when merged.
-						// We also account for the overhead--usually a short,
-						// sometimes a short and a byte.
-						// Need a switch to handle both cases.
-						if (merged_compression_length <= (current_length + next_length - 16)) 
+						// We also account for the overhead--sometimes a short,
+						// sometimes a short and a byte, sometimes an int.
+						
+						if (merged_compression_length <= (current_length + next_length - overhead)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
@@ -398,6 +406,14 @@ public class SegmentMapper
 			current_segment_length.clear();
 			current_compressed_length.clear();
 			current_compressed_data.clear();
+			
+			overhead = 0;
+			if(max_segment_byte_length < 80192)
+				overhead = 16;
+			else if(max_segment_byte_length <= Short.MAX_VALUE)
+				overhead = 24;
+			else
+				overhead = 32;
 		}
 		
 		
