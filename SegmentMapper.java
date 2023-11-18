@@ -188,6 +188,7 @@ public class SegmentMapper
 		int number_of_zero_segments = 0;
 		int number_of_one_segments  = 0;
 		int number_of_uncompressed_segments = 0;
+		int number_of_compressed_segments = 0;
 		
 		while (current_number_of_segments != previous_number_of_segments) 
 		{
@@ -196,6 +197,7 @@ public class SegmentMapper
 			number_of_zero_segments = 0;
 			number_of_one_segments  = 0;
 			number_of_uncompressed_segments = 0;
+			number_of_compressed_segments   = 0;
 			
 			int i = 0;
 			int current_offset = 0;
@@ -230,6 +232,7 @@ public class SegmentMapper
 					
 					if (current_string_type == next_string_type && current_iterations > 0 && next_iterations > 0) 
 					{
+						number_of_compressed_segments++;
 						int merged_uncompressed_length = current_uncompressed_length + next_uncompressed_length;
 
 						int byte_offset = current_offset / 8;
@@ -313,13 +316,11 @@ public class SegmentMapper
 						number_of_uncompressed_segments++;
 						int merged_length = current_length + next_length;
 						int merged_uncompressed_length = current_uncompressed_length + next_uncompressed_length;
-
 						int byte_offset = current_offset / 8;
 						int byte_length = merged_uncompressed_length / 8;
 						if (merged_uncompressed_length % 8 != 0) 
 						{
 							byte_length++;
-							
 							//System.out.println("Uneven segment at index " + (i + 1));
 							//System.out.println("Current number of segments is " + previous_number_of_segments);
 							//System.out.println("Current iteration is " + iterations);
@@ -352,6 +353,11 @@ public class SegmentMapper
 					} 
 					else 
 					{
+						current_iterations = current_string[current_string.length - 1];
+						if(current_iterations == 0)
+							number_of_uncompressed_segments++;
+						else
+							number_of_compressed_segments++;
 						current_segment_type.add(current_string_type);
 						current_segment_length.add(current_uncompressed_length);
 						current_compressed_length.add(current_length);
@@ -362,13 +368,19 @@ public class SegmentMapper
 				} 
 				else 
 				{
-					if(current_iterations == 0)
-						number_of_uncompressed_segments++;	
 					int current_string_type = (int) previous_segment_type.get(i);
 					int current_uncompressed_length = (int) previous_segment_length.get(i);
 					int current_length = (int) previous_compressed_length.get(i);
 					byte[] current_string = (byte[]) previous_compressed_data.get(i);
-
+					current_iterations = current_string[current_string.length - 1];
+					if(current_iterations == 0)
+						number_of_uncompressed_segments++;
+					else
+						number_of_compressed_segments++;
+					if(current_string_type == 0)
+						number_of_zero_segments++;
+					else
+						number_of_one_segments++;
 					current_segment_type.add(current_string_type);
 					current_segment_length.add(current_uncompressed_length);
 					current_compressed_length.add(current_length);
@@ -397,7 +409,8 @@ public class SegmentMapper
 		System.out.println("Maximum segment byte length was " + max_segment_byte_length);
 		System.out.println("Number of zero segments is " + number_of_zero_segments);
 		System.out.println("Number of one segments is " + number_of_one_segments);
-		//System.out.println("Number of uncompressed segments is " + number_of_uncompressed_segments);
+		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
+		System.out.println("Number of uncompressed segments is " + number_of_uncompressed_segments);
 		System.out.println();
 		
 		ArrayList segment_data = new ArrayList();

@@ -165,13 +165,8 @@ public class AdaptiveEncoder2
 					public void actionPerformed(ActionEvent event)
 					{
 						for(int i = 0; i < xdim; i++)
-					    {
 					    	for(int j = 0; j < ydim; j++)
-					    	{
 					    		image.setRGB(i, j, original_pixel[j * xdim + i]);
-					    	}
-					    	
-					    } 
 						System.out.println("Reloaded original image.");
 						image_canvas.repaint();
 					}	
@@ -247,7 +242,7 @@ public class AdaptiveEncoder2
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(100);
+				segment_slider.setMaximum(20);
 				segment_slider.setValue(segment_length);
 				segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -449,7 +444,6 @@ public class AdaptiveEncoder2
 			min_set_id = min_index;
 			int [] channel = DeltaMapper.getChannels(min_set_id);
 			
-			
 			channel_id = new ArrayList();
 			channel_table = new ArrayList();
 			channel_data = new ArrayList();
@@ -482,20 +476,21 @@ public class AdaptiveEncoder2
 				channel_bitlength.add(bitlength);
 				
 	           
-	            int max_length = bitlength / 2 - 16;
-	            int remainder = max_length % 8;
-	            max_length -= remainder;
+	            int max_length = bitlength / 2;
+	            int remainder  = max_length % 8;
+	            max_length    -= remainder;
 	            
-	            double factor = segment_length;
-	            factor       /= 100;
-	            factor       *= max_length;
+	            double factor = Math.pow(2,  segment_length);
+	        
+	            int minimum_segment_length = (int)(factor * 32);
 	            
-	            int minimum_segment_length = (int)factor + 16;
-	            remainder = minimum_segment_length % 8;
-	            minimum_segment_length -= remainder;
-				
-				if(minimum_segment_length > max_length)
-					minimum_segment_length = max_length;	
+	            if(minimum_segment_length < max_length)
+	            {
+	                remainder = minimum_segment_length % 8;
+	                minimum_segment_length -= remainder;
+	            }
+	            else
+	            	minimum_segment_length = max_length;
 				
 				ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);
 				channel_data.add(segment_data_list);
@@ -824,8 +819,10 @@ public class AdaptiveEncoder2
 		            out.writeInt(max_segment_byte_length);
 		            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 		            
-		            if(max_segment_byte_length >= 8192)
-		            	System.out.println("Max segment length too large to pack extra bits.");
+		            if(max_segment_byte_length < 8192)
+		            	System.out.println("Max segment length small enough to pack extra bits in a short.");
+		            else if (max_segment_byte_length > Short.MAX_VALUE)
+		            	System.out.println("Max segment length too large to fit in a short.");
 		            
 		            for(int k = 0; k < n; k++)
 		            {
@@ -833,16 +830,21 @@ public class AdaptiveEncoder2
 		            	byte [] segment = (byte [])segment_data.get(k);
 		            	short extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
 		            	
-		            	if(max_segment_byte_length < 8192)
+		            	if(max_segment_byte_length < 80192)
 		            	{
 		            	    short packed_segment_length = (short)segment.length;
 	            	        packed_segment_length <<= 3;
 	            	        packed_segment_length += extra_bits;
 		            	    out.writeShort(packed_segment_length);
 		            	}
-		            	else
+		            	else if(max_segment_byte_length <= Short.MAX_VALUE)
 		            	{
 		            		out.writeShort(segment.length);	
+		            		out.writeByte(extra_bits);
+		            	}
+		            	else
+		            	{
+		            		out.writeInt(segment.length);
 		            		out.writeByte(extra_bits);
 		            	}
 		            	out.write(segment, 0, segment.length);
