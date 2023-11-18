@@ -5,7 +5,6 @@ import java.math.*;
 
 public class SegmentMapper 
 {
-
 	// This function returns a segment list with regular lengths.
 	public static ArrayList getSegmentedData(byte[] string, int string_bit_length, int segment_bit_length) 
 	{
@@ -27,8 +26,8 @@ public class SegmentMapper
 		byte[] segment = new byte[current_byte_length];
 		byte[] compressed_segment = new byte[2 * current_byte_length];
 
-		for (int i = 0; i < number_of_segments; i++) {
-
+		for (int i = 0; i < number_of_segments; i++) 
+		{
 			if (i == number_of_segments - 1) {
 				current_byte_length = last_segment_byte_length;
 				current_bit_length = last_segment_bit_length;
@@ -52,42 +51,19 @@ public class SegmentMapper
 				clipped_string[current_byte_length] = 0;
 				compressed_length.add(current_bit_length);
 				compressed_data.add(clipped_string);
-			} else {
+			} else 
+			{
 				int compressed_bit_length = 0;
 				if (zero_ratio >= .5)
-					compressed_bit_length = DeltaMapper.compressZeroStrings2(segment, current_bit_length,
+					compressed_bit_length = DeltaMapper.compressZeroStrings(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = DeltaMapper.compressOneStrings2(segment, current_bit_length,
+					compressed_bit_length = DeltaMapper.compressOneStrings(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
 					compressed_byte_length++;
 				compressed_byte_length++;
-
-				// We're over expanding the compressed string
-				// with extra trailing bits because of odd
-				// stop bits at the end of strings in the recursion.
-
-				// It mostly happens with binary images,
-				// which makes sense because they are mostly likely
-				// to produce extra zero bits in the recursive process.
-				// It also happens when there are more segments,
-				// which makes sense because there are more opportunities
-				// to produce extra trailing bits.
-
-				// compressed_byte_length += 2;
-
-				// We'll just catch the exception instead of trying to
-				// avoid it, since the program has seemingly processed
-				// the data correctly when it runs out of memory.
-				// The error seems to be relegated to
-				// low resolution images with lots of segments, probably
-				// for the reasons described above.
-
-				// I'm not sure if there's any logic related directly to
-				// the length of the clipped string in the rest of the program.
-				// Best practice is to avoid relying on it.
 
 				byte[] clipped_string = new byte[compressed_byte_length];
 				for (int j = 0; j < compressed_byte_length; j++)
@@ -166,10 +142,10 @@ public class SegmentMapper
 			{
 				int compressed_bit_length = 0;
 				if (string_type == 0)
-					compressed_bit_length = DeltaMapper.compressZeroStrings2(segment, current_bit_length,
+					compressed_bit_length = DeltaMapper.compressZeroStrings(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = DeltaMapper.compressOneStrings2(segment, current_bit_length,
+					compressed_bit_length = DeltaMapper.compressOneStrings(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -202,22 +178,31 @@ public class SegmentMapper
 
 		int current_number_of_segments = compressed_data.size();
 		int previous_number_of_segments = 0;
-
-		System.out.println("The number of segments in initial list is " + current_number_of_segments);
+        int initial_number_of_segments = current_number_of_segments;
+		
+		
 		int last_bit_length = (int)segment_length.get(current_number_of_segments - 1);
 		//System.out.println("The last segment bit length is " + last_bit_length);
 	
 		int iterations = 0;
+		int number_of_zero_segments = 0;
+		int number_of_one_segments  = 0;
+		int number_of_uncompressed_segments = 0;
+		
 		while (current_number_of_segments != previous_number_of_segments) 
 		{
 			iterations++;
 			previous_number_of_segments = previous_compressed_data.size();
-
+			number_of_zero_segments = 0;
+			number_of_one_segments  = 0;
+			number_of_uncompressed_segments = 0;
+			
 			int i = 0;
 			int current_offset = 0;
 
 			for (i = 0; i < previous_number_of_segments; i++) 
 			{
+				int current_iterations = 0;
 				if (i < previous_number_of_segments - 1) 
 				{
 					int current_string_type = (int) previous_segment_type.get(i);
@@ -228,10 +213,14 @@ public class SegmentMapper
 					int next_length = (int) previous_compressed_length.get(i + 1);
 					byte[] current_string = (byte[]) previous_compressed_data.get(i);
 					byte[] next_string = (byte[]) previous_compressed_data.get(i + 1);
-					int current_iterations = DeltaMapper.getIterations(current_string, current_length);
+					current_iterations = DeltaMapper.getIterations(current_string, current_length);
 					int next_iterations = DeltaMapper.getIterations(next_string, next_length);
-
-
+                    
+					if(current_string_type == 1)
+						number_of_one_segments++;
+					else
+						number_of_zero_segments++;
+					
 					if (current_string_type == next_string_type && current_iterations > 0 && next_iterations > 0) 
 					{
 						int merged_uncompressed_length = current_uncompressed_length + next_uncompressed_length;
@@ -240,7 +229,6 @@ public class SegmentMapper
 						int byte_length = merged_uncompressed_length / 8;
 						if(merged_uncompressed_length % 8 != 0)
 							byte_length++;
-
 						if (byte_length > max_segment_byte_length)
 							max_segment_byte_length = byte_length;
 
@@ -253,9 +241,9 @@ public class SegmentMapper
 						try 
 						{
 							if (current_string_type == 0)
-								merged_compression_length = DeltaMapper.compressZeroStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = DeltaMapper.compressZeroStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 							else
-								merged_compression_length = DeltaMapper.compressOneStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = DeltaMapper.compressOneStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 						} 
 						catch (Exception e) 
 						{
@@ -272,8 +260,8 @@ public class SegmentMapper
 						
                         // Do a check to see if the segments compress better when merged.
 						// We also account for the overhead--usually a short,
-						// sometimes and a short and a byte.
-						
+						// sometimes a short and a byte.
+						// Need a switch to handle both cases.
 						if (merged_compression_length <= (current_length + next_length - 16)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
@@ -311,6 +299,7 @@ public class SegmentMapper
 					else if (current_iterations == 0 && next_iterations == 0)
 					//if(current_iterations == 0 && next_iterations == 0)
 					{
+						number_of_uncompressed_segments++;
 						int merged_length = current_length + next_length;
 						int merged_uncompressed_length = current_uncompressed_length + next_uncompressed_length;
 
@@ -349,6 +338,8 @@ public class SegmentMapper
 					} 
 					else 
 					{
+						if(current_iterations == 0)
+							number_of_uncompressed_segments++;	
 						current_segment_type.add(current_string_type);
 						current_segment_length.add(current_uncompressed_length);
 						current_compressed_length.add(current_length);
@@ -359,6 +350,8 @@ public class SegmentMapper
 				} 
 				else 
 				{
+					if(current_iterations == 0)
+						number_of_uncompressed_segments++;	
 					int current_string_type = (int) previous_segment_type.get(i);
 					int current_uncompressed_length = (int) previous_segment_length.get(i);
 					int current_length = (int) previous_compressed_length.get(i);
@@ -382,12 +375,19 @@ public class SegmentMapper
 			current_compressed_length.clear();
 			current_compressed_data.clear();
 		}
-
+		
+		
+		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
 		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Number of merged segments was " + previous_compressed_data.size());
+		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Minimum segment byte length was " + (segment_bit_length / 8));
 		System.out.println("Maximum segment byte length was " + max_segment_byte_length);
+		System.out.println("Number of zero segments is " + number_of_zero_segments);
+		System.out.println("Number of one segments is " + number_of_one_segments);
+		System.out.println("Number of uncompressed segments is " + number_of_uncompressed_segments);
 		System.out.println();
+		
 		ArrayList segment_data = new ArrayList();
 		segment_data.add(previous_compressed_length);
 		segment_data.add(previous_compressed_data);
