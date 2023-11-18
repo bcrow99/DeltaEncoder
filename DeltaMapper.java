@@ -26,16 +26,16 @@ public class DeltaMapper
 	public static int[] getSum(int src1[], int src2[])
 	{
 		int length = src1.length;
-		int [] difference = new int[length];
+		int [] sum = new int[length];
 		
-		if(src2.length == length)  // else return uninitialzed array.
+		if(src2.length == length) 
 		{
 		    for(int i = 0; i < length; i++)
 		    {
-			    difference[i] = src1[i] + src2[i];
+			    sum[i] = src1[i] + src2[i];
 		    }
 		}
-		return(difference);
+		return(sum);
 	}
 	
 	public static ArrayList getHistogram(int value[])
@@ -208,7 +208,6 @@ public class DeltaMapper
 
     // These functions use the horizontal, vertical, or diagonal
     // deltas depending on the result of a convolution. 
-    // Not using the sum anymore.
     
     // The paeth filter usually works better than vertical or horizontal deltas,
     // but still does not do as well as simply choosing the smallest delta.
@@ -354,391 +353,6 @@ public class DeltaMapper
             }
         }
         return dst;
-    }
-    
-    public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
-    {
-    	int n = code.length;
-    
-    	int current_bit = 0;
-    	for(int i = 0; i < src.length; i++)
-    	{
-    	    int j = src[i];
-    	    int k = table[j];
-    	    
-    	    long code_word   = code[k];
-    	    int  code_length = length[k];
-    	    
-    	    
-    	    int offset = current_bit % 8;  
-    	    code_word <<= offset; 
-    	    int or_length = code_length + offset;
-    	    int number_of_bytes = or_length / 8;
-    	    if(or_length % 8 != 0)
-    	        number_of_bytes++;
-    	   
-    	    int current_byte = current_bit / 8;
-    	   
-    	    
-    	    
-    	    if(number_of_bytes == 1)
-    	    {
-    	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
-    	    	
-    	    }
-    	    else
-    	    {
-    	    	for(int m = 0; m < number_of_bytes - 1; m++)
-        	    {
-        	        dst[current_byte] |= (byte)(code_word & 0x00ff);
-        	        current_byte++;
-        	        code_word >>= 8;
-        	    }	
-    	    	dst[current_byte] = (byte)(code_word & 0x00ff);
-    	    }
-    	    
-    	    current_bit += code_length;
-    	}
-    	
-    	int bit_length = current_bit;
-    	return bit_length;
-    }
-  
-    public static int packCode(int src[], int table[], BigInteger [] code, int [] length, byte dst[])
-    {
-    	int current_bit = 0;
-    	for(int i = 0; i < src.length; i++)
-    	{
-    	    int j = src[i];
-    	    int k = table[j];
-    	    
-    	    BigInteger code_word = code[k];
-    	    int code_length      = length[k];
-    	  
-    	    int shift = current_bit % 8;
-    	    
-    	    code_word = code_word.shiftLeft(shift);
-    	    
-    	    int or_length = code_length + shift;
-    	    
-    	    int number_of_bytes = or_length / 8;
-    	    if(or_length % 8 != 0)
-    	        number_of_bytes++;
-    	   
-    	    int current_byte = current_bit / 8;
-    	    shift            = 0;
-  
-    	    for(int m = 0; m < number_of_bytes; m++)
-    	    {
-    	        BigInteger shifted_code_word = code_word.shiftRight(shift);
-    	        
-    	        long mask_value = 255;
-    	        BigInteger mask = BigInteger.ONE;
-    	        mask = mask.valueOf(mask_value);
-    	        shifted_code_word = shifted_code_word.and(mask);
-    	        try
-    	        {
-    	        	mask_value = 1;
-    	        	for(int n = 0; n < 8; n++)
-    	        	{
-    	        		mask = mask.valueOf(mask_value);
-    	        	    BigInteger bit_value = shifted_code_word.and(mask);
-    	        	    if(bit_value.compareTo(BigInteger.ZERO) != 0)
-    	        	    {
-    	        	    	byte byte_mask = (byte)mask_value;
-    	        	    	dst[current_byte] |= byte_mask;
-    	        	    }
-    	        	   
-    	        	    mask_value *= 2;
-    	        	}
-    	            current_byte++;
-        	        shift += 8;
-    	        }
-    	        catch(Exception e)
-    	        {
-    	        	System.out.println(e.toString());
-    	        	
-    	            current_byte++;
-    	            shift += 8;
-    	        }
-    	    }
-    	    current_bit += code_length;
-    	}
-    	
-    	int bit_length = current_bit;
-    	return bit_length;
-    }
-    
-    public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
-    {
-    	boolean debug = false;
-    	
-    	int number_of_different_values = table.length;
-        int [] inverse_table = new int[number_of_different_values];
-        for(int i = 0; i < number_of_different_values; i++)
-        {
-            int j            = table[i];
-            inverse_table[j] = i;
-        }
-        
-        int number_of_codes = code.length;
-        int max_length      = code_length[code.length - 1];
-        int max_bytes       = max_length / 8;
-        if(max_length % 8 != 0)
-        	max_bytes++;
-        
-        
-        if(debug)
-        {
-            // Segment of the string bytes we want to debug.
-            int start = 0;
-            int stop  = 10;	
-        
-            System.out.println("Prefix free code:");
-            for(int i = 0; i < code.length; i++)
-            {
-                for(int j = 0; j < code_length[i]; j++)
-                {
-                    long mask = 1;
-                    mask <<= j;
-                    if((code[i] & mask) == 0)
-                        System.out.print(0);
-                    else
-                	    System.out.print(1);
-                }
-                System.out.println();
-            }
-            System.out.println();
-        
-            System.out.println("Look-up table:");
-            for(int i = 0; i < table.length; i++)
-        	    System.out.println(i + " -> " + table[i]);;
-            System.out.println();
-        
-            System.out.println("Bytes from delta string:");
-        
-            for(int i = start; i < stop; i++)
-            {
-        	    System.out.print(i + "  ");
-                for(int j = 0; j < 8; j++)
-                {
-        	        byte src_mask = 1;	
-        	        src_mask <<= j;
-        	        int src_bit = src_mask & src[i];
-        	        if(src_bit == 0)
-        		        System.out.print("0");
-        	        else
-        		        System.out.print("1");
-                }
-                System.out.println();
-            }
-            System.out.println();
-        }
-        
-        int current_bit     = 0;
-        int offset          = 0;
-        int current_byte    = 0;
-    	int number_unpacked = 0;
-    	int dst_byte        = 0;
-    	
-    	boolean matched = true;
-    	
-        for(int i = 0; i < dst.length; i++)
-        {
-        	long src_word       = 0;
-    	
-            for(int j = 0; j < max_bytes; j++)
-            {
-          	    long src_byte = (long)src[current_byte + j];
-          	    if(src_byte < 0)
-          		    src_byte += 256;
-          	    if(j == 0)
-          	        src_byte >>= offset;
-          	    else
-          	        src_byte <<= j * 8 - offset;
-          	    src_word |= src_byte;
-            }
-
-            if(offset != 0)
-            {
-          	    long src_byte = (long)src[current_byte + max_bytes];
-          	    if(src_byte < 0)
-          		    src_byte += 256;
-          	    
-          	    src_byte <<= max_bytes * 8 - offset;
-          	   
-          	    src_word |= src_byte;
-            }
-      	
-            for(int j = 0; j < code.length; j++)
-            {
-          	    long code_word = code[j];
-          	    long mask = -1;
-          	    mask <<= code_length[j];
-          	    mask = ~mask;
-          	    
-          	    long masked_src_word = src_word & mask;
-          	    long masked_code_word = code_word & mask;
-          	    
-          	    if(masked_src_word == masked_code_word)
-          	    {
-          	    	dst[dst_byte++] = inverse_table[j];
-	                number_unpacked++;
-          		    current_bit += code_length[j];
-          		    current_byte = current_bit / 8;
-          		    offset       = current_bit % 8;
-          		    break;
-          	    }
-          	    else if(j == code.length - 1)
-          	    {
-          	    	/*
-          	    	System.out.println("No match for prefix-free code at byte " + current_byte);
-          	    	if(debug)
-          	    	{
-          		        long code_mask = 1;
-          		        System.out.println("Source word:");
-          		        for(int k = 0; k < code_length[j]; k++)
-          		        {
-          		        	long src_result = (code_mask << k) & src_word;
-          		        	if(src_result == 0)
-          		        		System.out.print(0);
-          		        	else
-          		        		System.out.print(1);
-          		        }
-          		        System.out.println();
-          	    	}
-          	    	*/
-          	    }
-            }
-        }  
-        
-        
-        if(debug)
-        {
-            System.out.println("The length of the original bit string was " + string_length);
-            System.out.println("Bits unpacked was " + current_bit);
-            System.out.println();
-        }
-       
-    	return number_unpacked;
-    }
-    
-    
-    public static int unpackCode(byte src[], int table[], BigInteger [] code, int [] code_length, int string_length, int dst[])
-    {
-    	boolean debug = false;
-    	
-    	int number_of_different_values = table.length;
-        int [] inverse_table = new int[number_of_different_values];
-        for(int i = 0; i < number_of_different_values; i++)
-        {
-            int j            = table[i];
-            inverse_table[j] = i;
-        }
-        
-        int number_of_codes = code.length;
-        int max_length      = code_length[code.length - 1];
-        int max_bytes       = max_length / 8;
-        if(max_length % 8 != 0)
-        	max_bytes++;
-        
-        if(debug)
-        {
-            // Segment of the string bytes we want to debug.
-            int start = 0;
-            int stop  = 10;
-            System.out.println("Bytes from delta string:");
-            for(int i = start; i < stop; i++)
-            {
-        	    System.out.print(i + "  ");
-                for(int j = 0; j < 8; j++)
-                {
-        	        byte src_mask = 1;	
-        	        src_mask <<= j;
-        	        int src_bit = src_mask & src[i];
-        	        if(src_bit == 0)
-        		        System.out.print("0");
-        	        else
-        		        System.out.print("1");
-                }
-                System.out.println();
-            }
-            System.out.println();
-            
-        }
-        
-        int current_bit     = 0;
-        int offset          = 0;
-        int current_byte    = 0;
-    	int number_unpacked = 0;
-    	int dst_byte        = 0;
-    	
-        for(int i = 0; i < dst.length; i++)
-        {
-        	BigInteger src_word = BigInteger.ZERO;
-    	
-            for(int j = 0; j < max_bytes; j++)
-            {
-          	    long src_byte = (long)src[current_byte + j];
-          	    if(src_byte < 0)
-          		    src_byte += 256;
-          	    
-          	    BigInteger addend = BigInteger.valueOf(src_byte);
-          	    if(j == 0)
-          	        addend = addend.shiftRight(offset);
-          	    else
-          	    	addend = addend.shiftLeft(j * 8 - offset);
-          	    src_word = src_word.add(addend);
-            }
-            
-            if(offset != 0)
-            {
-          	    long src_byte = (long)src[current_byte + max_bytes];
-          	    if(src_byte < 0)
-          		    src_byte += 256;
-          	    BigInteger addend = BigInteger.valueOf(src_byte);
-          	    addend = addend.shiftLeft(max_bytes * 8 - offset);
-        	    src_word = src_word.add(addend);
-            }
-      	
-            for(int j = 0; j < code.length; j++)
-            {
-          	    BigInteger code_word = code[j];
-          	    BigInteger mask      = BigInteger.ONE;
-          	    BigInteger addend    = BigInteger.TWO;
-          	    for(int k = 1; k < code_length[j]; k++)
-          	    {
-          		    mask = mask.add(addend);
-          		    addend = addend.multiply(BigInteger.TWO);
-          	    }
-          	    BigInteger masked_src_word = src_word.and(mask);
-          	
-          	    if(code_word.compareTo(masked_src_word) == 0)
-          	    {
-          	    	dst[dst_byte++] = inverse_table[j];
-	                number_unpacked++;
-          		    current_bit += code_length[j];
-          		    current_byte = current_bit / 8;
-          		    offset       = current_bit % 8;
-          		    
-          		    break;
-          	    }
-          	    else if(j == code.length - 1)
-          	    {
-          		    System.out.println("No match for prefix-free code.");
-          	    }
-            }
-        }  
-
-        if(debug)
-        {
-            System.out.println("The length of the original bit string was " + string_length);
-            System.out.println("Bits unpacked was " + current_bit);
-            System.out.println("Number of bytes was " + current_byte);
-            System.out.println();
-        }
-       
-    	return number_unpacked;
     }
     
     // These packing/unpacking functions represent int values as unary strings.
@@ -1262,9 +876,10 @@ public class DeltaMapper
 
 	public static int decompressZeroBits(byte src[], int size, byte dst[]) 
 	{
+		// This is necessary because dst can be used multiple times,
+    	// so we can't count on it being initialized with zeros.
 		for (int i = 0; i < dst.length; i++)
 			dst[i] = 0;
-
 		int current_byte = 0;
 		int current_bit = 0;
 		byte mask = 0x01;
@@ -1544,7 +1159,6 @@ public class DeltaMapper
     	return current_length;
     }
     
-    
     public static int decompressZeroStrings(byte src[], int length, byte dst[])
     {
         // Getting the number of iterations appended to
@@ -1568,27 +1182,24 @@ public class DeltaMapper
         	int byte_length = length / 8;
         	if(length % 8 != 0)
         		byte_length++;
-        	for(int i = 0; i < byte_length; i++)
-        		dst[i] = src[i];
+        	
+        	System.arraycopy(src,  0,  dst, 0, byte_length);
         	return length;
         }
         
-        
-        byte[]  temp = new byte[dst.length];
         int current_length = 0;
         if(iterations == 1)
         {
-        	
             current_length = decompressZeroBits(src, length, dst);
-            iterations--;
+            return current_length;
         }
         else if(iterations % 2 == 0)
         {
+        	byte[]  temp = new byte[dst.length];
             current_length = decompressZeroBits(src, length, temp);
             iterations--;
             while(iterations > 0)
             {
-            	
                 int previous_length = current_length;
                 if(iterations % 2 == 0)
                     current_length = decompressZeroBits(dst, previous_length, temp);
@@ -1596,9 +1207,11 @@ public class DeltaMapper
                     current_length = decompressZeroBits(temp, previous_length, dst);
                 iterations--;
             }
+            return current_length;
         }
         else
         {
+        	byte[]  temp = new byte[dst.length];
             current_length = decompressZeroBits(src, length, dst);
             iterations--;
             while(iterations > 0)
@@ -1610,9 +1223,8 @@ public class DeltaMapper
                     current_length = decompressZeroBits(temp, previous_length, dst);
                 iterations--;
             }
-        }
-       
-        return(current_length);
+            return current_length;
+        } 
     }
    
     public static int compressOneBits(byte src[], int size, byte dst[])
@@ -1722,6 +1334,8 @@ public class DeltaMapper
 
     public static int decompressOneBits(byte src[], int size, byte dst[])
     {
+    	// This is necessary because dst can be used multiple times,
+    	// so we can't count on it being initialized with zeros.
     	for(int i = 0; i < dst.length; i++)
         	dst[i] = 0;
     	
@@ -1891,7 +1505,7 @@ public class DeltaMapper
     	}
     }
     
-    // This function uses a metric to see if the data will expand or contract, and
+ // This function uses a metric to see if the data will expand or contract, and
     // simply copies src to dst if it will expand.  This breaks the
     // original encoder/decoder programs.
     public static int compressOneStrings2(byte src[], int length, byte dst[])
@@ -2001,21 +1615,21 @@ public class DeltaMapper
         	int byte_length = length / 8;
         	if(length % 8 != 0)
         		byte_length++;
-        	for(int i = 0; i < byte_length; i++)
-        		dst[i] = src[i];
+        	System.arraycopy(src, 0, dst, 0, byte_length);
         	return length;
         }
         
-        byte[]  temp = new byte[dst.length];
+        
         
         int current_length = 0;
         if(iterations == 1)
         {
             current_length = decompressOneBits(src, length, dst);
-            iterations--;
+            return current_length;
         }
         else if(iterations % 2 == 0)
         {
+        	byte[]  temp = new byte[dst.length];
             current_length = decompressOneBits(src, length, temp);
             iterations--;
             while(iterations > 0)
@@ -2027,9 +1641,11 @@ public class DeltaMapper
                     current_length = decompressOneBits(temp, previous_length, dst);
                 iterations--;
             }
+            return current_length;
         }
         else
         {
+        	byte[]  temp = new byte[dst.length];
             current_length = decompressOneBits(src, length, dst);
             iterations--;
             while(iterations > 0)
@@ -2041,8 +1657,8 @@ public class DeltaMapper
                     current_length = decompressOneBits(temp, previous_length, dst);
                 iterations--;
             }
+            return current_length;
         }
-        return(current_length);
     } 
     
     public static int getIterations(byte string[], int length)
@@ -2133,248 +1749,6 @@ public class DeltaMapper
     	    channel[2] = 5;	
     	}
     	return channel;
-    }
-  
-    public static long[] getUnaryCode(int n)
-    {
-        long [] code         = new long[n];
-       
-        code[0] = 0;
-        
-        long addend = 1;
-	    for(int i = 1; i < n; i++)
-	    {
-	    	code[i] = code[i - 1] + addend;
-	    	addend *= 2;
-	    }
-        return code;
-    }
-    
-    public static BigInteger[] getBigUnaryCode(int n)
-    {
-        BigInteger [] code         = new BigInteger[n];
-       
-        code[0] = BigInteger.ZERO;
-        BigInteger addend = BigInteger.ONE;
-	    for(int i = 1; i < n; i++)
-	    {
-	    	BigInteger value = code[i - 1];
-	    	value = value.add(addend);
-	    	code[i] = value;
-	    	addend = addend.multiply(BigInteger.TWO);
-	    }
-	    
-        return code;
-    }
-    
-    public static int[] getUnaryLength(int n)
-    {
-    	int [] length = new int[n];
-    	for(int i = 0; i < n; i++)
-    		length[i] = i + 1;
-    	length[n - 1]--;
-    	return length;
-    }
-    
-    public static int[] getHuffmanLength(int [] frequency)
-    {
-    	// The in-place processing is one of the
-    	// trickiest parts of this code, but we
-    	// don't want to modify the input so we'll 
-    	// make a copy and work from that.
-    	int n = frequency.length;
-    	
-    	int [] w = new int[n];
-    	for(int i = 0; i < n; i++)
-    		w[i] = frequency[i];
-    	
-    	int leaf = n - 1;
-    	int root = n - 1;
-    	int next;
-    	
-    	// Create tree.
-    	for(next = n - 1; next > 0; next--)
-    	{
-    		// Find first child.
-    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
-    	    {
-    	        // Use internal node and reassign w[next].
-    	    	w[next] = w[root];
-    	    	w[root] = next;
-    	    	root--;
-    	    }
-    	    else
-    	    {
-    	    	// Use leaf node and reassign w[next].
-    	    	w[next] = w[leaf];
-    	    	leaf--;
-    	    }
-    	    
-    	    // Find second child.
-    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
-    	    {
-    	        // Use internal node and add to w[next].
-    	    	w[next] += w[root];
-    	    	w[root] = next;
-    	    	root--;
-    	    }
-    	    else
-    	    {
-    	    	// Use leaf node and add to w[next].
-    	    	w[next] += w[leaf];
-    	    	leaf--;
-    	    }
-    	}
-    	
-    	// Traverse tree from root down, converting parent pointers into
-    	// internal node depths.
-    	w[1] = 0;
-    	for(next = 2; next < n; next++)
-    		w[next] = w[w[next]] + 1;
-    	
-    	// Final pass to produce code lengths.
-    	int avail = 1;
-    	int used  = 0;
-    	int depth = 0;
-    	
-    	root = 1;
-    	next = 0;
-    	
-    	while(avail > 0)
-    	{
-    		// Count internal nodes at each depth.
-    		while(root < n && w[root] == depth)
-    		{
-    			used++;
-    			root++;
-    		}
-    		
-    		// Assign as leaves any nodes that are not internal.
-    		while(avail > used)
-    		{
-    			w[next] = depth;
-    			next++;
-    			avail--;
-    		}
-    		
-    		// Reset variables.
-    		avail = 2 * used;
-    		used  = 0;
-    		depth++;
-    	}
-    	
-    	 return w;
-    }
-     
-    
-    public static long[] getCanonicalCode(int [] length)
-    {
-    	int n = length.length;
-    	
-        long [] code         = new long[n];
-        long [] shifted_code = new long[n];
-        int max_length = length[n - 1];
-        
-        code[0] = 0;
-        shifted_code[0] = 0;
-        for(int i = 1; i < n; i++)
-        {
-        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
-        	int shift = max_length - length[i];
-        	shifted_code[i] = code[i] >> shift;
-        }
-        
-        long [] reversed_code = new long[n];
-        reversed_code[0] = 0;
-        for(int i = 1; i < n; i++)
-        {
-        	long code_word = shifted_code[i];
-        	int  code_length = length[i];
-        	long code_mask = 1;
-        	
-        	for(int j = 0; j < code_length; j++)
-        	{
-        		long result = code_word & (code_mask << j);
-        		if(result != 0)
-        		{
-        			int shift = (code_length - 1) - j;
-        			reversed_code[i] |= code_mask << shift;
-        		}
-        	}
-        }
-        return reversed_code;
-    }
- 
-    public static BigInteger [] getBigCanonicalCode(int [] length)
-    {
-    	int n = length.length;
-    	
-        BigInteger [] code         = new BigInteger[n];
-        BigInteger [] shifted_code = new BigInteger[n];
-        int max_length = length[n - 1];
-        
-        code[0] = BigInteger.ZERO;
-        shifted_code[0] = BigInteger.ZERO;
-        for(int i = 1; i < n; i++)
-        {
-        	//code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
-        	code[i] = code[i - 1];
-        	int j = (int)(Math.pow(2, max_length - length[i - 1]));
-        	BigInteger addend = BigInteger.valueOf(j);
-        	code[i] = code[i].add(addend);
-        	
-        	int shift = max_length - length[i];
-        	shifted_code[i] = code[i].shiftRight(shift);
-        }
-        
-        BigInteger [] reversed_code = new BigInteger[n];
-        reversed_code[0] = BigInteger.ZERO;
-        for(int i = 1; i < n; i++)
-        {
-        	BigInteger code_word = shifted_code[i];
-        	int  code_length = length[i];
-        	BigInteger code_mask = BigInteger.ONE;
-            reversed_code[i] = BigInteger.ZERO;
-        	
-        	for(int j = 0; j < code_length; j++)
-        	{
-        		BigInteger result = code_word.and(code_mask.shiftLeft(j));
-        		if(result.compareTo(BigInteger.ZERO) != 0)
-        		{
-        			int shift = (code_length - 1) - j;
-        			reversed_code[i] = reversed_code[i].or(code_mask.shiftLeft(shift));
-        		}
-        	}
-        }
-      
-        return reversed_code;
-    }
-    
-    public static double getZeroRatio(int [] code, int [] length, int [] frequency)
-    {
-    	int    n     = code.length;
-    	double ratio = 0;
-    	
-    	int    number_of_zeros = 0;
-    	int    number_of_ones  = 0;
-    	
-    	for(int i = 0; i < n; i++)
-    	{
-    		int mask = 1;
-    		for(int j = 0; j < length[i]; j++)
-    		{
-    			int bit_mask = mask << j;
-    			int bit      = code[i] & bit_mask;
-    			if(bit == 0)
-    				number_of_zeros++;
-    			else
-    				number_of_ones++;
-    		}
-    	}
-    	ratio  = number_of_zeros;
-    	ratio /= number_of_zeros + number_of_ones;
-    	
-    	return ratio;
     }
     
     public static double log2(double value)
