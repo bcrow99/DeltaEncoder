@@ -844,8 +844,10 @@ public class AdaptiveEncoder2
 		            	}
 		            	else
 		            	{
-		            		out.writeInt(segment.length);
-		            		out.writeByte(extra_bits);
+		            		int packed_segment_length = segment.length;
+		            		packed_segment_length <<= 3;
+	            	        packed_segment_length += extra_bits;
+		            	    out.writeInt(packed_segment_length);
 		            	}
 		            	out.write(segment, 0, segment.length);
 		            }

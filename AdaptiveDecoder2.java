@@ -77,7 +77,7 @@ public class AdaptiveDecoder2
 			    
 			    
 	       pixel_shift = in.readByte();
-		   System.out.println("Read byte pixel shift " + pixel_shift);
+		   //System.out.println("Read byte pixel shift " + pixel_shift);
 		   //System.out.println();
 			    
 		   for(int i = 0; i < 3; i++)
@@ -88,29 +88,29 @@ public class AdaptiveDecoder2
 			   int channel_min = in.readInt();
 			   int init_value = in.readInt();
 			   int delta_min  = in.readInt();
-			   System.out.println("Read in channel min " + channel_min);
-			   System.out.println("Read int init value " + init_value);
-			   System.out.println("Read int delta minimum is " + delta_min); 
+			   //System.out.println("Read in channel min " + channel_min);
+			   //System.out.println("Read int init value " + init_value);
+			   //System.out.println("Read int delta minimum is " + delta_min); 
 			   int table_length = 0;
 			    
 			   table_length = in.readShort();
-			   System.out.println("Read short string table length " +  table_length);
+			   //System.out.println("Read short string table length " +  table_length);
 			    
 			   string_table = new int[table_length];
 			   for(int j = 0; j < table_length; j++)
 			    	string_table[j] = in.readInt();
-			   System.out.println("Read ints string table.");
+			   //System.out.println("Read ints string table.");
 			   
 			   // Length of the concatenated segments.
 			   int channel_bit_length = in.readInt();
-			   System.out.println("Read int bit length of concatenated strings is " + channel_bit_length);
+			   //System.out.println("Read int bit length of concatenated strings is " + channel_bit_length);
 			   
 			   // Number of segments
 			   int n = in.readInt(); 
-			   System.out.println("Read int number of segments " + n );
+			   //System.out.println("Read int number of segments " + n );
 			   
 			   int max_segment_length = in.readInt();
-			   System.out.println("Read int max segment byte length " + max_segment_length);
+			   //System.out.println("Read int max segment byte length " + max_segment_length);
 			   
 			   int byte_length = channel_bit_length / 8;
 			   if(channel_bit_length % 8 != 0)
@@ -125,12 +125,11 @@ public class AdaptiveDecoder2
 			       int segment_byte_length = 0;
 				   if(max_segment_length < 8192)
 				   {
-					   System.out.println("Byte length was packed.");
 				       short packed_segment_length = in.readShort();
 				       extra_bits = (short)(packed_segment_length & 0x0007);
 				       segment_byte_length = (packed_segment_length >> 3); 
 				   }
-				   else if(max_segment_length < Short.MAX_VALUE)
+				   else if(max_segment_length <= Short.MAX_VALUE)
 				   {
 					   segment_byte_length = in.readShort();
 					   extra_bits          = in.readByte();
@@ -138,16 +137,13 @@ public class AdaptiveDecoder2
 				   else
 				   {
 					   segment_byte_length = in.readInt();
-					   extra_bits          = in.readByte();   
+					   extra_bits = (short)(segment_byte_length & 0x0007);
+				       segment_byte_length >>= 3; 
 				   }
 				   
-				   System.out.println("Extra bits is " + extra_bits);
-				   System.out.println("Segment byte length is " + segment_byte_length);
-				 
+				  
 				   byte [] segment          = new byte[segment_byte_length];
 			       in.read(segment, 0, segment_byte_length);
-			       System.out.println("Read bytes segment data.");
-			       
 			       int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
 			       int iterations  = (int)segment[segment_byte_length - 1];
 			       int string_type = 0;
