@@ -813,7 +813,6 @@ public class DeltaMapper
                     {
                 	    // The last iteration used temp as a destination,
                 	    // so we need to copy the data from temp to dst.
-    				
                         byte_length = current_length / 8;
                         if(current_length % 8 != 0)
                             byte_length++; 
@@ -1278,30 +1277,7 @@ public class DeltaMapper
             return current_length;
         }
     } 
-    
-    public static int getIterations(byte string[], int length)
-    {
-    	int last_byte = length / 8;
-        if(length % 8 != 0)
-        	last_byte++;
-        int iterations  = string[last_byte];
-        if(iterations < 0)
-            iterations = -iterations;
-        return iterations;
-    }
-    
-    public static int getStringType(byte string[], int length)
-    {
-    	int last_byte = length / 8;
-        if(length % 8 != 0)
-        	last_byte++;
-        int string_type = 0;
-        int iterations  = string[last_byte];
-        if(iterations < 0)
-            string_type = 1;
-        return string_type;
-    }
-    
+   
     public static int[] getChannels(int set_id)
     {
     	int [] channel = new int[3];
@@ -1368,55 +1344,7 @@ public class DeltaMapper
     	}
     	return channel;
     }
-    
-    public static double log2(double value)
-    {
-    	double result = (Math.log(value)/Math.log(2.));
-    	return result;
-    }
-    
-    // Somewhere we are passing histograms with holes in
-    // them.  Tricky problem that also hampers deflate.
-    // We'll filter the zero values--room to improve
-    // efficiency although it shouldn't effect final
-    // result, unlike deflate.
-    public static double getShannonLimit(int [] frequency)
-    {
-    	int n   = frequency.length;
-    	int sum = 0;
-    	for(int i = 0; i < n; i++)
-    	    sum += frequency[i];
-    	double [] weight = new double[n];
-    	for(int i = 0; i < n; i++)
-    	{
-    	    weight[i]  = frequency[i];
-    	    weight[i] /= sum;
-    	}
-    	
-    	double limit = 0;
-    	for(int i = 0; i < n; i++)
-    	{
-    		if(weight[i] != 0)
-    	        limit -= frequency[i] * log2(weight[i]);
-    	}
-    	
-        return limit;
-    }
-
-    // We'll refer to integer values as frequencies,
-    // and fractions (or probabilities) as weights.
-    public static int getCost(int [] length, int [] frequency)
-    {
-    	int n    = length.length;
-    	int cost = 0;
-    	
-    	for(int i = 0; i < n; i++)
-    	{
-    	    cost += length[i] * frequency[i];
-    	}
-    	return cost;
-    }
-    
+ 
     public static double getZeroRatio(byte [] string, int bit_length)
     {
     	int byte_length = bit_length / 8;
