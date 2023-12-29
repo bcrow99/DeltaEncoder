@@ -10,9 +10,6 @@ public class DeltaMapper
 		int length = src1.length;
 		int [] difference = new int[length];
 		
-		// Could throw an exception here, but will
-		// just return uninitialized array the same length
-		// as src1.
 		if(src2.length == length)
 		{
 		    for(int i = 0; i < length; i++)
@@ -305,8 +302,6 @@ public class DeltaMapper
         dst[0]    = init_value;
         int value = init_value;
 
-        // The first int is always 0.  Opportunity to use a code to switch delta types.
-        // To maximize compression it should be eliminated or replaced with a single bit.
         if(src[0] != 0)
         	System.out.println("Wrong code at beginning of delta array.");
         
@@ -354,7 +349,332 @@ public class DeltaMapper
         }
         return dst;
     }
+ 
+    // Get an ideal delta set and a map of which pixels are used.
+    // The combined ideal deltas and map seem to amount to about
+    // the same as the paeth deltas by themselves.
+    public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
+    {
+        int[]  dst        = new int[xdim * ydim];
+        int[] direction   = new int[xdim * ydim];
+        
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        int sum            = 0;
+        
+        int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 3 to mark the delta type ideal.
+            			dst[k]       = 3;
+            			direction[k] = 0;
+            			k++;
+            	    }
+            		else
+            		{
+            			// We don't have an upper or upper diagonal delta to check
+            			// in the first row, so we just use horizontal deltas.
+            		    delta        = src[k] - value;
+                        value       += delta;
+                        dst[k]       = delta;
+                        direction[k] = 0;
+                        sum         += Math.abs(delta);
+                        k++;
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta or diagonal delta to check,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta        = src[k] - init_value;
+            	    	init_value   = src[k];
+            	    	dst[k]       = delta;
+            	    	direction[k] = 1;
+            	    	sum          += Math.abs(delta);
+            	    	k++;
+            	    }
+            	    else
+            	    {
+            	    	// Now we have a set of 3 possible pixels to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c))
+            	    	{
+            	    		delta        = a;
+            	    	    dst[k]       = delta;
+            	    	    direction[k] = 0;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    	else if(Math.abs(b)<= Math.abs(c))
+            	    	{
+            	    		delta        = b;
+            	    		dst[k]       = delta;
+            	    	    direction[k] = 1;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta        = c;
+            	    		dst[k]       = delta;
+            	    	    direction[k] = 2;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;	
+            	    	}
+            	    }
+                }
+        	}
+        }
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        result.add(direction);
+        return result;
+    }
+
+    public static int[] getValuesFromDeltas4(int [] src, int xdim, int ydim, int init_value, int [] direction)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0] = init_value;
+        int value = init_value;
+        
+        if(src[0] != 3)
+        	System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)	
+            {
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            		int current_direction = direction[i * xdim + j]; 
+            		if(current_direction == 0)
+            		    value = dst[i * xdim + j - 1];
+            		else if(current_direction == 1)
+            		    value = dst[(i - 1) * xdim + j];
+            		else if(current_direction == 2)
+            		    value = dst[(i - 1) * xdim + j - 1];
+            	    value += src[i * xdim + j];
+            	    dst[i * xdim + j] = value;
+            	}
+            }
+        }
+        
+        return dst;
+    }
     
+    // Slightly modified paeth filter that checks both diagonals.
+    // This does not seem to help much, but is not well tested.
+    public static ArrayList getDeltasFromValues5(int src[], int xdim, int ydim)
+    {
+    	int[] dst          = new int[xdim * ydim];
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        int sum            = 0;
+        int k              = 0;
+      
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            			dst[k++] = 0;
+            	    }
+            		else
+            		{
+            		    delta     = src[k] - value;
+                        value     += delta;
+                        dst[k++]  = delta;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We dont have a horizontal delta or diagonal delta for our paeth filter,
+            	    	// so we just use a vertical delta, and reset our init value.
+            	    	delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	dst[k++]   = delta;
+            	        sum += Math.abs(delta);
+            	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = a + b - c;
+            	    	
+            	    	
+            	    	// Prediction deltas.
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	
+            	    	// Actual deltas.
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int backward_diagonal_delta   = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	    delta = horizontal_delta;
+            	    	else if(delta_b <= delta_c)
+            	    	    delta = vertical_delta;
+            	    	else
+            	    	    delta = backward_diagonal_delta;
+            	    	
+            	    	
+            	    	c = src[k - xdim + 1];
+            	    	d = a + b - c;
+            	    	delta_a = Math.abs(a - d);
+            	    	delta_b = Math.abs(b - d);
+            	    	delta_c = Math.abs(c - d);
+            	    	
+            	    	int forward_diagonal_delta = src[k] - src[k - xdim + 1];
+            	    	
+            	    	if(delta_c < delta_a && delta_c < delta_b && forward_diagonal_delta < backward_diagonal_delta)
+            	    	{
+            	    		delta = forward_diagonal_delta;
+            	    		System.out.println("Reassigning delta.");
+            	    	}
+            	    	
+            	    	dst[k++] = delta;
+            	    	
+            	    	
+            	    	sum += Math.abs(delta);
+            	    }
+            	    else
+            	    {
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = a + b - c;
+            	    	
+            	    	
+            	    	// Prediction deltas.
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	
+            	    	// Actual deltas.
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	    delta = horizontal_delta;
+            	    	else if(delta_b <= delta_c)
+            	    	    delta = vertical_delta;
+            	    	else
+            	    	    delta = diagonal_delta;
+            	    	dst[k++] = delta;
+            	    	
+            	    	
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        return result;    
+    }
+
+    // This has not been modified from method 3.  Waiting to see if checking both diagonals 
+    // really helps.
+    public static int[] getValuesFromDeltas5(int src[], int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0]    = init_value;
+        int value = init_value;
+
+
+        if(src[0] != 0)
+        	System.out.println("Wrong code at beginning of delta array.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)	
+            {
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            	    int a = dst[i * xdim + j - 1];
+            	    int b = dst[(i - 1) * xdim + j];
+            	    int c = dst[(i - 1) * xdim + j - 1];
+            	    int d = a + b - c;
+            	    
+            	    int delta_a = Math.abs(a - d);
+        	    	int delta_b = Math.abs(b - d);
+        	    	int delta_c = Math.abs(c - d);
+        	    	
+        	    	if(delta_a <= delta_b && delta_a <= delta_c)
+        	    	{
+        	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+        	    	}
+        	    	else if(delta_b <= delta_c)
+        	    	{
+        	    		dst[i * xdim + j] = b + src[i * xdim + j];
+        	    	}
+        	    	else
+        	    	{
+        	    		dst[i * xdim + j] = c + src[i * xdim + j];
+        	    	}
+            	}
+            }
+        }
+        return dst;
+    }
+ 
     
     // These packing/unpacking functions use the maximum length
     // code to dispense with a stop bit in the longest string.
@@ -1235,8 +1555,6 @@ public class DeltaMapper
         	System.arraycopy(src, 0, dst, 0, byte_length);
         	return length;
         }
-        
-        
         
         int current_length = 0;
         if(iterations == 1)
