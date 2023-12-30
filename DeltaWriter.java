@@ -12,43 +12,12 @@ import javax.swing.event.ChangeListener;
 
 public class DeltaWriter
 {
-	BufferedImage original_image;
 	BufferedImage image;
-	JMenuItem     apply_item;
-	JDialog       quant_dialog;
-	JTextField    quant_value;
-	JDialog       shift_dialog;
-	JTextField    shift_value;
-	JDialog       correction_dialog;
-	JTextField    correction_value;
-	
-	
 	ImageCanvas   image_canvas;
-	
 	int           xdim, ydim;
-	
+	JMenuItem     apply_item;
 	String        filename;
-	
-	int [] original_pixel;
-	int [] new_pixel;
-	int [] alpha;
-	int [] blue;
-	int [] green;
-	int [] red;
-	int [] blue_green;
-	int [] red_green;
-	int [] red_blue;
-	
-	int [] new_blue;
-	int [] new_green;
-	int [] new_red;
-	int [] new_blue_green;
-	int [] new_red_green;
-	int [] new_red_blue;
-
-	int [] blue_error;
-	int [] green_error;
-	int [] red_error;
+	int [] pixel;
 	
 	int pixel_quant = 0;
 	int pixel_shift = 0;
@@ -69,11 +38,8 @@ public class DeltaWriter
 	int [] channel_string_type;
 	
 	long file_length;
-	
-	ArrayList channel_list, quantized_channel_list, shifted_channel_list, error_list;
-	ArrayList resized_channel_list;
-	
-	ArrayList delta_list, table_list, string_list;
+
+	ArrayList channel_list, table_list, string_list;
 
 	boolean initialized = false;
 	
@@ -87,7 +53,7 @@ public class DeltaWriter
 		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 	
-		DeltaWriter analyzer = new DeltaWriter(prefix + filename);
+		DeltaWriter writer = new DeltaWriter(prefix + filename);
 	}
 
 	public DeltaWriter(String _filename)
@@ -97,7 +63,7 @@ public class DeltaWriter
 		{
 			File file = new File(filename);
 			file_length            = file.length();
-			original_image = ImageIO.read(file);
+			BufferedImage original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
 			ColorModel color_model = original_image.getColorModel();
 			int number_of_channels = color_model.getNumColorComponents();
@@ -109,39 +75,16 @@ public class DeltaWriter
 			
 			int pixel_length = xdim * ydim * 8;
 		    
-		    original_pixel = new int[xdim * ydim];
-		    new_pixel      = new int[xdim * ydim];
-		    alpha          = new int[xdim * ydim];
-			blue           = new int[xdim * ydim];
-		    green          = new int[xdim * ydim];
-		    red            = new int[xdim * ydim];
-		    blue_green     = new int[xdim * ydim];
-			red_green      = new int[xdim * ydim];
-			red_blue       = new int[xdim * ydim];
-
-		    
+		    // Set in constructor and accessed 
+			// by apply handler.
 		    channel_list = new ArrayList();
 		   
-		    shifted_channel_list = new ArrayList();
-		    
-		    quantized_channel_list = new ArrayList();
-		    
-		    delta_list = new ArrayList();
-		    
+		    // Set by apply handler and accessed
+		    // by save handler.
 		    table_list = new ArrayList();
-		  
 		    string_list = new ArrayList();
-		    
-		    resized_channel_list = new ArrayList();
-		    
-		    blue_error  = new int[xdim * ydim];
-		    green_error = new int[xdim * ydim];
-		    red_error   = new int[xdim * ydim];
-		    error_list  = new ArrayList();
-		    error_list.add(blue_error);
-		    error_list.add(green_error);
-		    error_list.add(red_error);
-		    
+		  
+		
 		    
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
@@ -176,8 +119,8 @@ public class DeltaWriter
 			
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
-				int[]          pixel = new int[xdim * ydim];
-				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, original_pixel, 0, xdim);
+				pixel = new int[xdim * ydim];
+				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, pixel, 0, xdim);
 		        try
 		        {
 		            pixel_grabber.grabPixels();
@@ -192,14 +135,17 @@ public class DeltaWriter
 		            System.exit(1);
 		        }
 		        
+		        int [] alpha = new int[xdim * ydim];
+		        int [] blue = new int[xdim * ydim];
+		        int [] green = new int[xdim * ydim];
+		        int [] red = new int[xdim * ydim];
 		        for(int i = 0; i < xdim * ydim; i++)
 				{
-			        alpha[i] = (original_pixel[i] >> 24) & 0xff;
-				    blue[i]  = (original_pixel[i] >> 16) & 0xff;
-				    green[i] = (original_pixel[i] >> 8) & 0xff; 
-		            red[i]   = original_pixel[i] & 0xff; 
+			        alpha[i] = (pixel[i] >> 24) & 0xff;
+				    blue[i]  = (pixel[i] >> 16) & 0xff;
+				    green[i] = (pixel[i] >> 8) & 0xff; 
+		            red[i]   =  pixel[i] & 0xff; 
 				}
-		        
 		        channel_list.add(blue);
 		        channel_list.add(green);
 		        channel_list.add(red);
@@ -210,10 +156,10 @@ public class DeltaWriter
 			    for(int i = 0; i < xdim; i++)
 				{
 				    for(int j = 0; j < ydim; j++)
-				    	image.setRGB(i, j, original_pixel[j * xdim + i]);	
+				    	image.setRGB(i, j, pixel[j * xdim + i]);	
 				} 
 			    
-			    JFrame frame = new JFrame("DeltaWriter");
+			    JFrame frame = new JFrame("Delta Writer");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
 			        public void windowClosing(WindowEvent event)
@@ -237,7 +183,18 @@ public class DeltaWriter
 				file_menu.add(apply_item);
 				
 				JMenuItem reload_item        = new JMenuItem("Reload");
-				ReloadHandler reload_handler = new ReloadHandler();
+				ActionListener reload_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent event)
+					{
+						for(int i = 0; i < xdim; i++)
+					    	for(int j = 0; j < ydim; j++)
+					    		image.setRGB(i, j, pixel[j * xdim + i]); 
+						System.out.println("Reloaded original image.");
+						image_canvas.repaint();
+					}	
+			    };
+				
 				reload_item.addActionListener(reload_handler);
 				file_menu.add(reload_item);
 				
@@ -249,6 +206,7 @@ public class DeltaWriter
 				JMenu settings_menu = new JMenu("Settings");
 			
 				JMenuItem quant_item = new JMenuItem("Pixel Quantization");
+				JDialog quant_dialog = new JDialog(frame, "Pixel Quantization");
 				ActionListener quant_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -263,13 +221,13 @@ public class DeltaWriter
 					}
 				};
 				quant_item.addActionListener(quant_handler);
-				quant_dialog = new JDialog(frame, "Pixel Quantization");
+				
 				JPanel quant_panel = new JPanel(new BorderLayout());
 				JSlider quant_slider = new JSlider();
 				quant_slider.setMinimum(0);
 				quant_slider.setMaximum(10);
 				quant_slider.setValue(pixel_quant);
-				quant_value = new JTextField(3);
+				JTextField quant_value = new JTextField(3);
 				quant_value.setText(" " + pixel_quant + " ");
 				ChangeListener quant_slider_handler = new ChangeListener()
 				{
@@ -290,7 +248,8 @@ public class DeltaWriter
 				quant_dialog.add(quant_panel);
 				settings_menu.add(quant_item);
 				
-				JMenuItem shift_item = new JMenuItem("Pixel Shift");
+				JMenuItem shift_item   = new JMenuItem("Pixel Shift");
+				JDialog   shift_dialog = new JDialog(frame, "Pixel Shift");
 				ActionListener shift_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -305,13 +264,13 @@ public class DeltaWriter
 					}
 				};
 				shift_item.addActionListener(shift_handler);
-				shift_dialog = new JDialog(frame, "Pixel Shift");
+				
 				JPanel shift_panel = new JPanel(new BorderLayout());
 				JSlider shift_slider = new JSlider();
 				shift_slider.setMinimum(0);
 				shift_slider.setMaximum(7);
 				shift_slider.setValue(correction);
-				shift_value = new JTextField(3);
+				JTextField shift_value = new JTextField(3);
 				shift_value.setText(" " + pixel_shift + " ");
 				ChangeListener shift_slider_handler = new ChangeListener()
 				{
@@ -321,9 +280,7 @@ public class DeltaWriter
 						pixel_shift = slider.getValue();
 						shift_value.setText(" " + pixel_shift + " ");
 						if(slider.getValueIsAdjusting() == false)
-						{
 							apply_item.doClick();
-						}
 					}
 				};
 				shift_slider.addChangeListener(shift_slider_handler);
@@ -333,7 +290,12 @@ public class DeltaWriter
 				
 				settings_menu.add(shift_item);
 				
+				// The correction value is a convenience to help see what
+				// quantizing does to the original image, instead of
+				// simply switching back and forth between the original
+				// image and the quantized image.
 				JMenuItem correction_item = new JMenuItem("Error Correction");
+				JDialog correction_dialog = new JDialog(frame, "Error Correction");
 				ActionListener correction_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -348,13 +310,13 @@ public class DeltaWriter
 					}
 				};
 				correction_item.addActionListener(correction_handler);
-				correction_dialog = new JDialog(frame, "Error Correction");
+				
 				JPanel correction_panel = new JPanel(new BorderLayout());
 				JSlider correction_slider = new JSlider();
 				correction_slider.setMinimum(0);
 				correction_slider.setMaximum(10);
 				correction_slider.setValue(correction);
-				correction_value = new JTextField(3);
+				JTextField correction_value = new JTextField(3);
 				correction_value.setText(" " + correction + " ");
 				ChangeListener correction_slider_handler = new ChangeListener()
 				{
@@ -364,9 +326,7 @@ public class DeltaWriter
 						correction = slider.getValue();
 						correction_value.setText(" " + correction + " ");
 						if(slider.getValueIsAdjusting() == false)
-						{
 							apply_item.doClick();
-						}
 					}
 				};
 				correction_slider.addChangeListener(correction_slider_handler);
@@ -409,7 +369,7 @@ public class DeltaWriter
 		// with every change in the parameters.
 		public void actionPerformed(ActionEvent event)
 		{
-			shifted_channel_list.clear();
+			ArrayList shifted_channel_list = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
 			{
@@ -420,7 +380,7 @@ public class DeltaWriter
 				shifted_channel_list.add(shifted_channel);
 			}
 			
-			quantized_channel_list.clear();
+			ArrayList quantized_channel_list = new ArrayList();
 	       
 			int new_xdim = xdim;
 		    int new_ydim = ydim;
@@ -519,7 +479,7 @@ public class DeltaWriter
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 			
 			table_list.clear();
-			string_list.clear();
+			string_list.clear();;
 			
 			int total_bits = 0;
 			int total_map_bits = 0;
@@ -580,7 +540,7 @@ public class DeltaWriter
 			
 			System.out.println();
 			
-			resized_channel_list.clear();
+			ArrayList resized_channel_list = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
 		    {
@@ -609,122 +569,121 @@ public class DeltaWriter
 			    	int number_unpacked = DeltaMapper.unpackStrings2(string, table, delta);
 					if(number_unpacked != new_xdim * new_ydim)
 					    System.out.println("Number of values unpacked does not agree with image dimensions.");	
-					else
-					    System.out.println("Unpacked strings.");	
 			    }
 			    
 			    for(int k = 1; k < delta.length; k++)
 			    	delta[k] += channel_delta_min[j];
-			    int [] result = DeltaMapper.getValuesFromDeltas3(delta, new_xdim , new_ydim, channel_init[j]);
+			    int [] channel = DeltaMapper.getValuesFromDeltas3(delta, new_xdim , new_ydim, channel_init[j]);
 				if(j > 2)
-					for(int k = 0; k < result.length; k++)
-						result[k] += channel_min[j];
-				
-				
+					for(int k = 0; k < channel.length; k++)
+						channel[k] += channel_min[j];
 				if(new_xdim != xdim && new_ydim != ydim)
 				{
-					int [] resized_channel = ResizeMapper.resize(result, new_xdim, xdim, ydim);
+					int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
 					resized_channel_list.add(resized_channel);
 				    
 				}
 				else
-					resized_channel_list.add(result);
+					resized_channel_list.add(channel);
 		    }
+			
+			int [] blue  = new int[xdim * ydim];
+			int [] green = new int[xdim * ydim];
+			int [] red   = new int[xdim * ydim];
 			
 			if(min_set_id == 0)
 			{
-				new_blue  = (int [])resized_channel_list.get(0);
-				new_green = (int [])resized_channel_list.get(1);
-				new_red   = (int [])resized_channel_list.get(2);
+				blue  = (int [])resized_channel_list.get(0);
+				green = (int [])resized_channel_list.get(1);
+				red   = (int [])resized_channel_list.get(2);
 		    }
 			else if(min_set_id == 1)
 			{ 
-				new_blue      = (int [])resized_channel_list.get(0);
-				new_red       = (int [])resized_channel_list.get(1);
-				new_red_green = (int [])resized_channel_list.get(2);
-				new_green     = DeltaMapper.getDifference(new_red, new_red_green);
+				blue  = (int [])resized_channel_list.get(0);
+				red   = (int [])resized_channel_list.get(1);
+				int [] red_green = (int [])resized_channel_list.get(2);
+				green = DeltaMapper.getDifference(red, red_green);
 		    }
 			else if(min_set_id == 2)
 			{ 
-				new_blue       = (int [])resized_channel_list.get(0);
-				new_red        = (int [])resized_channel_list.get(1);
-				new_blue_green = (int [])resized_channel_list.get(2);
-				new_green      = DeltaMapper.getDifference(new_blue, new_blue_green);
+				blue  = (int [])resized_channel_list.get(0);
+				red   = (int [])resized_channel_list.get(1);
+				int [] blue_green = (int [])resized_channel_list.get(2);
+				green = DeltaMapper.getDifference(blue, blue_green);
 			}
 			else if(min_set_id == 3)
 			{ 
-				new_blue       = (int [])resized_channel_list.get(0);
-				new_blue_green = (int [])resized_channel_list.get(1);
-				new_green      = DeltaMapper.getDifference(new_blue, new_blue_green);
-				new_red_green  = (int [])resized_channel_list.get(2);
-				new_red = DeltaMapper.getSum(new_red_green, new_green);
+				blue       = (int [])resized_channel_list.get(0);
+				int [] blue_green = (int [])resized_channel_list.get(1);
+				green = DeltaMapper.getDifference(blue, blue_green);
+				int [] red_green  = (int [])resized_channel_list.get(2);
+				red = DeltaMapper.getSum(red_green, green);
 			}
 			else if(min_set_id == 4)
 			{ 
-				new_blue       = (int [])resized_channel_list.get(0);
-				new_blue_green = (int [])resized_channel_list.get(1);
-				new_green      = DeltaMapper.getDifference(new_blue, new_blue_green);
-				new_red_blue   = (int [])resized_channel_list.get(2);
-				new_red        = DeltaMapper.getSum(new_blue, new_red_blue);
+				blue  = (int [])resized_channel_list.get(0);
+				int [] blue_green = (int [])resized_channel_list.get(1);
+				green = DeltaMapper.getDifference(blue, blue_green);
+				int [] red_blue   = (int [])resized_channel_list.get(2);
+				red        = DeltaMapper.getSum(blue, red_blue);
 			}
 		    else if(min_set_id == 5)
 			{
-		    	new_green   = (int [])resized_channel_list.get(0);
-		    	new_red     = (int [])resized_channel_list.get(1);
-		    	new_blue_green = (int [])resized_channel_list.get(2);
-		    	new_blue = DeltaMapper.getSum(new_blue_green, new_green);
+		    	green = (int [])resized_channel_list.get(0);
+		    	red   = (int [])resized_channel_list.get(1);
+		    	int [] blue_green = (int [])resized_channel_list.get(2);
+		    	blue  = DeltaMapper.getSum(blue_green, green);
 			}
 			else if(min_set_id == 6)
 			{
-				new_red     = (int [])resized_channel_list.get(0);
-				new_blue_green = (int [])resized_channel_list.get(1);
-				new_red_green = (int [])resized_channel_list.get(2);
-				for(int i = 0; i < new_red_green.length; i++)
-					new_red_green[i] = -new_red_green[i];
-				new_green = DeltaMapper.getSum(new_red_green, new_red);
-				new_blue = DeltaMapper.getSum(new_blue_green, new_green);	
+				red     = (int [])resized_channel_list.get(0);
+				int [] blue_green = (int [])resized_channel_list.get(1);
+				int [] red_green  = (int [])resized_channel_list.get(2);
+				for(int i = 0; i < red_green.length; i++)
+					red_green[i] = -red_green[i];
+				green = DeltaMapper.getSum(red_green, red);
+				blue = DeltaMapper.getSum(blue_green, green);	
 			}
 			else if(min_set_id == 7)
 			{
-				new_green   = (int [])resized_channel_list.get(0);
-				new_blue_green = (int [])resized_channel_list.get(1);
-				new_blue = DeltaMapper.getSum(new_green, new_blue_green);
-				new_red_green = (int [])resized_channel_list.get(2);
-				new_red  = DeltaMapper.getSum(new_green, new_red_green);
+				green   = (int [])resized_channel_list.get(0);
+				int [] blue_green = (int [])resized_channel_list.get(1);
+				blue = DeltaMapper.getSum(green, blue_green);
+				int [] red_green = (int [])resized_channel_list.get(2);
+				red  = DeltaMapper.getSum(green, red_green);
 			}
 			else if(min_set_id == 8)
 			{
-				new_green     = (int [])resized_channel_list.get(0);
-				new_red_green = (int [])resized_channel_list.get(1);
-				new_red       = DeltaMapper.getSum(new_green, new_red_green);
-				new_red_blue  = (int [])resized_channel_list.get(1);
-				new_blue      = DeltaMapper.getDifference(new_red, new_red_blue);
+				green = (int [])resized_channel_list.get(0);
+				int [] red_green = (int [])resized_channel_list.get(1);
+				red   = DeltaMapper.getSum(green, red_green);
+				int [] red_blue  = (int [])resized_channel_list.get(1);
+				blue  = DeltaMapper.getDifference(red, red_blue);
 		    }
 			else if(min_set_id == 9)
 			{
-				new_red       = (int [])resized_channel_list.get(0);
-				new_red_green = (int [])resized_channel_list.get(1);
-				new_green     = DeltaMapper.getDifference(new_red, new_red_green); 
-				new_red_blue  = (int [])resized_channel_list.get(2);
-				new_blue      = DeltaMapper.getDifference(new_red, new_red_blue);
+				red   = (int [])resized_channel_list.get(0);
+				int [] red_green = (int [])resized_channel_list.get(1);
+				green = DeltaMapper.getDifference(red, red_green); 
+				int [] red_blue  = (int [])resized_channel_list.get(2);
+				blue  = DeltaMapper.getDifference(red, red_blue);
 			}
 			
 			int [] original_blue  = (int [])channel_list.get(0);
 		    int [] original_green = (int [])channel_list.get(1);
 		    int [] original_red   = (int [])channel_list.get(2);
+		
 		    
-		    int [] blue_error   = (int [])error_list.get(0);
-		    int [] green_error  = (int [])error_list.get(1);
-		    int [] red_error    = (int [])error_list.get(2);
+		    int [][] error = new int [3][xdim * ydim];
 		    
 		    for(int i = 0; i < xdim * ydim; i++)
 		    {
-		    	new_blue[i]      <<= pixel_shift;
-		    	blue_error[i]  = original_blue[i] - new_blue[i];
-		    	new_green[i]     <<= pixel_shift;
-		    	green_error[i] = original_green[i] - new_green[i];
-		    	new_red[i]       <<= pixel_shift;
-		    	red_error[i]   = original_red[i] - new_red[i];
+		    	blue[i]  <<= pixel_shift;
+		    	green[i] <<= pixel_shift;
+		    	red[i]   <<= pixel_shift;
+		    	error[0][i] = original_blue[i] - blue[i];
+		    	error[1][i] = original_green[i] - green[i];
+		    	error[2][i]  = original_red[i] - red[i];
 		    }
 	
 		    double correction_value = 0;
@@ -737,23 +696,23 @@ public class DeltaWriter
 					
 					int pixel = 0;
 					
-		    		correction_value = blue_error[k];
+		    		correction_value = error[0][k];
 		    		factor = correction;
 		    		factor /= 10;
 		    		correction_value *= factor;
-					pixel |= (new_blue[k] + (int)correction_value) << 16;
+					pixel |= (blue[k] + (int)correction_value) << 16;
 					
-					correction_value = green_error[k];
+					correction_value = error[1][k];
 		    		factor = correction;
 		    		factor /= 10;
 		    		correction_value *= factor;
-				    pixel |= (new_green[k] + (int)correction_value) << 8;
+				    pixel |= (green[k] + (int)correction_value) << 8;
 					
-					correction_value = red_error[k];
+					correction_value = error[2][k];
 		    		factor = correction;
 		    		factor /= 10;
 		    		correction_value *= factor;
-					pixel |= new_red[k] + (int)correction_value;
+					pixel |= red[k] + (int)correction_value;
 					
 				    image.setRGB(j, i, pixel);
 				}
@@ -761,7 +720,6 @@ public class DeltaWriter
 		   
 			image_canvas.repaint();
 			initialized = true;
-			
 			// Current information can now be located with min set id from channel arrays,
 			// along with table list and string list.
 		}
@@ -771,21 +729,19 @@ public class DeltaWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			//System.out.print("Saving deltas ...");
-			//System.out.println("saved.");
 			if(!initialized)
 				apply_item.doClick();
 			int channel_id[] = DeltaMapper.getChannels(min_set_id);
-			
 			
 			try
 		    {
 		        DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
 		        
-		        // Dimensions of full sized frame.
+		        // Dimensions of full sized frame
 		        out.writeShort(xdim);
 		        out.writeShort(ydim);
 		        
+		        // Compression parameters
 		        out.writeByte(pixel_shift);
 		        out.writeByte(pixel_quant);
 		        out.writeByte(min_set_id);
@@ -800,7 +756,7 @@ public class DeltaWriter
 		        	if(channel_compressed_length[j] == channel_length[j])
 		        	{
 		        		out.writeByte(0);
-		        		out.writeInt(channel_length[j]);
+		        		out.writeInt(channel_length[j]);	
 		        	}
 		        	else
 		        	{
@@ -813,14 +769,19 @@ public class DeltaWriter
 		            out.writeShort(table.length);
 		            for(int k = 0; k < table.length; k++)
 		                out.writeInt(table[k]);
-		            
-		            
-		            
-		            
-		            // We need to clip the string to get maximum compression;
+		           
+		            // We need to clip the string to get maximum compression.
+		            System.out.println("Got here 1.");
 		            byte [] unclipped_string = (byte [])string_list.get(i);
-		            int byte_length = channel_compressed_length[j] / 8 + 1;
+		            System.out.println("Got here 2.");
+		            System.out.println("Unclipped string length is " + unclipped_string.length);
+		            int byte_length = channel_compressed_length[j] / 8;
+		            // If we have odd bits, add a byte.
 		            if(channel_compressed_length[j] % 8 != 0)
+		            	byte_length++; 
+		            // If we have a compressed string, add a byte to store 
+		            // how many times it was compressed.
+		            if(channel_compressed_length[j] < channel_length[j])
 		            	byte_length++;
 		            
 		            byte [] string = new byte[byte_length];
@@ -838,27 +799,6 @@ public class DeltaWriter
 			{
 				System.out.println(e.toString());
 			}
-			
-		}
-	}
-	
-	
-	class ReloadHandler implements ActionListener
-	{
-		public void actionPerformed(ActionEvent event)
-		{
-			
-			for(int i = 0; i < xdim; i++)
-		    {
-		    	for(int j = 0; j < ydim; j++)
-		    	{
-		    		image.setRGB(i, j, original_pixel[j * xdim + i]);
-		    	}
-		    	
-		    } 
-			System.out.println("Reloaded original image.");
-			System.out.println();
-			image_canvas.repaint();
 		}
 	}
 }
