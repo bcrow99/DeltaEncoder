@@ -40,7 +40,7 @@ public class AdaptiveWriter
 	
 	long file_length;
 
-	ArrayList channel_list, table_list, string_list;
+	ArrayList channel_list, table_list, string_list, channel_data;
 
 	boolean initialized = false;
 	
@@ -84,9 +84,9 @@ public class AdaptiveWriter
 		    // by save handler.
 		    table_list = new ArrayList();
 		    string_list = new ArrayList();
-		  
-		
 		    
+		    channel_data = new ArrayList();
+		 
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
 		    channel_string[1] = new String("green");
@@ -522,7 +522,8 @@ public class AdaptiveWriter
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 			
 			table_list.clear();
-			string_list.clear();;
+			string_list.clear();
+			channel_data.clear();
 			
 			int total_bits = 0;
 			int total_map_bits = 0;
@@ -547,15 +548,16 @@ public class AdaptiveWriter
 				byte [] compression_string = new byte[xdim * ydim * 4];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
 				
-				int segment_length;
+				
 				if(segment != 0)
 				{
+					channel_compressed_length[j] = channel_length[j];
 					int divisor = 1;
-					int increment = ydim / 10;
+					int increment = ydim / 5;
 					for(int k = 0; k < segment; k++)
 						divisor += increment;
 					
-					segment_length = channel_length[j] / divisor;
+					int segment_length = channel_length[j] / divisor;
 					
 					// The segment length has to be an even multiple of 8,
 					// with the exception of the last segment.
@@ -567,43 +569,58 @@ public class AdaptiveWriter
 					System.out.println("Number of segments is " + number_of_segments);
 					System.out.println("Minimum segment length is " + segment_length);	
 					System.out.println();
+					
+					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, channel_length[j], segment_length);
+					channel_data.add(segment_data_list);
+					
+					ArrayList segment_length_list = (ArrayList)segment_data_list.get(0);
+					int number_of_merged_segments = segment_length_list.size();
+					System.out.println("Number of merged segments is " + number_of_merged_segments);
+					int current_length = 0;
+					for(int k = 0; k < segment_length_list.size(); k++)
+					{
+						current_length = (int)segment_length_list.get(k);
+						total_bits += current_length;
+					}
+					
+					// A convenience so we can construct an image in the writer
+					// easily.
+					string_list.add(string);
 				}
-				
-				double zero_one_ratio = new_xdim * new_ydim;
-		        if(histogram.length > 1)
-		        {
-					int min_value = Integer.MAX_VALUE;
-					for(int k = 0; k < histogram.length; k++)
+				else
+				{
+				    double zero_one_ratio = new_xdim * new_ydim;
+		            if(histogram.length > 1)
+		            {
+					    int min_value = Integer.MAX_VALUE;
+					    for(int k = 0; k < histogram.length; k++)
 						 if(histogram[k] < min_value)
 							min_value = histogram[k];
-					zero_one_ratio -= min_value;
-		        }	
-			    zero_one_ratio  /= channel_length[j];
+					    zero_one_ratio -= min_value;
+		            }	
+			        zero_one_ratio  /= channel_length[j];
 			    
-			    if(zero_one_ratio > .5)
-			    {
-					channel_compressed_length[j] = DeltaMapper.compressZeroStrings(string, channel_length[j], compression_string);
-					channel_string_type[j] = 0;
-					if(channel_compressed_length[j] == channel_length[j])
-						System.out.println("Channel string type 0 did not compress.");
-					string_list.add(compression_string);
-			    }
-			    else
-			    {
-			    	channel_compressed_length[j] = DeltaMapper.compressOneStrings(string, channel_length[j], compression_string);
-			    	channel_string_type[j] = 1;
-					if(channel_compressed_length[j] == channel_length[j])
-						System.out.println("Channel string type 1 did not compress.");
-					string_list.add(compression_string);
-			    }
-			    
-			    if(segment == 0)
-			    {
+			        if(zero_one_ratio > .5)
+			        {
+					    channel_compressed_length[j] = DeltaMapper.compressZeroStrings(string, channel_length[j], compression_string);
+					    channel_string_type[j] = 0;
+					    if(channel_compressed_length[j] == channel_length[j])
+						    System.out.println("Channel string type 0 did not compress.");
+					    string_list.add(compression_string);
+			        }
+			        else
+			        {
+			    	    channel_compressed_length[j] = DeltaMapper.compressOneStrings(string, channel_length[j], compression_string);
+			    	    channel_string_type[j] = 1;
+					    if(channel_compressed_length[j] == channel_length[j])
+						    System.out.println("Channel string type 1 did not compress.");
+					    string_list.add(compression_string);
+			        }
 			    	System.out.println("Number of segments is 1.");
 			    	System.out.println("Bitlength is " + channel_compressed_length[j]);
 			    	System.out.println();
+			    	total_bits += channel_compressed_length[j];
 			    }
-			    total_bits += channel_compressed_length[j];
 			}
 			int total_bytes = total_bits / 8;
 			double compression_rate = total_bytes;
@@ -837,26 +854,82 @@ public class AdaptiveWriter
 		            for(int k = 0; k < table.length; k++)
 		                out.writeInt(table[k]);
 		           
-		            // We need to clip the string to get maximum compression.
-		            byte [] unclipped_string = (byte [])string_list.get(i);
-		            int byte_length = channel_compressed_length[j] / 8;
-		            // If we have odd bits, add a byte.
-		            if(channel_compressed_length[j] % 8 != 0)
-		            	byte_length++; 
-		            // Add a byte to store how many times the string was compressed.
-		            byte_length++;
+		            if(segment == 0)
+		            {
+		            	int number_of_segments = 1;
+		            	out.writeInt(number_of_segments);
+		            	
+		                // We need to clip the string to get maximum compression.
+		                byte [] unclipped_string = (byte [])string_list.get(i);
+		                int byte_length = channel_compressed_length[j] / 8;
+		                // If we have odd bits, add a byte.
+		                if(channel_compressed_length[j] % 8 != 0)
+		            	    byte_length++; 
+		                // Add a byte to store how many times the string was compressed.
+		                byte_length++;
 		            
-		            byte [] string = new byte[byte_length];
-		            for(int k = 0; k < byte_length; k++)
-		            	string[k] = unclipped_string[k];
-		            // If the string was uncompressed, make sure
-		            // the last byte is 0.
-		            if(channel_compressed_length[j] == channel_length[j])
-		            	string[byte_length - 1] = 0;
+		                byte [] string = new byte[byte_length];
+		                for(int k = 0; k < byte_length; k++)
+		            	    string[k] = unclipped_string[k];
 		            
-		            out.writeInt(string.length);
-		            out.write(string, 0, string.length);
+		                // If the string was uncompressed, make sure
+		                // the last byte is 0, so the reader can check.
+		                if(channel_compressed_length[j] == channel_length[j])
+		            	    string[byte_length - 1] = 0;
+		            
+		                out.writeInt(string.length);
+		                out.write(string, 0, string.length);
+		            }
+		            else
+			        {
+			            ArrayList segment_data_list = (ArrayList)channel_data.get(i);
+						ArrayList segment_length    = (ArrayList)segment_data_list.get(0);
+						ArrayList segment_data      = (ArrayList)segment_data_list.get(1);
+						int max_segment_byte_length = (int)segment_data_list.get(2);
+						
+			            // Number of segments.
+			            int n = segment_data.size();
+			            out.writeInt(n);
+			            //System.out.println("Wrote int number of segments " + n);
+			            
+			            out.writeInt(max_segment_byte_length);
+			            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
+			            
+			            if(max_segment_byte_length < 8192)
+			            	System.out.println("Max segment length small enough to pack extra bits in a short.");
+			            else if (max_segment_byte_length > Short.MAX_VALUE)
+			            	System.out.println("Max segment length too large to fit in a short.");
+			            
+			            for(int k = 0; k < n; k++)
+			            {
+			            	int segment_bit_length  = (int)segment_length.get(k);
+			            	byte [] segment = (byte [])segment_data.get(k);
+			            	short extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
+			            	
+			            	if(max_segment_byte_length < 80192)
+			            	{
+			            	    short packed_segment_length = (short)segment.length;
+		            	        packed_segment_length <<= 3;
+		            	        packed_segment_length += extra_bits;
+			            	    out.writeShort(packed_segment_length);
+			            	}
+			            	else if(max_segment_byte_length <= Short.MAX_VALUE)
+			            	{
+			            		out.writeShort(segment.length);	
+			            		out.writeByte(extra_bits);
+			            	}
+			            	else
+			            	{
+			            		int packed_segment_length = segment.length;
+			            		packed_segment_length <<= 3;
+		            	        packed_segment_length += extra_bits;
+			            	    out.writeInt(packed_segment_length);
+			            	}
+			            	out.write(segment, 0, segment.length);
+			            }
+			        }
 		        }
+		        
 		        
 		        out.flush();
 		        out.close();

@@ -100,15 +100,101 @@ public class AdaptiveReader
 				
 				table_list.add(table);
 				
-				int string_length = in.readInt();
-				System.out.println("Read short string byte length " +  string_length);
+				int number_of_segments = in.readInt();
+				System.out.println("Number of segments in string is " + number_of_segments);
+				
+				if(number_of_segments == 1)
+				{
+				    int string_length = in.readInt();
+				    System.out.println("Read short string byte length " +  string_length);
                 
-				byte [] string    = new byte[string_length];
-			    in.read(string, 0, string_length);
-			    System.out.println("Read string byte array");
-			    string_list.add(string);
-		    	
-		    	System.out.println();
+				    byte [] string    = new byte[string_length];
+			        in.read(string, 0, string_length);
+			        System.out.println("Read string byte array");
+			        string_list.add(string);
+				}
+				else
+				{
+					int max_segment_length = in.readInt();
+					System.out.println("Read int max segment byte length " + max_segment_length);
+					   
+					int byte_length = length[i] / 8;
+					if(length[i] % 8 != 0)
+						   byte_length++;
+					byte_length++;
+					   
+					byte [] string = new byte[byte_length];
+					int     offset = 0;
+					
+					int n = number_of_segments;
+					for(int k = 0; k < n; k++)
+					{
+					    short extra_bits = 0;
+					    int segment_byte_length = 0;
+					    if(max_segment_length < 8192)
+						{
+						    short packed_segment_length = in.readShort();
+						    extra_bits = (short)(packed_segment_length & 0x0007);
+						    segment_byte_length = (packed_segment_length >> 3); 
+						 }
+						 else if(max_segment_length <= Short.MAX_VALUE)
+						 {
+							segment_byte_length = in.readShort();
+							extra_bits          = in.readByte();
+						 }
+						 else
+						 {
+					         segment_byte_length = in.readInt();
+							 extra_bits = (short)(segment_byte_length & 0x0007);
+						     segment_byte_length >>= 3; 
+						 }
+						   
+						  
+						 byte [] segment          = new byte[segment_byte_length];
+					     in.read(segment, 0, segment_byte_length);
+					     int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
+					     int iterations  = (int)segment[segment_byte_length - 1];
+					     int string_type = 0;
+					     if(iterations < 0)
+					     {
+					         iterations  = -iterations;
+					    	 string_type = 1;
+					     }
+					     if(iterations == 0)
+					     {
+					         for(int m = 0; m < segment.length - 1; m++) 
+					    	     string[offset + m] = segment[m];
+					    	 offset += segment.length - 1;
+					     }
+					     else
+					     {
+					    	 int decompression_length = 0;
+					    	 byte [] decompressed_segment = new byte[max_segment_length];
+					    	 
+					    	 if(string_type == 0)
+					    	     decompression_length = DeltaMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);   
+					    	 else
+					    		 decompression_length = DeltaMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
+					    	   
+					    	 byte_length = decompression_length / 8;
+					    	 if(decompression_length % 8 != 0)
+					    	 {
+					    		 if(k == n - 1)
+					    			   byte_length++;
+					    		 else
+					    		 {
+					    	         System.out.println("Uneven segment at index " + j);
+					    			 System.out.println("Iterations is " + iterations);
+					    			 System.out.println("String type is " + string_type);
+					    			 System.out.println();
+					    		  }
+					    	  }
+					    	  System.arraycopy(decompressed_segment, 0, string, offset, byte_length);
+					    	  offset += byte_length; 
+					       }
+					 }
+					 string_list.add(string);
+				}
 		    }
 		    
 		    ArrayList channel_list = new ArrayList();
