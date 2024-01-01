@@ -771,10 +771,10 @@ public class DeltaWriter
 		                out.writeInt(table[k]);
 		           
 		            // We need to clip the string to get maximum compression.
-		            System.out.println("Got here 1.");
+		            //System.out.println("Got here 1.");
 		            byte [] unclipped_string = (byte [])string_list.get(i);
-		            System.out.println("Got here 2.");
-		            System.out.println("Unclipped string length is " + unclipped_string.length);
+		            //System.out.println("Got here 2.");
+		            //System.out.println("Unclipped string length is " + unclipped_string.length);
 		            int byte_length = channel_compressed_length[j] / 8;
 		            // If we have odd bits, add a byte.
 		            if(channel_compressed_length[j] % 8 != 0)
