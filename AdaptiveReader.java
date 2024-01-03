@@ -131,6 +131,7 @@ public class AdaptiveReader
 					{
 					    short extra_bits = 0;
 					    int segment_byte_length = 0;
+					    /*
 					    if(max_segment_length < 8192)
 						{
 						    short packed_segment_length = in.readShort();
@@ -148,6 +149,10 @@ public class AdaptiveReader
 							 extra_bits = (short)(segment_byte_length & 0x0007);
 						     segment_byte_length >>= 3; 
 						 }
+						 */
+					    
+					     segment_byte_length = in.readInt();
+					     extra_bits          = in.readByte();
 						   
 						  
 						 byte [] segment          = new byte[segment_byte_length];

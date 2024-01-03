@@ -310,7 +310,7 @@ public class AdaptiveWriter
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(10);
+				segment_slider.setMaximum(13);
 				segment_slider.setValue(segment);
 				JTextField segment_value = new JTextField(3);
 				segment_value.setText(" " + segment + " ");
@@ -547,17 +547,27 @@ public class AdaptiveWriter
 				byte [] string         = new byte[xdim * ydim * 4];
 				byte [] compression_string = new byte[xdim * ydim * 4];
 				channel_length[j]      = DeltaMapper.packStrings2(delta, string_table, string);
-				
-				
+					
 				if(segment != 0)
 				{
 					channel_compressed_length[j] = channel_length[j];
 					int divisor = 1;
 					int increment = ydim / 5;
 					for(int k = 0; k < segment; k++)
-						divisor += increment;
+					{
+						if(k < 11)
+						    divisor += increment;
+					}
 					
 					int segment_length = channel_length[j] / divisor;
+					
+					if(segment > 10)
+					{
+						for (int k = 11; k <= segment; k++)
+						{
+							segment_length /= 2;
+						}
+					}
 					
 					// The segment length has to be an even multiple of 8,
 					// with the exception of the last segment.
@@ -906,6 +916,9 @@ public class AdaptiveWriter
 			            	byte [] segment = (byte [])segment_data.get(k);
 			            	short extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
 			            	
+			            	out.writeInt(segment.length);
+			            	out.writeByte(extra_bits);
+			            	/*
 			            	if(max_segment_byte_length < 80192)
 			            	{
 			            	    short packed_segment_length = (short)segment.length;
@@ -925,6 +938,7 @@ public class AdaptiveWriter
 		            	        packed_segment_length += extra_bits;
 			            	    out.writeInt(packed_segment_length);
 			            	}
+			            	*/
 			            	out.write(segment, 0, segment.length);
 			            }
 			        }
