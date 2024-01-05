@@ -72,6 +72,7 @@ public class AdaptiveReader
 		    byte compressed[] = new byte[3];
 		    int  length[]     = new int[3];
 		    int  compressed_length[] = new int[3];
+		    byte channel_iterations[] = new byte[3];
 		    
 		    ArrayList string_list = new ArrayList();
 		    ArrayList table_list  = new ArrayList();
@@ -88,8 +89,12 @@ public class AdaptiveReader
 		    	System.out.println("Read int channel delta min " + delta_min[i]);
 		    	
 		    	length[i] = in.readInt();
-		    	System.out.println("Read bit length of possibly compressed string " + length[i]);
+		    	System.out.println("Read bit length of uncompressed string " + length[i]);
+		    	compressed_length[i] = in.readInt();
+		    	System.out.println("Read bit length of compressed string " + compressed_length[i]);
 		    	
+		    	channel_iterations[i] = in.readByte();
+		    	System.out.println("Read iterations " + channel_iterations[i]);
 				int table_length = in.readShort();
 				System.out.println("Read short table length " +  table_length);
 				    
@@ -117,12 +122,22 @@ public class AdaptiveReader
 				{
 					int max_segment_length = in.readInt();
 					System.out.println("Read int max segment byte length " + max_segment_length);
-					   
-					int byte_length = length[i] / 8;
-					if(length[i] % 8 != 0)
+					 
+					int byte_length = 0;
+					if(channel_iterations[i] == 0)
+					{
+					   byte_length = length[i] / 8;
+					   if(length[i] % 8 != 0)
 						   byte_length++;
-					byte_length++;
-					   
+					    byte_length++;
+					}  
+					else
+					{
+						byte_length = compressed_length[i] / 8;	
+						if(compressed_length[i] % 8 != 0)
+							   byte_length++;
+						byte_length++;
+					}
 					byte [] string = new byte[byte_length];
 					int     offset = 0;
 					
@@ -131,7 +146,7 @@ public class AdaptiveReader
 					{
 					    short extra_bits = 0;
 					    int segment_byte_length = 0;
-					    /*
+					   
 					    if(max_segment_length < 8192)
 						{
 						    short packed_segment_length = in.readShort();
@@ -149,30 +164,54 @@ public class AdaptiveReader
 							 extra_bits = (short)(segment_byte_length & 0x0007);
 						     segment_byte_length >>= 3; 
 						 }
-						 */
+						
 					    
+					     /*
 					     segment_byte_length = in.readInt();
 					     extra_bits          = in.readByte();
-						   
-						  
+						 */ 
+						 
+					    /*
+					    if((max_segment_length) < 8192)
+						{
+						    short packed_segment_length = in.readShort();
+						    extra_bits = (short)(packed_segment_length & 0x0007);
+						    segment_byte_length = (packed_segment_length >> 3); 
+						 }
+						 else if((max_segment_length) <= Short.MAX_VALUE)
+						 {
+							segment_byte_length = in.readShort();
+							extra_bits          = in.readByte();
+						 }
+						 else
+						 {
+					         segment_byte_length = in.readInt();
+							 extra_bits = (short)(segment_byte_length & 0x0007);
+						     segment_byte_length >>= 3; 
+						 }
+					     */
+					    
 						 byte [] segment          = new byte[segment_byte_length];
 					     in.read(segment, 0, segment_byte_length);
 					     int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
 					     int iterations  = (int)segment[segment_byte_length - 1];
 					     int string_type = 0;
 					     if(iterations < 0)
-					     {
-					         iterations  = -iterations;
 					    	 string_type = 1;
-					     }
+					     
+					     if(iterations != 0)
+					    	 System.out.println("Iterations is " + iterations);
+					    
 					     if(iterations == 0)
 					     {
+					    	 //System.out.println("Inserting uncompressed segment.");
 					         for(int m = 0; m < segment.length - 1; m++) 
 					    	     string[offset + m] = segment[m];
 					    	 offset += segment.length - 1;
 					     }
 					     else
 					     {
+					    	 System.out.println("Inserting compressed segment.");
 					    	 int decompression_length = 0;
 					    	 byte [] decompressed_segment = new byte[max_segment_length];
 					    	 
@@ -198,6 +237,9 @@ public class AdaptiveReader
 					    	  offset += byte_length; 
 					       }
 					 }
+					 System.out.println("Offset is " + (offset * 8));
+					 System.out.println("Compressed length is "  + compressed_length[i]);
+					 string[string.length - 1] = channel_iterations[i];
 					 string_list.add(string);
 				}
 		    }
@@ -216,23 +258,21 @@ public class AdaptiveReader
 		    		// Decompressed one strings can be larger than the original size.
 		    		// This is a conservative sized buffer, but will still probably fail
 		    		// on some kind of image.  Using the theoretical limit uses a
-		    		// huge amount of storage. Might be an interesting experiment
-		    		// to come up with a pattern that produces a worst result.
+		    		// huge amount of storage. 
 		    		byte [] decompressed_string = new byte[xdim * ydim * 4];
 		    		int decompressed_length = 0;
 		    	    if(iterations > 0)
-		    	        decompressed_length = DeltaMapper.decompressZeroStrings(string, length[i], decompressed_string);
+		    	        decompressed_length = DeltaMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
 		    	    else
-		    	        decompressed_length = DeltaMapper.decompressOneStrings(string, length[i], decompressed_string);
+		    	        decompressed_length = DeltaMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
 		    	    System.out.println("Decompressed length is " + decompressed_length);
 		    	    
 		    	    // Not really necessary, but we'll clip the decompressed string.
 		    	    int byte_length = decompressed_length / 8;
 		    	    if(decompressed_length % 8 != 0)
 		    	        byte_length++;
-		    	    // We don't bother with an extra byte since this is an uncompressed string,
-		    	    // and we know it.
-		    	    string = new byte[byte_length];
+		    	    
+		    	    string = new byte[byte_length + 1];
 		    	    for(int j = 0; j < byte_length; j++)
 		    	        string[j] = decompressed_string[j];
 		    	}
