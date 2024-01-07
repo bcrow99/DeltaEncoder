@@ -211,8 +211,8 @@ public class AdaptiveWriter
 				
 				JMenu settings_menu = new JMenu("Settings");
 			
-				JMenuItem quant_item = new JMenuItem("Pixel Quantization");
-				JDialog quant_dialog = new JDialog(frame, "Pixel Quantization");
+				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
+				JDialog quant_dialog = new JDialog(frame, "Pixel Resolution");
 				ActionListener quant_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -254,8 +254,8 @@ public class AdaptiveWriter
 				quant_dialog.add(quant_panel);
 				settings_menu.add(quant_item);
 				
-				JMenuItem shift_item   = new JMenuItem("Pixel Shift");
-				JDialog   shift_dialog = new JDialog(frame, "Pixel Shift");
+				JMenuItem shift_item   = new JMenuItem("Color Resolution");
+				JDialog   shift_dialog = new JDialog(frame, "Color Resolution");
 				ActionListener shift_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -295,8 +295,8 @@ public class AdaptiveWriter
 				shift_dialog.add(shift_panel);
 				
 				settings_menu.add(shift_item);
-				JMenuItem segment_item = new JMenuItem("Segment");
-				JDialog segment_dialog = new JDialog(frame, "Segment");
+				JMenuItem segment_item = new JMenuItem("Segmentation");
+				JDialog segment_dialog = new JDialog(frame, "Segmentation");
 				ActionListener segment_length_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
