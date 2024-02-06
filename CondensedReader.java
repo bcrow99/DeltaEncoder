@@ -143,6 +143,8 @@ public class CondensedReader
 					int     offset = 0;
 					
 					int n = number_of_segments;
+					int number_of_zero_segments = 0;
+					int number_of_one_segments  = 0;
 					for(int k = 0; k < n; k++)
 					{
 					    
@@ -196,11 +198,14 @@ public class CondensedReader
 					     
 					     int iterations  = (int)segment[segment_byte_length - 1] & 31;
 					     int string_type = 0;
-					     if(iterations > 15)
+					     if(iterations > 16)
 					     {
 					    	 string_type = 1;
 					    	 iterations  = iterations - 16;
+					    	 number_of_one_segments++;
 					     }
+					     else
+					    	 number_of_zero_segments++;
 					     
 					     int extra_bits = (int)(segment[segment_byte_length - 1] >> 5);
 					     extra_bits    &= 7;
@@ -246,12 +251,21 @@ public class CondensedReader
 					    		  }
 					    	  }
 					    	  
-					    	  if(byte_length > decompressed_segment.length)
-					    		  byte_length = decompressed_segment.length;
+					    	  if(offset + byte_length > decompressed_segment.length)
+					    	  {
+					    		  System.out.println("Exceeding buffer size.");
+					    		  System.out.println("String type is " + string_type);
+					    		  System.out.println("Iterations is " + iterations);
+					    		  
+					    		  System.out.println("Number of zero segments is " + number_of_zero_segments);
+								  System.out.println("Number of one segments is " + number_of_one_segments);
+					    	  }
 					    	  System.arraycopy(decompressed_segment, 0, string, offset, byte_length);
 					    	  offset += byte_length; 
 					       }
 					 }
+					
+					 
 					 //System.out.println("Offset is " + (offset * 8));
 					 //System.out.println("Compressed length is "  + compressed_length[i]);
 					 System.out.println();

@@ -1180,9 +1180,13 @@ public class DeltaMapper
     	    {
     		    // 0 iterations
     		    System.arraycopy(src, 0, dst, 0, byte_length);
-    		    dst[byte_length] = (byte)iterations;
+    		    dst[byte_length] = 0;
     		    
     		    byte extra_bits = (byte)(length % 8);
+    		    if(extra_bits != 0)
+    		    {
+    		    	extra_bits = (byte)(7 - extra_bits);
+    		    }
     		    extra_bits     <<= 5;
     		    
     		    dst[byte_length] |= extra_bits;
@@ -1200,7 +1204,17 @@ public class DeltaMapper
     			    int last_byte = current_length / 8;
                     if(current_length % 8 != 0)
                 	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
+                    dst[last_byte] = 1;
+                    
+                    byte extra_bits = (byte)(length % 8);
+        		    if(extra_bits != 0)
+        		    {
+        		    	extra_bits = (byte)(7 - extra_bits);
+        		    }
+        		    extra_bits     <<= 5;
+        		    
+        		    dst[byte_length] |= extra_bits;
+                    
                     return(current_length);
     		    }
     		    else
@@ -1298,7 +1312,7 @@ public class DeltaMapper
         
         // If it's not a zero type string, we'll still process it.
         // This might actually compress a one type string.
-        if(iterations > 15)
+        if(iterations > 16)
         {
         	System.out.println("Not zero type string.");
         	iterations -= 16;
@@ -1743,8 +1757,11 @@ public class DeltaMapper
     		for(int i = 0; i < byte_length; i++)
     			dst[i] = src[i];
     		dst[byte_length] = 0;
-    		
-    	    
+    		byte extra_bits = (byte)(length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(7 - extra_bits);
+            extra_bits <<= 5;
+            dst[byte_length] |= extra_bits;
     	    return length;
     	}
         else
@@ -1758,7 +1775,12 @@ public class DeltaMapper
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
                 	last_byte++;
-                dst[last_byte] = (byte)-iterations;
+                dst[last_byte] = (byte) (iterations + 16);
+                byte extra_bits = (byte)(current_length % 8);
+                if(extra_bits != 0)
+                	extra_bits = (byte)(7 - extra_bits);
+                extra_bits <<= 5;
+                dst[last_byte] |= extra_bits;
                 return(current_length);
     		}
     		else

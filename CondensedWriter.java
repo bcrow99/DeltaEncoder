@@ -974,6 +974,11 @@ public class CondensedWriter
 			            out.writeInt(max_segment_byte_length);
 			            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 			            
+			            
+			            int number_of_zero_segments = 0;
+			            int number_of_one_segments  = 0;
+			            
+			            
 			            for(int k = 0; k < n; k++)
 			            {
 			            	int segment_bit_length  = (int)segment_length.get(k);
@@ -984,24 +989,15 @@ public class CondensedWriter
 			            	
 			            	if(iterations > 16)
 			            	{
-			            		iterations = (byte)-15;
-			            		if(iterations > 15)
-			            			System.out.println("Iterations will not fit in final byte.");
-			            		else
-			            		{
-			            		    segment[segment.length - 1] = (byte)(extra_bits << 5);
-			            		    segment[segment.length - 1] |= iterations;
-			            		}
+			            		number_of_one_segments++;
+			            		segment[segment.length - 1] = (byte)(extra_bits << 5);
+			            		segment[segment.length - 1] |= iterations;
 			            	}
 			            	else
 			            	{
-			            		if(iterations > 15)
-			            			System.out.println("Iterations will not fit in final byte.");
-			            		else
-			            		{
-			            		    segment[segment.length - 1] = (byte)(extra_bits << 5);
-			            		    segment[segment.length - 1] |= iterations;
-			            		}	
+			            		number_of_zero_segments++;    
+			            		segment[segment.length - 1] = (byte)(extra_bits << 5);
+			            		segment[segment.length - 1] |= iterations;
 			            	}
 			            	
 			            	if(max_segment_byte_length <= (Byte.MAX_VALUE * 2 + 1))
@@ -1018,6 +1014,8 @@ public class CondensedWriter
 			            	}
 			            	out.write(segment, 0, segment.length);
 			            }
+			            System.out.println("Number of zero segments was " + number_of_zero_segments);
+			            System.out.println("Number of one segments was " + number_of_one_segments);
 			        }
 		        }
 		        
