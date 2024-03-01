@@ -505,11 +505,12 @@ public class DeltaMapper
         {
         	if(i == 0)
         	{
+        		// No diagonal or vertical deltas, we just use the horizontal delta.
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
             	    {
-            			dst[k++] = 0;
+            			dst[k++] = 5;
             	    }
             		else
             		{
@@ -526,8 +527,9 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            	    	// We dont have a horizontal delta or diagonal delta for our paeth filter,
-            	    	// so we just use a vertical delta, and reset our init value.
+            	    	// We don't have a horizontal delta for the paeth filter,
+            	    	// so we just use the vertical deltas. 
+            	    	// We also reset our initial value.
             	    	delta      = src[k] - init_value;
             	    	init_value = src[k];
             	    	dst[k++]   = delta;
@@ -535,65 +537,70 @@ public class DeltaMapper
             	    }
             	    else if(j < xdim - 1)
             	    {
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = a + b - c;
-            	    	
-            	    	
-            	    	// Prediction deltas.
-            	    	int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	
-            	    	// Actual deltas.
+            	    	// We have both diagonals, vertical, and horizontal deltas available.
             	    	int horizontal_delta = src[k] - src[k - 1];
             	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int backward_diagonal_delta   = src[k] - src[k - xdim - 1];
-            	    	
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	    delta = horizontal_delta;
-            	    	else if(delta_b <= delta_c)
-            	    	    delta = vertical_delta;
-            	    	else
-            	    	    delta = backward_diagonal_delta;
+            	    	int backward_diagonal_delta = src[k] - src[k - xdim - 1];
+            	    	int forward_diagonal_delta  = src[k] - src[k - xdim + 1];
             	    	
             	    	
-            	    	c = src[k - xdim + 1];
-            	    	d = a + b - c;
-            	    	delta_a = Math.abs(a - d);
-            	    	delta_b = Math.abs(b - d);
-            	    	delta_c = Math.abs(c - d);
+            	    	int diagonal_gradient = Math.abs(src[k - 1] - src[k - xdim]);
+            	    	int vertical_gradient = Math.abs(src[k - 1] - src[k - xdim + 1]);
             	    	
-            	    	int forward_diagonal_delta = src[k] - src[k - xdim + 1];
-            	    	
-            	    	if(delta_c < delta_a && delta_c < delta_b && forward_diagonal_delta < backward_diagonal_delta)
+            	    	// Check to see which diagonal value to use.
+            	    	if(diagonal_gradient <= vertical_gradient)
             	    	{
-            	    		delta = forward_diagonal_delta;
-            	    		System.out.println("Reassigning delta.");
+            	    		int a = src[k - 1];
+                	    	int b = src[k - xdim];
+                	    	int c = src[k - xdim - 1];
+                	    	int d = a + b - c;   
+            	    	
+                	    	// Prediction deltas.
+                	    	int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	    delta = horizontal_delta;
+                	    	else if(delta_b <= delta_c)
+                	    	    delta = vertical_delta;
+                	    	else
+                	    	    delta = backward_diagonal_delta;	
             	    	}
+            	    	else
+            	    	{
+            	    		int a = src[k - 1];
+            	    		int b = src[k - xdim + 1];
+            	    		int c = src[k - xdim];
+            	    		int d = a + b - c;
+            	    		
+            	    		int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
             	    	
-            	    	dst[k++] = delta;
-            	    	
-            	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	    delta = horizontal_delta;
+                	    	else if(delta_b <= delta_c)
+                	    	    delta = forward_diagonal_delta;
+                	    	else
+                	    	    delta = vertical_delta;
+            	    	}
+            	    	dst[k++]   = delta;
             	    	sum += Math.abs(delta);
             	    }
             	    else
             	    {
+            	    	// No forward diagonal.
             	    	int a = src[k - 1];
             	    	int b = src[k - xdim];
             	    	int c = src[k - xdim - 1];
             	    	int d = a + b - c;
             	    	
             	    	
-            	    	// Prediction deltas.
             	    	int delta_a = Math.abs(a - d);
             	    	int delta_b = Math.abs(b - d);
             	    	int delta_c = Math.abs(c - d);
             	    	
-            	    	
-            	    	// Actual deltas.
             	    	int horizontal_delta = src[k] - src[k - 1];
             	    	int vertical_delta   = src[k] - src[k - xdim];
             	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
@@ -605,8 +612,6 @@ public class DeltaMapper
             	    	else
             	    	    delta = diagonal_delta;
             	    	dst[k++] = delta;
-            	    	
-            	    	
             	    	sum += Math.abs(delta);
             	    }
                 }
@@ -618,8 +623,6 @@ public class DeltaMapper
         return result;    
     }
 
-    // This has not been modified from method 3.  Waiting to see if checking both diagonals 
-    // really helps.
     public static int[] getValuesFromDeltas5(int src[], int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
@@ -627,7 +630,7 @@ public class DeltaMapper
         int value = init_value;
 
 
-        if(src[0] != 0)
+        if(src[0] != 5)
         	System.out.println("Wrong code at beginning of delta array.");
         
         for(int i = 1; i < xdim; i++)
@@ -648,27 +651,84 @@ public class DeltaMapper
             	}
             	else
             	{
-            	    int a = dst[i * xdim + j - 1];
-            	    int b = dst[(i - 1) * xdim + j];
-            	    int c = dst[(i - 1) * xdim + j - 1];
-            	    int d = a + b - c;
-            	    
-            	    int delta_a = Math.abs(a - d);
-        	    	int delta_b = Math.abs(b - d);
-        	    	int delta_c = Math.abs(c - d);
-        	    	
-        	    	if(delta_a <= delta_b && delta_a <= delta_c)
-        	    	{
-        	    	    dst[i * xdim + j] = a + src[i * xdim + j];
-        	    	}
-        	    	else if(delta_b <= delta_c)
-        	    	{
-        	    		dst[i * xdim + j] = b + src[i * xdim + j];
-        	    	}
-        	    	else
-        	    	{
-        	    		dst[i * xdim + j] = c + src[i * xdim + j];
-        	    	}
+            	    if(j == xdim - 1)
+            	    {
+            	    	int a = dst[i * xdim + j - 1];
+                	    int b = dst[(i - 1) * xdim + j];
+                	    int c = dst[(i - 1) * xdim + j - 1];
+                	    int d = a + b - c;
+                	    
+                	    int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	{
+            	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+            	    	}
+            	    	else if(delta_b <= delta_c)
+            	    	{
+            	    		dst[i * xdim + j] = b + src[i * xdim + j];
+            	    	}
+            	    	else
+            	    	{
+            	    		dst[i * xdim + j] = c + src[i * xdim + j];
+            	    	}
+            	    }
+            	    else
+            	    {
+            	    	int diagonal_gradient = Math.abs(dst[i * xdim + j - 1] - dst[i * xdim + j - xdim]);
+            	    	int vertical_gradient = Math.abs(dst[i * xdim + j - 1] - dst[i * xdim + j - xdim + 1]);	
+            	    	
+            	    	if(diagonal_gradient <= vertical_gradient)
+            	    	{
+            	    		int a = dst[i * xdim + j - 1];
+                    	    int b = dst[(i - 1) * xdim + j];
+                    	    int c = dst[(i - 1) * xdim + j - 1];
+                    	    int d = a + b - c;
+                    	    
+                    	    int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+                	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	{
+                	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+                	    	}
+                	    	else if(delta_b <= delta_c)
+                	    	{
+                	    		dst[i * xdim + j] = b + src[i * xdim + j];
+                	    	}
+                	    	else
+                	    	{
+                	    		dst[i * xdim + j] = c + src[i * xdim + j];
+                	    	}	
+            	    	}
+            	    	else
+            	    	{
+            	    		int a = dst[i * xdim + j - 1];
+            	    		int b = dst[(i - 1) * xdim + j + 1];
+            	    		int c = dst[(i - 1) * xdim + j];
+            	    		int d = a + b - c;
+            	    		
+            	    		int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+                	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	{
+                	    	    dst[i * xdim + j] = a + src[i * xdim + j];
+                	    	}
+                	    	else if(delta_b <= delta_c)
+                	    	{
+                	    		dst[i * xdim + j] = b + src[i * xdim + j];
+                	    	}
+                	    	else
+                	    	{
+                	    		dst[i * xdim + j] = c + src[i * xdim + j];
+                	    	}	
+            	    	}
+            	    }
             	}
             }
         }
