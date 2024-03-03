@@ -203,6 +203,130 @@ public class DeltaMapper
         return sum;
     }
 
+
+    public static int getIdealSum(int src[], int xdim, int ydim)
+    {
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        
+        int sum            = 0;
+        int k              = 0;
+         
+        k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            			k++;
+            	    }
+            		else
+            		{
+            		    delta     = src[k] - value;
+                        value     += delta;
+                        k++;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	k++;
+            	        sum += Math.abs(delta);
+            	    }
+            	    else
+            	    {
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = src[k - xdim + 1];
+            	    	int e = src[k];
+            	    	
+            	    	int delta_a = Math.abs(a - e);
+            	    	int delta_b = Math.abs(b - e);
+            	    	int delta_c = Math.abs(c - e);
+            	    	int delta_d = Math.abs(d - e);
+            	    	
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+            	    	{
+            	    	    delta = delta_a;
+            	    	
+            	    	}
+            	    	else if(delta_b <= delta_c && delta_b <= delta_d)
+            	    	{
+            	    	    delta = delta_b;
+            	    	}
+            	    	else if(delta_c <= delta_d)
+            	    	{
+            	    	    delta = delta_c;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta = delta_d;
+            	    	}
+            	    	k++;
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+        return sum;
+    }
+
+    public static int getIdealSum2(int src[], int xdim, int ydim, int interval)
+    {
+        int sum   = 0;
+        int delta = 0;
+        for(int i = 1; i < ydim; i++)
+        {
+        	int k = i * xdim + 1;
+        	for(int j = 1; j < xdim - 1; j += interval)
+            {
+                int a = src[k - 1];
+            	int b = src[k - xdim];
+            	int c = src[k - xdim - 1];
+            	int d = src[k - xdim - 1];
+            	int e = src[k];
+            	
+            	int delta_a = Math.abs(a - e);
+            	int delta_b = Math.abs(b - e);
+            	int delta_c = Math.abs(c - e);
+            	int delta_d = Math.abs(d - e);
+            	    	   	
+            	if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+    	    	{
+    	    	    delta = delta_a;
+    	    	}
+    	    	else if(delta_b <= delta_c && delta_b <= delta_d)
+    	    	{
+    	    	    delta = delta_b;
+    	    	}
+    	    	else if(delta_c <= delta_d)
+    	    	{
+    	    	    delta = delta_c;
+    	    	}
+    	    	else
+    	    	{
+    	    		delta = delta_d;
+    	    	}
+            	sum += delta;
+            	k += interval;  	
+        	}
+        }
+        return sum;
+    }
+
     // These functions use the horizontal, vertical, or diagonal
     // deltas depending on the result of a convolution. 
     
@@ -219,6 +343,7 @@ public class DeltaMapper
         int delta          = 0;
         int sum            = 0;
         int k              = 0;
+        int number_of_misses = 0;
       
         for(int i = 0; i < ydim; i++)
         {
@@ -229,8 +354,6 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             		    // Setting the first value to 0 to mark the delta type paeth.
-            	    	// Since we're only using one type of delta, we don't really
-            	    	// have a use for the first delta as a code word.
             			dst[k++] = 0;
             	    }
             		else
@@ -282,6 +405,9 @@ public class DeltaMapper
             	    	    delta = vertical_delta;
             	    	else
             	    	    delta = diagonal_delta;
+            	    	
+            	    	if(delta > horizontal_delta || delta > vertical_delta || delta > diagonal_delta)
+            	    		number_of_misses++;
             	    	dst[k++] = delta;
             	    	
             	    	
@@ -293,6 +419,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(number_of_misses);
         return result;    
     }
 
@@ -350,6 +477,7 @@ public class DeltaMapper
         return dst;
     }
  
+
     // Get an ideal delta set and a map of which pixels are used.
     // The combined ideal deltas minus the bit map seem to amount to about
     // the same as the paeth deltas by themselves.
@@ -379,7 +507,7 @@ public class DeltaMapper
             	    }
             		else
             		{
-            			// We don't have an upper or upper diagonal delta to check
+            			// We don't have any vertical or diagonal deltas to check
             			// in the first row, so we just use horizontal deltas.
             		    delta        = src[k] - value;
                         value       += delta;
@@ -396,8 +524,8 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            	    	// We dont have a horizontal delta or diagonal delta to check,
-            	    	// so we just use a vertical delta, and reset our init value.
+            	    	// We don't have a horizontal delta or diagonal delta to check,
+            	    	// so we just use a vertical delta, and reset our initial value.
             	    	delta        = src[k] - init_value;
             	    	init_value   = src[k];
             	    	dst[k]       = delta;
@@ -405,9 +533,50 @@ public class DeltaMapper
             	    	sum          += Math.abs(delta);
             	    	k++;
             	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	//We have a set of 4 possible deltas to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim - 1];
+            	    	int d = src[k] - src[k - xdim + 1];
+            	    	
+            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c) && Math.abs(a) <= Math.abs(d))
+            	    	{
+            	    		delta        = a;
+            	    	    dst[k]       = delta;
+            	    	    direction[k] = 0;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    	else if(Math.abs(b) <= Math.abs(c)&& Math.abs(b) <= Math.abs(d))
+            	    	{
+            	    		delta        = b;
+            	    		dst[k]       = delta;
+            	    	    direction[k] = 1;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    	else if(Math.abs(b) <= Math.abs(c))
+            	    	{
+            	    		delta        = c;
+            	    		dst[k]       = delta;
+            	    	    direction[k] = 2;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;	
+            	    	}
+            	    	else
+            	    	{
+            	    		delta        = d;
+            	    		dst[k]       = delta;
+            	    		direction[k] = 3;
+            	    	    sum         += Math.abs(delta);
+            	    	    k++;
+            	    	}
+            	    }
             	    else
             	    {
-            	    	// Now we have a set of 3 possible pixels to use.
+            	    	// We have a set of 3 possible pixels to use.
             	    	int a = src[k] - src[k - 1];
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - xdim - 1];
@@ -435,7 +604,7 @@ public class DeltaMapper
             	    	    direction[k] = 2;
             	    	    sum         += Math.abs(delta);
             	    	    k++;	
-            	    	}
+            	    	}	
             	    }
                 }
         	}
@@ -481,6 +650,8 @@ public class DeltaMapper
             		    value = dst[(i - 1) * xdim + j];
             		else if(current_direction == 2)
             		    value = dst[(i - 1) * xdim + j - 1];
+            		else if(current_direction == 3)
+            			value = dst[(i - 1) * xdim + j + 1];
             	    value += src[i * xdim + j];
             	    dst[i * xdim + j] = value;
             	}
@@ -489,9 +660,12 @@ public class DeltaMapper
         
         return dst;
     }
+   
+    
     
     // Slightly modified paeth filter that checks both diagonals.
-    // This does not seem to help much, but is not well tested.
+    // This only seem to help with smooth images, and reduces
+    // the prediction accuracy.
     public static ArrayList getDeltasFromValues5(int src[], int xdim, int ydim)
     {
     	int[] dst          = new int[xdim * ydim];
@@ -620,6 +794,194 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        return result;    
+    }
+
+    public static ArrayList getDeltasFromValues6(int src[], int xdim, int ydim)
+    {
+    	int[] dst          = new int[xdim * ydim];
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+        int sum            = 0;
+        int k              = 0;
+        
+        int number_of_false_forward_diagonals  = 0;
+        int number_of_false_backward_diagonals = 0;
+        int number_of_false_verticals          = 0;
+        int number_of_false_horizontals        = 0;
+      
+        int number_of_misses = 0;
+        
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+        		// No diagonal or vertical deltas, we just use the horizontal delta.
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            			dst[k++] = 5;
+            	    }
+            		else
+            		{
+            		    delta     = src[k] - value;
+                        value     += delta;
+                        dst[k++]  = delta;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We don't have a horizontal delta for the paeth filter,
+            	    	// so we just use the vertical deltas. 
+            	    	// We also reset our initial value.
+            	    	delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	dst[k++]   = delta;
+            	        sum += Math.abs(delta);
+            	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	// We have both diagonals, vertical, and horizontal deltas available.
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int backward_diagonal_delta = src[k] - src[k - xdim - 1];
+            	    	int forward_diagonal_delta  = src[k] - src[k - xdim + 1];
+            	    	
+            	    	
+            	    	int diagonal_gradient = Math.abs(src[k - 1] - src[k - xdim]);
+            	    	int vertical_gradient = Math.abs(src[k - 1] - src[k - xdim + 1]);
+            	    	
+            	    	// Check to see which diagonal value to use.
+            	    	if(diagonal_gradient <= vertical_gradient)
+            	    	{
+            	    		int a = src[k - 1];
+                	    	int b = src[k - xdim];
+                	    	int c = src[k - xdim - 1];
+                	    	int d = a + b - c;   
+            	    	
+                	    	// Prediction deltas.
+                	    	int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	{
+                	    	    delta = horizontal_delta;
+                	    	    if(horizontal_delta > vertical_delta || horizontal_delta > backward_diagonal_delta || horizontal_delta > forward_diagonal_delta)
+                	    	    	number_of_false_horizontals++;
+                	    	}
+                	    	else if(delta_b <= delta_c)
+                	    	{
+                	    	    delta = vertical_delta;
+                	    	    if(vertical_delta > horizontal_delta || vertical_delta > backward_diagonal_delta || vertical_delta > forward_diagonal_delta)
+                	    	    	number_of_false_verticals++;
+                	    	}
+                	    	else
+                	    	{
+                	    	    delta = backward_diagonal_delta;
+                	    	    if(backward_diagonal_delta > horizontal_delta || backward_diagonal_delta > vertical_delta || backward_diagonal_delta > forward_diagonal_delta)
+                	    	    	number_of_false_backward_diagonals++;
+                	    	}
+                	    	
+                	    	if(delta > horizontal_delta || delta > vertical_delta || delta > backward_diagonal_delta || delta > forward_diagonal_delta)
+                	    		number_of_misses++;
+            	    	}
+            	    	else
+            	    	{
+            	    		int a = src[k - 1];
+            	    		int b = src[k - xdim + 1];
+            	    		int c = src[k - xdim];
+            	    		int d = a + b - c;
+            	    		
+            	    		int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    	
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	{
+                	    	    delta = horizontal_delta;
+                	    	    if(horizontal_delta > vertical_delta || horizontal_delta > backward_diagonal_delta || horizontal_delta > forward_diagonal_delta)
+                	    	    	number_of_false_horizontals++;
+                	    	}
+                	    	else if(delta_b <= delta_c)
+                	    	{
+                	    	    delta = forward_diagonal_delta;
+                	    	    if(forward_diagonal_delta > horizontal_delta || forward_diagonal_delta > vertical_delta || forward_diagonal_delta > backward_diagonal_delta)
+                	    	    	number_of_false_forward_diagonals++;
+                	    	}
+                	    	else
+                	    	{
+                	    	    delta = vertical_delta;
+                	    	    if(vertical_delta > horizontal_delta || vertical_delta > backward_diagonal_delta || vertical_delta > forward_diagonal_delta)
+                	    	    	number_of_false_verticals++;
+                	    	}
+                	    	if(delta > horizontal_delta || delta > vertical_delta || delta > backward_diagonal_delta || delta > forward_diagonal_delta)
+                	    		number_of_misses++;
+                	    	
+            	    	}
+            	    	dst[k++]   = delta;
+            	    	sum += Math.abs(delta);
+            	    }
+            	    else
+            	    {
+            	    	// No forward diagonal.
+            	    	int a = src[k - 1];
+            	    	int b = src[k - xdim];
+            	    	int c = src[k - xdim - 1];
+            	    	int d = a + b - c;
+            	    	
+            	    	
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+            	    	
+            	    	int horizontal_delta = src[k] - src[k - 1];
+            	    	int vertical_delta   = src[k] - src[k - xdim];
+            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
+            	    	
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	{
+            	    	    delta = horizontal_delta;
+            	    	    if(horizontal_delta > vertical_delta || horizontal_delta > diagonal_delta)
+            	    	    	number_of_false_horizontals++;
+            	    	}
+            	    	else if(delta_b <= delta_c)
+            	    	{
+            	    	    delta = vertical_delta;
+            	    	    if(vertical_delta > horizontal_delta || vertical_delta > diagonal_delta)
+            	    	    	number_of_false_verticals++;
+            	    	}
+            	    	else
+            	    	{
+            	    	    delta = diagonal_delta;
+            	    	    if(diagonal_delta > vertical_delta || diagonal_delta > horizontal_delta)
+            	    	    	number_of_false_backward_diagonals++;
+            	    	}
+            	    	if(delta > horizontal_delta || delta > vertical_delta || delta > diagonal_delta)
+            	    		number_of_misses++;
+            	    	dst[k++] = delta;
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        result.add(number_of_misses);
+        System.out.println("There were " + number_of_false_horizontals + " false horizontal deltas.");
+        System.out.println("There were " + number_of_false_verticals + " false vertical deltas.");
+        System.out.println("There were " + number_of_false_backward_diagonals + " false backward diagonal deltas.");
+        System.out.println("There were " + number_of_false_forward_diagonals + " false forward diagonal deltas.");
+        
         return result;    
     }
 
