@@ -35,175 +35,6 @@ public class DeltaMapper
 		return(sum);
 	}
 	
-	public static ArrayList getHistogram(int value[])
-	{  
-	    int value_min = value[0];
-	    int value_max = value[0];
-	    for(int i = 0; i < value.length; i++)
-	    {
-	    	if(value[i] > value_max)
-	    		value_max = value[i];
-	    	if(value[i] < value_min)
-	    		value_min = value[i];
-	    }
-	    int value_range = value_max - value_min + 1;
-	    int [] histogram = new int[value_range];
-	    for(int i = 0; i < value_range; i++)
-	    	histogram[i] = 0;
-	    for(int i = 0; i < value.length; i++)
-	    {
-	    	int j = value[i] - value_min;
-	    	histogram[j]++;
-	    }
-	    
-	    ArrayList histogram_list = new ArrayList();
-	    histogram_list.add(value_min);
-	    histogram_list.add(histogram);
-	    histogram_list.add(value_range);
-	    return histogram_list;
-	}
-	
-	public static int[] getRankTable(int histogram[])
-	{
-		ArrayList key_list     = new ArrayList();
-	    Hashtable rank_table   = new Hashtable();
-	    for(int i = 0; i < histogram.length; i++)
-	    {
-	    	double key = histogram[i];
-	    	while(rank_table.containsKey(key))
-	    	{
-	    		key +=.001;
-	    	}
-	    	rank_table.put(key, i);
-	    	key_list.add(key);
-	    }
-	    Collections.sort(key_list);
-	    
-	    int random_lut[] = new int[histogram.length];
-	    int k     = -1;
-	    for(int i = histogram.length - 1; i >= 0; i--)
-	    {
-	    	double key = (double)key_list.get(i);
-	    	int    j   = (int)rank_table.get(key);
-	    	random_lut[j]   = ++k;
-	    }	
-	    return random_lut;
-	}
-    
-    public static int getPaethSum(int src[], int xdim, int ydim)
-    {
-        int init_value     = src[0];
-        int value          = init_value;
-        int delta          = 0;
-        
-        int sum            = 0;
-        int k              = 0;
-         
-        k = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-        	if(i == 0)
-        	{
-                for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            			k++;
-            	    }
-            		else
-            		{
-            		    delta     = src[k] - value;
-                        value     += delta;
-                        k++;
-                        sum      += Math.abs(delta);
-            		}
-            	}
-            }
-        	else
-        	{
-        		for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            	    	delta      = src[k] - init_value;
-            	    	init_value = src[k];
-            	    	k++;
-            	        sum += Math.abs(delta);
-            	    }
-            	    else
-            	    {
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = a + b - c;
-            	    	
-            	    	
-            	    	// Prediction deltas.
-            	    	int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	
-            	    	// Actual deltas.
-            	    	int horizontal_delta = src[k] - src[k - 1];
-            	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
-            	    	
-            	    	
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	{
-            	    	    delta = horizontal_delta;
-            	    	
-            	    	}
-            	    	else if(delta_b <= delta_c)
-            	    	{
-            	    	    delta = vertical_delta;
-            	    	}
-            	    	else
-            	    	{
-            	    	    delta = diagonal_delta;
-            	    	}
-            	    	k++;
-            	    	sum += Math.abs(delta);
-            	    }
-                }
-        	}
-        }
-        return sum;
-    }
-
-    public static int getPaethSum2(int src[], int xdim, int ydim, int interval)
-    {
-        int sum            = 0;
-        for(int i = 1; i < ydim; i++)
-        {
-        	int k = i * xdim + 1;
-        	for(int j = 1; j < xdim; j += interval)
-            {
-                int a = src[k - 1];
-            	int b = src[k - xdim];
-            	int c = src[k - xdim - 1];
-            	int d = a + b - c;
-            	int e = src[k];
-            	
-            	int delta_a = Math.abs(a - d);
-            	int delta_b = Math.abs(b - d);
-            	int delta_c = Math.abs(c - d);
-            	    	   	
-            	if(delta_a <= delta_b && delta_a <= delta_c)
-            		sum += Math.abs(e - a);
-            	else if(delta_b <= delta_c)
-            	    sum += Math.abs(e - b);
-            	else
-            	    sum += Math.abs(e - c);
-            	
-            	k += interval;  	
-        	}
-        }
-        return sum;
-    }
-
-
     public static int getIdealSum(int src[], int xdim, int ydim)
     {
         int init_value     = src[0];
@@ -284,7 +115,7 @@ public class DeltaMapper
         return sum;
     }
 
-    public static int getIdealSum2(int src[], int xdim, int ydim, int interval)
+    public static int getIdealSum(int src[], int xdim, int ydim, int interval)
     {
         int sum   = 0;
         int delta = 0;
@@ -326,16 +157,151 @@ public class DeltaMapper
         }
         return sum;
     }
+    
+    public static ArrayList getHorizontalDeltasFromValues(int src[], int xdim, int ydim)
+    {
+        int[] dst            = new int[xdim * ydim];
+        int   sum            = 0;
+        int   init_value     = src[0];
+        int   value          = init_value;
+         
+        int k     = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	// We set the first value to zero to mark the type of deltas as horizontal.
+        	// We don't want to include the initial value because it could easily be
+        	// much larger than any of our deltas.
+            if(i == 0)
+        	    dst[k++] = 0;
+            else
+            {
+            	int delta   = src[k] - init_value;
+            	dst[k++]    = delta;
+            	init_value += delta;
+            	sum        += Math.abs(delta);
+            	value       = init_value;
+            }
+            
+            for(int j = 1; j < xdim; j++)
+            {
+                int delta = src[k]  - value;
+                value    += delta;
+                sum      += Math.abs(delta);
+                dst[k++]  = delta;
+            }
+        }
+        
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        return result;
+    }
+    
+    public static int[] getValuesFromHorizontalDeltas(int src[],int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+    	
+        int k     = 0;
+        int value = init_value;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i != 0)
+                value += src[k];
+        	else
+        	{
+        		if(src[k] != 0)
+        			System.out.println("Wrong code.");
+        	}
+            int current_value = value;
+            dst[k++]          = current_value;
+            for(int j = 1; j < xdim; j++)
+            {
+                current_value += src[k];
+                dst[k++]       = current_value;
+            }
+        }
+        return dst;
+    }
+    
+    public static ArrayList getVerticalDeltasFromValues(int src[], int xdim, int ydim)
+    {
+        int[] dst          = new int[xdim * ydim];
+        int init_value     = src[0];
+        int value          = init_value;
+        int delta          = 0;
+       
+        int sum            = 0;
+        
+        int k          = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)
+            {
+            	if(i == 0)
+            	{
+            		// Setting the first value to 1 mark the type of deltas vertical.
+            		if(j == 0)
+            			dst[k++] = 1;
+            		else
+            		{
+            		    delta    = src[k] - value;
+                        value    += delta;
+                        dst[k++]  = delta;
+                        sum      += Math.abs(delta);
+            		}
+            	}
+            	else
+            	{
+                    delta    = src[k]  - src[k - xdim];
+                    dst[k++] = delta;
+                    sum     += Math.abs(delta);
+            	}
+            }
+        }
+        
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        return result;
+    }
 
-    // These functions use the horizontal, vertical, or diagonal
-    // deltas depending on the result of a convolution. 
+    public static int[] getValuesFromVerticalDeltas(int src[], int xdim, int ydim, int init_value)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0] = init_value;
+        int value = init_value;
+        
+        if(src[0] != 1)
+            System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        // Now we can use values from the destination data to get the rest of the values. 
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)
+            {
+            	int index  = i * xdim + j;
+            	dst[index] = dst[index - xdim] + src[index]; 
+            }
+        }
+       
+        return dst;
+    }
     
     // The paeth filter usually works better than vertical or horizontal deltas,
-    // but still does not do as well as simply choosing the smallest delta.
+    // but still does not do as well as simply choosing the smallest delta 
+    // by a very significant amount.
+    
     // The problem is choosing the smallest delta requires keeping a state
-    // that seems to amount to more than the sum of paeth deltas minus the sum of 
-    // ideal deltas.
-    public static ArrayList getDeltasFromValues3(int src[], int xdim, int ydim)
+    // that seems to amount to more than the compressed paeth deltas minus the 
+    // compressed ideal deltas.
+    // This function also returns the delta sum and prediction accuracy rate.
+    public static ArrayList getPaethDeltasFromValues(int src[], int xdim, int ydim)
     {
     	int[] dst          = new int[xdim * ydim];
         int init_value     = src[0];
@@ -354,7 +320,7 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             		    // Setting the first value to 0 to mark the delta type paeth.
-            			dst[k++] = 0;
+            			dst[k++] = 2;
             	    }
             		else
             		{
@@ -373,7 +339,7 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            	    	// We dont have a horizontal delta or diagonal delta for our paeth filter,
+            	    	// We don't have a horizontal delta or diagonal delta for our paeth filter,
             	    	// so we just use a vertical delta, and reset our init value.
             	    	delta      = src[k] - init_value;
             	    	init_value = src[k];
@@ -423,13 +389,13 @@ public class DeltaMapper
         return result;    
     }
 
-    public static int[] getValuesFromDeltas3(int src[], int xdim, int ydim, int init_value)
+    public static int[] getValuesFromPaethDeltas(int src[], int xdim, int ydim, int init_value)
     {
     	int[] dst = new int[xdim * ydim];
         dst[0]    = init_value;
         int value = init_value;
 
-        if(src[0] != 0)
+        if(src[0] != 2)
         	System.out.println("Wrong code at beginning of delta array.");
         
         for(int i = 1; i < xdim; i++)
@@ -477,14 +443,11 @@ public class DeltaMapper
         return dst;
     }
  
-
-    
     // Get an ideal delta set and a map of which pixels are used.
-  
-    public static ArrayList getDeltasFromValues4(int src[], int xdim, int ydim)
+    public static ArrayList getIdealDeltasFromValues(int src[], int xdim, int ydim)
     {
-        int[]  dst        = new int[xdim * ydim];
-        int[]  map   = new int[xdim * ydim];
+        int[]  dst = new int[xdim * ydim];
+        byte[] map = new byte[xdim * ydim];
         
         int init_value     = src[0];
         int value          = init_value;
@@ -632,49 +595,86 @@ public class DeltaMapper
         return result;
     }
     
-    public static ArrayList getIdealDeltasFromValues(int src[], int xdim, int ydim)
+    public static int[] getValuesFromIdealDeltas(int [] src, int xdim, int ydim, int init_value, byte [] map)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0] = init_value;
+        int value = init_value;
+        
+        if(src[0] != 3)
+        	System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+            for(int j = 0; j < xdim; j++)	
+            {
+            	if(j == 0)
+            	{
+            	    init_value   += src[i * xdim];
+            	    dst[i * xdim] = init_value;
+            	    value         = init_value;
+            	}
+            	else
+            	{
+            		int current_direction = map[i * xdim + j]; 
+            		if(current_direction == 0)
+            		    value = dst[i * xdim + j - 1];
+            		else if(current_direction == 1)
+            		    value = dst[(i - 1) * xdim + j];
+            		else if(current_direction == 2)
+            		    value = dst[(i - 1) * xdim + j - 1];
+            		else if(current_direction == 3)
+            			value = dst[(i - 1) * xdim + j + 1];
+            	    value += src[i * xdim + j];
+            	    dst[i * xdim + j] = value;
+            	}
+            }
+        }
+        return dst;
+    }
+    
+    // This function returns the result from the paeth filter or a modified paeth filter,
+    // using the backward diagonal or the forward diagonal depending on whether
+    // the horizontal or vertical delta is less.  The idea is that if the vertical
+    // delta is less than the horizontal delta, the forward diagonal is more likely
+    // to be less than the backward diagonal.
+    public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
     {
         byte [] map = new byte[ydim - 1];
         
         for(int i = 1; i < ydim; i++)
         {
-        	int [] sum = new int[4];
+        	int vertical_sum = 0;
+        	int horizontal_sum = 0;
         	
         	for(int j = 1; j < xdim - 1; j++)
         	{
         		int k = i * xdim + j;
         		
-        		//We have a set of 4 possible deltas to use.
-    	    	int a = src[k] - src[k - 1];
-    	    	int b = src[k] - src[k - xdim];
-    	    	int c = src[k] - src[k - xdim - 1];
-    	    	int d = src[k] - src[k - xdim + 1];
-    	    	
-    	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c) && Math.abs(a) <= Math.abs(d))
-    	    	    sum[0] += Math.abs(a);	
-    	    	else if(Math.abs(b) <= Math.abs(c)&& Math.abs(b) <= Math.abs(d))
-    	    		sum[1] += Math.abs(b);
-    	    	else if(Math.abs(c) <= Math.abs(d))
-    	    		sum[2] += Math.abs(c);
-    	    	else
-    	    		sum[3] += Math.abs(d);          	
+    	    	horizontal_sum += src[k] - src[k - 1];
+    	    	vertical_sum   += src[k] - src[k - xdim];
         	}
         	
-        	int min_value  = sum[0];
-        	int min_index = 0;
-        	for(int j = 1; j < 4; j++)
-        	{
-        	    if(sum[j] < min_value)
-        	    {
-        	    	min_value = sum[j];
-        	    	min_index = j;
-        	    }
-        	}
-        	map[i - 1] = (byte)min_index;
+        	if(vertical_sum < horizontal_sum)
+        	    map[i - 1] = 1;
         }
     	
+        for(int i = 0; i < ydim - 1; i++)
+        {
+        	System.out.print(map[i] + " ");
+        }
+        System.out.println();
+        
     	int[] dst = new int[xdim * ydim];
       
+    	// Setting the inital value to 4 to show mixed deltas.
+    	dst[0] = 4;
         
         int init_value = src[0];
         int value      = init_value;
@@ -722,15 +722,50 @@ public class DeltaMapper
             	    else if(j < xdim - 1)
             	    {
             	    	if(m == 0)
-            	    		delta = src[k] - src[k - 1];
-            	    	else if(m == 1)
-            	    		delta = src[k] - src[k - xdim];
-            	    	else if(m == 2)
-            	    		delta = src[k] - src[k] - src[k - xdim - 1];
-            	    	else if(m == 3)
-            	    		delta = src[k] - src[k] - src[k - xdim + 1]; 
-            	    	dst[k]    = delta;
-            	    	ideal_sum += Math.abs(delta);
+            	    	{
+            	    		// Use paeth filter.
+            	    		int a = src[k - 1];
+                	    	int b = src[k - xdim];
+                	    	int c = src[k - xdim - 1];
+                	    	int d = a + b - c;
+            	    		
+                	    	int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    		
+                	    	int paeth_delta = 0;
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	    paeth_delta = src[k] - src[k - 1];
+                	    	else if(delta_b <= delta_c)
+                	    	    paeth_delta = src[k] - src[k - xdim];
+                	    	else
+                	    	    paeth_delta = src[k] - src[k - xdim - 1];
+                	    	dst[k] = paeth_delta;
+                	    
+                	    	ideal_sum += Math.abs(paeth_delta);
+            	    	}
+            	    	else
+            	    	{
+            	    	    // Use modified paeth filter.
+            	    		int a = src[k - 1];
+            	    		int b = src[k - xdim + 1];
+            	    		int c = src[k - xdim];
+            	    		int d = a + b - c;
+            	    		
+            	    		int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    	
+                	    	int modified_paeth_delta = 0;
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    		modified_paeth_delta = src[k] - src[k - 1];
+                	    	else if(delta_b <= delta_c)
+                	    		modified_paeth_delta = src[k] - src[k - xdim + 1];
+                	    	else
+                	    		modified_paeth_delta = src[k] - src[k - xdim];
+                	    	
+                	    	ideal_sum += Math.abs(modified_paeth_delta);
+            	    	}
             	    	
             	    	// Get the paeth delta to keep a running comparison.
             	    	int a = src[k - 1];
@@ -754,6 +789,7 @@ public class DeltaMapper
             	    else
             	    {
             	    	// Keep the code simple and use the horizontal delta.
+            	    	// Could use a paeth filter.
             	    	delta  = src[k] - src[k - 1];
             	    	dst[k] = delta;
             	    	ideal_sum += Math.abs(delta);
@@ -777,227 +813,12 @@ public class DeltaMapper
             	    	paeth_sum += Math.abs(paeth_delta);
             	    }
                 }
-        		System.out.println("Paeth sum is " + paeth_sum);
-                System.out.println("Ideal sum is " + ideal_sum);
-        	}
-        }
-        
-        
-        System.out.println();
-        ArrayList result = new ArrayList();
-        result.add(ideal_sum);
-        result.add(dst);
-        result.add(map);
-        return result;
-    }
-    
-    public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
-    {
-        int[] dst = new int[xdim * ydim];
-        byte[] map = new byte[xdim * ydim];
-        
-        int init_value = src[0];
-        int value      = init_value;
-        int paeth_sum  = 0;
-        int ideal_sum  = 0;
-        
-        int k = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-        	if(i == 0)
-        	{
-                for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            		    // Setting the first value to 3 to mark the delta type ideal.
-            			dst[k] = 3;
-            			map[k] = 0;
-            			k++;
-            	    }
-            		else
-            		{
-            			// We don't have any vertical or diagonal deltas to check
-            			// in the first row, so we just use horizontal deltas.
-            		    int delta    = src[k] - value;
-                        value       += delta;
-                        dst[k]       = delta;
-                        map[k] = 0;
-                        ideal_sum    += Math.abs(delta);
-                        paeth_sum    += Math.abs(delta);
-                        k++;
-            		}
-            	}
-            }
-        	else
-        	{
-        		for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            	    	// We don't have horizontal or diagonal deltas to check,
-            	    	// so we just use the vertical delta, and reset our initial value.
-            	    	int delta  = src[k] - init_value;
-            	    	init_value = src[k];
-            	    	dst[k]     = delta;
-            	    	map[k]     = 1;
-            	    	ideal_sum += Math.abs(delta);
-                        paeth_sum += Math.abs(delta);
-            	    	k++;
-            	    }
-            	    else if(j < xdim - 1)
-            	    {
-            	    	
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = a + b - c;
-            	    	
-            	    	
-            	    	// Prediction deltas.
-            	    	int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	
-            	    	// Actual deltas.
-            	    	int horizontal_delta = src[k] - src[k - 1];
-            	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
-            	    	
-            	    	int paeth_delta = 0;
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	    paeth_delta = horizontal_delta;
-            	    	else if(delta_b <= delta_c)
-            	    	    paeth_delta = vertical_delta;
-            	    	else
-            	    	    paeth_delta = diagonal_delta;
-            	    	paeth_sum += Math.abs(paeth_delta);
-            	    	
-            	    	
-            	    	
-            	    	int ideal_delta = 0;
-            	    	
-            	    	//We have a set of 4 possible deltas to use.
-            	    	a = src[k] - src[k - 1];
-            	    	b = src[k] - src[k - xdim];
-            	    	c = src[k] - src[k - xdim - 1];
-            	    	d = src[k] - src[k - xdim + 1];
-            	    	
-            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c) && Math.abs(a) <= Math.abs(d))
-            	    	{
-            	    		ideal_delta = a;
-            	    	    dst[k]      = ideal_delta;
-            	    	    map[k]      = 0;
-            	    	    ideal_sum  += Math.abs(ideal_delta);
-            	    	    k++;
-            	    	    
-            	    	    if(Math.abs(ideal_delta) > Math.abs(paeth_delta))
-            	    	    	System.out.println("Ideal delta larger than paeth delta");
-            	    	}
-            	    	else if(Math.abs(b) <= Math.abs(c)&& Math.abs(b) <= Math.abs(d))
-            	    	{
-            	    		ideal_delta = b;
-            	    		dst[k]      = ideal_delta;
-            	    	    map[k]      = 1;
-            	    	    ideal_sum  += Math.abs(ideal_delta);
-            	    	    k++;
-            	    	    
-            	    	    if(Math.abs(ideal_delta) > Math.abs(paeth_delta))
-            	    	    	System.out.println("Ideal delta larger than paeth delta");
-            	    	}
-            	    	else if(Math.abs(c) <= Math.abs(d))
-            	    	{
-            	    		ideal_delta = c;
-            	    		dst[k]      = ideal_delta;
-            	    	    map[k]      = 2;
-            	    	    ideal_sum   += Math.abs(ideal_delta);
-            	    	    k++;	
-            	    	    
-            	    	    if(Math.abs(ideal_delta) > Math.abs(paeth_delta))
-            	    	    	System.out.println("Ideal delta larger than paeth delta");
-            	    	}
-            	    	else
-            	    	{
-            	    		ideal_delta  = d;
-            	    		dst[k]       = ideal_delta;
-            	    		map[k] = 3;
-            	    		ideal_sum   += Math.abs(ideal_delta);
-            	    	    k++;
-            	    	    
-            	    	    if(Math.abs(ideal_delta) > Math.abs(paeth_delta))
-            	    	    	System.out.println("Ideal delta larger than paeth delta");
-            	    	}
-            	    }
-            	    else
-            	    {
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = a + b - c;
-            	    	
-            	    	
-            	    	// Prediction deltas.
-            	    	int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	
-            	    	// Actual deltas.
-            	    	int horizontal_delta = src[k] - src[k - 1];
-            	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
-            	    	
-            	    	int paeth_delta = 0;
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	    paeth_delta = horizontal_delta;
-            	    	else if(delta_b <= delta_c)
-            	    	    paeth_delta = vertical_delta;
-            	    	else
-            	    	    paeth_delta = diagonal_delta;
-            	    	paeth_sum += Math.abs(paeth_delta);
-            	    	
-            	    	
-            	    	int ideal_delta = 0;
-            	    	
-            	    	// We have a set of 3 possible pixels to use.
-            	    	a = src[k] - src[k - 1];
-            	    	b = src[k] - src[k - xdim];
-            	    	c = src[k] - src[k - xdim - 1];
-            	    	
-            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c))
-            	    	{
-            	    		ideal_delta = a;
-            	    	    dst[k]      = ideal_delta;
-            	    	    map[k]      = 0;
-            	    	    ideal_sum  += Math.abs(ideal_delta);
-            	    	    k++;
-            	    	}
-            	    	else if(Math.abs(b)<= Math.abs(c))
-            	    	{
-            	    		ideal_delta = b;
-            	    		dst[k]      = ideal_delta;
-            	    	    map[k]      = 1;
-            	    	    ideal_sum  += Math.abs(ideal_delta);
-            	    	    k++;
-            	    	}
-            	    	else
-            	    	{
-            	    		ideal_delta = c;
-            	    		dst[k]      = ideal_delta;
-            	    	    map[k]      = 2;
-            	    	    ideal_sum  += Math.abs(ideal_delta);
-            	    	    k++;	
-            	    	}
-            	    	 if(Math.abs(ideal_delta) > Math.abs(paeth_delta))
-         	    	    	System.out.println("Ideal delta larger than paeth delta");
-            	    }
-                }
         	}
         }
         
         System.out.println("Paeth sum is " + paeth_sum);
-        System.out.println("Ideal sum is " + ideal_sum);
+        System.out.println("Mixed sum is " + ideal_sum);
+        
         System.out.println();
         ArrayList result = new ArrayList();
         result.add(ideal_sum);
@@ -1005,1653 +826,8 @@ public class DeltaMapper
         result.add(map);
         return result;
     }
-    
-    public static int[] getValuesFromIdealDeltas(int [] src, int xdim, int ydim, int init_value, byte [] map)
-    {
-    	int[] dst = new int[xdim * ydim];
-        dst[0] = init_value;
-        int value = init_value;
-        
-        if(src[0] != 3)
-        	System.out.println("Wrong code.");
-        
-        for(int i = 1; i < xdim; i++)
-        {
-        	value   += src[i];
-        	dst[i] = value;
-        }
-        
-        for(int i = 1; i < ydim; i++)
-        {
-            for(int j = 0; j < xdim; j++)	
-            {
-            	int k = map[i - 1];
-            	if(j == 0)
-            	{
-            	    init_value   += src[i * xdim];
-            	    dst[i * xdim] = init_value;
-            	    value         = init_value;
-            	}
-            	else if (j < xdim - 1)
-            	{
-            		if(k == 0)
-            		    value = dst[i * xdim + j - 1];
-            		else if(k == 1)
-            		    value = dst[(i - 1) * xdim + j];
-            		else if(k == 2)
-            		    value = dst[(i - 1) * xdim + j - 1];
-            		else if(k == 3)
-            			value = dst[(i - 1) * xdim + j + 1];
-            	    value += src[i * xdim + j];
-            	    dst[i * xdim + j] = value;
-            	}
-            }
-        }
-        
-        return dst;
-    }
-   
-    public static int[] getValuesFromDeltas4(int [] src, int xdim, int ydim, int init_value, byte [] map)
-    {
-    	int[] dst = new int[xdim * ydim];
-        dst[0] = init_value;
-        int value = init_value;
-        
-        if(src[0] != 3)
-        	System.out.println("Wrong code.");
-        
-        for(int i = 1; i < xdim; i++)
-        {
-        	value   += src[i];
-        	dst[i] = value;
-        }
-        
-        for(int i = 1; i < ydim; i++)
-        {
-            for(int j = 0; j < xdim; j++)	
-            {
-            	if(j == 0)
-            	{
-            	    init_value   += src[i * xdim];
-            	    dst[i * xdim] = init_value;
-            	    value         = init_value;
-            	}
-            	else
-            	{
-            		int current_direction = map[i * xdim + j]; 
-            		if(current_direction == 0)
-            		    value = dst[i * xdim + j - 1];
-            		else if(current_direction == 1)
-            		    value = dst[(i - 1) * xdim + j];
-            		else if(current_direction == 2)
-            		    value = dst[(i - 1) * xdim + j - 1];
-            		else if(current_direction == 3)
-            			value = dst[(i - 1) * xdim + j + 1];
-            	    value += src[i * xdim + j];
-            	    dst[i * xdim + j] = value;
-            	}
-            }
-        }
-        return dst;
-    }
-    
-    // Slightly modified paeth filter that checks both diagonals.
-    // This only seem to help with smooth images, and reduces
-    // the prediction accuracy.
-    public static ArrayList getDeltasFromValues5(int src[], int xdim, int ydim)
-    {
-    	int[] dst          = new int[xdim * ydim];
-        int init_value     = src[0];
-        int value          = init_value;
-        int delta          = 0;
-        int sum            = 0;
-        int k              = 0;
-      
-        for(int i = 0; i < ydim; i++)
-        {
-        	if(i == 0)
-        	{
-        		// No diagonal or vertical deltas, we just use the horizontal delta.
-                for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            			dst[k++] = 5;
-            	    }
-            		else
-            		{
-            		    delta     = src[k] - value;
-                        value     += delta;
-                        dst[k++]  = delta;
-                        sum      += Math.abs(delta);
-            		}
-            	}
-            }
-        	else
-        	{
-        		for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            	    	// We don't have a horizontal delta for the paeth filter,
-            	    	// so we just use the vertical deltas. 
-            	    	// We also reset our initial value.
-            	    	delta      = src[k] - init_value;
-            	    	init_value = src[k];
-            	    	dst[k++]   = delta;
-            	        sum += Math.abs(delta);
-            	    }
-            	    else if(j < xdim - 1)
-            	    {
-            	    	// We have both diagonals, vertical, and horizontal deltas available.
-            	    	int horizontal_delta = src[k] - src[k - 1];
-            	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int backward_diagonal_delta = src[k] - src[k - xdim - 1];
-            	    	int forward_diagonal_delta  = src[k] - src[k - xdim + 1];
-            	    	
-            	    	
-            	    	int diagonal_gradient = Math.abs(src[k - 1] - src[k - xdim]);
-            	    	int vertical_gradient = Math.abs(src[k - 1] - src[k - xdim + 1]);
-            	    	
-            	    	// Check to see which diagonal value to use.
-            	    	if(diagonal_gradient <= vertical_gradient)
-            	    	{
-            	    		int a = src[k - 1];
-                	    	int b = src[k - xdim];
-                	    	int c = src[k - xdim - 1];
-                	    	int d = a + b - c;   
-            	    	
-                	    	// Prediction deltas.
-                	    	int delta_a = Math.abs(a - d);
-                	    	int delta_b = Math.abs(b - d);
-                	    	int delta_c = Math.abs(c - d);
-            	    	
-                	    	if(delta_a <= delta_b && delta_a <= delta_c)
-                	    	    delta = horizontal_delta;
-                	    	else if(delta_b <= delta_c)
-                	    	    delta = vertical_delta;
-                	    	else
-                	    	    delta = backward_diagonal_delta;	
-            	    	}
-            	    	else
-            	    	{
-            	    		int a = src[k - 1];
-            	    		int b = src[k - xdim + 1];
-            	    		int c = src[k - xdim];
-            	    		int d = a + b - c;
-            	    		
-            	    		int delta_a = Math.abs(a - d);
-                	    	int delta_b = Math.abs(b - d);
-                	    	int delta_c = Math.abs(c - d);
-            	    	
-                	    	if(delta_a <= delta_b && delta_a <= delta_c)
-                	    	    delta = horizontal_delta;
-                	    	else if(delta_b <= delta_c)
-                	    	    delta = forward_diagonal_delta;
-                	    	else
-                	    	    delta = vertical_delta;
-            	    	}
-            	    	dst[k++]   = delta;
-            	    	sum += Math.abs(delta);
-            	    }
-            	    else
-            	    {
-            	    	// No forward diagonal.
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = a + b - c;
-            	    	
-            	    	
-            	    	int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	int horizontal_delta = src[k] - src[k - 1];
-            	    	int vertical_delta   = src[k] - src[k - xdim];
-            	    	int diagonal_delta   = src[k] - src[k - xdim - 1];
-            	    	
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	    delta = horizontal_delta;
-            	    	else if(delta_b <= delta_c)
-            	    	    delta = vertical_delta;
-            	    	else
-            	    	    delta = diagonal_delta;
-            	    	dst[k++] = delta;
-            	    	sum += Math.abs(delta);
-            	    }
-                }
-        	}
-        }
-        ArrayList result = new ArrayList();
-        result.add(sum);
-        result.add(dst);
-        return result;    
-    }
-
-
-    public static int[] getValuesFromDeltas5(int src[], int xdim, int ydim, int init_value)
-    {
-    	int[] dst = new int[xdim * ydim];
-        dst[0]    = init_value;
-        int value = init_value;
-
-
-        if(src[0] != 5)
-        	System.out.println("Wrong code at beginning of delta array.");
-        
-        for(int i = 1; i < xdim; i++)
-        {
-        	value   += src[i];
-        	dst[i] = value;
-        }
-        
-        for(int i = 1; i < ydim; i++)
-        {
-            for(int j = 0; j < xdim; j++)	
-            {
-            	if(j == 0)
-            	{
-            	    init_value   += src[i * xdim];
-            	    dst[i * xdim] = init_value;
-            	    value         = init_value;
-            	}
-            	else
-            	{
-            	    if(j == xdim - 1)
-            	    {
-            	    	int a = dst[i * xdim + j - 1];
-                	    int b = dst[(i - 1) * xdim + j];
-                	    int c = dst[(i - 1) * xdim + j - 1];
-                	    int d = a + b - c;
-                	    
-                	    int delta_a = Math.abs(a - d);
-            	    	int delta_b = Math.abs(b - d);
-            	    	int delta_c = Math.abs(c - d);
-            	    	
-            	    	if(delta_a <= delta_b && delta_a <= delta_c)
-            	    	{
-            	    	    dst[i * xdim + j] = a + src[i * xdim + j];
-            	    	}
-            	    	else if(delta_b <= delta_c)
-            	    	{
-            	    		dst[i * xdim + j] = b + src[i * xdim + j];
-            	    	}
-            	    	else
-            	    	{
-            	    		dst[i * xdim + j] = c + src[i * xdim + j];
-            	    	}
-            	    }
-            	    else
-            	    {
-            	    	int diagonal_gradient = Math.abs(dst[i * xdim + j - 1] - dst[i * xdim + j - xdim]);
-            	    	int vertical_gradient = Math.abs(dst[i * xdim + j - 1] - dst[i * xdim + j - xdim + 1]);	
-            	    	
-            	    	if(diagonal_gradient <= vertical_gradient)
-            	    	{
-            	    		int a = dst[i * xdim + j - 1];
-                    	    int b = dst[(i - 1) * xdim + j];
-                    	    int c = dst[(i - 1) * xdim + j - 1];
-                    	    int d = a + b - c;
-                    	    
-                    	    int delta_a = Math.abs(a - d);
-                	    	int delta_b = Math.abs(b - d);
-                	    	int delta_c = Math.abs(c - d);
-                	    	
-                	    	if(delta_a <= delta_b && delta_a <= delta_c)
-                	    	{
-                	    	    dst[i * xdim + j] = a + src[i * xdim + j];
-                	    	}
-                	    	else if(delta_b <= delta_c)
-                	    	{
-                	    		dst[i * xdim + j] = b + src[i * xdim + j];
-                	    	}
-                	    	else
-                	    	{
-                	    		dst[i * xdim + j] = c + src[i * xdim + j];
-                	    	}	
-            	    	}
-            	    	else
-            	    	{
-            	    		int a = dst[i * xdim + j - 1];
-            	    		int b = dst[(i - 1) * xdim + j + 1];
-            	    		int c = dst[(i - 1) * xdim + j];
-            	    		int d = a + b - c;
-            	    		
-            	    		int delta_a = Math.abs(a - d);
-                	    	int delta_b = Math.abs(b - d);
-                	    	int delta_c = Math.abs(c - d);
-                	    	
-                	    	if(delta_a <= delta_b && delta_a <= delta_c)
-                	    	{
-                	    	    dst[i * xdim + j] = a + src[i * xdim + j];
-                	    	}
-                	    	else if(delta_b <= delta_c)
-                	    	{
-                	    		dst[i * xdim + j] = b + src[i * xdim + j];
-                	    	}
-                	    	else
-                	    	{
-                	    		dst[i * xdim + j] = c + src[i * xdim + j];
-                	    	}	
-            	    	}
-            	    }
-            	}
-            }
-        }
-        return dst;
-    }
  
-    
-    // These packing/unpacking functions use the maximum length
-    // code to dispense with a stop bit in the longest string.
-    // Not very significant until we are looking at binary and
-    // low resolution images.
-    public static int packStrings2(int src[], int table[], byte dst[])
-    {
-    	int size             = src.length;
-    	int number_of_values = table.length;
-    	
-    	int maximum_length = number_of_values - 1;
-    
-        int [] mask  = new int[8];
-        
-        mask[0] = 1;
-        mask[1] = 3;
-        mask[2] = 7;
-        mask[3] = 15;
-        mask[4] = 31;
-        mask[5] = 63;
-        mask[6] = 127;
-        mask[7] = 255;
-        
-    
-        int start_bit  = 0;
-        int stop_bit   = 0;
-        int p   = 0;
-        dst[p]  = 0;
-        
-        for(int i = 0; i < size; i++)
-        {
-            int j = src[i];
-            int k = table[j];
-            
-            if(k == 0)
-            {
-                start_bit++;
-                if(start_bit == 8)
-                {
-                    dst[++p] = 0;
-                    start_bit       = 0;
-                }
-            }
-            else
-            {
-                stop_bit = (start_bit + k + 1) % 8;
-                if(k == maximum_length)
-                {
-                	stop_bit--;
-                	if(stop_bit < 0)
-                		stop_bit = 7;
-                }
-                
-                if(k <= 7)
-                {
-                	dst[p] |= (byte) (mask[k - 1] << start_bit);
-                	
-                    if(stop_bit <= start_bit)
-                    {
-                        dst[++p] = 0;
-                        if(stop_bit != 0)
-                        {
-                            dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
-                        }
-                    }
-                }
-                else if(k > 7)
-                {
-                	dst[p] |= (byte)(mask[7] << start_bit);
-            		int m = (k - 8) / 8;
-                    for(int n = 0; n < m; n++)
-                        dst[++p] = (byte)(mask[7]);
-                    dst[++p] = 0;
-                    
-                    if(start_bit != 0)
-                        dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
-                    
-                    if(k % 8 != 0)
-                    {
-                        m = k % 8 - 1;
-                        
-                        dst[p] |= (byte)(mask[m] << start_bit);
-                        
-                        if(stop_bit <= start_bit)
-                        {
-                            dst[++p] = 0;
-                            if(stop_bit != 0)
-                            {
-                                dst[p] |= (byte)(mask[m] >> (8 - start_bit));
-                            }
-                        }
-                    }
-                    // If this is the maximum_length index and it's a multiple of 8,
-                    // then we already incremeted the index and then reset the stop bit.
-                    // Don't want to do it twice.   Very tricky bug.
-                    else if(stop_bit <= start_bit && k != maximum_length)
-                            dst[++p] = 0;
-                }
-                start_bit = stop_bit;
-            }
-        }
-        
-        if(start_bit != 0)
-            p++;
-        int number_of_bits = p * 8;
-        if(start_bit != 0)
-            number_of_bits -= 8 - start_bit;
-        return(number_of_bits);
-    }
-    
-    
-    public static int unpackStrings2(byte src[], int table[], int dst[])
-    {
-    	for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
-        int size             = dst.length;
-        int number_of_values = table.length;
-        int number_unpacked  = 0;
-        int maximum_length   = number_of_values - 1;
-   
-        int [] index = new int[number_of_values];
-        
-        int [] inverse_table = new int[number_of_values];
-        for(int i = 0; i < number_of_values; i++)
-        {
-            int j            = table[i];
-            inverse_table[j] = i;
-            index[i]         = 0;
-        }
-        
-        int length   = 1;
-        int src_byte = 0;
-        int dst_byte = 0;
-        
-        
-        byte mask = 0x01;
-        byte bit  = 0;
-        
-        try
-        {
-        while(dst_byte < size)
-        {
-            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
-            if(non_zero != 0 && length < maximum_length)
-                length++;
-            else if(non_zero == 0)
-            {
-                int k = length - 1;
-                dst[dst_byte++] = inverse_table[k]; 
-               
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
-            }
-            else if(length == maximum_length)
-            {
-            	int k = length;
-            	dst[dst_byte++] = inverse_table[k];
-            	
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
-            }
-            bit++;
-            if(bit == 8)
-            {
-                bit = 0;
-                src_byte++;
-            }
-        }
-        }
-        catch(Exception e)
-        {
-        	System.out.println(e.toString());
-        	System.out.println("Exiting unpackStrings2 with an exception.");
-        }
-        return(number_unpacked);
-    }
- 
-	public static int compressZeroBits(byte src[], int size, byte dst[]) {
-		for (int i = 0; i < dst.length; i++)
-			dst[i] = 0;
-		int current_byte = 0;
-		int current_bit = 0;
-		byte mask = 0x01;
-		dst[0] = 0;
-
-		int i = 0;
-		int j = 0;
-		int k = 0;
-
-		try {
-			for (i = 0; i < size; i++) {
-				if ((src[k] & (mask << j)) == 0 && i < size - 1) {
-					i++;
-					j++;
-
-					if (j == 8) {
-						j = 0;
-						k++;
-					}
-					if ((src[k] & (mask << j)) == 0) {
-						// Current bit is a 0.
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							// current_bit = dst[current_byte] = 0;
-							current_bit = 0;
-						}
-					} else {
-						// Current bit is a 1.
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							current_bit = dst[current_byte] = 0;
-						}
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							current_bit = 0;
-						}
-					}
-				} 
-				else if ((src[k] & (mask << j)) == 0 && (i == size - 1)) 
-				{
-					// We're at the end of the string and we have an odd 0.
-					// Put a 1 down to signal that there is an odd 0.
-					// This works for double iterations but can produce trailing 
-					// zero bits in the other recursive cases.
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						current_bit = 0;
-					}
-				} 
-				else 
-				{
-					// Current first bit is a 1.
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						current_bit = 0;
-					}
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						current_bit = 0;
-					}
-				}
-				j++;
-				if (j == 8) 
-				{
-					j = 0;
-					k++;
-				}
-			}
-		} 
-		catch (Exception e) 
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting compressZeroBits with an exception.");
-		}
-		
-		int number_of_bits = current_byte * 8;
-		number_of_bits += current_bit;
-
-		return (number_of_bits);
-	}
-
-	public static int decompressZeroBits(byte src[], int size, byte dst[]) 
-	{
-		// This is necessary because dst can be used multiple times,
-    	// so we can't count on it being initialized with zeros.
-		for (int i = 0; i < dst.length; i++)
-			dst[i] = 0;
-		int current_byte = 0;
-		int current_bit = 0;
-		byte mask = 0x01;
-		dst[0] = 0;
-
-		int i = 0;
-		int j = 0;
-		int k = 0;
-		
-		try 
-		{
-			for (i = 0; i < size; i++) 
-			{
-				if ((src[k] & (mask << j)) != 0 && i < size - 1) 
-				{
-					i++;
-					j++;
-					if (j == 8) 
-					{
-						j = 0;
-						k++;
-					}
-					if ((src[k] & (mask << j)) != 0) 
-					{
-						current_bit++;
-						if (current_bit == 8) 
-						{
-							current_byte++;
-							current_bit = 0;
-						}
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							current_bit = 0;
-						}
-					} 
-					else 
-					{
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							current_bit = 0;
-						}
-					}
-				} 
-				else if (((src[k] & (mask << j)) != 0) && i == size - 1) 
-				{
-					// Append an odd 0.
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						current_bit = 0;
-					}
-				} 
-				else if ((src[k] & (mask << j)) == 0) 
-				{
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						if (current_byte < dst.length)
-							current_bit = 0;
-					}
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						if (current_byte < dst.length)
-							current_bit = 0;
-					}
-				}
-
-				j++;
-				if (j == 8) 
-				{
-					j = 0;
-					k++;
-				}
-			}
-		} 
-		catch (Exception e) 
-		{
-			System.out.println(e.toString());
-			System.out.println("Input size was " + size);
-			System.out.println("Exception at index " + i);
-			System.out.println("Exiting decompressZeroBits with an exception.");
-		}
-
-		int number_of_bits = current_byte * 8;
-		number_of_bits += current_bit;
-		return (number_of_bits);
-	}
-	
-    // This function uses a metric to see if the data will expand or contract, and
-    // copies the src to dst instead of processing it if it would expand.  
-    // Worth noting that sometimes expanded strings compress better with
-    // a prefix free code later than unexpanded strings since it's 
-    // another example of recursive compression.
-    public static int compressZeroStrings(byte src[], int length, byte dst[])
-    {
-    	int     current_length  = 0;
-    	int     iterations      = 0;
-    	boolean even_iterations = true;
-    	
-    	int string_length = length;
-    	int byte_length   = string_length / 8;
-    	if(string_length % 8 != 0)
-    		byte_length++;
-    	int input_length  = src.length;
-    	int output_length = dst.length;
-    	
-    	try
-    	{
-            int amount = getCompressionAmount(src, length, 0);
-    	    if(amount > 0)
-    	    {
-    		    // 0 iterations
-    		    System.arraycopy(src, 0, dst, 0, byte_length);
-    		    dst[byte_length] = (byte)iterations;
-    	        return length;
-    	    }
-            else
-            {
-            	iterations = 1;
-    		    current_length = compressZeroBits(src, length, dst);
-    		    amount         = getCompressionAmount(dst, current_length, 0);
-    		
-    		    if(amount >= 0)
-    		    {
-    		    	// 1 iteration
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-                    return(current_length);
-    		    }
-    		    else
-    		    {
-    			    byte [] temp      = new byte[src.length];  
-    			    while(amount < 0)
-    			    {
-    				   int previous_length = current_length;
-        	           if(iterations % 2 == 1)
-        	           {
-        	        	   string_length = previous_length;
-                           input_length  = dst.length;
-                           output_length = temp.length;
-        	        	
-                           current_length = compressZeroBits(dst, previous_length, temp);
-                           iterations++; 
-                           even_iterations = true;
-                           amount         = getCompressionAmount(temp, current_length, 0);
-                        
-        	            }
-                        else
-                        {
-                        	string_length = previous_length;
-                            input_length  = temp.length;
-                            output_length = dst.length;
-                        	
-                            current_length  = compressZeroBits(temp, previous_length, dst);
-                            iterations++; 
-                        	even_iterations = false;
-                            amount         = getCompressionAmount(dst, current_length, 0);
-                        }
-    			    }
-    			
-    			    if(iterations % 2 == 0) 
-                    {
-                	    // The last iteration used temp as a destination,
-                	    // so we need to copy the data from temp to dst.
-                        byte_length = current_length / 8;
-                        if(current_length % 8 != 0)
-                            byte_length++; 
-                        System.arraycopy(temp,  0,  dst,  0,  byte_length);
-                    } 
-                    // else the result is already in dst.
-    			
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-    		    }
-    	    }
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressZeroStrings with an exception.");
-    		System.out.println("The number of iterations was " + iterations);
-    		System.out.println("String length was " + string_length);
-    		System.out.println("Byte length was " + byte_length);
-    		System.out.println("Input buffer length was " + input_length);
-    		System.out.println("Output buffer length was " + output_length);
-    	}
-    	return current_length;
-    }
-    
-    public static int compressZeroStrings2(byte src[], int length, byte dst[])
-    {
-    	int     current_length  = 0;
-    	int     iterations      = 0;
-    	boolean even_iterations = true;
-    	
-    	int string_length = length;
-    	int byte_length   = string_length / 8;
-    	if(string_length % 8 != 0)
-    		byte_length++;
-    	int input_length  = src.length;
-    	int output_length = dst.length;
-    	
-    	try
-    	{
-            int amount = getCompressionAmount(src, length, 0);
-    	    if(amount > 0)
-    	    {
-    		    // 0 iterations
-    		    System.arraycopy(src, 0, dst, 0, byte_length);
-    		    dst[byte_length] = 0;
-    		    
-    		    byte extra_bits = (byte)(length % 8);
-    		    if(extra_bits != 0)
-    		    {
-    		    	extra_bits = (byte)(7 - extra_bits);
-    		    }
-    		    extra_bits     <<= 5;
-    		    
-    		    dst[byte_length] |= extra_bits;
-    	        return length;
-    	    }
-            else
-            {
-            	iterations = 1;
-    		    current_length = compressZeroBits(src, length, dst);
-    		    amount         = getCompressionAmount(dst, current_length, 0);
-    		
-    		    if(amount >= 0)
-    		    {
-    		    	// 1 iteration
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = 1;
-                    
-                    byte extra_bits = (byte)(length % 8);
-        		    if(extra_bits != 0)
-        		    {
-        		    	extra_bits = (byte)(7 - extra_bits);
-        		    }
-        		    extra_bits     <<= 5;
-        		    
-        		    dst[byte_length] |= extra_bits;
-                    
-                    return(current_length);
-    		    }
-    		    else
-    		    {
-    			    byte [] temp      = new byte[src.length];  
-    			    while(amount < 0 && iterations < 15)
-    			    {
-    				   int previous_length = current_length;
-        	           if(iterations % 2 == 1)
-        	           {
-        	        	   string_length = previous_length;
-                           input_length  = dst.length;
-                           output_length = temp.length;
-        	        	
-                           current_length = compressZeroBits(dst, previous_length, temp);
-                           iterations++; 
-                           even_iterations = true;
-                           amount         = getCompressionAmount(temp, current_length, 0);
-                        
-        	            }
-                        else
-                        {
-                        	string_length = previous_length;
-                            input_length  = temp.length;
-                            output_length = dst.length;
-                        	
-                            current_length  = compressZeroBits(temp, previous_length, dst);
-                            iterations++; 
-                        	even_iterations = false;
-                            amount         = getCompressionAmount(dst, current_length, 0);
-                        }
-    			    }
-    			
-    			    if(iterations % 2 == 0) 
-                    {
-                	    // The last iteration used temp as a destination,
-                	    // so we need to copy the data from temp to dst.
-                        byte_length = current_length / 8;
-                        if(current_length % 8 != 0)
-                            byte_length++; 
-                        System.arraycopy(temp,  0,  dst,  0,  byte_length);
-                    } 
-                    // else the result is already in dst.
-    			
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-                    byte extra_bits = (byte)(current_length % 8);
-                    if(extra_bits != 0)
-                    	extra_bits = (byte)(7 - extra_bits);
-                    extra_bits <<= 5;
-                    dst[last_byte] |= extra_bits;
-    		    }
-    	    }
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressZeroStrings2 with an exception.");
-    		System.out.println("The number of iterations was " + iterations);
-    		System.out.println("String length was " + string_length);
-    		System.out.println("Byte length was " + byte_length);
-    		System.out.println("Input buffer length was " + input_length);
-    		System.out.println("Output buffer length was " + output_length);
-    	}
-    	return current_length;
-    }
-    
-    
-    public static int decompressZeroStrings2(byte src[], int length, byte dst[])
-    {
-        // Getting the number of iterations appended to
-        // the end of the string. 
-        int last_byte = length / 8;
-        if(length % 8 != 0)
-        	last_byte++;
-        int iterations = src[last_byte] & (byte)31;
-        byte extra_bits = (byte)(src[last_byte] >> 5);
-        extra_bits &= 7;
-        
-        int modulus = length % 8;
-        int inverse = modulus;
-        if(inverse != 0)
-        	inverse = 8 - inverse;
-       
-        if(extra_bits != inverse)
-        {
-        	System.out.println("Extra bits is " + extra_bits);
-        	System.out.println("Inverse of modulus of bit length is " + inverse);
-        	System.out.println();
-        }
-        
-        int bit_length = (src.length - 1) * 8 - extra_bits;
-        
-        // If it's not a zero type string, we'll still process it.
-        // This might actually compress a one type string.
-        if(iterations > 16)
-        {
-        	System.out.println("Not zero type string.");
-        	iterations -= 16;
-        }
-        
-        // If it was not compressed, we copy src to dst.
-        if(iterations == 0)
-        {
-        	int byte_length = length / 8;
-        	if(length % 8 != 0)
-        		byte_length++;
-        	
-        	System.arraycopy(src,  0,  dst, 0, byte_length);
-        	return length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressZeroBits(src, length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        } 
-    }
-   
-    public static int decompressZeroStrings(byte src[], int length, byte dst[])
-    {
-        // Getting the number of iterations appended to
-        // the end of the string. 
-        int last_byte = length / 8;
-        if(length % 8 != 0)
-        	last_byte++;
-        int iterations = src[last_byte];
-        
-        // If it's not a zero type string, we'll still process it.
-        // This might actually compress a one type string.
-        if(iterations < 0)
-        {
-        	System.out.println("Not zero type string.");
-        	iterations = -iterations;
-        }
-        
-        // If it was not compressed, we copy src to dst.
-        if(iterations == 0)
-        {
-        	int byte_length = length / 8;
-        	if(length % 8 != 0)
-        		byte_length++;
-        	
-        	System.arraycopy(src,  0,  dst, 0, byte_length);
-        	return length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressZeroBits(src, length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        } 
-    }
-   
-    
-    public static int compressOneBits(byte src[], int size, byte dst[])
-    {
-        for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
-        int current_byte        = 0;
-        int current_bit         = 0;
-        byte mask               = 0x01;
-        dst[0]                  = 0;
-        
-        int i = 0;
-        int j = 0;
-        int k = 0;
-        for(i = 0; i < size; i++)
-        {
-            // Current bit is a 1.  Check the next bit.
-            if((src[k] & (mask << j)) != 0 && i < size - 1)
-            {
-               i++;
-               j++;
-                
-               if(j == 8)
-               {
-                   j = 0;
-                   k++;
-               }
-               if((src[k] & (mask << j)) != 0)
-               {
-                   // Current bit is a 1.
-                   // We parsed two 1 bits in a row, put down a 1 bit.
-                   dst[current_byte] |= (byte)mask << current_bit;
-                   
-                   // Move to the start of the next code.
-                   current_bit++;
-                   if(current_bit == 8)
-                   {
-                       current_byte++;
-                       current_bit = 0;
-                   }
-               }
-               else
-               {
-                   // Current bit is a 0.
-                   // We want 10 -> 01. 
-                   // Increment and leave a 0 bit.
-                   current_bit++;
-                   if(current_bit == 8)
-                   {
-                       current_byte++;
-                       current_bit = 0;
-                   }
-                   
-                   // Put down a 1 bit.
-                   dst[current_byte] |= (byte)mask << current_bit;
-                   
-                   // Move to the start of the next code.
-                   current_bit++;
-                   if(current_bit == 8)
-                   {
-                       current_byte++;
-                       current_bit = 0;
-                   }
-               }
-            }
-            else if((src[k] & (mask << j)) != 0 && (i == size - 1)) // We're at the end of the string and we have an odd 1.
-            {
-                // Put a 0 down to signal that there is an odd 1.
-            	// This works for single iterations but might fail in the recursive case.
-            	// It seems like there could be extra trailing bits up to the amount of
-            	// iterations, but that does not seem to happen.
-                current_bit++;
-                if(current_bit == 8)
-                {
-                    current_byte++;
-                    current_bit = 0;
-                }
-            }
-            else
-            {
-            	// Current first bit is a 0.
-            	// 0->00
-                current_bit++;
-                if(current_bit == 8)
-                {
-                    current_byte++;
-                    current_bit = 0;
-                }
-                current_bit++;
-                if(current_bit == 8)
-                {
-                    current_byte++;
-                    current_bit = 0;
-                }
-            }
-            j++;
-            if(j == 8)
-            {
-                j = 0;
-                k++;
-            }
-        }    
-        int number_of_bits = current_byte * 8;
-        number_of_bits    += current_bit;
-        return(number_of_bits);
-    }
-
-    public static int decompressOneBits(byte src[], int size, byte dst[])
-    {
-    	// This is necessary because dst can be used multiple times,
-    	// so we can't count on it being initialized with zeros.
-    	for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
-    	
-        int  current_byte = 0;
-        int  current_bit  = 0;
-        byte mask         = 0x01;
-        dst[0]            = 0;
-        
-        int i = 0;
-        int j = 0;
-        int k = 0;
-      
-        for(i = 0; i < size; i++)
-        {
-			try 
-			{
-				// First bit is a 0, get next bit.
-				if (((src[k] & (mask << j)) == 0) && i < size - 1) 
-				{
-					i++;
-					j++;
-					if (j == 8) 
-					{
-						j = 0;
-						k++;
-					}
-					if ((src[k] & (mask << j)) == 0) 
-					{
-						// Another zero bit. Leave a zero bit in the output.
-						current_bit++;
-						if (current_bit == 8) {
-							current_byte++;
-							current_bit = 0;
-						}
-					} 
-					else 
-					{
-						// We have 01->10.
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) 
-						{
-							current_byte++;
-							current_bit = 0;
-						}
-						current_bit++;
-						if (current_bit == 8) 
-						{
-							current_byte++;
-							current_bit = 0;
-						}
-					}
-				} 
-				else if (((src[k] & (mask << j)) == 0) && i == size - 1) 
-				{
-					// Append an odd 1.
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						current_bit = 0;
-					}
-				} 
-				else if ((src[k] & (mask << j)) != 0) 
-				{
-					// We have a 1 bit, put down two 1 bits in the output.
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						if (current_byte < dst.length)
-							current_bit = 0;
-					}
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) 
-					{
-						current_byte++;
-						if (current_byte < dst.length)
-							current_bit = 0;
-					}
-				}
-				j++;
-				if (j == 8) 
-				{
-					j = 0;
-					k++;
-				}
-			}
-			catch (Exception e) 
-			{
-				/*
-				System.out.println(e.toString());
-				System.out.println("Size of input was " + size);
-				System.out.println("Exception on index " + i);
-				System.out.println("Exiting decompressOneBits.");
-				*/
-			}
-        }
-        
-        int number_of_bits = current_byte * 8;
-        number_of_bits += current_bit;
-        return(number_of_bits);
-    }
   
-
-    public static int compressOneStrings(byte src[], int length, byte dst[])
-    {
-    	int current_length = 0;
-    
-    	boolean even_iterations = true;
-    	
-    	try
-    	{
-        int amount = getCompressionAmount(src, length, 1);
-    	if(amount > 0)
-    	{
-    		int byte_length = length / 8;
-    		if(length % 8 != 0)
-    			byte_length++;
-    		for(int i = 0; i < byte_length; i++)
-    			dst[i] = src[i];
-    		dst[byte_length] = 0;
-    		dst[byte_length] &= 127;
-    	    
-    	    return length;
-    	}
-        else
-        {
-    		current_length = compressOneBits(src, length, dst);
-    		int iterations     = 1;
-    		amount             = getCompressionAmount(dst, current_length, 1);
-    		
-    		if(amount >= 0)
-    		{
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte)-iterations;
-                return(current_length);
-    		}
-    		else
-    		{
-    			byte [] temp      = new byte[src.length];  
-    			while(amount < 0)
-    			{
-    				int previous_length = current_length;
-        	        if(iterations % 2 == 1)
-        	        {
-                        current_length = compressOneBits(dst, previous_length, temp);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-        	        }
-                    else
-                    {
-                        current_length = compressOneBits(temp, previous_length, dst);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-                    }
-                    iterations++; 
-    			}
-    			
-    			if(iterations % 2 == 0) 
-    			{
-                	// The last iteration used temp as a destination,
-                	// so we need to copy the data from temp to dst.
-                    int byte_length = current_length / 8;
-                    if(current_length % 8 != 0)
-                        byte_length++; 
-                    for(int i = 0; i < byte_length; i++)
-                        dst[i] = temp[i];
-                    
-                }   
-    			
-                // else the result is already in dst.
-    			
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte)-iterations;
-                
-    		}
-    	}
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressOneStrings2 with exception.");
-    	}
-    	return current_length;
-    }
-    
-
-    public static int compressOneStrings2(byte src[], int length, byte dst[])
-    {
-    	int current_length = 0;
-    
-    	boolean even_iterations = true;
-    	
-    	try
-    	{
-        int amount = getCompressionAmount(src, length, 1);
-    	if(amount > 0)
-    	{
-    		int byte_length = length / 8;
-    		if(length % 8 != 0)
-    			byte_length++;
-    		for(int i = 0; i < byte_length; i++)
-    			dst[i] = src[i];
-    		dst[byte_length] = 0;
-    		byte extra_bits = (byte)(length % 8);
-            if(extra_bits != 0)
-            	extra_bits = (byte)(7 - extra_bits);
-            extra_bits <<= 5;
-            dst[byte_length] |= extra_bits;
-    	    return length;
-    	}
-        else
-        {
-    		current_length = compressOneBits(src, length, dst);
-    		int iterations     = 1;
-    		amount             = getCompressionAmount(dst, current_length, 1);
-    		
-    		if(amount >= 0)
-    		{
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte) (iterations + 16);
-                byte extra_bits = (byte)(current_length % 8);
-                if(extra_bits != 0)
-                	extra_bits = (byte)(7 - extra_bits);
-                extra_bits <<= 5;
-                dst[last_byte] |= extra_bits;
-                return(current_length);
-    		}
-    		else
-    		{
-    			byte [] temp      = new byte[src.length];  
-    			while(amount < 0 && iterations < 15)
-    			{
-    				int previous_length = current_length;
-        	        if(iterations % 2 == 1)
-        	        {
-                        current_length = compressOneBits(dst, previous_length, temp);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-        	        }
-                    else
-                    {
-                        current_length = compressOneBits(temp, previous_length, dst);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-                    }
-                    iterations++; 
-    			}
-    			
-    			if(iterations % 2 == 0) 
-    			{
-                	// The last iteration used temp as a destination,
-                	// so we need to copy the data from temp to dst.
-                    int byte_length = current_length / 8;
-                    if(current_length % 8 != 0)
-                        byte_length++; 
-                    for(int i = 0; i < byte_length; i++)
-                        dst[i] = temp[i];
-                    
-                }   
-    			
-                // else the result is already in dst.
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte)(iterations + 16);
-                byte extra_bits = (byte)(current_length % 8);
-                if(extra_bits != 0)
-                	extra_bits = (byte)(7 - extra_bits);
-                extra_bits <<= 5;
-                dst[last_byte] |= extra_bits;
-    		}
-    	}
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressOneStrings2 with exception.");
-    	}
-    	return current_length;
-    }
-    
-    
-    
-    public static int decompressOneStrings(byte src[], int length, byte dst[])
-    {
-        // Getting the number of iterations appended to
-        // the end of the string.
-        int last_byte = length / 8;
-        if(length % 8 != 0)
-            last_byte++;
-        int iterations = src[last_byte];
-        
-        // We process the string anyway, although we might
-        // actually be compressing it.
-        if(iterations > 0)
-        	System.out.println("Is not one type string.");
-        else
-        	iterations = -iterations;
-        
-        // If it was not compressed, we copy src to dst.
-        if(iterations == 0)
-        {
-        	int byte_length = length / 8;
-        	if(length % 8 != 0)
-        		byte_length++;
-        	System.arraycopy(src, 0, dst, 0, byte_length);
-        	return length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressOneBits(src, length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-    } 
-   
-    public static int decompressOneStrings2(byte src[], int length, byte dst[])
-    {
-        // Getting the number of iterations appended to
-        // the end of the string.
-        int last_byte = length / 8;
-        if(length % 8 != 0)
-            last_byte++;
-        int iterations = (src[last_byte] & (byte)31);
-        
-        if(iterations < 16)
-        {
-        	System.out.println("Is not one type string.");	
-        }
-        else
-        	iterations -= 16;
-        
-        byte extra_bits = src[last_byte];
-        extra_bits >>= 5;
-        extra_bits &= 7;
-        
-        int modulus = length % 8;
-        int inverse = modulus;
-        if(inverse != 0)
-        	inverse = 8 - inverse;
-        
-        if(extra_bits != inverse)
-        {
-        	System.out.println("Extra bits is " + extra_bits);
-        	System.out.println("Inverse of modulus of bit length is " + inverse);
-        	System.out.println();
-        }
-        
-        // If it was not compressed, we copy src to dst.
-        if(iterations == 0)
-        {
-        	int byte_length = length / 8;
-        	if(length % 8 != 0)
-        		byte_length++;
-        	System.arraycopy(src, 0, dst, 0, byte_length);
-        	return length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressOneBits(src, length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-    } 
-   
     public static int[] getChannels(int set_id)
     {
     	int [] channel = new int[3];
@@ -2717,150 +893,5 @@ public class DeltaMapper
     	    channel[2] = 5;	
     	}
     	return channel;
-    }
- 
-    public static double getZeroRatio(byte [] string, int bit_length)
-    {
-    	int byte_length = bit_length / 8;
-    	int zero_sum    = 0;
-        int one_sum     = 0;
-        byte mask       = 1;
-        
-        int n           = byte_length;
-        
-        for(int i = 0; i < n; i++)
-        {
-        	for(int j = 0; j < 8; j++)
-        	{
-        	    int k = string[i] & mask << j;	
-        	    if(k == 0)
-        	    	zero_sum++;
-        	    else
-        	    	one_sum++;
-        	}
-        }
-       
-    	int remainder = bit_length % 8;
-    	if(remainder != 0)
-    	{
-    		for(int i = 0; i < remainder; i++)
-    		{
-    			int j = string[byte_length] & mask << i;
-    			if(j == 0)
-    				zero_sum++;
-    			else
-    				one_sum++;
-    		}
-    	}
-    	
-    	double ratio = zero_sum;
-    	ratio       /= zero_sum + one_sum;
-    	return ratio;
-    }
-    
-    
-    public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
-    {
-    	int  positive = 0;
-        int  negative = 0;     
-        byte mask     = 1;
-      
-        int byte_length = bit_length / 8;
-        int n           = byte_length;
-        if(transform_type == 0)
-        {
-        	int previous = 1;
-            for(int i = 0; i < n; i++)
-            {
-            	for(int j = 0; j < 8; j++)
-            	{
-            	    int k = string[i] & mask << j;	
-            	    
-            	    if(k != 0 && previous != 0)
-            	    	positive++;
-            	    else if(k != 0 && previous == 0)
-            	        previous = 1;
-            	    else if(k == 0 && previous != 0)
-            	    	previous = 0;
-            	    else if(k == 0 && previous == 0)
-            	    {
-            	        negative++;
-            	        previous = 1;
-            	    }
-            	}
-            }
-           
-            
-        	int remainder = bit_length % 8;
-        	if(remainder != 0)
-        	{
-        		for(int i = 0; i < remainder; i++)
-        		{
-        			int j = string[byte_length] & mask << i;
-        			
-        			if(j != 0 && previous != 0)
-            	    	positive++;
-            	    else if(j != 0 && previous == 0)
-            	        previous = 1;
-            	    else if(j == 0 && previous != 0)
-            	    	previous = 0;
-            	    else if(j == 0 && previous == 0)
-            	    {
-            	        negative++;
-            	        previous = 1;
-            	    }
-        		}
-        	}	
-        }
-        else
-        {
-        	int previous = 0;
-            for(int i = 0; i < n; i++)
-            {
-            	for(int j = 0; j < 8; j++)
-            	{
-            	    int k = string[i] & mask << j;	
-            	    
-            	    if(k == 0 && previous == 0)
-            	    	positive++;
-            	    else if(k == 0 && previous == 1)
-            	        previous = 0;
-            	    else if(k != 0 && previous == 0)
-            	    	previous = 1;
-            	    else if(k != 0 && previous != 0)
-            	    {
-            	        negative++;
-            	        previous = 0;
-            	    }
-            	}
-            }
-           
-        	int remainder = bit_length % 8;
-        	if(remainder != 0)
-        	{
-        		for(int i = 0; i < remainder; i++)
-        		{
-        			int j = string[byte_length] & mask << i;
-        			
-        			if(j == 0 && previous == 0)
-            	    	positive++;
-            	    else if(j == 0 && previous == 1)
-            	        previous = 0;
-            	    else if(j != 0 && previous == 0)
-            	    	previous = 1;
-            	    else if(j != 0 && previous != 0)
-            	    {
-            	        negative++;
-            	        previous = 0;
-            	    }
-        		}
-        	}		
-        }
-    	int total = positive - negative;
-    	// Account for the extra bits, although
-    	// it doesn't show up in the bit length.
-    	if(bit_length % 8 != 0)
-    	    total += 8 - bit_length % 8;	
-    	return total;
     }
 }

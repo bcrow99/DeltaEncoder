@@ -37,12 +37,12 @@ public class SegmentMapper
 			for (int j = 0; j < current_byte_length; j++)
 				segment[j] = string[i * segment_byte_length + j];
 
-			double zero_ratio = DeltaMapper.getZeroRatio(segment, current_bit_length);
+			double zero_ratio = StringMapper.getZeroRatio(segment, current_bit_length);
 			int compression_amount = 0;
 			if (zero_ratio >= .5)
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 0);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 0);
 			else
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 1);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 1);
 			if (compression_amount >= 0) {
 				// Add 0 iterations to uncompressed segment.
 				byte[] clipped_string = new byte[current_byte_length + 1];
@@ -55,10 +55,10 @@ public class SegmentMapper
 			{
 				int compressed_bit_length = 0;
 				if (zero_ratio >= .5)
-					compressed_bit_length = DeltaMapper.compressZeroStrings(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressZeroStrings(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = DeltaMapper.compressOneStrings(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressOneStrings(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -112,12 +112,12 @@ public class SegmentMapper
 			for (int j = 0; j < current_byte_length; j++)
 				segment[j] = string[i * segment_byte_length + j];
 
-			double zero_ratio = DeltaMapper.getZeroRatio(segment, current_bit_length);
+			double zero_ratio = StringMapper.getZeroRatio(segment, current_bit_length);
 			int compression_amount = 0;
 			if (zero_ratio >= .5)
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 0);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 0);
 			else
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 1);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 1);
 			if (compression_amount >= 0) 
 			{
 				// Add 0 iterations to uncompressed segment.
@@ -135,13 +135,13 @@ public class SegmentMapper
 				byte [] decompressed_segment = new byte[segment.length * 2];
 				if (zero_ratio >= .5)
 				{
-					compressed_bit_length = DeltaMapper.compressZeroStrings(segment, current_bit_length, compressed_segment);
-					new_length            = DeltaMapper.decompressZeroStrings(compressed_segment, compressed_bit_length, decompressed_segment);
+					compressed_bit_length = StringMapper.compressZeroStrings(segment, current_bit_length, compressed_segment);
+					new_length            = StringMapper.decompressZeroStrings(compressed_segment, compressed_bit_length, decompressed_segment);
 				}
 				else
 				{
-					compressed_bit_length = DeltaMapper.compressOneStrings(segment, current_bit_length, compressed_segment);
-					new_length            = DeltaMapper.decompressOneStrings(compressed_segment, compressed_bit_length, decompressed_segment);
+					compressed_bit_length = StringMapper.compressOneStrings(segment, current_bit_length, compressed_segment);
+					new_length            = StringMapper.decompressOneStrings(compressed_segment, compressed_bit_length, decompressed_segment);
 				}
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -207,7 +207,7 @@ public class SegmentMapper
 			for (int j = 0; j < current_byte_length; j++)
 				segment[j] = string[i * segment_byte_length + j];
 
-			double zero_ratio = DeltaMapper.getZeroRatio(segment, current_bit_length);
+			double zero_ratio = StringMapper.getZeroRatio(segment, current_bit_length);
 			int string_type = 0;
 			if (zero_ratio < .5)
 				string_type++;
@@ -216,9 +216,9 @@ public class SegmentMapper
 
 			int compression_amount = 0;
 			if (string_type == 0)
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 0);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 0);
 			else
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 1);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 1);
 			if (compression_amount >= 0) 
 			{
 				byte[] clipped_string = new byte[current_byte_length + 1];
@@ -232,10 +232,10 @@ public class SegmentMapper
 			{
 				int compressed_bit_length = 0;
 				if (string_type == 0)
-					compressed_bit_length = DeltaMapper.compressZeroStrings(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressZeroStrings(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = DeltaMapper.compressOneStrings(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressOneStrings(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -350,9 +350,9 @@ public class SegmentMapper
 						try 
 						{
 							if (current_string_type == 0)
-								merged_compression_length = DeltaMapper.compressZeroStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressZeroStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 							else
-								merged_compression_length = DeltaMapper.compressOneStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressOneStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 						} 
 						catch (Exception e) 
 						{
@@ -562,7 +562,7 @@ public class SegmentMapper
 			for (int j = 0; j < current_byte_length; j++)
 				segment[j] = string[i * segment_byte_length + j];
 
-			double zero_ratio = DeltaMapper.getZeroRatio(segment, current_bit_length);
+			double zero_ratio = StringMapper.getZeroRatio(segment, current_bit_length);
 			int string_type = 0;
 			if (zero_ratio < .5)
 				string_type++;
@@ -571,9 +571,9 @@ public class SegmentMapper
 
 			int compression_amount = 0;
 			if (string_type == 0)
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 0);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 0);
 			else
-				compression_amount = DeltaMapper.getCompressionAmount(segment, current_bit_length, 1);
+				compression_amount = StringMapper.getCompressionAmount(segment, current_bit_length, 1);
 			if (compression_amount >= 0) 
 			{
 				byte[] clipped_string = new byte[current_byte_length + 1];
@@ -587,10 +587,10 @@ public class SegmentMapper
 			{
 				int compressed_bit_length = 0;
 				if (string_type == 0)
-					compressed_bit_length = DeltaMapper.compressZeroStrings2(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressZeroStrings2(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = DeltaMapper.compressOneStrings2(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressOneStrings2(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -706,9 +706,9 @@ public class SegmentMapper
 						try 
 						{
 							if (current_string_type == 0)
-								merged_compression_length = DeltaMapper.compressZeroStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressZeroStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 							else
-								merged_compression_length = DeltaMapper.compressOneStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressOneStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 						} 
 						catch (Exception e) 
 						{
@@ -884,5 +884,4 @@ public class SegmentMapper
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
 	}
-
 }

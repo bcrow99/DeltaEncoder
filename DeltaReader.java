@@ -24,7 +24,7 @@ public class DeltaReader
 		
 	    String prefix      = new String("");
 		String filename     = new String(args[0]);
-		DeltaReader Decoder2 = new DeltaReader(prefix + filename);
+		DeltaReader reader = new DeltaReader(prefix + filename);
 	}
 	
 	public DeltaReader(String filename)
@@ -43,13 +43,10 @@ public class DeltaReader
 		int pixel_quant = 0;
 		int set_id      = 0;
 		
-        
 		try
 		{
 			File file              = new File(filename);
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
-			
-			
 			
 			xdim = in.readShort();
 			ydim = in.readShort();
@@ -75,6 +72,7 @@ public class DeltaReader
 		    byte compressed[] = new byte[3];
 		    int  length[]     = new int[3];
 		    int  compressed_length[] = new int[3];
+		    byte channel_iterations[] = new byte[3];
 		    
 		    ArrayList string_list = new ArrayList();
 		    ArrayList table_list  = new ArrayList();
@@ -89,18 +87,14 @@ public class DeltaReader
 		    	System.out.println("Read int channel init " + init[i]);
 		    	delta_min[i] = in.readInt();
 		    	System.out.println("Read int channel delta min " + delta_min[i]);
-		    	type[i] = in.readByte();
-		    	System.out.println("Read channel string type " + type[i]);
-		    	compressed[i] = in.readByte();
-		    	System.out.println("Read if the string was compressed " + compressed[i]);
-		    	length[i] = in.readInt();
-		    	System.out.println("Read bit length of string " + length[i]);
-		    	if(compressed[i] != 0)
-		    	{
-		    		compressed_length[i] = in.readInt();
-		    		System.out.println("Read bit length of compressed string " + compressed_length[i]);
-		    	}
 		    	
+		    	length[i] = in.readInt();
+		    	System.out.println("Read bit length of uncompressed string " + length[i]);
+		    	compressed_length[i] = in.readInt();
+		    	System.out.println("Read bit length of compressed string " + compressed_length[i]);
+		    	
+		    	channel_iterations[i] = in.readByte();
+		    	System.out.println("Read iterations " + channel_iterations[i]);
 				int table_length = in.readShort();
 				System.out.println("Read short table length " +  table_length);
 				    
@@ -111,13 +105,156 @@ public class DeltaReader
 				
 				table_list.add(table);
 				
-				int string_length = in.readInt();
-				System.out.println("Read short string byte length " +  string_length);
-                byte [] string    = new byte[string_length];
-			    in.read(string, 0, string_length);
-			    string_list.add(string);
-		    	
-		    	System.out.println();
+				byte use_map = in.readByte();
+				if(use_map == 0)
+				{
+					System.out.println("Not using delta map.");
+				}
+				else
+				{
+					
+				}
+				int number_of_segments = in.readInt();
+				System.out.println("Number of segments in string is " + number_of_segments);
+				
+				if(number_of_segments == 1)
+				{
+				    int string_length = in.readInt();
+				    System.out.println("Read short string byte length " +  string_length);
+                
+				    byte [] string    = new byte[string_length];
+			        in.read(string, 0, string_length);
+			        System.out.println("Read string byte array");
+			        System.out.println();
+			        string_list.add(string);
+				}
+				else
+				{
+					int max_segment_length = in.readInt();
+					System.out.println("Read int max segment byte length " + max_segment_length);
+					 
+					int byte_length = 0;
+					if(channel_iterations[i] == 0)
+					{
+					   byte_length = length[i] / 8;
+					   if(length[i] % 8 != 0)
+						   byte_length++;
+					    byte_length++;
+					}  
+					else
+					{
+						byte_length = compressed_length[i] / 8;	
+						if(compressed_length[i] % 8 != 0)
+							   byte_length++;
+						byte_length++;
+					}
+					byte [] string = new byte[byte_length];
+					int     offset = 0;
+					
+					int n = number_of_segments;
+					int number_of_zero_segments = 0;
+					int number_of_one_segments  = 0;
+					for(int k = 0; k < n; k++)
+					{
+					    
+					    int segment_byte_length = 0;
+					   
+					    if(max_segment_length <= (Byte.MAX_VALUE * 2 + 1))
+		            	{
+		            		segment_byte_length = in.readByte();  
+		            		if(segment_byte_length < 0)
+		            			segment_byte_length += Byte.MAX_VALUE + 1;
+		            	}
+		            	else if(max_segment_length <= (Short.MAX_VALUE * 2 + 1))
+		            	{
+		            		segment_byte_length = in.readShort();
+		            		if(segment_byte_length < 0)
+		            			segment_byte_length += Short.MAX_VALUE + 1;
+		            	}
+		            	else
+		            	{
+		            		segment_byte_length = in.readShort(); 	
+		            	}
+						
+						 byte [] segment          = new byte[segment_byte_length];
+					     in.read(segment, 0, segment_byte_length);
+					     
+					     int iterations  = (int)segment[segment_byte_length - 1] & 31;
+					     int string_type = 0;
+					     if(iterations > 16)
+					     {
+					    	 string_type = 1;
+					    	 iterations  = iterations - 16;
+					    	 number_of_one_segments++;
+					     }
+					     else
+					    	 number_of_zero_segments++;
+					     
+					     int extra_bits = (int)(segment[segment_byte_length - 1] >> 5);
+					     extra_bits    &= 7;
+					     
+					     
+						 int segment_bit_length = (segment.length - 1) * 8 - extra_bits;
+					     
+					     //System.out.println("String type is " + string_type);
+					     //System.out.println("Iterations is " + iterations);
+					     //System.out.println("Extra bits is " + extra_bits);
+					     //System.out.println("Bit length is " + segment_bit_length);
+						  
+						    
+					     if(iterations == 0)
+					     {
+					         for(int m = 0; m < segment.length - 1; m++) 
+					    	     string[offset + m] = segment[m];
+					    	 offset += segment.length - 1;
+					     }
+					     else
+					     {
+					    	 int decompression_length = 0;
+					    	 byte [] decompressed_segment = new byte[max_segment_length];
+					    	 
+					    	 if(string_type == 0)
+					    	     decompression_length = StringMapper.decompressZeroStrings2(segment, segment_bit_length, decompressed_segment);   
+					    	 else
+					    		 decompression_length = StringMapper.decompressOneStrings2(segment, segment_bit_length, decompressed_segment);
+					    	   
+					    	 byte_length = decompression_length / 8;
+					    	 if(decompression_length % 8 != 0)
+					    	 {
+					    		 if(k == n - 1)
+					    		 {
+					    			   byte_length++;
+					    		 }
+					    		 else
+					    		 {
+					    	         System.out.println("Uneven segment at index " + j);
+					    			 System.out.println("Iterations is " + iterations);
+					    			 System.out.println("String type is " + string_type);
+					    			 System.out.println();
+					    		  }
+					    	  }
+					    	  
+					    	  if(offset + byte_length > decompressed_segment.length)
+					    	  {
+					    		  System.out.println("Exceeding buffer size.");
+					    		  System.out.println("String type is " + string_type);
+					    		  System.out.println("Iterations is " + iterations);
+					    		  
+					    		  System.out.println("Number of zero segments is " + number_of_zero_segments);
+								  System.out.println("Number of one segments is " + number_of_one_segments);
+					    	  }
+					    	  System.arraycopy(decompressed_segment, 0, string, offset, byte_length);
+					    	  offset += byte_length; 
+					       }
+					 }
+					
+					 
+					 //System.out.println("Offset is " + (offset * 8));
+					 //System.out.println("Compressed length is "  + compressed_length[i]);
+					 System.out.println();
+					 string[string.length - 1] = channel_iterations[i];
+					 string_list.add(string);
+				}
 		    }
 		    
 		    ArrayList channel_list = new ArrayList();
@@ -125,23 +262,31 @@ public class DeltaReader
 		    for(int i = 0; i < 3; i++)
 		    {
 		    	byte [] string = (byte [])string_list.get(i);
+		    	System.out.println("String byte length is " + string.length);
+		    	byte iterations = string[string.length - 1];
+		    	System.out.println("Iterations is " + iterations);
 		    	
-		    	if(compressed[i] != 0)
+		    	if(iterations != 0)
 		    	{
-		    		byte [] decompressed_string = new byte[xdim * ydim];
+		    		// Decompressed one strings can be larger than the original size.
+		    		// This is a conservative sized buffer, but will still probably fail
+		    		// on some kind of image.  Using the theoretical limit uses a
+		    		// huge amount of storage. 
+		    		byte [] decompressed_string = new byte[xdim * ydim * 4];
 		    		int decompressed_length = 0;
-		    	    if(type[i] == 0)
-		    	        decompressed_length = DeltaMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
+		    	    if(iterations > 0)
+		    	        decompressed_length = StringMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
 		    	    else
-		    	        decompressed_length = DeltaMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
-		    	    if(decompressed_length != length[i])
-	    	        	System.out.println("Length returned from decompress was different from expected length.");
+		    	        decompressed_length = StringMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
+		    	    System.out.println("Decompressed length is " + decompressed_length);
+		    	    System.out.println();
 		    	    
 		    	    // Not really necessary, but we'll clip the decompressed string.
 		    	    int byte_length = decompressed_length / 8;
 		    	    if(decompressed_length % 8 != 0)
 		    	        byte_length++;
-		    	    string = new byte[byte_length];
+		    	    
+		    	    string = new byte[byte_length + 1];
 		    	    for(int j = 0; j < byte_length; j++)
 		    	        string[j] = decompressed_string[j];
 		    	}
@@ -150,10 +295,10 @@ public class DeltaReader
 		    	if(pixel_quant == 0)
 		    	{
 		    		int [] delta = new int[xdim * ydim];
-		    	    int number_unpacked = DeltaMapper.unpackStrings2(string, table, delta);
+		    	    int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
-				    int [] current_channel = DeltaMapper.getValuesFromDeltas3(delta, xdim , ydim, init[i]);
+				    int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, xdim , ydim, init[i]);
 				    if(channel_id[i] > 2)
 				       for(int j = 0; j < current_channel.length; j++)
 							current_channel[j] += min[i];
@@ -166,10 +311,10 @@ public class DeltaReader
 			        int _xdim = xdim - (int)(factor * (xdim / 2 - 2));
 			        int _ydim = ydim - (int)(factor * (ydim / 2 - 2));
 			        int [] delta = new int[_xdim * _ydim];
-			        int number_unpacked = DeltaMapper.unpackStrings2(string, table, delta);
+			        int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
-				    int [] current_channel = DeltaMapper.getValuesFromDeltas3(delta, _xdim , _ydim, init[i]);
+				    int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
 				    if(channel_id[i] > 2)
 				       for(int j = 0; j < current_channel.length; j++)
 							current_channel[j] += min[i];
@@ -177,7 +322,6 @@ public class DeltaReader
 				    channel_list.add(resized_channel);
 		    	}
 		    }
-		    
 		    
 		    int [] blue = new int[xdim * ydim];
 		    int [] green = new int[xdim * ydim];
@@ -307,7 +451,6 @@ public class DeltaReader
 		{
 			System.out.println(e.toString());
 		}
-		
 	}
 	    
 	class ImageCanvas extends Canvas
