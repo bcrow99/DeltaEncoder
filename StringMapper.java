@@ -33,6 +33,35 @@ public class StringMapper
 	    return histogram_list;
 	}
 	
+	public static ArrayList getHistogram(byte value[])
+	{  
+	    int value_min = value[0];
+	    int value_max = value[0];
+	    for(int i = 0; i < value.length; i++)
+	    {
+	    	if(value[i] > value_max)
+	    		value_max = value[i];
+	    	if(value[i] < value_min)
+	    		value_min = value[i];
+	    }
+	    int value_range = value_max - value_min + 1;
+	    int [] histogram = new int[value_range];
+	    for(int i = 0; i < value_range; i++)
+	    	histogram[i] = 0;
+	    for(int i = 0; i < value.length; i++)
+	    {
+	    	int j = value[i] - value_min;
+	    	histogram[j]++;
+	    }
+	    
+	    ArrayList histogram_list = new ArrayList();
+	    histogram_list.add(value_min);
+	    histogram_list.add(histogram);
+	    histogram_list.add(value_range);
+	    return histogram_list;
+	}
+	
+	
 	public static int[] getRankTable(int histogram[])
 	{
 		ArrayList key_list     = new ArrayList();
@@ -284,6 +313,116 @@ public class StringMapper
                         }
                     }
                     // If this is the maximum_length index and it's a multiple of 8,
+                    // then we already incremented the index and then reset the stop bit.
+                    // Don't want to do it twice.   Very tricky bug.
+                    else if(stop_bit <= start_bit && k != maximum_length)
+                            dst[++p] = 0;
+                }
+                start_bit = stop_bit;
+            }
+        }
+        
+        if(start_bit != 0)
+            p++;
+        int number_of_bits = p * 8;
+        if(start_bit != 0)
+            number_of_bits -= 8 - start_bit;
+        return(number_of_bits);
+    }
+    
+    public static int packStrings2(byte src[], int table[], byte dst[])
+    {
+    	int size             = src.length;
+    	int number_of_values = table.length;
+    	
+    	int maximum_length = number_of_values - 1;
+    	
+    	//System.out.println("Maximum length is " + maximum_length);
+    
+        int [] mask  = new int[8];
+        
+        mask[0] = 1;
+        mask[1] = 3;
+        mask[2] = 7;
+        mask[3] = 15;
+        mask[4] = 31;
+        mask[5] = 63;
+        mask[6] = 127;
+        mask[7] = 255;
+        
+    
+        int start_bit  = 0;
+        int stop_bit   = 0;
+        int p   = 0;
+        dst[p]  = 0;
+        
+        for(int i = 0; i < size; i++)
+        {
+            int j = src[i];
+            //System.out.println("Value is " + j);
+            int k = table[j];
+            //System.out.println("Lookup value is " + k);
+            //System.out.println();
+            
+            if(k == 0)
+            {
+                start_bit++;
+                if(start_bit == 8)
+                {
+                    dst[++p] = 0;
+                    start_bit       = 0;
+                }
+            }
+            else
+            {
+                stop_bit = (start_bit + k + 1) % 8;
+                if(k == maximum_length)
+                {
+                	stop_bit--;
+                	if(stop_bit < 0)
+                		stop_bit = 7;
+                }
+                
+                if(k <= 7)
+                {
+                	dst[p] |= (byte) (mask[k - 1] << start_bit);
+                	
+                    if(stop_bit <= start_bit)
+                    {
+                        dst[++p] = 0;
+                        if(stop_bit != 0)
+                        {
+                            dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
+                        }
+                    }
+                }
+                else if(k > 7)
+                {
+                	dst[p] |= (byte)(mask[7] << start_bit);
+            		int m = (k - 8) / 8;
+                    for(int n = 0; n < m; n++)
+                        dst[++p] = (byte)(mask[7]);
+                    dst[++p] = 0;
+                    
+                    if(start_bit != 0)
+                        dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
+                    
+                    if(k % 8 != 0)
+                    {
+                        m = k % 8 - 1;
+                        
+                        dst[p] |= (byte)(mask[m] << start_bit);
+                        
+                        if(stop_bit <= start_bit)
+                        {
+                            dst[++p] = 0;
+                            if(stop_bit != 0)
+                            {
+                                dst[p] |= (byte)(mask[m] >> (8 - start_bit));
+                            }
+                        }
+                    }
+                    // If this is the maximum_length index and it's a multiple of 8,
                     // then we already incremeted the index and then reset the stop bit.
                     // Don't want to do it twice.   Very tricky bug.
                     else if(stop_bit <= start_bit && k != maximum_length)
@@ -371,6 +510,78 @@ public class StringMapper
         }
         return(number_unpacked);
     }
+    
+    public static int unpackStrings2(byte src[], int table[], byte dst[])
+    {
+    	for(int i = 0; i < dst.length; i++)
+        	dst[i] = 0;
+        int size             = dst.length;
+        int number_of_values = table.length;
+        int number_unpacked  = 0;
+        int maximum_length   = number_of_values - 1;
+   
+        int [] index = new int[number_of_values];
+        
+        int [] inverse_table = new int[number_of_values];
+        for(int i = 0; i < number_of_values; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = i;
+            index[i]         = 0;
+        }
+        
+        int length   = 1;
+        int src_byte = 0;
+        int dst_byte = 0;
+        
+        
+        byte mask = 0x01;
+        byte bit  = 0;
+        
+        try
+        {
+        while(dst_byte < size)
+        {
+            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
+            if(non_zero != 0 && length < maximum_length)
+                length++;
+            else if(non_zero == 0)
+            {
+                int k = length - 1;
+                dst[dst_byte++] = (byte)inverse_table[k]; 
+               
+                index[k]++;
+                
+                number_unpacked++;
+                length = 1;
+            }
+            else if(length == maximum_length)
+            {
+            	int k = length;
+            	dst[dst_byte++] = (byte)inverse_table[k];
+            	
+                index[k]++;
+                
+                number_unpacked++;
+                length = 1;
+            }
+            bit++;
+            if(bit == 8)
+            {
+                bit = 0;
+                src_byte++;
+            }
+        }
+        }
+        catch(Exception e)
+        {
+        	System.out.println(e.toString());
+        	System.out.println("Exiting unpackStrings2 with an exception.");
+        }
+        return(number_unpacked);
+    }
+    
+    
     
     public static int compressZeroBits(byte src[], int size, byte dst[]) 
 	{

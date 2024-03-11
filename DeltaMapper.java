@@ -557,7 +557,7 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             		    // Setting the first value to 3 to mark the delta type ideal.
-            			dst[k]       = 3;
+            			dst[k]       = 4;
             			map[k] = 0;
             			k++;
             	    }
@@ -714,17 +714,18 @@ public class DeltaMapper
             	}
             	else
             	{
-            		int current_direction = map[i * xdim + j]; 
-            		if(current_direction == 0)
-            		    value = dst[i * xdim + j - 1];
-            		else if(current_direction == 1)
-            		    value = dst[(i - 1) * xdim + j];
-            		else if(current_direction == 2)
-            		    value = dst[(i - 1) * xdim + j - 1];
-            		else if(current_direction == 3)
-            			value = dst[(i - 1) * xdim + j + 1];
+            		int k = i * xdim + j;
+            		int m = map[i * xdim + j]; 
+            		if(m == 0)
+            		    value = dst[k - 1];
+            		else if(m == 1)
+            		    value = dst[k - xdim];
+            		else if(m == 2)
+            		    value = dst[k - xdim - 1];
+            		else if(m == 3)
+            			value = dst[k - xdim + 1];
             	    value += src[i * xdim + j];
-            	    dst[i * xdim + j] = value;
+            	    dst[k] = value;
             	}
             }
         }
@@ -764,6 +765,25 @@ public class DeltaMapper
     	    	else
     	    	    delta = src[k] - src[k - xdim - 1];
     	    	sum[3] += Math.abs(delta);
+    	    	
+    	    	/*
+    	    	a = src[k - 1];
+    	    	b = src[k - xdim + 1];
+    	    	c = src[k - xdim];
+    	    	d = a + b - c;
+    	    	
+    	    	delta_a = Math.abs(a - d);
+    	    	delta_b = Math.abs(b - d);
+    	    	delta_c = Math.abs(c - d);
+    	    	
+    	    	if(delta_a <= delta_b && delta_a <= delta_c)
+    	    	    delta = src[k] - src[k - 1];
+    	    	else if(delta_b <= delta_c)
+    	    	    delta = src[k] - src[k - xdim + 1];
+    	    	else
+    	    		delta = src[k] - src[k - xdim];
+    	    	sum[4] += Math.abs(delta);
+    	    	*/
         	}
         	
         	int min_value = sum[0];
@@ -800,7 +820,7 @@ public class DeltaMapper
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
-            		    // Setting the first value to 3 to mark the delta type ideal.
+            		    // Setting the first value to 4 to mark the delta type mixed.
             			dst[j] = 4;
             		else
             		{
@@ -872,7 +892,8 @@ public class DeltaMapper
             	    }
             	    else
             	    {
-            	    	// Use the horizontal delta.
+            	    	// Use the horizontal delta, in case the best filter
+            	    	// was the modified paeth.
             	    	delta  = src[k] - src[k - 1];
             	    	dst[k] = delta;
             	    	sum += Math.abs(delta);
@@ -889,6 +910,87 @@ public class DeltaMapper
         return result;
     }
   
+    public static int[] getValuesFromMixedDeltas(int [] src, int xdim, int ydim, int init_value, byte [] map)
+    {
+    	int[] dst = new int[xdim * ydim];
+        dst[0] = init_value;
+        int value = init_value;
+        
+        if(src[0] != 4)
+        	System.out.println("Wrong code.");
+        
+        for(int i = 1; i < xdim; i++)
+        {
+        	value   += src[i];
+        	dst[i] = value;
+        }
+        
+        for(int i = 1; i < ydim; i++)
+        {
+        	byte m = map[i - 1];
+            for(int j = 0; j < xdim; j++)	
+            {
+            	int k = i * xdim + j;
+            	if(j == 0)
+            	{
+            	    init_value += src[k];
+            	    dst[k]      = init_value;
+            	}
+            	else if(j < xdim - 1)
+            	{
+            		if(m == 0)
+            		    value = dst[k - 1];
+            		else if(m == 1)
+            			value = dst[k - xdim];
+            		else if(m == 2)
+            			value = (dst[k - 1] + dst[k - xdim]) / 2;
+            		else if(m == 3)
+            		{
+            			int a = dst[k - 1];
+            	    	int b = dst[k - xdim];
+            	    	int c = dst[k - xdim - 1];
+            	    	int d = a + b - c;
+        	    		
+            	    	int delta_a = Math.abs(a - d);
+            	    	int delta_b = Math.abs(b - d);
+            	    	int delta_c = Math.abs(c - d);
+        	    		
+            	    	int paeth_delta = 0;
+            	    	if(delta_a <= delta_b && delta_a <= delta_c)
+            	    	    value = dst[k - 1];
+            	    	else if(delta_b <= delta_c)
+            	    	    value = dst[k - xdim];
+            	    	else
+            	    	    value = dst[k - xdim - 1];
+            		}
+            		value += src[k];
+            		dst[k] = value;
+            	}
+            	else
+            	{
+            	    value = dst[k - 1] ;
+            	    value += src[k];
+            	    dst[k] = value;
+            	}
+            }
+        }
+        return dst;
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     // This function returns the result from the paeth filter or a modified paeth filter,
