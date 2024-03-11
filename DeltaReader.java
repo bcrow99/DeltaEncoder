@@ -76,6 +76,9 @@ public class DeltaReader
 		    
 		    ArrayList string_list = new ArrayList();
 		    ArrayList table_list  = new ArrayList();
+		    ArrayList map_list    = new ArrayList();
+		    
+		    byte use_map = 0;
 		    
 		    for(int i = 0; i < 3; i++)
 		    {
@@ -105,15 +108,45 @@ public class DeltaReader
 				
 				table_list.add(table);
 				
-				byte use_map = in.readByte();
+				use_map = in.readByte();
 				if(use_map == 0)
 				{
 					System.out.println("Not using delta map.");
 				}
 				else
 				{
+					/*
+					out.writeShort(string_table.length);
+		            for(int k = 0; k < string_table.length; k++)
+		                out.writeInt(string_table[k]);
+		            out.writeShort(byte_length);
+		            out.write(string, 0, byte_length);
+		            out.writeByte(remainder);
+		            */
 					
+					short  map_table_length = in.readShort();
+					int [] map_table        = new int[map_table_length];	
+					for(int k = 0; k < map_table_length; k++)
+						map_table[k] = in.readInt();
+					short byte_length = in.readShort();
+					byte [] map_string    = new byte[byte_length];
+				    in.read(map_string, 0, byte_length);
+				    byte remainder = in.readByte();
+				    
+				    int string_length = byte_length * 8 - remainder;
+				    
+				    byte [] map = new byte[ydim - 1];
+				    
+				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
+				    
+				    if(size != ydim - 1)
+				    {
+				    	System.out.println("Size does not agree with image dimension.");
+				    }
+				    
+				    map_list.add(map);
 				}
+				
 				int number_of_segments = in.readInt();
 				System.out.println("Number of segments in string is " + number_of_segments);
 				
@@ -298,11 +331,24 @@ public class DeltaReader
 		    	    int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
-				    int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, xdim , ydim, init[i]);
-				    if(channel_id[i] > 2)
-				       for(int j = 0; j < current_channel.length; j++)
-							current_channel[j] += min[i];
-					channel_list.add(current_channel);
+				    
+				    if(use_map == 1)
+				    {
+				        byte [] map = (byte [])map_list.get(i);
+				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, xdim , ydim, init[i], map);
+				        if(channel_id[i] > 2)
+					           for(int j = 0; j < current_channel.length; j++)
+								    current_channel[j] += min[i];
+						    channel_list.add(current_channel);
+				    }
+				    else
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, xdim , ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+					    channel_list.add(current_channel);
+				    }
 		    	}
 		    	else
 		    	{

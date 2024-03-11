@@ -47,7 +47,7 @@ public class DeltaWriter
 	ArrayList channel_list, table_list, string_list, channel_data, map_list;
 
 	boolean initialized = false;
-	boolean use_map     = false;
+	boolean use_map     = true;
 	
 	public static void main(String[] args)
 	{
@@ -569,18 +569,18 @@ public class DeltaWriter
 				ArrayList result = new ArrayList();
 				if(use_map)
 				{
-				    //result = DeltaMapper.getDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+				   
+					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
-				    int ideal_sum = (int)result.get(0);
-				    //System.out.println("Ideal sum is " + ideal_sum);
+				    int mixed_sum = (int)result.get(0);
+				    System.out.println("Mixed sum is " + mixed_sum);
 				}
 				else
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int paeth_sum = (int)result.get(0);
-					//System.out.println("Paeth sum is " + paeth_sum);
+					System.out.println("Paeth sum is " + paeth_sum);
 				}
                 int []    delta  = (int [])result.get(1);
                 
@@ -780,7 +780,7 @@ public class DeltaWriter
 			    if(use_map)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
+			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
 			    }
 			    else
 			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);
@@ -969,7 +969,8 @@ public class DeltaWriter
 		            	out.writeByte(1);
 		            	
 		            	byte [] map = (byte [])map_list.get(i);
-		            	byte [] zipped_map = new byte[xdim * ydim];
+		            	
+		            	byte [] zipped_map = new byte[2 * ydim];
 		            	
 		            	Deflater deflater = new Deflater();
 		            	deflater.setInput(map);
@@ -977,17 +978,79 @@ public class DeltaWriter
 		            	int zipped_length = deflater.deflate(zipped_map);
 		            	deflater.end();
 		            	
-		            	out.writeInt(zipped_length);
-		            	out.write(zipped_map, 0, zipped_length);
+		            	//out.writeInt(zipped_length);
+		            	//out.write(zipped_map, 0, zipped_length);
 		            	
 		            	
 		            	double compression_rate = zipped_length;
 		            	compression_rate /= ydim - 1;
-		            	System.out.println("Compression rate for map is " + String.format("%.2f", compression_rate));
+		
+		            	System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));	
+		            	
+		            	
+		            	ArrayList result  = StringMapper.getHistogram(map);
+		            	int min_value     = (int)result.get(0);
+		            	int [] histogram  = (int [])result.get(1);
+		            	int value_range   = (int)result.get(2);
+		            	
+		            	int [] string_table = StringMapper.getRankTable(histogram);
+					
+		            	/*
+		            	System.out.println("Map :");
+						for(int k = 0; k < map.length; k++)
+							System.out.print(map[k] + " ");
+						System.out.println();
+						System.out.println();
+						System.out.println("Histogram :");
+						for(int k = 0; k < histogram.length; k++)
+							System.out.print(histogram[k] + " ");
+						System.out.println();
+						System.out.println("Min value is " + min_value);
+						System.out.println("Value range is " + value_range);
+						System.out.println();
+						
+						System.out.println("Rank table :");
+						for(int k = 0; k < string_table.length; k++)
+							System.out.print(string_table[k] + " ");
+						System.out.println();
+						System.out.println();
+						
+						for(int k = 0; k < map.length; k++)
+							map[k] -= min_value;
+
+						System.out.println("Map :");
+						for(int k = 0; k < map.length; k++)
+							System.out.print(map[k] + " ");
+						System.out.println();
+						System.out.println();
+		            	*/
+						
+		            	
+		            	for(int k = 0; k < map.length; k++)
+							map[k] -= min_value;
+						byte [] string = new byte[ydim * 2];
+						int map_length = StringMapper.packStrings2(map, string_table, string);
+						int byte_length = map_length / 8;
+						int remainder = byte_length % 8;
+						if(remainder != 0)
+							byte_length++;
+						
+						compression_rate = byte_length + string_table.length;
+						compression_rate /= ydim - 1;
+						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
+						System.out.println();
+						
+						out.writeShort(string_table.length);
+			            for(int k = 0; k < string_table.length; k++)
+			                out.writeInt(string_table[k]);
+			            out.writeShort(byte_length);
+			            out.write(string, 0, byte_length);
+			            out.writeByte(remainder);
 		            }
 		            else
 		            	out.writeByte(0);
-		           
+		            
+		            
 		            if(segment == 0 || channel_segmented[i] == false)
 		            {
 		            	int number_of_segments = 1;
