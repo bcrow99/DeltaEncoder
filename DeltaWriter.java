@@ -43,6 +43,7 @@ public class DeltaWriter
 	boolean [] channel_segmented;
 	
 	long file_length;
+	double file_compression_rate;
 
 	ArrayList channel_list, table_list, string_list, channel_data, map_list;
 
@@ -124,7 +125,6 @@ public class DeltaWriter
             channel_string_type = new int[3];
             channel_iterations  = new byte[3];
             channel_segmented   = new boolean[3];
-			System.out.println();
 			
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
@@ -542,14 +542,11 @@ public class DeltaWriter
 				
 			min_set_id = min_index;
 			
-			double file_compression_rate = file_length;
-			file_compression_rate       /= xdim * ydim * 3;
-			System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-			
+			file_compression_rate  = file_length;
+			file_compression_rate /= xdim * ydim * 3;
 			
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
 			
-		    
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 			
 			table_list.clear();
@@ -574,13 +571,13 @@ public class DeltaWriter
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				    int mixed_sum = (int)result.get(0);
-				    System.out.println("Mixed sum is " + mixed_sum);
+				    //System.out.println("Mixed sum is " + mixed_sum);
 				}
 				else
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int paeth_sum = (int)result.get(0);
-					System.out.println("Paeth sum is " + paeth_sum);
+					//System.out.println("Paeth sum is " + paeth_sum);
 				}
                 int []    delta  = (int [])result.get(1);
                 
@@ -617,6 +614,7 @@ public class DeltaWriter
 				    {
 				        channel_iterations[i] = 0;
 				        string_list.add(string);
+				        System.out.println("Iterations was " + 0);
 				    }
 				    else
 				    {
@@ -625,7 +623,7 @@ public class DeltaWriter
 				    		compression_byte_length++;
 				    	compression_byte_length++;
 				    	channel_iterations[i] = compression_string[compression_byte_length - 1];
-				    	System.out.println("String compressed.");
+				    	//System.out.println("String compressed.");
 				    	System.out.println("Iterations was " + channel_iterations[i]);
 				    	string_list.add(compression_string);		
 				    }
@@ -638,6 +636,7 @@ public class DeltaWriter
 				    {
 					    channel_iterations[i] = 0;
 					    string_list.add(string);
+					    System.out.println("Iterations was " + 0);
 				    }
 				    else
 				    {
@@ -646,7 +645,7 @@ public class DeltaWriter
 				    		compression_byte_length++;
 				    	compression_byte_length++;
 				    	channel_iterations[i] = compression_string[compression_byte_length - 1];
-				    	System.out.println("String compressed.");
+				    	//System.out.println("String compressed.");
 				    	System.out.println("Iterations was " + channel_iterations[i]);
 				    	string_list.add(compression_string);			
 				    }
@@ -777,6 +776,10 @@ public class DeltaWriter
 			    	delta[k] += channel_delta_min[j];
 			    
 			    int [] channel;
+			    
+
+			    
+			    
 			    if(use_map)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
@@ -795,6 +798,36 @@ public class DeltaWriter
 				}
 				else
 					resized_channel_list.add(channel);
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+			    
+				
+				
+				
 		    }
 			
 			int [] blue  = new int[xdim * ydim];
@@ -943,6 +976,11 @@ public class DeltaWriter
 		        out.writeByte(pixel_quant);
 		        out.writeByte(min_set_id);
 		        
+		        if(use_map)
+		            out.writeByte(1);
+		        else
+		        	out.writeByte(0);
+		        
 		        for(int i = 0; i < 3; i++)
 		        {
 		        	int j = channel_id[i];
@@ -966,8 +1004,6 @@ public class DeltaWriter
 		            
 		            if(use_map)
 		            {
-		            	out.writeByte(1);
-		            	
 		            	byte [] map = (byte [])map_list.get(i);
 		            	
 		            	byte [] zipped_map = new byte[2 * ydim];
@@ -985,7 +1021,7 @@ public class DeltaWriter
 		            	double compression_rate = zipped_length;
 		            	compression_rate /= ydim - 1;
 		
-		            	System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));	
+		            		
 		            	
 		            	
 		            	ArrayList result  = StringMapper.getHistogram(map);
@@ -995,11 +1031,15 @@ public class DeltaWriter
 		            	
 		            	int [] string_table = StringMapper.getRankTable(histogram);
 					
-		            	/*
+		            	if(i == 0)
+		            	{
 		            	System.out.println("Map :");
 						for(int k = 0; k < map.length; k++)
 							System.out.print(map[k] + " ");
 						System.out.println();
+		            	}
+						
+						/*
 						System.out.println();
 						System.out.println("Histogram :");
 						for(int k = 0; k < histogram.length; k++)
@@ -1035,6 +1075,8 @@ public class DeltaWriter
 						if(remainder != 0)
 							byte_length++;
 						
+						
+						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = byte_length + string_table.length;
 						compression_rate /= ydim - 1;
 						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
@@ -1046,10 +1088,8 @@ public class DeltaWriter
 			            out.writeShort(byte_length);
 			            out.write(string, 0, byte_length);
 			            out.writeByte(remainder);
+			            out.writeByte(min_value);
 		            }
-		            else
-		            	out.writeByte(0);
-		            
 		            
 		            if(segment == 0 || channel_segmented[i] == false)
 		            {
@@ -1175,6 +1215,8 @@ public class DeltaWriter
 		        long file_length = file.length();
 		        double compression_rate = file_length;
 		        compression_rate /= xdim * ydim * 3;
+		        System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
+				
 		        System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
 		        
 		    }

@@ -77,8 +77,12 @@ public class DeltaReader
 		    ArrayList string_list = new ArrayList();
 		    ArrayList table_list  = new ArrayList();
 		    ArrayList map_list    = new ArrayList();
+		    ArrayList map_add     = new ArrayList();
 		    
 		    byte use_map = 0;
+		    
+		    use_map = in.readByte();
+		    System.out.println("Read byte use_map " + use_map);
 		    
 		    for(int i = 0; i < 3; i++)
 		    {
@@ -108,22 +112,12 @@ public class DeltaReader
 				
 				table_list.add(table);
 				
-				use_map = in.readByte();
 				if(use_map == 0)
 				{
 					System.out.println("Not using delta map.");
 				}
 				else
 				{
-					/*
-					out.writeShort(string_table.length);
-		            for(int k = 0; k < string_table.length; k++)
-		                out.writeInt(string_table[k]);
-		            out.writeShort(byte_length);
-		            out.write(string, 0, byte_length);
-		            out.writeByte(remainder);
-		            */
-					
 					short  map_table_length = in.readShort();
 					int [] map_table        = new int[map_table_length];	
 					for(int k = 0; k < map_table_length; k++)
@@ -132,16 +126,28 @@ public class DeltaReader
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length);
 				    byte remainder = in.readByte();
+				    byte increment = in.readByte();
+				    
 				    
 				    int string_length = byte_length * 8 - remainder;
 				    
 				    byte [] map = new byte[ydim - 1];
 				    
 				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
+				    for(int k = 0; k < map.length; k++)
+				    	map[k] += increment;
 				    
 				    if(size != ydim - 1)
 				    {
 				    	System.out.println("Size does not agree with image dimension.");
+				    }
+				    
+				    if(i == 0)
+				    {
+				    	System.out.println("Map:");
+				    	for(int k = 0; k < map.length; k++)
+				    	    System.out.print(map[k] + " ");
+				    	System.out.println();
 				    }
 				    
 				    map_list.add(map);

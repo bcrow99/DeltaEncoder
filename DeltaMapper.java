@@ -801,11 +801,13 @@ public class DeltaMapper
        
         }
     	
+        /*
         for(int i = 0; i < ydim - 1; i++)
         {
         	System.out.print(map[i] + " ");
         }
         System.out.println();
+        */
         
     	int[] dst = new int[xdim * ydim];
      
