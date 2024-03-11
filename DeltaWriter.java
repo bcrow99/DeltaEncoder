@@ -787,6 +787,7 @@ public class DeltaWriter
 			    }
 			    else
 			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			    
 				if(j > 2)
 					for(int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
@@ -798,36 +799,6 @@ public class DeltaWriter
 				}
 				else
 					resized_channel_list.add(channel);
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    
-				
-				
-				
 		    }
 			
 			int [] blue  = new int[xdim * ydim];
@@ -962,7 +933,7 @@ public class DeltaWriter
 			if(!initialized)
 				apply_item.doClick();
 			int channel_id[] = DeltaMapper.getChannels(min_set_id);
-			
+			System.out.println("Got here.");
 			try
 		    {
 		        DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
