@@ -732,6 +732,7 @@ public class DeltaMapper
         return dst;
     }
     
+    /*
     // This function returns the result from the standard png filters, using
     // the filter that produces the smallest delta sum for each row.
     public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
@@ -765,27 +766,6 @@ public class DeltaMapper
     	    	else
     	    	    delta = src[k] - src[k - xdim - 1];
     	    	sum[3] += Math.abs(delta);
-    	    	
-    	    	
-    	    	// Checking modified paeth.
-    	    	/*
-    	    	a = src[k - 1];
-    	    	b = src[k - xdim + 1];
-    	    	c = src[k - xdim];
-    	    	d = a + b - c;
-    	    	
-    	    	delta_a = Math.abs(a - d);
-    	    	delta_b = Math.abs(b - d);
-    	    	delta_c = Math.abs(c - d);
-    	    	
-    	    	if(delta_a <= delta_b && delta_a <= delta_c)
-    	    	    delta = src[k] - src[k - 1];
-    	    	else if(delta_b <= delta_c)
-    	    	    delta = src[k] - src[k - xdim + 1];
-    	    	else
-    	    		delta = src[k] - src[k - xdim];
-    	    	sum[4] += Math.abs(delta);
-    	    	*/
         	}
         	
         	int min_value = sum[0];
@@ -803,14 +783,7 @@ public class DeltaMapper
        
         }
     	
-        /*
-        for(int i = 0; i < ydim - 1; i++)
-        {
-        	System.out.print(map[i] + " ");
-        }
-        System.out.println();
-        */
-        
+      
     	int[] dst = new int[xdim * ydim];
      
         int init_value = src[0];
@@ -913,7 +886,252 @@ public class DeltaMapper
         result.add(map);
         return result;
     }
-  
+    */
+    
+    
+    // This function returns the result from the standard png filters, using
+    // the filter that produces the smallest delta sum for each row.
+    public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
+    {
+        byte [] map = new byte[ydim - 1];
+        
+        for(int i = 1; i < ydim; i++)
+        {
+        	int [] sum   = new int[5];
+        	int [] delta = new int[4];
+        	
+        	for(int j = 1; j < xdim - 1; j++)
+        	{
+        		int k = i * xdim + j;
+        		
+    	    	sum[0] += Math.abs(src[k] - src[k - 1]);
+    	    	sum[1] += Math.abs(src[k] - src[k - xdim]);
+    	    	sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+    	    	
+    	    	int a = src[k - 1];
+    	    	int b = src[k - xdim];
+    	    	int c = src[k - xdim - 1];
+    	    	int d = a + b - c;
+    	    	
+    	    	delta[0] = Math.abs(a - d);
+    	    	delta[1] = Math.abs(b - d);
+    	    	delta[2] = Math.abs(c - d);
+    	    	
+    	    	int _delta   = 0;
+    	    	if(delta[0] <= delta[1] && delta[0] <= delta[2])
+    	    	    _delta = src[k] - src[k - 1];
+    	    	else if(delta[1] <= delta[2])
+    	    	    _delta = src[k] - src[k - xdim];
+    	    	else
+    	    	    _delta = src[k] - src[k - xdim - 1];
+    	    	sum[3] += Math.abs(_delta);
+    	    	
+    	    	a = src[k - 1];
+    	    	b = src[k - xdim];
+    	    	c = src[k - xdim - 1];
+    	    	d = src[k - xdim - 1];
+    	    	
+    	    	int average = (a + b + c + d) / 4;
+    	    	delta[0] = Math.abs(average - a);
+    	    	delta[1] = Math.abs(average - b);
+    	    	delta[2] = Math.abs(average - c);
+    	    	delta[3] = Math.abs(average - c);
+    	    	
+    	    	int min_value = delta[0];
+    	    	int min_index = 0;
+    	    	for(int m = 1; m < 3; m++)
+    	    	{
+    	    		if(delta[m] < min_value)
+    	    		{
+    	    			min_value = delta[m];
+    	    			min_index = m;
+    	    		}
+    	    	}
+    	    	
+    	    	int m = min_value;
+    	    	if(m == 0)	
+    	    		sum[4] += Math.abs(src[k] - src[k - 1]);
+    	    	else if(m == 1)
+    	    		sum[4] += Math.abs(src[k] - src[k - xdim]);
+    	    	else if(m == 1)
+    	    		sum[4] += Math.abs(src[k] - src[k - xdim - 1]);
+    	    	else if(m == 1)
+    	    		sum[4] += Math.abs(src[k] - src[k - xdim + 1]);
+    	    	
+    	    	
+        	}
+        	
+        	
+        	
+        	int min_value = sum[0];
+        	int min_index = 0;
+        	for(int k = 1; k < 4; k++)
+        	{
+        		if(sum[k] < min_value)
+        		{
+        			min_value = sum[k];
+        			min_index = k;
+        		}
+        	}
+        	
+        	map[i - 1] = (byte)min_index;
+       
+        }
+    	
+      
+    	int[] dst = new int[xdim * ydim];
+     
+        int init_value = src[0];
+        int value      = init_value;
+        int sum        = 0;
+        
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            		    // Setting the first value to 4 to mark the delta type mixed.
+            			dst[j] = 4;
+            		else
+            		{
+            			// We don't have any vertical or diagonal deltas to check
+            			// in the first row, so we just use horizontal deltas.
+            		    int delta    = src[j] - value;
+                        value       += delta;
+                        dst[j]       = delta;
+            		}
+            	}
+            }
+        	else
+        	{
+        		int m     = map[i - 1];
+        		
+        		for(int j = 0; j < xdim; j++)
+                {
+        			int k = i * xdim + j;
+            	    if(j == 0)
+            	    {
+            	    	// Use the vertical delta for the first value.
+            	    	int delta      = src[k] - init_value;
+            	    	init_value = src[k];
+            	    	dst[k]     = delta;
+            	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	if(m == 0)
+            	    	{
+            	    	    int delta = src[k] - src[k - 1];
+            	    	    dst[k] = delta;
+            	    	    sum += Math.abs(delta);
+            	    	}
+            	    	else if(m == 1)
+            	    	{
+            	    		int delta = src[k] - src[k - xdim];
+            	    	    dst[k] = delta;
+            	    	    sum += Math.abs(delta);	
+            	    	}
+            	    	else if(m == 2)
+            	    	{
+            	    		int average = (src[k - 1] + src[k - xdim]) / 2;
+            	    		int delta = src[k] - average;
+            	    	    dst[k] = delta;
+            	    	    sum += Math.abs(delta);	       	
+            	    	}
+            	    	else if(m == 3)
+            	    	{
+            	    		int a = src[k - 1];
+                	    	int b = src[k - xdim];
+                	    	int c = src[k - xdim - 1];
+                	    	int d = a + b - c;
+            	    		
+                	    	int delta_a = Math.abs(a - d);
+                	    	int delta_b = Math.abs(b - d);
+                	    	int delta_c = Math.abs(c - d);
+            	    		
+                	    	int paeth_delta = 0;
+                	    	if(delta_a <= delta_b && delta_a <= delta_c)
+                	    	    paeth_delta = src[k] - src[k - 1];
+                	    	else if(delta_b <= delta_c)
+                	    	    paeth_delta = src[k] - src[k - xdim];
+                	    	else
+                	    	    paeth_delta = src[k] - src[k - xdim - 1];
+                	    	dst[k] = paeth_delta;
+                	    
+                	    	sum += Math.abs(paeth_delta);
+            	    	}
+            	    	else if(m == 4)
+            	    	{
+            	    		int a = src[k - 1];
+                	    	int b = src[k - xdim];
+                	    	int c = src[k - xdim - 1];
+                	    	int d = src[k - xdim - 1];;
+            	    		
+                	    	int [] delta = new int[4];
+
+                	    	int average = (a + b + c + d) / 4;
+                	    	delta[0] = Math.abs(average - a);
+                	    	delta[1] = Math.abs(average - b);
+                	    	delta[2] = Math.abs(average - c);
+                	    	delta[3] = Math.abs(average - c);
+                	    	
+                	    	int min_value = delta[0];
+                	    	int min_index = 0;
+                	    	for(int n = 1; n < 3; n++)
+                	    	{
+                	    		if(delta[n] < min_value)
+                	    		{
+                	    			min_value = delta[n];
+                	    			min_index = n;
+                	    		}
+                	    	}
+                	    	
+                	    	int n = min_value;
+                	    	if(n == 0)	
+                	    	{
+                	    		sum += Math.abs(src[k] - src[k - 1]);
+                	    		dst[k] = src[k] - src[k - 1];
+                	    	}
+                	    	else if(n == 1)
+                	    	{
+                	    		sum += Math.abs(src[k] - src[k - xdim]);
+                	    		dst[k] = src[k] - src[k - xdim];
+                	    	}
+                	    	else if(n == 3)
+                	    	{
+                	    		sum += Math.abs(src[k] - src[k - xdim - 1]);
+                	    		dst[k] = src[k] - src[k - xdim - 1];
+                	    	}
+                	    	else if(n == 3)
+                	    	{
+                	    		sum += Math.abs(src[k] - src[k - xdim + 1]);
+                	    		dst[k] = src[k] - src[k - xdim + 1];
+                	    	}
+                	    	
+            	    	}
+            	    }
+            	    else
+            	    {
+            	    	// Use the horizontal delta, in case the best filter
+            	    	// was the modified paeth.
+            	    	int delta  = src[k] - src[k - 1];
+            	    	dst[k] = delta;
+            	    	sum += Math.abs(delta);
+            	    }
+                }
+        	}
+        }
+       
+        System.out.println();
+        ArrayList result = new ArrayList();
+        result.add(sum);
+        result.add(dst);
+        result.add(map);
+        return result;
+    }
+    
+    
     public static int[] getValuesFromMixedDeltas(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
     	int[] dst = new int[xdim * ydim];
