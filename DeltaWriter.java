@@ -933,7 +933,7 @@ public class DeltaWriter
 			if(!initialized)
 				apply_item.doClick();
 			int channel_id[] = DeltaMapper.getChannels(min_set_id);
-			System.out.println("Got here.");
+			
 			try
 		    {
 		        DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
@@ -946,7 +946,6 @@ public class DeltaWriter
 		        out.writeByte(pixel_shift);
 		        out.writeByte(pixel_quant);
 		        out.writeByte(min_set_id);
-		        
 		        if(use_map)
 		            out.writeByte(1);
 		        else
@@ -990,7 +989,7 @@ public class DeltaWriter
 		            	
 		            	
 		            	double compression_rate = zipped_length;
-		            	compression_rate /= ydim - 1;
+		            	compression_rate /= map.length;
 		
 		            		
 		            	
@@ -1004,10 +1003,10 @@ public class DeltaWriter
 					
 		            	if(i == 0)
 		            	{
-		            	System.out.println("Map :");
-						for(int k = 0; k < map.length; k++)
-							System.out.print(map[k] + " ");
-						System.out.println();
+		            	    System.out.println("Map :");
+						    for(int k = 0; k < map.length; k++)
+							    System.out.print(map[k] + " ");
+						    System.out.println();
 		            	}
 						
 						/*
@@ -1060,6 +1059,7 @@ public class DeltaWriter
 			            out.write(string, 0, byte_length);
 			            out.writeByte(remainder);
 			            out.writeByte(min_value);
+			            out.writeShort(map.length);
 		            }
 		            
 		            if(segment == 0 || channel_segmented[i] == false)

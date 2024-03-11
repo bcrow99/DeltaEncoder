@@ -126,18 +126,19 @@ public class DeltaReader
 				    in.read(map_string, 0, byte_length);
 				    byte remainder = in.readByte();
 				    byte increment = in.readByte();
+				    short dimension = in.readShort();
 				    
 				    
 				    int string_length = byte_length * 8 - remainder;
 				    
-				    byte [] map = new byte[ydim - 1];
+				    byte [] map = new byte[dimension];
 				    
 				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
 				    
 				    
-				    if(size != ydim - 1)
+				    if(size != dimension)
 				    {
-				    	System.out.println("Expected size was " + (ydim - 1));
+				    	System.out.println("Expected size was " + dimension);
 				    	System.out.println("Actual size was " + size);
 				    }
 				    
@@ -374,6 +375,7 @@ public class DeltaReader
 			        int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
+				    
 				    
 				    if(use_map == 1)
 				    {
