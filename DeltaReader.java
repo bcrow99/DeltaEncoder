@@ -55,13 +55,13 @@ public class DeltaReader
 			System.out.println("Read short ydim " + ydim);
 			       
 	        pixel_shift = in.readByte();
-		    System.out.println("Read byte pixel shift " + pixel_shift);
+		    //System.out.println("Read byte pixel shift " + pixel_shift);
 		   
 		    pixel_quant = in.readByte();
 		    System.out.println("Read byte pixel quant " + pixel_quant);
 		   
 		    set_id = in.readByte();
-		    System.out.println("Read byte set id " + set_id);
+		    //System.out.println("Read byte set id " + set_id);
 		    System.out.println();
 		   
 		    int  channel_id[] = DeltaMapper.getChannels(set_id);
@@ -77,7 +77,6 @@ public class DeltaReader
 		    ArrayList string_list = new ArrayList();
 		    ArrayList table_list  = new ArrayList();
 		    ArrayList map_list    = new ArrayList();
-		    ArrayList map_add     = new ArrayList();
 		    
 		    byte use_map = 0;
 		    
@@ -134,13 +133,21 @@ public class DeltaReader
 				    byte [] map = new byte[ydim - 1];
 				    
 				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
-				    for(int k = 0; k < map.length; k++)
-				    	map[k] += increment;
+				    
 				    
 				    if(size != ydim - 1)
 				    {
-				    	System.out.println("Size does not agree with image dimension.");
+				    	System.out.println("Expected size was " + (ydim - 1));
+				    	System.out.println("Actual size was " + size);
 				    }
+				    
+				    
+				    
+				    
+				    
+				    for(int k = 0; k < map.length; k++)
+				    	map[k] += increment;
+				    
 				    
 				    if(i == 0)
 				    {
@@ -363,15 +370,30 @@ public class DeltaReader
 			        int _xdim = xdim - (int)(factor * (xdim / 2 - 2));
 			        int _ydim = ydim - (int)(factor * (ydim / 2 - 2));
 			        int [] delta = new int[_xdim * _ydim];
+			        
 			        int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
-				    int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
-				    if(channel_id[i] > 2)
-				       for(int j = 0; j < current_channel.length; j++)
-							current_channel[j] += min[i];
-				    int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
-				    channel_list.add(resized_channel);
+				    
+				    if(use_map == 1)
+				    {
+				        byte [] map = (byte [])map_list.get(i);
+				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, _xdim , _ydim, init[i], map);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							   current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+				        channel_list.add(resized_channel);
+				    }
+				    else
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							   current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+				        channel_list.add(resized_channel);
+				    }
 		    	}
 		    }
 		    

@@ -766,6 +766,8 @@ public class DeltaMapper
     	    	    delta = src[k] - src[k - xdim - 1];
     	    	sum[3] += Math.abs(delta);
     	    	
+    	    	
+    	    	// Checking modified paeth.
     	    	/*
     	    	a = src[k - 1];
     	    	b = src[k - xdim + 1];
