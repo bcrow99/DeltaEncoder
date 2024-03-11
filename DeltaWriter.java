@@ -1048,7 +1048,7 @@ public class DeltaWriter
 						
 						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = byte_length + string_table.length;
-						compression_rate /= ydim - 1;
+						compression_rate /= map.length;
 						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
 						System.out.println();
 						
