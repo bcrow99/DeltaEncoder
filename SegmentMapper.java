@@ -252,6 +252,13 @@ public class SegmentMapper
 			}
 		}
 
+		
+		
+		
+		
+		
+		
+		
 		// Finished constructing initial list.
 
 		// Merging segments.
@@ -507,7 +514,6 @@ public class SegmentMapper
 				overhead = 32;
 		}
 		
-		
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
 		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Number of merged segments was " + previous_compressed_data.size());
@@ -587,10 +593,10 @@ public class SegmentMapper
 			{
 				int compressed_bit_length = 0;
 				if (string_type == 0)
-					compressed_bit_length = StringMapper.compressZeroStrings2(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressZeroStrings(segment, current_bit_length,
 							compressed_segment);
 				else
-					compressed_bit_length = StringMapper.compressOneStrings2(segment, current_bit_length,
+					compressed_bit_length = StringMapper.compressOneStrings(segment, current_bit_length,
 							compressed_segment);
 				int compressed_byte_length = compressed_bit_length / 8;
 				if (compressed_bit_length % 8 != 0)
@@ -609,8 +615,21 @@ public class SegmentMapper
 
 		// Finished constructing initial list.
 
+		//ArrayList segment_data = new ArrayList();
+		//segment_data.add(compressed_length);
+		//segment_data.add(compressed_data);
+		//segment_data.add(max_segment_byte_length);
+		//return segment_data;
+		
+		
+		
+		
+		
+		
+		
+		
 		// Merging segments.
-
+        
 		int overhead = 0;
 		if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 			overhead = 8;
@@ -643,7 +662,7 @@ public class SegmentMapper
 		int number_of_compressed_segments = 0;
 		
 		
-		while (current_number_of_segments != previous_number_of_segments) 
+		while(current_number_of_segments != previous_number_of_segments) 
 		{
 			iterations++;
 			previous_number_of_segments = previous_compressed_data.size();
@@ -694,8 +713,8 @@ public class SegmentMapper
 						int byte_length = merged_uncompressed_length / 8;
 						if(merged_uncompressed_length % 8 != 0)
 							byte_length++;
-						if (byte_length > max_segment_byte_length)
-							max_segment_byte_length = byte_length;
+						if (byte_length + 1 > max_segment_byte_length)
+							max_segment_byte_length = byte_length + 1;
 
 						byte[] merged_segment = new byte[byte_length];
 						for (int j = 0; j < byte_length; j++)
@@ -706,9 +725,9 @@ public class SegmentMapper
 						try 
 						{
 							if (current_string_type == 0)
-								merged_compression_length = StringMapper.compressZeroStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressZeroStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 							else
-								merged_compression_length = StringMapper.compressOneStrings2(merged_segment, merged_uncompressed_length, compressed_merged_segment);
+								merged_compression_length = StringMapper.compressOneStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
 						} 
 						catch (Exception e) 
 						{
@@ -765,7 +784,7 @@ public class SegmentMapper
 							current_offset += current_uncompressed_length;
 						}
 					} 
-					else if (current_iterations == 0 && next_iterations == 0)
+					else if(current_iterations == 0 && next_iterations == 0)
 					{
 						number_of_uncompressed_segments++;
 						int merged_length = current_length + next_length;
@@ -788,10 +807,6 @@ public class SegmentMapper
 						for (int j = 0; j < byte_length; j++)
 							merged_segment[j] = string[j + byte_offset];
 						merged_segment[byte_length] = 0;
-
-						// Keep track of maximum segment length.
-						if (byte_length > max_segment_byte_length)
-							max_segment_byte_length = byte_length;
 
 						int merged_type = 0;
 						current_iterations = merged_segment[merged_segment.length - 1];
@@ -864,7 +879,6 @@ public class SegmentMapper
 				overhead = 32;
 		}
 		
-		
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
 		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Number of merged segments was " + previous_compressed_data.size());
@@ -883,5 +897,6 @@ public class SegmentMapper
 		segment_data.add(previous_compressed_data);
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
+		
 	}
 }

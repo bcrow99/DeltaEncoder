@@ -142,10 +142,6 @@ public class DeltaReader
 				    	System.out.println("Actual size was " + size);
 				    }
 				    
-				    
-				    
-				    
-				    
 				    for(int k = 0; k < map.length; k++)
 				    	map[k] += increment;
 				    
@@ -220,7 +216,7 @@ public class DeltaReader
 		            	}
 		            	else
 		            	{
-		            		segment_byte_length = in.readShort(); 	
+		            		segment_byte_length = in.readInt(); 	
 		            	}
 						
 						 byte [] segment          = new byte[segment_byte_length];
@@ -258,7 +254,8 @@ public class DeltaReader
 					     else
 					     {
 					    	 int decompression_length = 0;
-					    	 byte [] decompressed_segment = new byte[max_segment_length];
+					    	 
+					    	 byte [] decompressed_segment = new byte[2 * max_segment_length];
 					    	 
 					    	 if(string_type == 0)
 					    	     decompression_length = StringMapper.decompressZeroStrings2(segment, segment_bit_length, decompressed_segment);   

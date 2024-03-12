@@ -168,7 +168,7 @@ public class DeltaWriter
 				    	image.setRGB(i, j, pixel[j * xdim + i]);	
 				} 
 			    
-			    JFrame frame = new JFrame("Adaptive Delta Writer");
+			    JFrame frame = new JFrame("Delta Writer");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
 			        public void windowClosing(WindowEvent event)
@@ -720,7 +720,7 @@ public class DeltaWriter
 					    System.out.println("Number of original segments is " + number_of_segments);
 					    System.out.println("Minimum segment length is " + segment_length);	
 					  
-					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, channel_compressed_length[j], segment_length);
+					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, channel_compressed_length[j], segment_length);
 					    ArrayList length_list = (ArrayList)segment_data_list.get(0);
 					    System.out.println("Number of merged segments is " + length_list.size());
 					    if(length_list.size() == 1)
@@ -1045,7 +1045,6 @@ public class DeltaWriter
 						if(remainder != 0)
 							byte_length++;
 						
-						
 						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = byte_length + string_table.length;
 						compression_rate /= map.length;
@@ -1120,11 +1119,7 @@ public class DeltaWriter
 		            		System.out.println("Segment length requires int."); 	
 		            	}
 			            
-			            
-			            
-			            
 			            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
-			            
 			            for(int k = 0; k < n; k++)
 			            {
 			            	int segment_bit_length  = (int)segment_length.get(k);
@@ -1137,7 +1132,7 @@ public class DeltaWriter
 			            	{
 			            		iterations = (byte)-iterations;
 			            		if(iterations > 15)
-			            			System.out.println("Iterations will not fit in final byte.");
+			            			System.out.println("Iterations will not fit in final byte (1).");
 			            		else
 			            		{
 			            		    iterations += 16;
@@ -1148,7 +1143,10 @@ public class DeltaWriter
 			            	else
 			            	{
 			            		if(iterations > 15)
-			            			System.out.println("Iterations will not fit in final byte.");
+			            		{
+			            			System.out.println("Iterations will not fit in final byte.(2)");
+			            			System.out.println();
+			            		}
 			            		else
 			            		{
 			            		    segment[segment.length - 1] = (byte)(extra_bits << 5);
@@ -1158,19 +1156,17 @@ public class DeltaWriter
 			            	
 			            	if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 			            	{
+			            		System.out.println("Writing byte.");
 			            		out.writeByte(segment.length);  	
 			            	}
 			            	else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 			            	{
 			            		out.writeShort(segment.length);	
-			            	}
-			            	else if(max_segment_byte_length <= (Short.MAX_VALUE * 2 + 1) + (Byte.MAX_VALUE * 2 + 1))
-			            	{
-			            		out.writeShort(segment.length >> 16);	
-			            		out.writeByte(segment.length & (Byte.MAX_VALUE * 2 + 1));
+			            		System.out.println("Writing short.");
 			            	}
 			            	else
 			            	{
+			            		System.out.println("Writing int.");
 			            		out.writeInt(segment.length);	
 			            	}
 			            	out.write(segment, 0, segment.length);
