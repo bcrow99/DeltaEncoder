@@ -615,11 +615,11 @@ public class SegmentMapper
 
 		// Finished constructing initial list.
 
-		//ArrayList segment_data = new ArrayList();
-		//segment_data.add(compressed_length);
-		//segment_data.add(compressed_data);
-		//segment_data.add(max_segment_byte_length);
-		//return segment_data;
+		ArrayList segment_data = new ArrayList();
+		segment_data.add(compressed_length);
+		segment_data.add(compressed_data);
+		segment_data.add(max_segment_byte_length);
+		return segment_data;
 		
 		
 		
@@ -629,7 +629,7 @@ public class SegmentMapper
 		
 		
 		// Merging segments.
-        
+        /*
 		int overhead = 0;
 		if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 			overhead = 8;
@@ -743,10 +743,10 @@ public class SegmentMapper
 						}
 						
                         // Do a check to see if the segments compress better when merged.
-						// We also account for the overhead--sometimes a short,
-						// sometimes a short and a byte, sometimes an int.
+						// We also account for the overhead--either a byte,
+						// a short, or an int.
 						
-						if (merged_compression_length <= (current_length + next_length - overhead)) 
+						if(merged_compression_length <= (current_length + next_length - overhead)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
@@ -780,7 +780,6 @@ public class SegmentMapper
 							current_segment_length.add(current_uncompressed_length);
 							current_compressed_length.add(current_length);
 							current_compressed_data.add(current_string);
-
 							current_offset += current_uncompressed_length;
 						}
 					} 
@@ -897,6 +896,6 @@ public class SegmentMapper
 		segment_data.add(previous_compressed_data);
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
-		
+		*/
 	}
 }
