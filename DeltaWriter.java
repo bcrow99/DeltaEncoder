@@ -48,7 +48,9 @@ public class DeltaWriter
 	ArrayList channel_list, table_list, string_list, channel_data, map_list;
 
 	boolean initialized = false;
-	boolean use_map     = true;
+	
+	
+	int delta_type = 5;
 	
 	public static void main(String[] args)
 	{
@@ -388,54 +390,54 @@ public class DeltaWriter
 				
 				settings_menu.add(correction_item);
 				
-				/*
-				JCheckBoxMenuItem use_map_item = new JCheckBoxMenuItem("Use Delta Map");
-				ActionListener use_map_handler = new ActionListener()
-				{
-					public void actionPerformed(ActionEvent e) 
-		            {
-		            	JCheckBoxMenuItem item = (JCheckBoxMenuItem) e.getSource();
-		            	if(use_map == true)
-						{
-		            		use_map = false;
-							item.setState(false);
-						}
-						else
-						{
-							use_map = true;
-							item.setState(true);
-						
-						}
-		            }   	
-				};
-				use_map_item.addActionListener(use_map_handler);
-				if(use_map)
-					use_map_item.setState(true);
-				settings_menu.add(use_map_item);
-				*/
-				
-				menu_bar.add(file_menu);
-				menu_bar.add(settings_menu);
-				
 				
 				JMenu delta_menu = new JMenu("Delta");
-				JRadioButtonMenuItem horizontal = new JRadioButtonMenuItem("H");
-				JRadioButtonMenuItem vertical   = new JRadioButtonMenuItem("V");
-				JRadioButtonMenuItem average    = new JRadioButtonMenuItem("HV average");
-				JRadioButtonMenuItem paeth      = new JRadioButtonMenuItem("Paeth");
-				JRadioButtonMenuItem gradient   = new JRadioButtonMenuItem("Gradient");
-				JRadioButtonMenuItem scanline   = new JRadioButtonMenuItem("Scanline");
-				scanline.setSelected(true);
-				JRadioButtonMenuItem ideal      = new JRadioButtonMenuItem("Ideal");
 				
-				delta_menu.add(horizontal);
-				delta_menu.add(vertical);
-				delta_menu.add(average);
-				delta_menu.add(paeth);
-				delta_menu.add(gradient);
-				delta_menu.add(scanline);
-				delta_menu.add(ideal);
+				JRadioButtonMenuItem [] delta_button = new JRadioButtonMenuItem[7];
+				
+				delta_button[0] = new JRadioButtonMenuItem("H");
+				delta_button[1] = new JRadioButtonMenuItem("V");
+				delta_button[2] = new JRadioButtonMenuItem("HV average");
+				delta_button[3] = new JRadioButtonMenuItem("Paeth");
+				delta_button[4] = new JRadioButtonMenuItem("Gradient");
+				delta_button[5] = new JRadioButtonMenuItem("Scanline");
+				delta_button[6] = new JRadioButtonMenuItem("Ideal");
+				
+				delta_type = 5;
+				delta_button[5].setSelected(true);
+				
+				class ButtonHandler implements ActionListener
+				{
+					int index;
+				    ButtonHandler(int index)	
+				    {
+				        this.index = index;	
+				    }
+				    
+				    public void actionPerformed(ActionEvent e) 
+		            {
+				    	if(delta_type != index)
+				    	{
+				    	    delta_button[delta_type].setSelected(false);
+				    	    delta_type = index;
+				    	    delta_button[delta_type].setSelected(true);
+				    	    apply_item.doClick();
+				    	}
+				    	else
+					    	delta_button[delta_type].setSelected(true);
+		            }  
+				    
+				}
+				
+				for(int i = 0; i < 7; i++)
+				{
+					delta_button[i].addActionListener(new ButtonHandler(i));
+					delta_menu.add(delta_button[i]);
+				}
+			
+				menu_bar.add(file_menu);
 				menu_bar.add(delta_menu);
+				menu_bar.add(settings_menu);
 				
 				frame.setJMenuBar(menu_bar);
 				
@@ -581,31 +583,36 @@ public class DeltaWriter
 			map_list.clear();
 			for(int i = 0; i < 3; i++)
 			{
+				System.out.println("i == " + i);
 				int j = channel_id[i];
 				
 				int [] quantized_channel = (int[])quantized_channel_list.get(j);
 				
 				ArrayList result = new ArrayList();
-				if(use_map)
+				
+				if(delta_type == 3)
 				{
-				   
+					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int paeth_sum = (int)result.get(0);
+					System.out.println("Paeth sum is " + paeth_sum);	
+				}
+				else if(delta_type == 4)
+				{
+					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int gradient_sum = (int)result.get(0);
+					System.out.println("Gradient sum is " + gradient_sum);	
+				}
+				else if(delta_type == 5)
+				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				    int mixed_sum = (int)result.get(0);
-				    //System.out.println("Mixed sum is " + mixed_sum);
+				    System.out.println("Mixed sum is " + mixed_sum);	
 				}
-				else
-				{
-					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					//result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					//int paeth_sum = (int)result.get(0);
-					//System.out.println("Paeth sum is " + paeth_sum);
-				}
-                int []    delta  = (int [])result.get(1);
-                
-               
 				
+                int []    delta  = (int [])result.get(1);
+               
 				ArrayList histogram_list = StringMapper.getHistogram(delta);
 			    channel_delta_min[j]     = (int)histogram_list.get(0);
 			    int [] histogram         = (int[])histogram_list.get(1);
@@ -776,6 +783,8 @@ public class DeltaWriter
 			    
 			    if(channel_length[j] != channel_compressed_length[j])
 			    {
+			    	
+			    	System.out.println();
 			    	byte [] decompressed_string = new byte[xdim * ydim * 4];
 			    	int decompressed_length = 0;
 			    	if(channel_string_type[i] == 0)
@@ -798,20 +807,21 @@ public class DeltaWriter
 			    for(int k = 1; k < delta.length; k++)
 			    	delta[k] += channel_delta_min[j];
 			    
-			    int [] channel;
-			    
-
+			    int [] channel = new int[0];
 			    
 			    
-			    if(use_map)
+			    if(delta_type == 3)
+			    {
+			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			    }
+			    else if(delta_type == 4)
+			    {
+			    	channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			    }
+			    else if(delta_type == 5)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
-			    }
-			    else
-			    {
-			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);
-			    	//channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
 			    
 				if(j > 2)
@@ -972,22 +982,20 @@ public class DeltaWriter
 		        out.writeByte(pixel_shift);
 		        out.writeByte(pixel_quant);
 		        out.writeByte(min_set_id);
-		        if(use_map)
-		            out.writeByte(1);
-		        else
-		        	out.writeByte(0);
-		        
+		        out.writeByte(delta_type);
+		     
 		        for(int i = 0; i < 3; i++)
 		        {
 		        	int j = channel_id[i];
 		        	
-		        	// Don't really use this for reference channels.
+		        	// Only use this for difference channels.
 		        	out.writeInt(channel_min[j]);
 		        	
 		        	out.writeInt(channel_init[j]);
 		        	out.writeInt(channel_delta_min[j]);
 		        
 		        	out.writeInt(channel_length[j]);
+		        	
 		        	// If the string didn't compress, 
 		        	// this is the same as the uncompressed length.
 		        	out.writeInt(channel_compressed_length[j]);
@@ -998,7 +1006,7 @@ public class DeltaWriter
 		            for(int k = 0; k < table.length; k++)
 		                out.writeInt(table[k]);
 		            
-		            if(use_map)
+		            if(delta_type == 5)
 		            {
 		            	byte [] map = (byte [])map_list.get(i);
 		            	

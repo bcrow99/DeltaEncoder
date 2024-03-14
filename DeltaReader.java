@@ -42,6 +42,7 @@ public class DeltaReader
 		int pixel_shift = 0;
 		int pixel_quant = 0;
 		int set_id      = 0;
+		byte delta_type = 0;
 		
 		try
 		{
@@ -78,10 +79,10 @@ public class DeltaReader
 		    ArrayList table_list  = new ArrayList();
 		    ArrayList map_list    = new ArrayList();
 		    
-		    byte use_map = 0;
 		    
-		    use_map = in.readByte();
-		    System.out.println("Read byte use_map " + use_map);
+		    
+		    delta_type = in.readByte();
+		    System.out.println("Read byte delta type " + delta_type);
 		    
 		    for(int i = 0; i < 3; i++)
 		    {
@@ -111,7 +112,7 @@ public class DeltaReader
 				
 				table_list.add(table);
 				
-				if(use_map == 0)
+				if(delta_type != 5)
 				{
 					System.out.println("Not using delta map.");
 				}
@@ -175,6 +176,19 @@ public class DeltaReader
 				{
 					int max_segment_length = in.readInt();
 					System.out.println("Read int max segment byte length " + max_segment_length);
+					if(max_segment_length <= (Byte.MAX_VALUE * 2 + 1))
+		            {
+		                System.out.println("Segment length requires byte.");
+		            }
+		            else if(max_segment_length <= (Short.MAX_VALUE * 2 + 1))
+		            {
+		            	System.out.println("Segment length requires short.");
+		            }
+		            else
+		            {
+		            	System.out.println("Segment length requires int."); 	
+		            }
+					
 					 
 					int byte_length = 0;
 					if(channel_iterations[i] == 0)
@@ -207,6 +221,8 @@ public class DeltaReader
 		            		segment_byte_length = in.readByte();  
 		            		if(segment_byte_length < 0)
 		            			segment_byte_length += Byte.MAX_VALUE + 1;
+		            		System.out.println("Segment byte length is " + segment_byte_length);
+		            		System.out.println();
 		            	}
 		            	else if(max_segment_length <= (Short.MAX_VALUE * 2 + 1))
 		            	{
@@ -280,12 +296,12 @@ public class DeltaReader
 					    	  
 					    	  if(offset + byte_length > decompressed_segment.length)
 					    	  {
+					    		  System.out.println("Input length is " + segment_byte_length);
+					    		  System.out.println("Output length is " + byte_length);
 					    		  System.out.println("Exceeding buffer size.");
 					    		  System.out.println("String type is " + string_type);
 					    		  System.out.println("Iterations is " + iterations);
-					    		  
-					    		  System.out.println("Number of zero segments is " + number_of_zero_segments);
-								  System.out.println("Number of one segments is " + number_of_one_segments);
+					    		  System.out.println();
 					    	  }
 					    	  System.arraycopy(decompressed_segment, 0, string, offset, byte_length);
 					    	  offset += byte_length; 
@@ -343,16 +359,8 @@ public class DeltaReader
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
 				    
-				    if(use_map == 1)
-				    {
-				        byte [] map = (byte [])map_list.get(i);
-				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, xdim , ydim, init[i], map);
-				        if(channel_id[i] > 2)
-					           for(int j = 0; j < current_channel.length; j++)
-								    current_channel[j] += min[i];
-						    channel_list.add(current_channel);
-				    }
-				    else
+				    
+				    if(delta_type == 3)
 				    {
 				        int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, xdim , ydim, init[i]);
 				        if(channel_id[i] > 2)
@@ -360,6 +368,24 @@ public class DeltaReader
 							    current_channel[j] += min[i];
 					    channel_list.add(current_channel);
 				    }
+				    else if(delta_type == 4)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, xdim , ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+					    channel_list.add(current_channel);
+				    }
+				    else if(delta_type == 5)
+				    {
+				        byte [] map = (byte [])map_list.get(i);
+				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, xdim , ydim, init[i], map);
+				        if(channel_id[i] > 2)
+					           for(int j = 0; j < current_channel.length; j++)
+								    current_channel[j] += min[i];
+						channel_list.add(current_channel);
+				    }
+				    
 		    	}
 		    	else
 		    	{
@@ -373,20 +399,28 @@ public class DeltaReader
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
 				    
-				    
-				    if(use_map == 1)
+				    if(delta_type == 3)
 				    {
-				        byte [] map = (byte [])map_list.get(i);
-				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, _xdim , _ydim, init[i], map);
+				    	int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
 				        if(channel_id[i] > 2)
 				           for(int j = 0; j < current_channel.length; j++)
 							   current_channel[j] += min[i];
 				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
-				        channel_list.add(resized_channel);
+				        channel_list.add(resized_channel);	
 				    }
-				    else
+				    else if(delta_type == 4)
 				    {
-				        int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
+				    	int [] current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, _xdim , _ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							   current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+				        channel_list.add(resized_channel);	
+				    }
+				    else if(delta_type == 5)
+				    {
+				        byte [] map = (byte [])map_list.get(i);
+				        int [] current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, _xdim , _ydim, init[i], map);
 				        if(channel_id[i] > 2)
 				           for(int j = 0; j < current_channel.length; j++)
 							   current_channel[j] += min[i];
@@ -503,7 +537,7 @@ public class DeltaReader
 				}
 			}
 			
-			JFrame frame = new JFrame("DeltaReader");
+			JFrame frame = new JFrame("Delta Reader");
 			WindowAdapter window_handler = new WindowAdapter()
 			{
 				public void windowClosing(WindowEvent event)
