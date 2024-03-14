@@ -265,11 +265,11 @@ public class SegmentMapper
 
 		int overhead = 0;
 		if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-			overhead = 8;
-		else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 			overhead = 16;
+		else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
+			overhead = 24;
 		else
-			overhead = 32;
+			overhead = 40;
 		ArrayList previous_segment_type = (ArrayList) segment_type.clone();
 		ArrayList previous_segment_length = (ArrayList) segment_length.clone();
 		ArrayList previous_compressed_length = (ArrayList) compressed_length.clone();
@@ -375,8 +375,8 @@ public class SegmentMapper
 						}
 						
                         // Do a check to see if the segments compress better when merged.
-						// We also account for the overhead--sometimes a short,
-						// sometimes a short and a byte, sometimes an int.
+						// We also account for the overhead--a byte plus a byte,
+						// a short plus a byte, or an int plus a byte.
 						
 						if (merged_compression_length <= (current_length + next_length - overhead)) 
 						{
@@ -507,11 +507,11 @@ public class SegmentMapper
 			// Reset overhead since we might have some longer segments.
 			overhead = 0;
 			if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-				overhead = 8;
-			else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 				overhead = 16;
+			else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
+				overhead = 24;
 			else
-				overhead = 32;
+				overhead = 40;
 		}
 		
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
@@ -632,11 +632,11 @@ public class SegmentMapper
         
 		int overhead = 0;
 		if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-			overhead = 9;
+			overhead = 16;
 		else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
-			overhead = 17;
+			overhead = 24;
 		else
-			overhead = 33;
+			overhead = 40;
 		ArrayList previous_segment_type = (ArrayList) segment_type.clone();
 		ArrayList previous_segment_length = (ArrayList) segment_length.clone();
 		ArrayList previous_compressed_length = (ArrayList) compressed_length.clone();
@@ -870,13 +870,11 @@ public class SegmentMapper
 			// Reset overhead since we might have some longer segments.
 			overhead = 0;
 			if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-				overhead = 8;
-			else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 				overhead = 16;
+			else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
+				overhead = 24;
 			else
-				overhead = 32;
-			// Account for trailing byte.
-			overhead++;
+				overhead = 40;
 		}
 		
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
