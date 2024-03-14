@@ -583,34 +583,57 @@ public class DeltaWriter
 			map_list.clear();
 			for(int i = 0; i < 3; i++)
 			{
-				System.out.println("i == " + i);
 				int j = channel_id[i];
 				
 				int [] quantized_channel = (int[])quantized_channel_list.get(j);
 				
 				ArrayList result = new ArrayList();
-				
-				if(delta_type == 3)
+				if(delta_type == 0)
+				{
+					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int sum = (int)result.get(0);
+					//System.out.println("Horizontal sum is " + sum);	
+				}
+				else if(delta_type == 1)
+				{
+					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int sum = (int)result.get(0);
+					//System.out.println("Vertical sum is " + sum);
+				}
+				else if(delta_type == 2)
+				{
+					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int sum = (int)result.get(0);
+					//System.out.println("Average sum is " + sum);
+				}
+				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int paeth_sum = (int)result.get(0);
-					System.out.println("Paeth sum is " + paeth_sum);	
+					int sum = (int)result.get(0);
+					//System.out.println("Paeth sum is " + sum);	
 				}
 				else if(delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int gradient_sum = (int)result.get(0);
-					System.out.println("Gradient sum is " + gradient_sum);	
+					int sum = (int)result.get(0);
+					//System.out.println("Gradient sum is " + sum);	
 				}
 				else if(delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
-				    int mixed_sum = (int)result.get(0);
-				    System.out.println("Mixed sum is " + mixed_sum);	
+				    int sum = (int)result.get(0);
+				    //System.out.println("Mixed sum is " + sum);	
 				}
-				
+				else if(delta_type == 6)
+				{
+					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+				    byte [] map = (byte [])result.get(2);
+				    map_list.add(map);
+				    int sum = (int)result.get(0);
+				    //System.out.println("Ideal sum is " + sum);	
+				}
                 int []    delta  = (int [])result.get(1);
                
 				ArrayList histogram_list = StringMapper.getHistogram(delta);
@@ -644,7 +667,7 @@ public class DeltaWriter
 				    {
 				        channel_iterations[i] = 0;
 				        string_list.add(string);
-				        System.out.println("Iterations was " + 0);
+				        //System.out.println("Iterations was " + 0);
 				    }
 				    else
 				    {
@@ -654,7 +677,7 @@ public class DeltaWriter
 				    	compression_byte_length++;
 				    	channel_iterations[i] = compression_string[compression_byte_length - 1];
 				    	//System.out.println("String compressed.");
-				    	System.out.println("Iterations was " + channel_iterations[i]);
+				    	//System.out.println("Iterations was " + channel_iterations[i]);
 				    	string_list.add(compression_string);		
 				    }
 		        }   
@@ -666,7 +689,7 @@ public class DeltaWriter
 				    {
 					    channel_iterations[i] = 0;
 					    string_list.add(string);
-					    System.out.println("Iterations was " + 0);
+					    //System.out.println("Iterations was " + 0);
 				    }
 				    else
 				    {
@@ -676,7 +699,7 @@ public class DeltaWriter
 				    	compression_byte_length++;
 				    	channel_iterations[i] = compression_string[compression_byte_length - 1];
 				    	//System.out.println("String compressed.");
-				    	System.out.println("Iterations was " + channel_iterations[i]);
+				    	//System.out.println("Iterations was " + channel_iterations[i]);
 				    	string_list.add(compression_string);			
 				    }
 		        }
@@ -769,8 +792,6 @@ public class DeltaWriter
 				}
 			}
 			
-			System.out.println();
-			
 			ArrayList resized_channel_list = new ArrayList();
 			
 			for(int i = 0; i < 3; i++)
@@ -783,8 +804,6 @@ public class DeltaWriter
 			    
 			    if(channel_length[j] != channel_compressed_length[j])
 			    {
-			    	
-			    	System.out.println();
 			    	byte [] decompressed_string = new byte[xdim * ydim * 4];
 			    	int decompressed_length = 0;
 			    	if(channel_string_type[i] == 0)
@@ -809,10 +828,21 @@ public class DeltaWriter
 			    
 			    int [] channel = new int[0];
 			    
-			    
-			    if(delta_type == 3)
+			    if(delta_type == 0)
 			    {
-			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			    	channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			    }
+			    else if(delta_type == 1)
+			    {
+			        channel = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			    }
+			    else if(delta_type == 2)
+			    {
+			        channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			    }
+			    else if(delta_type == 3)
+			    {
+			        channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
 			    }
 			    else if(delta_type == 4)
 			    {
@@ -823,7 +853,11 @@ public class DeltaWriter
 			    	byte [] map = (byte[])map_list.get(i);
 			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
-			    
+			    else if(delta_type == 6)
+			    {
+			    	byte [] map = (byte[])map_list.get(i);
+			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			    }
 				if(j > 2)
 					for(int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
@@ -1025,16 +1059,13 @@ public class DeltaWriter
 		            	double compression_rate = zipped_length;
 		            	compression_rate /= map.length;
 		
-		            		
-		            	
-		            	
 		            	ArrayList result  = StringMapper.getHistogram(map);
 		            	int min_value     = (int)result.get(0);
 		            	int [] histogram  = (int [])result.get(1);
 		            	int value_range   = (int)result.get(2);
-		            	
 		            	int [] string_table = StringMapper.getRankTable(histogram);
 					
+		            	/*
 		            	if(i == 0)
 		            	{
 		            	    System.out.println("Map :");
@@ -1042,8 +1073,6 @@ public class DeltaWriter
 							    System.out.print(map[k] + " ");
 						    System.out.println();
 		            	}
-						
-						/*
 						System.out.println();
 						System.out.println("Histogram :");
 						for(int k = 0; k < histogram.length; k++)
@@ -1143,8 +1172,6 @@ public class DeltaWriter
 		            	else
 		            		System.out.println("Max segment length " + max_segment_byte_length + " int."); 
 		            	
-			            
-			            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 			            for(int k = 0; k < n; k++)
 			            {
 			            	int segment_bit_length  = (int)segment_length.get(k);
@@ -1186,13 +1213,14 @@ public class DeltaWriter
 			            	}
 			            	else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 			            	{
-			            		//out.writeShort(segment.length);	
-			            		System.out.println("Writing short.");
+			            		//System.out.println("Writing short.");
+			            		out.writeShort(segment.length);	
+			            		
 			            	}
 			            	else
 			            	{
-			            		System.out.println("Writing int.");
-			            		//out.writeInt(segment.length);	
+			            		//System.out.println("Writing int.");
+			            		out.writeInt(segment.length);	
 			            	}
 			            	
 			            	out.write(segment, 0, segment.length);
@@ -1209,7 +1237,7 @@ public class DeltaWriter
 		        double compression_rate = file_length;
 		        compression_rate /= xdim * ydim * 3;
 		        System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				
+				System.out.println("Delta type is " + delta_type);
 		        System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
 		        
 		    }

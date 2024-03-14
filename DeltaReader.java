@@ -359,8 +359,31 @@ public class DeltaReader
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
 				    
-				    
-				    if(delta_type == 3)
+				    if(delta_type == 0)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, xdim , ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+					    channel_list.add(current_channel);
+				    }
+				    else if(delta_type == 1)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, xdim , ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+					    channel_list.add(current_channel);
+				    }
+				    else if(delta_type == 2)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, xdim , ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+					    channel_list.add(current_channel);
+				    }
+				    else if(delta_type == 3)
 				    {
 				        int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, xdim , ydim, init[i]);
 				        if(channel_id[i] > 2)
@@ -384,6 +407,10 @@ public class DeltaReader
 					           for(int j = 0; j < current_channel.length; j++)
 								    current_channel[j] += min[i];
 						channel_list.add(current_channel);
+				    }
+				    else
+				    {
+				    	System.out.println("Delta type " + delta_type + " not supported.");
 				    }
 				    
 		    	}
