@@ -615,11 +615,11 @@ public class SegmentMapper
 
 		// Finished constructing initial list.
 
-		ArrayList segment_data = new ArrayList();
-		segment_data.add(compressed_length);
-		segment_data.add(compressed_data);
-		segment_data.add(max_segment_byte_length);
-		return segment_data;
+		//ArrayList segment_data = new ArrayList();
+		//segment_data.add(compressed_length);
+		//segment_data.add(compressed_data);
+		//segment_data.add(max_segment_byte_length);
+		//return segment_data;
 		
 		
 		
@@ -629,14 +629,14 @@ public class SegmentMapper
 		
 		
 		// Merging segments.
-        /*
+        
 		int overhead = 0;
 		if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-			overhead = 8;
+			overhead = 9;
 		else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
-			overhead = 16;
+			overhead = 17;
 		else
-			overhead = 32;
+			overhead = 33;
 		ArrayList previous_segment_type = (ArrayList) segment_type.clone();
 		ArrayList previous_segment_length = (ArrayList) segment_length.clone();
 		ArrayList previous_compressed_length = (ArrayList) compressed_length.clone();
@@ -653,7 +653,6 @@ public class SegmentMapper
 		
 		
 		int last_bit_length = (int)segment_length.get(current_number_of_segments - 1);
-		//System.out.println("The last segment bit length is " + last_bit_length);
 	
 		int iterations = 0;
 		int number_of_zero_segments = 0;
@@ -876,6 +875,8 @@ public class SegmentMapper
 				overhead = 16;
 			else
 				overhead = 32;
+			// Account for trailing byte.
+			overhead++;
 		}
 		
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
@@ -896,6 +897,6 @@ public class SegmentMapper
 		segment_data.add(previous_compressed_data);
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
-		*/
+	
 	}
 }
