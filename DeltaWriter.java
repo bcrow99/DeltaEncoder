@@ -213,7 +213,8 @@ public class DeltaWriter
 				file_menu.add(save_item);
 				
 				JMenu settings_menu = new JMenu("Settings");
-			
+				
+				
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
 				JDialog quant_dialog = new JDialog(frame, "Pixel Resolution");
 				ActionListener quant_handler = new ActionListener()
@@ -387,6 +388,7 @@ public class DeltaWriter
 				
 				settings_menu.add(correction_item);
 				
+				/*
 				JCheckBoxMenuItem use_map_item = new JCheckBoxMenuItem("Use Delta Map");
 				ActionListener use_map_handler = new ActionListener()
 				{
@@ -410,10 +412,30 @@ public class DeltaWriter
 				if(use_map)
 					use_map_item.setState(true);
 				settings_menu.add(use_map_item);
-				
+				*/
 				
 				menu_bar.add(file_menu);
 				menu_bar.add(settings_menu);
+				
+				
+				JMenu delta_menu = new JMenu("Delta");
+				JRadioButtonMenuItem horizontal = new JRadioButtonMenuItem("H");
+				JRadioButtonMenuItem vertical   = new JRadioButtonMenuItem("V");
+				JRadioButtonMenuItem average    = new JRadioButtonMenuItem("HV average");
+				JRadioButtonMenuItem paeth      = new JRadioButtonMenuItem("Paeth");
+				JRadioButtonMenuItem gradient   = new JRadioButtonMenuItem("Gradient");
+				JRadioButtonMenuItem scanline   = new JRadioButtonMenuItem("Scanline");
+				scanline.setSelected(true);
+				JRadioButtonMenuItem ideal      = new JRadioButtonMenuItem("Ideal");
+				
+				delta_menu.add(horizontal);
+				delta_menu.add(vertical);
+				delta_menu.add(average);
+				delta_menu.add(paeth);
+				delta_menu.add(gradient);
+				delta_menu.add(scanline);
+				delta_menu.add(ideal);
+				menu_bar.add(delta_menu);
 				
 				frame.setJMenuBar(menu_bar);
 				
@@ -576,7 +598,8 @@ public class DeltaWriter
 				else
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int paeth_sum = (int)result.get(0);
+					//result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					//int paeth_sum = (int)result.get(0);
 					//System.out.println("Paeth sum is " + paeth_sum);
 				}
                 int []    delta  = (int [])result.get(1);
@@ -786,7 +809,10 @@ public class DeltaWriter
 			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
 			    }
 			    else
+			    {
 			    	channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			    	//channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			    }
 			    
 				if(j > 2)
 					for(int k = 0; k < channel.length; k++)
@@ -1103,21 +1129,12 @@ public class DeltaWriter
 			            
 			            
 			            if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
-		            	{
-		            		System.out.println("Segment length requires byte."); 	
-		            	}
+		            		System.out.println("Max segment length " + max_segment_byte_length + " requires byte."); 	
 		            	else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
-		            	{
-		            		System.out.println("Segment length requires short."); 
-		            	}
-		            	else if(max_segment_byte_length <= (Short.MAX_VALUE * 2 + 1) + (Byte.MAX_VALUE * 2 + 1))
-		            	{
-		            		System.out.println("Segment length requires short and byte."); 
-		            	}
+		            		System.out.println("Max segment length " + max_segment_byte_length + " requires short."); 
 		            	else
-		            	{
-		            		System.out.println("Segment length requires int."); 	
-		            	}
+		            		System.out.println("Max segment length " + max_segment_byte_length + " int."); 
+		            	
 			            
 			            //System.out.println("Wrote max segment byte length " + max_segment_byte_length);
 			            for(int k = 0; k < n; k++)
@@ -1156,19 +1173,20 @@ public class DeltaWriter
 			            	
 			            	if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 			            	{
-			            		System.out.println("Writing byte.");
+			            		//System.out.println("Writing byte.");
 			            		out.writeByte(segment.length);  	
 			            	}
 			            	else if(max_segment_byte_length <= Short.MAX_VALUE * 2 + 1)
 			            	{
-			            		out.writeShort(segment.length);	
+			            		//out.writeShort(segment.length);	
 			            		System.out.println("Writing short.");
 			            	}
 			            	else
 			            	{
 			            		System.out.println("Writing int.");
-			            		out.writeInt(segment.length);	
+			            		//out.writeInt(segment.length);	
 			            	}
+			            	
 			            	out.write(segment, 0, segment.length);
 			            }
 			        }
