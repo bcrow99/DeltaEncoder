@@ -17,7 +17,7 @@ public class DeltaWriter
 	int           xdim, ydim;
 	JMenuItem     apply_item;
 	String        filename;
-	int [] pixel;
+	int []        pixel;
 	
 	int pixel_quant = 0;
 	int pixel_shift = 0;
@@ -62,7 +62,8 @@ public class DeltaWriter
 		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 	
-		DeltaWriter writer = new DeltaWriter(prefix + filename);
+		//DeltaWriter writer = new DeltaWriter(prefix + filename);
+		DeltaWriter writer = new DeltaWriter(filename);
 	}
 
 	public DeltaWriter(String _filename)
@@ -170,7 +171,8 @@ public class DeltaWriter
 				    	image.setRGB(i, j, pixel[j * xdim + i]);	
 				} 
 			    
-			    JFrame frame = new JFrame("Delta Writer");
+			    JFrame frame = new JFrame("Delta Writer " + filename);
+			    //JFrame frame = new JFrame("Delta Writer");
 				WindowAdapter window_handler = new WindowAdapter()
 			    {
 			        public void windowClosing(WindowEvent event)
@@ -215,7 +217,6 @@ public class DeltaWriter
 				file_menu.add(save_item);
 				
 				JMenu settings_menu = new JMenu("Settings");
-				
 				
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
 				JDialog quant_dialog = new JDialog(frame, "Pixel Resolution");
@@ -1065,39 +1066,6 @@ public class DeltaWriter
 		            	int value_range   = (int)result.get(2);
 		            	int [] string_table = StringMapper.getRankTable(histogram);
 					
-		            	/*
-		            	if(i == 0)
-		            	{
-		            	    System.out.println("Map :");
-						    for(int k = 0; k < map.length; k++)
-							    System.out.print(map[k] + " ");
-						    System.out.println();
-		            	}
-						System.out.println();
-						System.out.println("Histogram :");
-						for(int k = 0; k < histogram.length; k++)
-							System.out.print(histogram[k] + " ");
-						System.out.println();
-						System.out.println("Min value is " + min_value);
-						System.out.println("Value range is " + value_range);
-						System.out.println();
-						
-						System.out.println("Rank table :");
-						for(int k = 0; k < string_table.length; k++)
-							System.out.print(string_table[k] + " ");
-						System.out.println();
-						System.out.println();
-						
-						for(int k = 0; k < map.length; k++)
-							map[k] -= min_value;
-
-						System.out.println("Map :");
-						for(int k = 0; k < map.length; k++)
-							System.out.print(map[k] + " ");
-						System.out.println();
-						System.out.println();
-		            	*/
-						
 		            	
 		            	for(int k = 0; k < map.length; k++)
 							map[k] -= min_value;
@@ -1163,7 +1131,6 @@ public class DeltaWriter
 			            //System.out.println("Wrote int number of segments " + n);
 			            
 			            out.writeInt(max_segment_byte_length);
-			            
 			            
 			            if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 		            		System.out.println("Max segment length " + max_segment_byte_length + " requires byte."); 	
@@ -1239,7 +1206,7 @@ public class DeltaWriter
 		        System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type is " + delta_type);
 		        System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
-		        
+		        System.out.println();
 		    }
 			catch(Exception e)
 			{
