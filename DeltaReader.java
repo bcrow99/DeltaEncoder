@@ -125,15 +125,12 @@ public class DeltaReader
 					short byte_length = in.readShort();
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length);
-				    byte extra_bits = in.readByte();
 				    byte increment  = in.readByte();
 				    short dimension = in.readShort();
-				    int string_length = byte_length * 8 - extra_bits;
 				    
-				    //System.out.println("Extra bits is " + extra_bits);
-				    System.out.println("Bitlength is " + string_length);
-				    
-				    
+				    // This is tricky--we use the dimension of the
+				    // destination to determine when to stop parsing,
+				    // not a predetermined bit length;
 				    byte [] map = new byte[dimension];
 				    
 				    int size = StringMapper.unpackStrings2(map_string, map_table, map);

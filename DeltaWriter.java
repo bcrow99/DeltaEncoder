@@ -1055,6 +1055,22 @@ public class DeltaWriter
 		    	error[0][i] = original_blue[i] - blue[i];
 		    	error[1][i] = original_green[i] - green[i];
 		    	error[2][i]  = original_red[i] - red[i];
+		    	
+		    	if(correction != 0)
+		    	{
+		    		double factor = correction;
+		    		factor       /= 10;
+		    	    
+		    		double addend = (double)error[0][i] * factor;
+		    		blue[i] += (int)addend;
+		    		
+		    		addend = (double)error[1][i] * factor;
+		    		green[i] += addend;
+		    		
+		    		addend = (double)error[2][i] * factor;
+		    		red[i] += addend;
+		    		
+		    	}
 		    }
 	
 		    for(int i = 0; i < ydim; i++)
@@ -1158,7 +1174,7 @@ public class DeltaWriter
 						byte [] string = new byte[ydim * 2];
 						int map_length = StringMapper.packStrings2(map, string_table, string);
 						int byte_length = map_length / 8;
-						int remainder = byte_length % 8;
+						int remainder = map_length % 8;
 						if(remainder != 0)
 							byte_length++;
 						
@@ -1182,7 +1198,7 @@ public class DeltaWriter
 			            out.writeShort(byte_length);
 			            out.write(string, 0, byte_length);
 			            //out.writeShort(map_length);
-			            out.writeByte(extra_bits);
+			            //out.writeByte(extra_bits);
 			            out.writeByte(min_value);
 			            out.writeShort(map.length);
 			            
