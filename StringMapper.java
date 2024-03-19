@@ -440,7 +440,6 @@ public class StringMapper
         return(number_of_bits);
     }
     
-    
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
     	for(int i = 0; i < dst.length; i++)
@@ -913,7 +912,7 @@ public class StringMapper
     		    byte extra_bits = (byte)(length % 8);
     		    if(extra_bits != 0)
     		    {
-    		    	extra_bits = (byte)(7 - extra_bits);
+    		    	extra_bits = (byte)(8 - extra_bits);
     		    }
     		    extra_bits     <<= 5;
     		    
@@ -934,15 +933,16 @@ public class StringMapper
                 	    last_byte++;
                     dst[last_byte] = 1;
                     
-                    byte extra_bits = (byte)(length % 8);
-        		    if(extra_bits != 0)
-        		    {
-        		    	extra_bits = (byte)(7 - extra_bits);
-        		    }
-        		    extra_bits     <<= 5;
-        		    
-        		    dst[byte_length] |= extra_bits;
+                    byte modulus = (byte)(current_length % 8);
                     
+                    byte extra_bits = 0;
+                    
+                    if(modulus != 0)
+                    	extra_bits = (byte)(8 - modulus);
+                    
+                    extra_bits <<= 5;
+                    dst[last_byte] |= extra_bits;
+                
                     return(current_length);
     		    }
     		    else
@@ -985,15 +985,20 @@ public class StringMapper
                             byte_length++; 
                         System.arraycopy(temp,  0,  dst,  0,  byte_length);
                     } 
-                    // else the result is already in dst.
     			
     			    int last_byte = current_length / 8;
                     if(current_length % 8 != 0)
                 	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-                    byte extra_bits = (byte)(current_length % 8);
-                    if(extra_bits != 0)
-                    	extra_bits = (byte)(7 - extra_bits);
+                	
+                    dst[last_byte] = (byte)(iterations);
+                    
+                    byte modulus = (byte)(current_length % 8);
+                    
+                    byte extra_bits = 0;
+                    
+                    if(modulus != 0)
+                    	extra_bits = (byte)(8 - modulus);
+                    
                     extra_bits <<= 5;
                     dst[last_byte] |= extra_bits;
     		    }
@@ -1451,7 +1456,6 @@ public class StringMapper
                     
                 }   
     			
-                // else the result is already in dst.
     			
     			int last_byte = current_length / 8;
                 if(current_length % 8 != 0)
@@ -1464,7 +1468,7 @@ public class StringMapper
     	catch(Exception e)
     	{
     		System.out.println(e.toString());
-    		System.out.println("Exiting compressOneStrings2 with exception.");
+    		System.out.println("Exiting compressOneStrings with exception.");
     	}
     	return current_length;
     }
@@ -1777,84 +1781,88 @@ public class StringMapper
     	
     	try
     	{
-        int amount = getCompressionAmount(src, length, 1);
-    	if(amount > 0)
-    	{
-    		int byte_length = length / 8;
-    		if(length % 8 != 0)
-    			byte_length++;
-    		for(int i = 0; i < byte_length; i++)
-    			dst[i] = src[i];
-    		dst[byte_length] = 0;
-    		byte extra_bits = (byte)(length % 8);
-            if(extra_bits != 0)
-            	extra_bits = (byte)(7 - extra_bits);
-            extra_bits <<= 5;
-            dst[byte_length] |= extra_bits;
-    	    return length;
-    	}
-        else
-        {
-    		current_length = compressOneBits(src, length, dst);
-    		int iterations     = 1;
-    		amount             = getCompressionAmount(dst, current_length, 1);
+            int amount = getCompressionAmount(src, length, 1);
+    	    if(amount > 0)
+    	    {
+    		    int byte_length = length / 8;
+    		    if(length % 8 != 0)
+    			    byte_length++;
+    		    for(int i = 0; i < byte_length; i++)
+    			    dst[i] = src[i];
+    		    dst[byte_length] = 0;
+    		    byte extra_bits = (byte)(length % 8);
+                if(extra_bits != 0)
+            	    extra_bits = (byte)(8 - extra_bits);
+                extra_bits <<= 5;
+                dst[byte_length] |= extra_bits;
+    	        return length;
+    	    }
+            else
+            {
+    		    current_length = compressOneBits(src, length, dst);
+    		    int iterations     = 1;
+    		    amount             = getCompressionAmount(dst, current_length, 1);
     		
-    		if(amount >= 0)
-    		{
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte) (iterations + 16);
-                byte extra_bits = (byte)(current_length % 8);
-                if(extra_bits != 0)
-                	extra_bits = (byte)(7 - extra_bits);
-                extra_bits <<= 5;
-                dst[last_byte] |= extra_bits;
-                return(current_length);
-    		}
-    		else
-    		{
-    			byte [] temp      = new byte[src.length];  
-    			while(amount < 0 && iterations < 15)
-    			{
-    				int previous_length = current_length;
-        	        if(iterations % 2 == 1)
-        	        {
-                        current_length = compressOneBits(dst, previous_length, temp);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-        	        }
-                    else
-                    {
-                        current_length = compressOneBits(temp, previous_length, dst);
-                        amount         = getCompressionAmount(dst, current_length, 1);
-                    }
-                    iterations++; 
-    			}
-    			
-    			if(iterations % 2 == 0) 
-    			{
-                	// The last iteration used temp as a destination,
-                	// so we need to copy the data from temp to dst.
-                    int byte_length = current_length / 8;
+    		    if(amount >= 0)
+    		    {
+    			    int last_byte = current_length / 8;
                     if(current_length % 8 != 0)
-                        byte_length++; 
-                    for(int i = 0; i < byte_length; i++)
-                        dst[i] = temp[i];
-                    
-                }   
+                	    last_byte++;
+                    dst[last_byte] = (byte) (iterations + 16);
+                    byte extra_bits = (byte)(current_length % 8);
+                    if(extra_bits != 0)
+                	    extra_bits = (byte)(8 - extra_bits);
+                    extra_bits <<= 5;
+                    dst[last_byte] |= extra_bits;
+                    return(current_length);
+    		    }
+    		    else
+    		    {
+    			    byte [] temp      = new byte[src.length];  
+    			    while(amount < 0 && iterations < 15)
+    			    {
+    				    int previous_length = current_length;
+        	            if(iterations % 2 == 1)
+        	            {
+                            current_length = compressOneBits(dst, previous_length, temp);
+                            amount         = getCompressionAmount(dst, current_length, 1);
+        	            }
+                        else
+                        {
+                            current_length = compressOneBits(temp, previous_length, dst);
+                            amount         = getCompressionAmount(dst, current_length, 1);
+                        }
+                        iterations++; 
+    			    }
     			
-                // else the result is already in dst.
-    			int last_byte = current_length / 8;
-                if(current_length % 8 != 0)
-                	last_byte++;
-                dst[last_byte] = (byte)(iterations + 16);
-                byte extra_bits = (byte)(current_length % 8);
-                if(extra_bits != 0)
-                	extra_bits = (byte)(7 - extra_bits);
-                extra_bits <<= 5;
-                dst[last_byte] |= extra_bits;
-    		}
-    	}
+    			    if(iterations % 2 == 0) 
+    			    {
+                	    // The last iteration used temp as a destination,
+                	    // so we need to copy the data from temp to dst.
+                        int byte_length = current_length / 8;
+                        if(current_length % 8 != 0)
+                            byte_length++; 
+                        for(int i = 0; i < byte_length; i++)
+                            dst[i] = temp[i];    
+                    }   
+    			
+    			    int last_byte = current_length / 8;
+                    if(current_length % 8 != 0)
+                	    last_byte++;
+                
+                    dst[last_byte] = (byte)(iterations + 16);
+                
+                    byte modulus = (byte)(current_length % 8);
+                
+                    byte extra_bits = 0;
+                
+                   if(modulus != 0)
+                	   extra_bits = (byte)(8 - modulus);
+                
+                   extra_bits <<= 5;
+                   dst[last_byte] |= extra_bits;
+    		   }
+    	   }
     	}
     	catch(Exception e)
     	{

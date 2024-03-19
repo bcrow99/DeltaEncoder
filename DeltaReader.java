@@ -22,7 +22,7 @@ public class DeltaReader
 			System.exit(0);
 		}
 		
-	    String prefix      = new String("");
+	    String prefix       = new String("");
 		String filename     = new String(args[0]);
 		DeltaReader reader = new DeltaReader(prefix + filename);
 	}
@@ -125,17 +125,18 @@ public class DeltaReader
 					short byte_length = in.readShort();
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length);
-				    byte remainder = in.readByte();
-				    byte increment = in.readByte();
+				    byte extra_bits = in.readByte();
+				    byte increment  = in.readByte();
 				    short dimension = in.readShort();
+				    int string_length = byte_length * 8 - extra_bits;
 				    
+				    //System.out.println("Extra bits is " + extra_bits);
+				    System.out.println("Bitlength is " + string_length);
 				    
-				    int string_length = byte_length * 8 - remainder;
 				    
 				    byte [] map = new byte[dimension];
 				    
 				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
-				    
 				    
 				    if(size != dimension)
 				    {
@@ -146,7 +147,7 @@ public class DeltaReader
 				    for(int k = 0; k < map.length; k++)
 				    	map[k] += increment;
 				    
-				    
+				    /*
 				    if(i == 0)
 				    {
 				    	System.out.println("Map:");
@@ -154,7 +155,7 @@ public class DeltaReader
 				    	    System.out.print(map[k] + " ");
 				    	System.out.println();
 				    }
-				    
+				    */
 				    map_list.add(map);
 				}
 				
@@ -211,24 +212,27 @@ public class DeltaReader
 					int n = number_of_segments;
 					int number_of_zero_segments = 0;
 					int number_of_one_segments  = 0;
+					
+					
+					int max_byte_value = Byte.MAX_VALUE * 2 + 1;
+					int max_short_value = Short.MAX_VALUE * 2 + 1;
 					for(int k = 0; k < n; k++)
 					{
 					    
 					    int segment_byte_length = 0;
 					   
-					    if(max_segment_length <= (Byte.MAX_VALUE * 2 + 1))
+					    if(max_segment_length <= max_byte_value)
 		            	{
 		            		segment_byte_length = in.readByte();  
 		            		if(segment_byte_length < 0)
-		            			segment_byte_length += Byte.MAX_VALUE + 1;
-		            		System.out.println("Segment byte length is " + segment_byte_length);
-		            		System.out.println();
+		            			segment_byte_length = max_byte_value + 1 + segment_byte_length;
+		            		
 		            	}
-		            	else if(max_segment_length <= (Short.MAX_VALUE * 2 + 1))
+		            	else if(max_segment_length <= max_short_value)
 		            	{
 		            		segment_byte_length = in.readShort();
 		            		if(segment_byte_length < 0)
-		            			segment_byte_length += Short.MAX_VALUE + 1;
+		            			segment_byte_length = max_short_value + 1 + segment_byte_length;
 		            	}
 		            	else
 		            	{
@@ -240,14 +244,17 @@ public class DeltaReader
 					     
 					     int iterations  = (int)segment[segment_byte_length - 1] & 31;
 					     int string_type = 0;
-					     if(iterations > 16)
+					     if(iterations > 15)
 					     {
 					    	 string_type = 1;
 					    	 iterations  = iterations - 16;
 					    	 number_of_one_segments++;
+					    	 
 					     }
 					     else
+					     {
 					    	 number_of_zero_segments++;
+					     }
 					     
 					     int extra_bits = (int)(segment[segment_byte_length - 1] >> 5);
 					     extra_bits    &= 7;
@@ -294,13 +301,19 @@ public class DeltaReader
 					    		  }
 					    	  }
 					    	  
-					    	  if(offset + byte_length > decompressed_segment.length)
+					    	  if(offset + byte_length > string.length)
 					    	  {
 					    		  System.out.println("Input length is " + segment_byte_length);
 					    		  System.out.println("Output length is " + byte_length);
 					    		  System.out.println("Exceeding buffer size.");
 					    		  System.out.println("String type is " + string_type);
 					    		  System.out.println("Iterations is " + iterations);
+					    		  
+					
+					    		  
+					    		  byte last_byte = segment[segment.length - 1];
+					    		  last_byte &= 31;
+					    		  System.out.println("Iterations from byte is " + last_byte);
 					    		  System.out.println();
 					    	  }
 					    	  System.arraycopy(decompressed_segment, 0, string, offset, byte_length);

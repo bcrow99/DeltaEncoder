@@ -62,8 +62,8 @@ public class DeltaWriter
 		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 	
-		//DeltaWriter writer = new DeltaWriter(prefix + filename);
-		DeltaWriter writer = new DeltaWriter(filename);
+		DeltaWriter writer = new DeltaWriter(prefix + filename);
+		//DeltaWriter writer = new DeltaWriter(filename);
 	}
 
 	public DeltaWriter(String _filename)
@@ -623,6 +623,9 @@ public class DeltaWriter
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
+				    
+				    if(map.length != new_ydim - 1)
+				    	System.out.println("Map length does not agree with image dimension.");
 				    map_list.add(map);
 				    int sum = (int)result.get(0);
 				    //System.out.println("Mixed sum is " + sum);	
@@ -771,12 +774,12 @@ public class DeltaWriter
 					
 					    int number_of_segments = channel_compressed_length[j] / segment_length;
 					
-					    System.out.println("Number of original segments is " + number_of_segments);
-					    System.out.println("Minimum segment length is " + segment_length);	
+					    //System.out.println("Number of original segments is " + number_of_segments);
+					    //System.out.println("Minimum segment length is " + segment_length);	
 					  
 					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, channel_compressed_length[j], segment_length);
 					    ArrayList length_list = (ArrayList)segment_data_list.get(0);
-					    System.out.println("Number of merged segments is " + length_list.size());
+					    //System.out.println("Number of merged segments is " + length_list.size());
 					    if(length_list.size() == 1)
 					    {
 					    	System.out.println("Merged segment list produced no segmentation.");
@@ -786,9 +789,7 @@ public class DeltaWriter
 					    {
 					    	channel_segmented[i] = true;
 					    }
-					    
 					    channel_data.add(segment_data_list);
-						
 					}
 				}
 			}
@@ -799,10 +800,95 @@ public class DeltaWriter
 		    {
 			    byte [] string = (byte [])string_list.get(i);
 			    int  [] table  = (int [])table_list.get(i);
-			    int  [] delta  = new int[new_xdim * new_ydim];
-			    
+			    int  [] delta  = new int[new_xdim * new_ydim]; 
 			    int j = channel_id[i];
 			    
+			    if(segment != 0 && channel_segmented[i] == true)
+			    {
+			    	ArrayList segment_data_list = (ArrayList)channel_data.get(i);
+					ArrayList segment_length    = (ArrayList)segment_data_list.get(0);
+					ArrayList segment_data      = (ArrayList)segment_data_list.get(1);
+					int max_segment_byte_length = (int)segment_data_list.get(2);	
+			        byte [] reconstructed_string = new byte[string.length];
+			        int offset = 0;
+			        for(int k = 0; k < segment_data.size(); k++)
+			        {
+			            byte [] current_segment = (byte [])	segment_data.get(k);
+			            byte last_byte          = current_segment[current_segment.length - 1];
+			            int  current_iterations = last_byte & 31;
+			            int  current_type       = 0;
+			        
+			            if(current_iterations > 15)
+			            {
+			                current_iterations -= 16;
+			                current_type        = 1;
+			            }
+			            int extra_bits = last_byte >> 5;
+				        extra_bits    &= 7;
+				        int bitlength = (current_segment.length - 1) * 8 - extra_bits;
+				    
+				    
+				        byte [] decompressed_string = new byte[max_segment_byte_length * 2];
+				   
+				        int decompressed_length = 0;
+				        if(current_type == 0)
+				            decompressed_length = StringMapper.decompressZeroStrings2(current_segment, bitlength, decompressed_string);
+				        else
+				    	    decompressed_length = StringMapper.decompressOneStrings2(current_segment, bitlength, decompressed_string);
+				        if(decompressed_length % 8 != 0 && k != segment_data.size() - 1)
+				        {
+				    	    System.out.println("Bitlength is not a multiple of 8 at segment " + k);
+				    	    System.out.println("There are " + segment_data.size() + " segments.");
+				    	    int original_bitlength = (int)segment_length.get(k);
+				    	    System.out.println("Input bitlength was " + bitlength + ", output bitlength was " + decompressed_length + ", original bitlength was " + original_bitlength);
+				    	
+				    	    // In case these were trailing zero bits--haven't really observed it but seems possible.
+				    	    if(k != segment_data.size() - 1)
+				    	    {
+				    		    int remainder = decompressed_length % 8;
+				    		    decompressed_length -= remainder;
+				    		    System.out.println("Clipping output.");
+				    	    }
+				    	    System.out.println();
+				        }
+				        
+				        int byte_length = decompressed_length / 8;
+				        if(decompressed_length % 8 != 0)
+				    	    byte_length++;
+				        for(int m = 0; m < byte_length; m++)
+				    	    reconstructed_string[offset + m] = decompressed_string[m];
+				        offset += byte_length;   
+			        }
+			    
+			        
+			        int channel_byte_length = channel_compressed_length[j];
+			        channel_byte_length /= 8;
+			        if(channel_compressed_length[j] % 8 != 0)
+			        	channel_byte_length++;
+			        reconstructed_string[channel_byte_length] = string[channel_byte_length];
+			        boolean wrong_value = false;
+			        int     wrong_index = 0;
+			        for(int k = 0; k < channel_byte_length + 1; k++)
+			        {
+			    	    if(reconstructed_string[k] != string[k])
+			    	    {
+			    		    if(!wrong_value)
+			    		    {
+			    			    wrong_value = true;
+			    			    System.out.println("String byte length is " + string.length);
+			    			    System.out.println("Wrong value at byte " + k);
+			    			    System.out.println();
+			    		    }
+			    	    }
+			        }
+			    
+			        if(!wrong_value)
+			        {
+			    	    System.out.println("Reconstructed string is same as original string.");
+			    	    System.out.println();
+			        }
+			    }
+		    
 			    if(channel_length[j] != channel_compressed_length[j])
 			    {
 			    	byte [] decompressed_string = new byte[xdim * ydim * 4];
@@ -1076,20 +1162,31 @@ public class DeltaWriter
 						if(remainder != 0)
 							byte_length++;
 						
+						byte extra_bits = (byte)remainder;
+						if(extra_bits != 0)
+							extra_bits = (byte)(8 - extra_bits);
+						
+						
+						System.out.println("Extra bits is " + extra_bits);
+						System.out.println("Bit length is " + map_length);
+						
 						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = byte_length + string_table.length;
 						compression_rate /= map.length;
 						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
-						System.out.println();
+						
 						
 						out.writeShort(string_table.length);
 			            for(int k = 0; k < string_table.length; k++)
 			                out.writeInt(string_table[k]);
 			            out.writeShort(byte_length);
 			            out.write(string, 0, byte_length);
-			            out.writeByte(remainder);
+			            //out.writeShort(map_length);
+			            out.writeByte(extra_bits);
 			            out.writeByte(min_value);
 			            out.writeShort(map.length);
+			            
+			            System.out.println("Map length is " + map.length);
 		            }
 		            
 		            if(segment == 0 || channel_segmented[i] == false)
@@ -1138,40 +1235,35 @@ public class DeltaWriter
 		            		System.out.println("Max segment length " + max_segment_byte_length + " requires short."); 
 		            	else
 		            		System.out.println("Max segment length " + max_segment_byte_length + " int."); 
-		            	
+			            System.out.println();
+			            
 			            for(int k = 0; k < n; k++)
 			            {
-			            	int segment_bit_length  = (int)segment_length.get(k);
 			            	byte [] segment = (byte [])segment_data.get(k);
-			            	byte extra_bits = (byte)(segment.length  * 8 - segment_bit_length - 8);
+			            	int segment_bit_length  = (int)segment_length.get(k);
 			            	
-			            	byte iterations = segment[segment.length - 1];
+			            	byte last_byte = segment[segment.length - 1];
 			            	
-			            	if(iterations < 0)
-			            	{
-			            		iterations = (byte)-iterations;
-			            		if(iterations > 15)
-			            			System.out.println("Iterations will not fit in final byte (1).");
-			            		else
-			            		{
-			            		    iterations += 16;
-			            		    segment[segment.length - 1] = (byte)(extra_bits << 5);
-			            		    segment[segment.length - 1] |= iterations;
-			            		}
-			            	}
-			            	else
-			            	{
-			            		if(iterations > 15)
-			            		{
-			            			System.out.println("Iterations will not fit in final byte.(2)");
-			            			System.out.println();
-			            		}
-			            		else
-			            		{
-			            		    segment[segment.length - 1] = (byte)(extra_bits << 5);
-			            		    segment[segment.length - 1] |= iterations;
-			            		}	
-			            	}
+			            	int string_type = 0;
+			            	
+				        	byte iterations = (byte)(last_byte & 31);
+				        	if(iterations > 15)
+				        	{
+				        		iterations -= 16;
+				        	    string_type = 1;   	
+				        	}
+				        	
+				        	int extra_bits = last_byte >> 5;
+						    extra_bits    &= 7;
+						    int bitlength = (segment.length - 1) * 8 - extra_bits;
+						    
+						    if(bitlength != segment_bit_length)
+						    {
+						    	System.out.println("Bitlength from byte " + bitlength +  " is not equal to bitlength on list " + segment_bit_length);
+						    	System.out.println("Index is " + k);
+						    	System.out.println("There are " + n + " segments.");
+						    	System.out.println("String type is " + string_type);
+						    }
 			            	
 			            	if(max_segment_byte_length <= Byte.MAX_VALUE * 2 + 1)
 			            	{
