@@ -732,7 +732,7 @@ public class DeltaWriter
 					    System.out.println("Number of original segments is " + number_of_segments);
 					    System.out.println("Minimum segment length is " + segment_length);	
 					   
-					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(string, channel_length[j], segment_length);
+					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(string, channel_length[j], segment_length);
 					    ArrayList length_list = (ArrayList)segment_data_list.get(0);
 					    System.out.println("Number of merged segments is " + length_list.size());
 					    if(length_list.size() == 1)
@@ -777,7 +777,7 @@ public class DeltaWriter
 					    //System.out.println("Number of original segments is " + number_of_segments);
 					    //System.out.println("Minimum segment length is " + segment_length);	
 					  
-					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, channel_compressed_length[j], segment_length);
+					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, channel_compressed_length[j], segment_length);
 					    ArrayList length_list = (ArrayList)segment_data_list.get(0);
 					    //System.out.println("Number of merged segments is " + length_list.size());
 					    if(length_list.size() == 1)
@@ -860,7 +860,7 @@ public class DeltaWriter
 				        offset += byte_length;   
 			        }
 			    
-			        
+			        // Regression testing in case the segmentation breaks.
 			        int channel_byte_length = channel_compressed_length[j];
 			        channel_byte_length /= 8;
 			        if(channel_compressed_length[j] % 8 != 0)
@@ -877,15 +877,10 @@ public class DeltaWriter
 			    			    wrong_value = true;
 			    			    System.out.println("String byte length is " + string.length);
 			    			    System.out.println("Wrong value at byte " + k);
+			    			    System.out.println("Reconstructed string does not match original string.");
 			    			    System.out.println();
 			    		    }
 			    	    }
-			        }
-			    
-			        if(!wrong_value)
-			        {
-			    	    System.out.println("Reconstructed string is same as original string.");
-			    	    System.out.println();
 			        }
 			    }
 		    
@@ -1184,12 +1179,17 @@ public class DeltaWriter
 						
 						
 						System.out.println("Extra bits is " + extra_bits);
-						System.out.println("Bit length is " + map_length);
+						System.out.println("Bit length from pack strings is " + map_length);
+						int bit_length = byte_length * 8 - extra_bits;
+						System.out.println("Bit length from extra bits is " + bit_length);
+						System.out.println();
 						
+						/*
 						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = byte_length + string_table.length;
 						compression_rate /= map.length;
 						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
+						*/
 						
 						
 						out.writeShort(string_table.length);
