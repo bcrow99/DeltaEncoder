@@ -339,6 +339,12 @@ public class SegmentMapper
 							byte_length++;
 						if (byte_length + 1 > max_segment_byte_length)
 							max_segment_byte_length = byte_length + 1;
+						if(max_segment_byte_length <= max_byte_value)
+							overhead = 16;
+						else if(max_segment_byte_length <= max_short_value)
+							overhead = 24;
+						else
+							overhead = 40;
 
 						byte[] merged_segment = new byte[byte_length];
 						for (int j = 0; j < byte_length; j++)
@@ -369,7 +375,7 @@ public class SegmentMapper
                         // Do a check to see if the segments compress better when merged.
 						// We also account for the overhead--either a byte,
 						// a short, or an int.
-						if(merged_compression_length <= (current_length + next_length - overhead)) 
+						if(merged_compression_length - overhead <= (current_length + next_length)) 
 						{
 							int compressed_byte_length = merged_compression_length / 8;
 							if (merged_compression_length % 8 != 0)
@@ -394,7 +400,15 @@ public class SegmentMapper
 							//System.out.println("Merged segments.");
 							
 							if (compressed_byte_length > max_segment_byte_length)
+							{
 								max_segment_byte_length = compressed_byte_length;
+								if(max_segment_byte_length <= max_byte_value)
+									overhead = 16;
+								else if(max_segment_byte_length <= max_short_value)
+									overhead = 24;
+								else
+									overhead = 40;
+							}
 						} 
 						else 
 						{
@@ -423,6 +437,12 @@ public class SegmentMapper
 
 						if (byte_length + 1 > max_segment_byte_length)
 							max_segment_byte_length = byte_length + 1;
+						if(max_segment_byte_length <= max_byte_value)
+							overhead = 16;
+						else if(max_segment_byte_length <= max_short_value)
+							overhead = 24;
+						else
+							overhead = 40;
 
 						byte[] merged_segment = new byte[byte_length + 1];
 
