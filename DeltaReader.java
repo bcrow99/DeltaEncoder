@@ -336,18 +336,14 @@ public class DeltaReader
 		    {
 		    	byte [] string = (byte [])string_list.get(i);
 		    	System.out.println("String byte length is " + string.length);
-		    	byte iterations = string[string.length - 1];
+		    	byte iterations = (byte)(string[string.length - 1] & 31);
 		    	System.out.println("Iterations is " + iterations);
 		    	
 		    	if(iterations != 0)
 		    	{
-		    		// Decompressed one strings can be larger than the original size.
-		    		// This is a conservative sized buffer, but will still probably fail
-		    		// on some kind of image.  Using the theoretical limit uses a
-		    		// huge amount of storage. 
 		    		byte [] decompressed_string = new byte[xdim * ydim * 4];
 		    		int decompressed_length = 0;
-		    	    if(iterations > 0)
+		    	    if(iterations < 16)
 		    	        decompressed_length = StringMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
 		    	    else
 		    	        decompressed_length = StringMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
