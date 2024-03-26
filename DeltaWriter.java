@@ -667,7 +667,7 @@ public class DeltaWriter
 		        {
 				    channel_compressed_length[j] = StringMapper.compressZeroStrings(string, channel_length[j], compression_string);
 				    
-				    byte [] compression_string2 = StringMapper.compressZeroStrings3(string, channel_length[j]);
+				    byte [] compression_string2 = StringMapper.compressZeroStrings(string, channel_length[j]);
 				    int     iterations2         = StringMapper.getIterations(compression_string2);
 				    int     bitlength2          = StringMapper.getBitlength(compression_string2);
 				    byte    type2               = StringMapper.getType(compression_string2);   
@@ -704,7 +704,7 @@ public class DeltaWriter
 		    	    channel_compressed_length[j] = StringMapper.compressOneStrings(string, channel_length[j], compression_string);
 		    	    channel_string_type[i] = 1;
 		    	    
-		    	    byte [] compression_string2 = StringMapper.compressOneStrings3(string, channel_length[j]);
+		    	    byte [] compression_string2 = StringMapper.compressOneStrings(string, channel_length[j]);
 				    int     iterations2         = StringMapper.getIterations(compression_string2);
 				    int     bitlength2          = StringMapper.getBitlength(compression_string2);
 				    byte    type2               = StringMapper.getType(compression_string2); 
@@ -868,9 +868,9 @@ public class DeltaWriter
 				   
 				        int decompressed_length = 0;
 				        if(current_type == 0)
-				            decompressed_length = StringMapper.decompressZeroStrings2(current_segment, bitlength, decompressed_string);
+				            decompressed_length = StringMapper.decompressZeroStrings(current_segment, bitlength, decompressed_string);
 				        else
-				    	    decompressed_length = StringMapper.decompressOneStrings2(current_segment, bitlength, decompressed_string);
+				    	    decompressed_length = StringMapper.decompressOneStrings(current_segment, bitlength, decompressed_string);
 				        if(decompressed_length % 8 != 0 && k != segment_data.size() - 1)
 				        {
 				    	    System.out.println("Bitlength is not a multiple of 8 at segment " + k);

@@ -780,179 +780,7 @@ public class StringMapper
 		number_of_bits += current_bit;
 		return (number_of_bits);
 	}
-	
-	// This function uses a metric to see if the data will expand or contract, and
-    // copies the src to dst instead of processing it if it would expand.  
-    // Worth noting that sometimes expanded strings compress better with
-    // a prefix free code later (using deflate) than unexpanded strings since it's 
-    // another example of recursive compression.
     public static int compressZeroStrings(byte src[], int bit_length, byte dst[])
-    {
-    	int current_length = 0;
-    	int byte_length    = bit_length / 8;
-    	if(bit_length % 8 != 0)
-    		byte_length++;
-    	
-    	try
-    	{
-            int amount = getCompressionAmount(src, bit_length, 0);
-    	    if(amount > 0)
-    	    {
-    		    System.arraycopy(src, 0, dst, 0, byte_length);
-    		    dst[byte_length] = 0;
-    		    
-    		    byte extra_bits = (byte) (bit_length % 8);
-    		    if(extra_bits != 0)
-    		    	extra_bits = (byte)(8 - extra_bits);
-    		    dst[byte_length] |= extra_bits;
-    	        return bit_length;
-    	    }
-            else
-            {
-            	int iterations = 1;
-    		    current_length = compressZeroBits(src, bit_length, dst);
-    		    amount         = getCompressionAmount(dst, current_length, 0);
-    		
-    		    if(amount >= 0)
-    		    {
-    		    	// 1 iteration
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-                    
-                    byte extra_bits = (byte) (current_length % 8);
-        		    if(extra_bits != 0)
-        		    	extra_bits = (byte)(8 - extra_bits);
-        		    extra_bits <<= 5;
-        		    
-        		    dst[byte_length] |= extra_bits;
-                    
-                    
-                    return(current_length);
-    		    }
-    		    else
-    		    {
-    			    byte [] temp      = new byte[src.length];  
-    			    while(amount < 0 && iterations < 15)
-    			    {
-    				   int previous_length = current_length;
-        	           if(iterations % 2 == 1)
-        	           {
-                           current_length = compressZeroBits(dst, previous_length, temp);
-                           iterations++; 
-                           amount         = getCompressionAmount(temp, current_length, 0);
-                        
-        	            }
-                        else
-                        {
-                            current_length  = compressZeroBits(temp, previous_length, dst);
-                            iterations++; 
-                            amount         = getCompressionAmount(dst, current_length, 0);
-                        }
-    			    }
-    			
-    			    if(iterations % 2 == 0) 
-                    {
-                	    // The last iteration used temp as a destination,
-                	    // so we need to copy the data from temp to dst.
-                        byte_length = current_length / 8;
-                        if(current_length % 8 != 0)
-                            byte_length++; 
-                        System.arraycopy(temp,  0,  dst,  0,  byte_length);
-                    } 
-                    
-    			
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)iterations;
-                    byte extra_bits = (byte) (current_length % 8);
-        		    if(extra_bits != 0)
-        		    	extra_bits = (byte)(8 - extra_bits);
-        		    extra_bits <<= 5;
-        		    dst[byte_length] |= extra_bits;
-        		    
-        		    return current_length;
-    		    }
-    	    }
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressZeroStrings with an exception.");
-    	}
-    	return current_length;
-    }
-    
-    
-    // This function expects to find the iterations in the final byte
-    // as a positive number less than 16, along with the bitlength.
-    public static int decompressZeroStrings(byte src[], int bit_length, byte dst[])
-    {
-        // Getting the number of iterations appended to
-        // the end of the string. 
-        int last_byte = bit_length / 8;
-        if(bit_length % 8 != 0)
-        	last_byte++;
-        int iterations = src[last_byte] & 31;
-        
-        if(iterations > 15)
-        {
-        	System.out.println("Not zero type string.");
-        	iterations -= 16;
-        }
-        
-        if(iterations == 0)
-        {
-        	int byte_length = bit_length / 8;
-        	if(bit_length % 8 != 0)
-        		byte_length++;
-        	System.arraycopy(src,  0,  dst, 0, byte_length);
-        	return bit_length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressZeroBits(src, bit_length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, bit_length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressZeroBits(src, bit_length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressZeroBits(dst, previous_length, temp);
-                else
-                    current_length = decompressZeroBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        } 
-    }
-   
-    public static int compressZeroStrings2(byte src[], int bit_length, byte dst[])
     {
     	int     current_length  = 0;
     	int     iterations      = 0;
@@ -1057,7 +885,7 @@ public class StringMapper
     // This function expects to find the number of iterations in the final
     // byte, as well as the number of odd bits determined by the bit length
     // subtracted from the byte length.
-    public static int decompressZeroStrings2(byte src[], int bit_length, byte dst[])
+    public static int decompressZeroStrings(byte src[], int bit_length, byte dst[])
     { 
         int last_byte = bit_length / 8;
         if(bit_length % 8 != 0)
@@ -1127,7 +955,7 @@ public class StringMapper
         } 
     }
    
-    public static byte[] compressZeroStrings3(byte[] src, int bit_length)
+    public static byte[] compressZeroStrings(byte[] src, int bit_length)
     {
     	try
     	{
@@ -1228,7 +1056,7 @@ public class StringMapper
     // This function expects to find the number of iterations in the final
     // byte, as well as the number of odd bits determined by the bit length
     // subtracted from the byte length.
-    public static byte[] decompressZeroStrings3(byte[] src)
+    public static byte[] decompressZeroStrings(byte[] src)
     {
         int last_byte   = src.length - 1;
         int iterations  = src[last_byte] & (byte)31;
@@ -1573,175 +1401,8 @@ public class StringMapper
         return(number_of_bits);
     }
   
-
-    public static int compressOneStrings(byte src[], int bit_length, byte dst[])
-    {
-    	int current_length = 0;
-    
-    	try
-    	{
-            int amount = getCompressionAmount(src, bit_length, 1);
-    	    if(amount > 0)
-    	    {
-    		    int byte_length = bit_length / 8;
-    		    if(bit_length % 8 != 0)
-    			    byte_length++;
-    		    for(int i = 0; i < byte_length; i++)
-    			    dst[i] = src[i];
-    		    
-    		    // We are effectively classifying this as a 0 string.
-    		    dst[byte_length] = 0;
-    		    
-                byte extra_bits = (byte)(current_length % 8);
-                if(extra_bits != 0)
-                	extra_bits = (byte)(8 - extra_bits);
-                extra_bits <<= 5;
-                
-                dst[byte_length] |= extra_bits;
-    	        return bit_length;
-    	    }
-            else
-            {
-    		    current_length = compressOneBits(src, bit_length, dst);
-    		    int iterations     = 1;
-    		    amount             = getCompressionAmount(dst, current_length, 1);
-    		    if(amount >= 0)
-    		    {
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)(iterations + 16);
-                    
-                    byte extra_bits = (byte)(current_length % 8);
-                    if(extra_bits != 0)
-                    	extra_bits = (byte)(8 - extra_bits);
-                    extra_bits <<= 5;
-                    
-                    dst[last_byte] |= extra_bits;
-                    
-                    return(current_length);
-    		    }
-    		    else
-    		    {
-    			    byte [] buffer      = new byte[src.length];  
-    			    while(amount < 0 && iterations < 15)
-    			    {
-    				    int previous_length = current_length;
-        	            if(iterations % 2 == 1)
-        	            {
-                            current_length = compressOneBits(dst, previous_length, buffer);
-                            amount         = getCompressionAmount(buffer, current_length, 1);
-        	            }
-                        else
-                        {
-                            current_length = compressOneBits(buffer, previous_length, dst);
-                            amount         = getCompressionAmount(dst, current_length, 1);
-                        }
-                        iterations++; 
-    			    }
-    			
-    			    if(iterations % 2 == 0) 
-    			    {
-                	    // The last iteration used the buffer as a destination,
-                	    // so we need to copy the data from the buffer to dst.
-                        int byte_length = current_length / 8;
-                        if(current_length % 8 != 0)
-                            byte_length++; 
-                        for(int i = 0; i < byte_length; i++)
-                            dst[i] = buffer[i];
-                    }   
-    			
-    			    int last_byte = current_length / 8;
-                    if(current_length % 8 != 0)
-                	    last_byte++;
-                    dst[last_byte] = (byte)(iterations + 16);
-                    
-                    byte extra_bits = (byte)(current_length % 8);
-                    if(extra_bits != 0)
-                    	extra_bits = (byte)(8 - extra_bits);
-                    extra_bits <<= 5;
-                    
-                    dst[last_byte] |= extra_bits;
-    		    }
-    	    }
-    	}
-    	catch(Exception e)
-    	{
-    		System.out.println(e.toString());
-    		System.out.println("Exiting compressOneStrings with exception.");
-    	}
-    	return current_length;
-    }
-   
-    
-
-    // This function expects to find the number of iterations in the final
-    // byte in the form of a negative number,
-    public static int decompressOneStrings(byte src[], int length, byte dst[])
-    {
-        int last_byte = length / 8;
-        if(length % 8 != 0)
-            last_byte++;
-        int iterations = src[last_byte] & 31;
-        
-        // We process the string anyway, although we might
-        // actually be compressing it.
-        if(iterations < 16)
-        	System.out.println("Is not one type string.");
-        else
-        	iterations -= 16;
-        
-        // If it was not compressed, we copy src to dst.
-        if(iterations == 0)
-        {
-        	int byte_length = length / 8;
-        	if(length % 8 != 0)
-        		byte_length++;
-        	System.arraycopy(src, 0, dst, 0, byte_length);
-        	return length;
-        }
-        
-        int current_length = 0;
-        if(iterations == 1)
-        {
-            current_length = decompressOneBits(src, length, dst);
-            return current_length;
-        }
-        else if(iterations % 2 == 0)
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, temp);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-        else
-        {
-        	byte[]  temp = new byte[dst.length];
-            current_length = decompressOneBits(src, length, dst);
-            iterations--;
-            while(iterations > 0)
-            {
-                int previous_length = current_length;
-                if(iterations % 2 == 0)
-                    current_length = decompressOneBits(dst, previous_length, temp);
-                else
-                    current_length = decompressOneBits(temp, previous_length, dst);
-                iterations--;
-            }
-            return current_length;
-        }
-    } 
-    
-    public static int compressOneStrings2(byte src[], int length, byte dst[])
+  
+    public static int compressOneStrings(byte src[], int length, byte dst[])
     {
     	int current_length = 0;
     
@@ -1842,7 +1503,7 @@ public class StringMapper
     // This function expects to find the number of iterations in the final
     // byte in the form of a negative number, as well as the number of odd bits 
     // determined by the bit length subtracted from the byte length.
-    public static int decompressOneStrings2(byte src[], int length, byte dst[])
+    public static int decompressOneStrings(byte src[], int length, byte dst[])
     {
         // Getting the number of iterations appended to
         // the end of the string.
@@ -1862,17 +1523,7 @@ public class StringMapper
         extra_bits >>= 5;
         extra_bits &= 7;
         
-        int modulus = length % 8;
-        int inverse = modulus;
-        if(inverse != 0)
-        	inverse = 8 - inverse;
-        
-        if(extra_bits != inverse)
-        {
-        	System.out.println("Extra bits is " + extra_bits);
-        	System.out.println("Inverse of modulus of bit length is " + inverse);
-        	System.out.println();
-        }
+       
         
         // If it was not compressed, we copy src to dst.
         if(iterations == 0)
@@ -1924,7 +1575,7 @@ public class StringMapper
         }
     } 
   
-    public static byte[] compressOneStrings3(byte[] src, int bit_length)
+    public static byte[] compressOneStrings(byte[] src, int bit_length)
     {
     	System.out.println("Entering compressOneStrings3.");
     	try
@@ -2041,7 +1692,7 @@ public class StringMapper
     // This function expects to find the number of iterations in the final
     // byte, as well as the number of odd bits determined by the bit length
     // subtracted from the byte length.
-    public static byte[] decompressOneStrings3(byte[] src)
+    public static byte[] decompressOneStrings(byte[] src)
     {
         int last_byte   = src.length - 1;
         int iterations  = src[last_byte] & (byte)31;
@@ -2177,8 +1828,6 @@ public class StringMapper
         } 
     }
    
-    
-    
     public static int getBitlength(byte [] string)
     {
         byte last_byte  = string[string.length - 1];

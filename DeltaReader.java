@@ -281,9 +281,9 @@ public class DeltaReader
 					    	 byte [] decompressed_segment = new byte[2 * max_segment_length];
 					    	 
 					    	 if(string_type == 0)
-					    	     decompression_length = StringMapper.decompressZeroStrings2(segment, segment_bit_length, decompressed_segment);   
+					    	     decompression_length = StringMapper.decompressZeroStrings(segment, segment_bit_length, decompressed_segment);   
 					    	 else
-					    		 decompression_length = StringMapper.decompressOneStrings2(segment, segment_bit_length, decompressed_segment);
+					    		 decompression_length = StringMapper.decompressOneStrings(segment, segment_bit_length, decompressed_segment);
 					    	   
 					    	 byte_length = decompression_length / 8;
 					    	 if(decompression_length % 8 != 0)
