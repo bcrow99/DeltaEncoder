@@ -542,6 +542,8 @@ public class DeltaMapper
         int sum            = 0;
         int k              = 0;
         int number_of_misses = 0;
+        
+        int forward_diagonals = 0;
       
         for(int i = 0; i < ydim; i++)
         {
@@ -617,12 +619,6 @@ public class DeltaMapper
             	    	gradient[2] = Math.abs(b - d);
             	    	gradient[3] = Math.abs(a - e);
             	    	
-            	    	int [] delta = new int[4];
-            	    	delta[0] = Math.abs(src[k] - a);
-            	    	delta[1] = Math.abs(src[k] - b);
-            	    	delta[2] = Math.abs(src[k] - c);
-            	    	delta[3] = Math.abs(src[k] - d);
-            	    	
             	    	int max_value = gradient[0];
             	    	int max_index = 0;
             	    	for(int m = 1; m < 4; m++)
@@ -634,21 +630,22 @@ public class DeltaMapper
             	    		}
             	    	}
             	    	
-            	    	int _delta = src[k];
-            	    	if(max_index == 0)
-            	    		_delta -= src[k - 1];
-            	    	else if(max_index == 1)
-            	    		_delta -= src[k - xdim];
-            	    	else if(max_index == 2)
-            	    		_delta -= src[k - xdim - 1];
-            	    	else
-            	    		_delta -= src[k - xdim + 1];
-            	    	dst[k] = _delta;
-            	    	sum += Math.abs(_delta);
-            	    	_delta = Math.abs(_delta);
+            	    	int delta = 0;
             	    	
-            	    	if(_delta > delta[0] || _delta > delta[1] || _delta > delta[2] || _delta > delta[3])
-            	    		number_of_misses++;
+            	    	
+            	    	if(max_index == 0)
+            	    		delta = src[k] - src[k - 1];
+            	    	else if(max_index == 1)
+            	    		delta = src[k] - src[k - xdim];
+            	    	else if(max_index == 2)
+            	    		delta = src[k] - src[k - xdim - 1];
+            	    	else
+            	    	{
+            	    		delta = src[k] - src[k - xdim + 1];
+            	    		forward_diagonals++;
+            	    	}
+            	    	dst[k] = delta;
+            	    	sum += Math.abs(delta);
             	    }
             	    else
             	    {
@@ -664,6 +661,8 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(number_of_misses);
+        
+        //System.out.println("Number of forward diagonals was " + forward_diagonals);
         return result;    
     }
 
@@ -770,7 +769,7 @@ public class DeltaMapper
         return dst;
     }
  
-    // Adjusting the diagonal deltas to account for the different distance from
+    // Adjusting the diagonal deltas to account for the different distances from
     // pixel centers does not seem to help.  Another possibility is averaging the
     // the backward diagonal of pixels a and d. That would involve skipping the 
     // second row since the the filter would then use 3 rows.
