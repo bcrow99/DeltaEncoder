@@ -578,9 +578,9 @@ public class DeltaWriter
 			string_list.clear();
 			channel_data.clear();
 			
-			int total_bits = 0;
-			int total_compressed_bits = 0;
-			int total_map_bits = 0;
+			//int total_bits = 0;
+			//int total_compressed_bits = 0;
+			//int total_map_bits = 0;
 			map_list.clear();
 			for(int i = 0; i < 3; i++)
 			{
@@ -593,31 +593,31 @@ public class DeltaWriter
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Horizontal sum is " + sum);	
+					System.out.println("Horizontal sum is " + sum);	
 				}
 				else if(delta_type == 1)
 				{
 					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Vertical sum is " + sum);
+				    System.out.println("Vertical sum is " + sum);
 				}
 				else if(delta_type == 2)
 				{
 					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Average sum is " + sum);
+					System.out.println("Average sum is " + sum);
 				}
 				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Paeth sum is " + sum);	
+					System.out.println("Paeth sum is " + sum);	
 				}
 				else if(delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Gradient sum is " + sum);	
+					System.out.println("Gradient sum is " + sum);	
 				}
 				else if(delta_type == 5)
 				{
@@ -628,7 +628,7 @@ public class DeltaWriter
 				    	System.out.println("Map length does not agree with image dimension.");
 				    map_list.add(map);
 				    int sum = (int)result.get(0);
-				    //System.out.println("Mixed sum is " + sum);	
+				    System.out.println("Mixed sum is " + sum);	
 				}
 				else if(delta_type == 6)
 				{
@@ -636,7 +636,7 @@ public class DeltaWriter
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				    int sum = (int)result.get(0);
-				    //System.out.println("Ideal sum is " + sum);	
+				    System.out.println("Ideal sum is " + sum);	
 				}
                 int []    delta  = (int [])result.get(1);
                
@@ -649,7 +649,7 @@ public class DeltaWriter
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
 				byte [] string         = new byte[xdim * ydim * 4];
-				byte [] compression_string = new byte[xdim * ydim * 4];
+				//byte [] compression_string = new byte[xdim * ydim * 4];
 				channel_length[j]      = StringMapper.packStrings2(delta, string_table, string);
 					
 				double zero_one_ratio = new_xdim * new_ydim;
@@ -665,76 +665,23 @@ public class DeltaWriter
 		    
 		        if(zero_one_ratio > .5)
 		        {
-				    channel_compressed_length[j] = StringMapper.compressZeroStrings(string, channel_length[j], compression_string);
-				    
-				    byte [] compression_string2 = StringMapper.compressZeroStrings(string, channel_length[j]);
-				    int     iterations2         = StringMapper.getIterations(compression_string2);
-				    int     bitlength2          = StringMapper.getBitlength(compression_string2);
-				    byte    type2               = StringMapper.getType(compression_string2);   
-				    
-				    channel_string_type[i] = 0;
-				    if(channel_compressed_length[j] == channel_length[j])
-				    {
-				        channel_iterations[i] = 0;
-				        string_list.add(string);
-				        //System.out.println("Iterations was " + 0);
-				    }
-				    else
-				    {
-				    	int compression_byte_length = channel_compressed_length[j] / 8;
-				    	if(channel_compressed_length[j] % 8 != 0)
-				    		compression_byte_length++;
-				    	compression_byte_length++;
-				    	channel_iterations[i] = (byte)(compression_string[compression_byte_length - 1] & 31);
-				    	System.out.println("String compressed.");
-				    	System.out.println("Iterations was " + channel_iterations[i]);
-				    	System.out.println("String type was " + type2);
-				    	string_list.add(compression_string2);	
-				    	
-				    	if(channel_compressed_length[j] != bitlength2)
-				    		System.out.println("Bitlength from compress1 " + channel_compressed_length[j] + " is not equal to bitlength from compress 3 " + bitlength2);
-				    	if(channel_iterations[i] != iterations2)
-				    		System.out.println("Iterations " + channel_iterations[i] + " is not equal to iterations from compress 3 " + iterations2);
-				    	if(channel_string_type[i] != type2)
-				    		System.out.println("Type " + channel_string_type[i] + " is not equal to type from compress 3 " + type2);
-				    }
+				    byte [] compression_string   = StringMapper.compressZeroStrings(string, channel_length[j]);
+				    channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
+				    channel_string_type[i]       = StringMapper.getType(compression_string);
+				    if(channel_string_type[i] != 0)
+				    	System.out.println("Unexpected string type for 0 string.");
+				    channel_iterations[i]        = StringMapper.getIterations(compression_string);
+				    string_list.add(compression_string);
 		        }   
 		        else
 		        {
-		    	    channel_compressed_length[j] = StringMapper.compressOneStrings(string, channel_length[j], compression_string);
-		    	    channel_string_type[i] = 1;
-		    	    
-		    	    byte [] compression_string2 = StringMapper.compressOneStrings(string, channel_length[j]);
-				    int     iterations2         = StringMapper.getIterations(compression_string2);
-				    int     bitlength2          = StringMapper.getBitlength(compression_string2);
-				    byte    type2               = StringMapper.getType(compression_string2); 
-		    	    
-		  
-				    if(channel_compressed_length[j] == channel_length[j])
-				    {
-					    channel_iterations[i] = 0;
-					    string_list.add(string);
-					    //System.out.println("Iterations was " + 0);
-				    }
-				    else
-				    {
-				    	int compression_byte_length = channel_compressed_length[j] / 8;
-				    	if(channel_compressed_length[j] % 8 != 0)
-				    		compression_byte_length++;
-				    	compression_byte_length++;
-				    	channel_iterations[i] = (byte)(compression_string[compression_byte_length - 1] & 31);
-				    	if(channel_compressed_length[j] != bitlength2)
-				    		System.out.println("Bitlength from compress1 " + channel_compressed_length[j] + " is not equal to bitlength from compress 3 " + bitlength2);
-				    	if(channel_iterations[i] != iterations2)
-				    		System.out.println("Iterations " + channel_iterations[i] + " is not equal to iterations from compress 3 " + iterations2);
-				    	if(channel_string_type[i] != type2)
-				    		System.out.println("Type " + channel_string_type[i] + " is not equal to type from compress 3 " + type2);
-				    	
-				    	
-				    	//System.out.println("String compressed.");
-				    	//System.out.println("Iterations was " + channel_iterations[i]);
-				    	string_list.add(compression_string);			
-				    }
+		        	byte [] compression_string   = StringMapper.compressOneStrings(string, channel_length[j]);
+				    channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
+				    channel_string_type[i]       = StringMapper.getType(compression_string);
+				    channel_iterations[i]        = StringMapper.getIterations(compression_string);
+				    if(channel_string_type[i] != 1 && channel_iterations[i] != 0)
+				    	System.out.println("Unexpected string type for 1 string.");
+				    string_list.add(compression_string);  
 		        }
 		    	
 				if(segment != 0)
@@ -770,9 +717,7 @@ public class DeltaWriter
 					    	channel_segmented[i] = false;
 					    }
 					    else
-					    {
 					    	channel_segmented[i] = true;
-					    }
 					    System.out.println();
 					    channel_data.add(segment_data_list);
 					}
@@ -805,7 +750,7 @@ public class DeltaWriter
 					
 					    //System.out.println("Number of original segments is " + number_of_segments);
 					    //System.out.println("Minimum segment length is " + segment_length);	
-					  
+					    byte [] compression_string = (byte []) string_list.get(i);
 					    long start = System.nanoTime();
 					    ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, channel_compressed_length[j], segment_length);
 					    long stop = System.nanoTime();
@@ -822,9 +767,7 @@ public class DeltaWriter
 					    	channel_segmented[i] = false;
 					    }
 					    else
-					    {
 					    	channel_segmented[i] = true;
-					    }
 					    channel_data.add(segment_data_list);
 					}
 				}
