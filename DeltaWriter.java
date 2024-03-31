@@ -578,9 +578,7 @@ public class DeltaWriter
 			string_list.clear();
 			channel_data.clear();
 			
-			//int total_bits = 0;
-			//int total_compressed_bits = 0;
-			//int total_map_bits = 0;
+			
 			map_list.clear();
 			for(int i = 0; i < 3; i++)
 			{
@@ -876,13 +874,60 @@ public class DeltaWriter
 			    	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 					if(number_unpacked != new_xdim * new_ydim)
 					    System.out.println("Number of values unpacked does not agree with image dimensions.");	
+					double compression_ratio = string.length;
+			    	compression_ratio       /= new_xdim * new_ydim;
+			    	System.out.println("The compression ratio for the compressed strings was " + String.format("%.2f", compression_ratio));
+			    	
+			    	Deflater deflater = new Deflater();
+			    	deflater.setInput(string);
+			    	byte [] zipped_string = new byte[2 * string.length];
+	            	deflater.finish();
+	            	int zipped_length = deflater.deflate(zipped_string);
+	            	deflater.end();
+	            	
+	            	compression_ratio = zipped_length;
+	            	compression_ratio /= new_xdim * new_ydim;
+	            	System.out.println("The compression ratio for the zipped compressed strings was " + String.format("%.2f", compression_ratio));
+			    	
+					
 			    }
 			    else
 			    {
+			    	System.out.println("String did not compress.");
+			    	double compression_ratio = string.length;
+			    	compression_ratio       /= new_xdim * new_ydim;
+			    	System.out.println("The compression ratio for the packed strings was " + String.format("%.2f", compression_ratio));
+			    	
+			    	Deflater deflater = new Deflater();
+			    	deflater.setInput(string);
+			    	byte [] zipped_string = new byte[2 * string.length];
+	            	deflater.finish();
+	            	int zipped_length = deflater.deflate(zipped_string);
+	            	deflater.end();
+	            	
+	            	compression_ratio = zipped_length;
+	            	compression_ratio /= new_xdim * new_ydim;
+	            	System.out.println("The compression ratio for the zipped packed strings was " + String.format("%.2f", compression_ratio));
+			    	
 			    	int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 					if(number_unpacked != new_xdim * new_ydim)
 					    System.out.println("Number of values unpacked does not agree with image dimensions.");	
 			    }
+			    
+			    byte [] delta_bytes = new byte[xdim * ydim];
+			    for(int k = 0; k < delta.length; k++)
+			    	delta_bytes[k] = (byte)delta[k];
+			    Deflater deflater = new Deflater();
+		    	deflater.setInput(delta_bytes);
+		    	byte [] zipped_string = new byte[delta_bytes.length * 2];
+            	deflater.finish();
+            	int zipped_length = deflater.deflate(zipped_string);
+            	deflater.end();
+            	
+            	double compression_ratio = zipped_length;
+            	compression_ratio /= new_xdim * new_ydim;
+            	System.out.println("The compression ratio for the zipped deltas was " + String.format("%.2f", compression_ratio));
+			    
 			    
 			    for(int k = 1; k < delta.length; k++)
 			    	delta[k] += channel_delta_min[j];
