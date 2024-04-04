@@ -136,7 +136,22 @@ public class DeltaReader
 				    short dimension = in.readShort();
 				    byte [] map = new byte[dimension];
 				    
-				    int size = StringMapper.unpackStrings2(map_string, map_table, map);
+				    byte iterations = StringMapper.getIterations(map_string);
+				    int  size = 0;
+				    if(iterations == 0)
+				    {
+				        size = StringMapper.unpackStrings2(map_string, map_table, map);
+				    }
+				    else if(iterations < 16)
+				    {
+				    	byte [] decompressed_string = StringMapper.decompressZeroStrings(map_string);
+				    	size = StringMapper.unpackStrings2(decompressed_string, map_table, map);		
+				    }
+				    else
+				    {
+				    	byte [] decompressed_string = StringMapper.decompressOneStrings(map_string);
+				    	size = StringMapper.unpackStrings2(decompressed_string, map_table, map);
+				    }
 				    
 				    if(size != dimension)
 				    {
@@ -147,15 +162,6 @@ public class DeltaReader
 				    for(int k = 0; k < map.length; k++)
 				    	map[k] += increment;
 				    
-				    /*
-				    if(i == 0)
-				    {
-				    	System.out.println("Map:");
-				    	for(int k = 0; k < map.length; k++)
-				    	    System.out.print(map[k] + " ");
-				    	System.out.println();
-				    }
-				    */
 				    map_list.add(map);
 				}
 				
