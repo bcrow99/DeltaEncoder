@@ -1968,8 +1968,8 @@ public class DeltaMapper
             		{
             		    delta        = src[k] - value;
                         value       += delta;
-                        dst[k]       = delta;
-                        sum         += Math.abs(delta);
+                        //dst[k]       = delta;
+                        //sum         += Math.abs(delta);
                         k++;
             		}
             	}
@@ -1983,8 +1983,8 @@ public class DeltaMapper
             	    	delta          = src[k] - init_value;
             	    	previous_delta = delta;
             	    	init_value     = src[k];
-            	    	dst[k]         = delta;
-            	    	sum           += Math.abs(delta);
+            	    	//dst[k]         = delta;
+            	    	//sum           += Math.abs(delta);
             	    	k++;
             	    }
             	    else if(j < xdim - 1)
@@ -2016,16 +2016,16 @@ public class DeltaMapper
             	    		neighbor[m][3] = 1;
             	    		delta          = d;
             	    	}
-            	    	dst[k] = delta;	
-            	    	sum   += Math.abs(delta);
+            	    	//dst[k] = delta;	
+            	    	//sum   += Math.abs(delta);
         	    	    k++;
         	    	    m++;
             	    }
             	    else
             	    {
             	    	delta  = src[k] - src[k - 1];
-            	    	dst[k] = delta;
-            	    	sum         += Math.abs(delta);
+            	    	//dst[k] = delta;
+            	    	//sum         += Math.abs(delta);
         	    	    k++;	
             	    }
                 }
@@ -2073,7 +2073,82 @@ public class DeltaMapper
         	if(is_assigned[i] == false)
         		all_assigned = false;
         }
-       
+        
+        
+        init_value     = src[0];
+        value          = init_value;
+        delta          = 0;
+        sum            = 0;
+        
+        k = 0;
+        m = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // Setting the first value to 6 to mark the delta type ideal.
+            			dst[k] = 6;
+            			k++;
+            	    }
+            		else
+            		{
+            		    delta        = src[k] - value;
+                        value       += delta;
+                        dst[k]       = delta;
+                        sum         += Math.abs(delta);
+                        k++;
+            		}
+            	}
+            }
+        	else
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	delta          = src[k] - init_value;
+            	    	previous_delta = delta;
+            	    	init_value     = src[k];
+            	    	dst[k]         = delta;
+            	    	sum           += Math.abs(delta);
+            	    	k++;
+            	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	//We have a set of 4 possible deltas to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim - 1];
+            	    	int d = src[k] - src[k - xdim + 1];
+            	    	
+            	    	if(map[m] == 0)
+            	    		delta = a;
+            	    	else if(map[m] == 1)
+            	    		delta = b;
+            	    	else if(map[m] == 2)
+            	    		delta = c;
+            	    	else if(map[m] == 3)
+            	    		delta = d;
+            	    	
+            	    	dst[k] = delta;	
+            	    	sum   += Math.abs(delta);
+        	    	    k++;
+        	    	    m++;
+            	    }
+            	    else
+            	    {
+            	    	delta  = src[k] - src[k - 1];
+            	    	dst[k] = delta;
+            	    	sum         += Math.abs(delta);
+        	    	    k++;	
+            	    }
+                }
+        	}
+        }
         
         ArrayList result = new ArrayList();
         result.add(sum);
@@ -2094,7 +2169,7 @@ public class DeltaMapper
         
         for(int i = 1; i < xdim; i++)
         {
-        	value   += src[i];
+        	value += src[i];
         	dst[i] = value;
         }
         
@@ -2113,8 +2188,6 @@ public class DeltaMapper
             	else if(j < xdim - 1)
             	{
             		int n = map[m]; 
-            		if(n < 0 || n > 3)
-            			System.out.println("Unexpected value.");
             		if(n == 0)
             		    value = dst[k - 1];
             		else if(n == 1)
