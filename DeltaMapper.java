@@ -1934,20 +1934,11 @@ public class DeltaMapper
         byte[]    map      = new byte[size];
         byte[][]  neighbor = new byte[size][4];
        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+      
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
-        int previous_delta = 0;
+        
         int sum            = 0;
         
         int k = 0;
@@ -1968,8 +1959,6 @@ public class DeltaMapper
             		{
             		    delta        = src[k] - value;
                         value       += delta;
-                        //dst[k]       = delta;
-                        //sum         += Math.abs(delta);
                         k++;
             		}
             	}
@@ -1981,10 +1970,7 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             	    	delta          = src[k] - init_value;
-            	    	previous_delta = delta;
             	    	init_value     = src[k];
-            	    	//dst[k]         = delta;
-            	    	//sum           += Math.abs(delta);
             	    	k++;
             	    }
             	    else if(j < xdim - 1)
@@ -1995,37 +1981,19 @@ public class DeltaMapper
             	    	int c = src[k] - src[k - xdim - 1];
             	    	int d = src[k] - src[k - xdim + 1];
             	    	
-            	    	// Can't assign the actual delta until after constructing the map.
             	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c) && Math.abs(a) <= Math.abs(d))
-            	    	{
-            	    		neighbor[m][0] = 1;
-            	    		delta          = a;
-            	    	}
+            	    	    neighbor[m][0] = 1;
             	    	if(Math.abs(b) <= Math.abs(a) && Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(d))
-            	    	{
             	    		neighbor[m][1] = 1;
-            	    		delta          = b;
-            	    	}
             	    	if(Math.abs(c) <= Math.abs(a) && Math.abs(c) <= Math.abs(b) && Math.abs(c) <= Math.abs(d))
-            	    	{
             	    		neighbor[m][2] = 1;
-            	    		delta          = c;
-            	    	}
             	    	if(Math.abs(d) <= Math.abs(a) && Math.abs(d) <= Math.abs(b) && Math.abs(d) <= Math.abs(c))
-            	    	{
             	    		neighbor[m][3] = 1;
-            	    		delta          = d;
-            	    	}
-            	    	//dst[k] = delta;	
-            	    	//sum   += Math.abs(delta);
         	    	    k++;
         	    	    m++;
             	    }
             	    else
             	    {
-            	    	delta  = src[k] - src[k - 1];
-            	    	//dst[k] = delta;
-            	    	//sum         += Math.abs(delta);
         	    	    k++;	
             	    }
                 }
@@ -2038,7 +2006,7 @@ public class DeltaMapper
             for(int j = 0; j < 4; j++)	
             	total[j] += neighbor[i][j];
         }
-        
+        System.out.println();
         Hashtable rank_table = new Hashtable();
         ArrayList key_list   = new ArrayList();
         boolean[] is_assigned = new boolean[size];
@@ -2046,19 +2014,22 @@ public class DeltaMapper
         {
         	key_list.add(total[i]);
         	rank_table.put(total[i], i);
+        	System.out.println(i + " " + total[i]);
         }
+        System.out.println();
         Collections.sort(key_list, Collections.reverseOrder());
-        System.out.println("Sorted delta indices.");
         for(int i = 0; i < 4; i++)
         {
         	int key   = (int)key_list.get(i);
         	int index = (int)rank_table.get(key);
-        	//System.out.println(i + " " + key);
+        	System.out.println(index + " " + key);
         	for(int j = 0; j < size; j++)
         	{
         		if(neighbor[j][index] == 1 && !is_assigned[j])
+        		{
         			map[j] = (byte)index;
-        		is_assigned[j] = true;
+        		    is_assigned[j] = true;
+        		}
         		
         		if(neighbor[j][index] != 0 && neighbor[j][index] != 1)
         		{
@@ -2073,7 +2044,6 @@ public class DeltaMapper
         	if(is_assigned[i] == false)
         		all_assigned = false;
         }
-        
         
         init_value     = src[0];
         value          = init_value;
@@ -2111,7 +2081,6 @@ public class DeltaMapper
             	    if(j == 0)
             	    {
             	    	delta          = src[k] - init_value;
-            	    	previous_delta = delta;
             	    	init_value     = src[k];
             	    	dst[k]         = delta;
             	    	sum           += Math.abs(delta);
@@ -2119,7 +2088,6 @@ public class DeltaMapper
             	    }
             	    else if(j < xdim - 1)
             	    {
-            	    	//We have a set of 4 possible deltas to use.
             	    	int a = src[k] - src[k - 1];
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - xdim - 1];
@@ -2143,7 +2111,7 @@ public class DeltaMapper
             	    {
             	    	delta  = src[k] - src[k - 1];
             	    	dst[k] = delta;
-            	    	sum         += Math.abs(delta);
+            	    	sum   += Math.abs(delta);
         	    	    k++;	
             	    }
                 }
