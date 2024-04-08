@@ -632,11 +632,56 @@ public class DeltaWriter
 				}
 				else if(delta_type == 6)
 				{
-					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				    int sum = (int)result.get(0);
-				    //System.out.println("Ideal sum is " + sum);	
+				    
+				    
+				    byte [] map_string       = new byte[map.length];
+				    ArrayList histogram_list = StringMapper.getHistogram(map);
+				    int [] histogram         = (int[])histogram_list.get(1);
+					int [] string_table      = StringMapper.getRankTable(histogram);
+				    
+				    int map_length           = StringMapper.packStrings2(map, string_table, map_string);
+				    
+				    double zero_one_ratio = map.length;
+		            if(histogram.length > 1)
+		            {
+					    int min_value = Integer.MAX_VALUE;
+					    for(int k = 0; k < histogram.length; k++)
+						 if(histogram[k] < min_value)
+							min_value = histogram[k];
+					    zero_one_ratio -= min_value;
+		            }	
+			        zero_one_ratio  /= map_length;
+			        
+			        System.out.println("Zero ratio was " + zero_one_ratio);
+			        byte[] map_compression_string = new byte[1];
+			        if(zero_one_ratio > .5)
+					    map_compression_string   = StringMapper.compressZeroStrings(map_string, map_length);
+			        else
+			        	map_compression_string   = StringMapper.compressOneStrings(map_string, map_length);
+			        double compression_rate = map_compression_string.length;
+				    compression_rate /= map.length;
+				    
+				    System.out.println("The string compression rate for the map was " + String.format("%.4f", compression_rate));
+				    
+				    Deflater deflater = new Deflater();
+			    	deflater.setInput(map);
+			    	byte [] zipped_string = new byte[2 * map.length];
+	            	deflater.finish();
+	            	int zipped_length = deflater.deflate(zipped_string);
+	            	deflater.end();
+	            	
+	            	compression_rate = zipped_length;
+	            	compression_rate /= map.length;
+	            	System.out.println("The zip compression rate for the map was " + String.format("%.4f", compression_rate));
+				   
+				    // The ideal sum for function 2 produces a slightly larger
+				    // number because the last delta in each row is simply assigned
+				    // to the horizontal delta to make the map smaller.
+				    System.out.println("Ideal sum is " + sum);	
 				}
                 int []    delta  = (int [])result.get(1);
                
@@ -1065,7 +1110,7 @@ public class DeltaWriter
 			    else if(delta_type == 6)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			        channel = DeltaMapper.getValuesFromIdealDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
 				if(j > 2)
 					for(int k = 0; k < channel.length; k++)
@@ -1288,20 +1333,6 @@ public class DeltaWriter
 		            	int value_range   = (int)result.get(2);
 		            	int [] string_table = StringMapper.getRankTable(histogram);
 					
-		            	
-		            	/*
-		            	if(i == 1 && delta_type == 5)
-		            	{
-		            		for(int k = 0; k < map.length; k++)
-		            		{
-		            			System.out.print(map[k] + " ");
-		            			if(k % 20 == 0)
-		            				System.out.println();
-		            		}
-		            		System.out.println();
-		            	}
-		            	*/
-		            	
 		            	for(int k = 0; k < map.length; k++)
 							map[k] -= min_value;
 						byte [] string = new byte[map.length * 2];
