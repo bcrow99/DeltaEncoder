@@ -104,11 +104,30 @@ public class DeltaReader
 		    	System.out.println("Read iterations " + channel_iterations[i]);
 				int table_length = in.readShort();
 				System.out.println("Read short table length " +  table_length);
+				
+				
+				int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
+				int max_short_value = Short.MAX_VALUE * 2 + 1;
 				    
 				int [] table = new int[table_length];
-				for(int k = 0; k < table_length; k++)
-				    	table[k] = in.readInt();
-				System.out.println("Read ints string table.");
+				
+				if(table.length <= max_byte_value)
+				{
+				    for(int k = 0; k < table_length; k++)
+				    {
+				    	table[k] = in.readByte();
+				    	if(table[k] < 0)
+	            			table[k] = max_byte_value + 1 + table[k];
+				    }
+				    System.out.println("Read bytes string table.");
+				}
+				else
+				{
+					for(int k = 0; k < table_length; k++)
+				    	table[k] = in.readShort();
+					System.out.println("Read shorts string table.");
+				}
+				
 				
 				table_list.add(table);
 				
@@ -121,7 +140,7 @@ public class DeltaReader
 					short  map_table_length = in.readShort();
 					int [] map_table        = new int[map_table_length];	
 					for(int k = 0; k < map_table_length; k++)
-						map_table[k] = in.readInt();
+						map_table[k] = in.readShort();
 					short byte_length = in.readShort();
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length);
@@ -220,8 +239,7 @@ public class DeltaReader
 					int number_of_one_segments  = 0;
 					
 					
-					int max_byte_value = Byte.MAX_VALUE * 2 + 1;
-					int max_short_value = Short.MAX_VALUE * 2 + 1;
+					
 					for(int k = 0; k < n; k++)
 					{
 					    
@@ -564,7 +582,6 @@ public class DeltaReader
 					
 					int pixel = 0;
 					
-		
 					blue[k] <<= pixel_shift;
 					pixel |= blue[k] << 16;
 					
@@ -574,7 +591,6 @@ public class DeltaReader
 					red[k] <<= pixel_shift;
 					pixel |= red[k];
 				
-				    	
 				    image.setRGB(j, i, pixel);
 				}
 			}

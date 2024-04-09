@@ -1305,8 +1305,20 @@ public class DeltaWriter
 		        	
 		        	int [] table = (int[])table_list.get(i);
 		            out.writeShort(table.length);
-		            for(int k = 0; k < table.length; k++)
-		                out.writeInt(table[k]);
+		         
+		            int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
+					int max_short_value = Short.MAX_VALUE * 2 + 1;
+					
+		            if(table.length <= max_byte_value)
+                    {
+		                for(int k = 0; k < table.length; k++)
+		                    out.writeByte(table[k]);
+                    }
+		            else 
+		            {
+		                for(int k = 0; k < table.length; k++)
+		                    out.writeShort(table[k]);
+                    }
 		            
 		            if(delta_type == 5)
 		            {
@@ -1349,26 +1361,32 @@ public class DeltaWriter
 			            }	
 				        zero_one_ratio  /= map_length;
 				        
+				        // 
 				        byte[] compressed_map = new byte[1];
 				        if(zero_one_ratio > .5)
-				        {
 				           compressed_map = StringMapper.compressZeroStrings(string, map_length);	
-				        }
 				        else
-				        {
 				        	compressed_map = StringMapper.compressOneStrings(string, map_length);	
-				        }
 						
-						//System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
+						System.out.println("Zip compression rate for map is " + String.format("%.4f", compression_rate));
 						compression_rate = compressed_map.length + string_table.length;
 						compression_rate /= map.length;
-						//System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
+						System.out.println("String compression rate for map is " + String.format("%.4f", compression_rate));
 						
+						deflater = new Deflater();
+		            	deflater.setInput(compressed_map);
+		            	deflater.finish();
+		            	zipped_length = deflater.deflate(zipped_map);
+		            	deflater.end();
 						
+		            	compression_rate = zipped_length + string_table.length;
+						compression_rate /= map.length;
+						System.out.println("Zipped string compression rate for map is " + String.format("%.4f", compression_rate));
+						System.out.println();
 						
 						out.writeShort(string_table.length);
 			            for(int k = 0; k < string_table.length; k++)
-			                out.writeInt(string_table[k]);
+			                out.writeShort(string_table[k]);
 			            out.writeShort(compressed_map.length);
 			            out.write(compressed_map, 0, compressed_map.length);
 			            out.writeByte(min_value);
@@ -1460,14 +1478,12 @@ public class DeltaWriter
 			            	{
 			            		//System.out.println("Writing short.");
 			            		out.writeShort(segment.length);	
-			            		
 			            	}
 			            	else
 			            	{
 			            		//System.out.println("Writing int.");
 			            		out.writeInt(segment.length);	
 			            	}
-			            	
 			            	out.write(segment, 0, segment.length);
 			            }
 			        }
