@@ -1023,108 +1023,144 @@ public class DeltaWriter
             	compression_ratio /= new_xdim * new_ydim;
             	System.out.println("The compression ratio for the zipped deltas was " + String.format("%.2f", compression_ratio));
 			    
+
+  			    /*
+			    for(int k = 1; k < delta.length; k++)
+			    	delta[k] += channel_delta_min[j];
+			    */
+            	
+            	
+			    ArrayList data_list = new ArrayList();
 			    
+			    int min = delta[0];
+			    int max = delta[0];
+			    if(min > delta[1])
+			    	min = delta[1]; 
+			    if(max < delta[1])
+			    	max = delta[1];
 			    
+			    int range = max - min;
+			    int k = 0;
+			    int m  = 1;
 			    
-			    
-			    
-			    
-			    
-			    
-			    
-			    ArrayList delta_byte_list = new ArrayList();
-			    int delta_min = delta[1];
-			    int delta_max = delta[1];
-			    if(delta_min > delta[2])
-			    	delta_max = delta[2]; 
-			    if(delta_max < delta[2])
-			    	delta_max = delta[2];
-			    
-			    int start_index = 1;
-			    int stop_index  = 2;
-			    
-			    int value_range = delta_max - delta_min;
-			    
-			    if(value_range > string_limit)
+			    while(m < delta.length - 1)
 			    {
-			    	delta_byte_list.add(start_index);
-			    	delta_byte_list.add(stop_index - 1);
-			    	delta_byte_list.add(delta_min);
-			    	start_index = stop_index + 1;
-			    	stop_index  = start_index;
-			    	delta_min   = delta[start_index];
-			    	delta_max   = delta[start_index];
+			        m++;
+			        if(min > delta[m])
+			        	min = delta[m];
+			        if(max < delta[m])
+			        	max = delta[m];
+			        range = max - min;
+			        if(range > string_limit)
+			        {
+			        	ArrayList list = new ArrayList();
+			        	
+			        	list.add(k);
+			        	list.add(m);
+			        	list.add(min);
+			        	list.add(range);
+			        	
+			        	
+			        	int n = m + 1;
+			        	if(n == delta.length - 1)
+			        	{
+			        	    list.clear();
+			        	    
+			        	    if(min > delta[n])
+					        	min = delta[n];
+					        if(max < delta[n])
+					        	max = delta[n];
+					        range = max - min;
+					        
+					        list.add(k);
+					        list.add(n);
+					        list.add(min);
+					        list.add(range);
+					        m++;
+			        	}
+			        	data_list.add(list);
+			        	
+			        	
+			        	k = m + 1;
+			        	min = delta[k];
+			        	max = delta[k];
+			        	range = 0;
+			        }
+			        else if(m == delta.length - 1)
+			        {
+                        ArrayList list = new ArrayList();
+			        	
+			        	list.add(k);
+			        	list.add(m);
+			        	list.add(min);
+			        	list.add(range);
+			        	data_list.add(list);
+			        }
 			    }
 			    
-			    while(stop_index < delta.length - 1)
-			    {
-			        stop_index++;
-			        if(delta_min > delta[stop_index])
-			        	delta_min = delta[stop_index];
-			        if(delta_max < delta[stop_index])
-			        	delta_max = delta[stop_index];
-			        value_range = delta_max - delta_min;
-			        if(value_range > string_limit)
-			        {
-			        	delta_byte_list.add(start_index);
-				    	delta_byte_list.add(stop_index - 1);
-				    	delta_byte_list.add(delta_min);
-				    	
-				    	if(stop_index < delta.length - 1)
-				    	{
-				    	    start_index = stop_index + 1;
-				    	    stop_index  = start_index;
-				    	    delta_min   = delta[start_index];
-				    	    delta_max   = delta[start_index];	
-				    	}
-			        }
-			        if(stop_index == delta.length - 1)
-			        {
-			        	delta_byte_list.add(start_index);
-			    		delta_byte_list.add(stop_index);  
-			    		delta_byte_list.add(delta_min);
-			        }
-			    }
-			    
-			    int number_of_segments = delta_byte_list.size() / 3;
+			    int number_of_segments = data_list.size();
 			    System.out.println("The deltas were divided into " + number_of_segments + " segments.");
-			    
-			    int segmented_zip_bytes = 0;
-			    if(number_of_segments != 0)
-			    {
-			    	for(int k = 0; k < number_of_segments; k++)
-			    	{
-			    		start_index = (int)delta_byte_list.get(k * 3);
-			    		stop_index  = (int)delta_byte_list.get(k * 3 + 1);
-			    		delta_min   =  (int)delta_byte_list.get(k * 3 + 2);
-			    		//System.out.print(start_index + ":" + stop_index + ":" + delta_min + " ");
-			    		
-			    		int segment_length = stop_index - start_index + 1;
-			    		byte[] segment_bytes = new byte[segment_length];
-			    	    for(int m = 0; m < segment_length; m++)
-			    	    {
-			    	    	segment_bytes[m] = (byte)(delta[m + start_index] - delta_min);
-			    	    }
-			    	    
-			    	    byte[] zip_bytes = new byte[2 * segment_length];
-			    	    deflater = new Deflater();
-				    	deflater.setInput(segment_bytes);
-				    	
-		            	deflater.finish();
-		            	zipped_length = deflater.deflate(zip_bytes);
-		            	deflater.end();
-		            	segmented_zip_bytes += zipped_length;
-			    	    	
-			    	}
-			    	System.out.println();
-			    	double compression_rate = segmented_zip_bytes;
-			    	compression_rate /= new_xdim * new_ydim;
-			    	//System.out.println("Compression rate from zipped segmented deltas is " + String.format("%.4f", compression_rate));
-			    }
 			    System.out.println();
 			    
+			    ArrayList segment_list = new ArrayList();
+			    
+			    int total_segmented_bytes = 0;
+			    for(k = 0; k < number_of_segments; k++)
+			    {
+			    	ArrayList list = (ArrayList)data_list.get(k);
+			    	
+			    	m = (int)list.get(0);
+			    	int n = (int)list.get(1);
+			    	min   = (int)list.get(2);
+			    	range = (int)list.get(3);
+			    	
+			    	int    length  = n - m + 1;
+			    	int[] segment = new int[length];
+			    	int q = 0;
+			    	for(int p = m; p <= n; p++)
+			    	{
+			    	    segment[q++] = delta[p] - min;
+			    	}
+			    	
+			    	segment_list.add(segment);
+			    	
+			    	
+			    	ArrayList histogram_list = StringMapper.getHistogram(segment);
+				    int [] histogram         = (int[])histogram_list.get(1);
+					int [] string_table      = StringMapper.getRankTable(histogram);
+					
+					byte[] segment_string = new byte[segment.length * 10];
+					
+					int bit_length = StringMapper.packStrings2(segment, string_table, segment_string);
+					
+					double zero_one_ratio = segment.length;
+		            if(histogram.length > 1)
+		            {
+					    int min_value = Integer.MAX_VALUE;
+					    for(m = 0; m < histogram.length; m++)
+						   if(histogram[m] < min_value)
+							   min_value = histogram[m];
+					    zero_one_ratio -= min_value;
+		            }	
+			        zero_one_ratio  /= bit_length;
+			        
+			        int compressed_bit_length = bit_length;
+			        byte [] compressed_string = new byte[1];
+			        if(zero_one_ratio > .5)
+			        	compressed_string = StringMapper.compressZeroStrings(segment_string, bit_length);
+			        else
+			        	compressed_string = StringMapper.compressOneStrings(segment_string, bit_length);
+			        total_segmented_bytes += compressed_string.length;
+					
+			    }
 			  
-			    for(int k = 1; k < delta.length; k++)
+			    double compression_rate = total_segmented_bytes;
+		    	compression_rate /= new_xdim * new_ydim;
+		    	System.out.println("The string compression rate for segmented deltas is " + String.format("%.4f", compression_rate));
+			    System.out.println();
+			    
+			    
+			    for(k = 1; k < delta.length; k++)
 			    	delta[k] += channel_delta_min[j];
 			    
 			    int [] channel = new int[0];
@@ -1160,7 +1196,7 @@ public class DeltaWriter
 			        channel = DeltaMapper.getValuesFromIdealDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
 				if(j > 2)
-					for(int k = 0; k < channel.length; k++)
+					for(k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
 				if(new_xdim != xdim && new_ydim != ydim)
 				{
