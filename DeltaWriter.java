@@ -24,6 +24,7 @@ public class DeltaWriter
 	int correction  = 0;
 	int segment     = 0;
 	int min_set_id  = 0;
+	int string_limit = 512;
 	
 	
 	int    [] set_sum, channel_sum;
@@ -301,8 +302,8 @@ public class DeltaWriter
 				shift_panel.add(shift_slider, BorderLayout.CENTER);
 				shift_panel.add(shift_value, BorderLayout.EAST);
 				shift_dialog.add(shift_panel);
-				
 				settings_menu.add(shift_item);
+				
 				JMenuItem segment_item = new JMenuItem("Segmentation");
 				JDialog segment_dialog = new JDialog(frame, "Segmentation");
 				ActionListener segment_length_handler = new ActionListener()
@@ -344,8 +345,53 @@ public class DeltaWriter
 				segment_panel.add(segment_slider, BorderLayout.CENTER);
 				segment_panel.add(segment_value, BorderLayout.EAST);
 				segment_dialog.add(segment_panel);
-				
 				settings_menu.add(segment_item);
+				
+				
+				JMenuItem limit_item = new JMenuItem("String Limit");
+				JDialog limit_dialog = new JDialog(frame, "String Limit");
+				ActionListener limit_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+						y -= 150;
+						limit_dialog.setLocation(x, y);
+						limit_dialog.pack();
+						limit_dialog.setVisible(true);
+					}
+				};
+				limit_item.addActionListener(limit_handler);
+				
+				JPanel limit_panel = new JPanel(new BorderLayout());
+				JSlider limit_slider = new JSlider();
+				limit_slider.setMinimum(2);
+				limit_slider.setMaximum(512);
+				limit_slider.setValue(string_limit);
+				JTextField limit_value = new JTextField(3);
+				limit_value.setText(" " + string_limit + " ");
+				ChangeListener limit_slider_handler = new ChangeListener()
+				{
+					public void stateChanged(ChangeEvent e)
+					{
+						JSlider slider = (JSlider) e.getSource();
+						string_limit = slider.getValue();
+						limit_value.setText(" " + string_limit + " ");
+						if(slider.getValueIsAdjusting() == false)
+						{
+							apply_item.doClick();
+						}
+					}
+				};
+				limit_slider.addChangeListener(limit_slider_handler);
+				limit_panel.add(limit_slider, BorderLayout.CENTER);
+				limit_panel.add(limit_value, BorderLayout.EAST);
+				limit_dialog.add(limit_panel);
+				settings_menu.add(limit_item);
+				
+				
 				// The correction value is a convenience to help see what
 				// quantizing does to the original image, instead of
 				// simply switching back and forth between the original
@@ -998,7 +1044,8 @@ public class DeltaWriter
 			    int stop_index  = 2;
 			    
 			    int value_range = delta_max - delta_min;
-			    if(value_range > 255)
+			    
+			    if(value_range > string_limit)
 			    {
 			    	delta_byte_list.add(start_index);
 			    	delta_byte_list.add(stop_index - 1);
@@ -1017,7 +1064,7 @@ public class DeltaWriter
 			        if(delta_max < delta[stop_index])
 			        	delta_max = delta[stop_index];
 			        value_range = delta_max - delta_min;
-			        if(value_range > 255)
+			        if(value_range > string_limit)
 			        {
 			        	delta_byte_list.add(start_index);
 				    	delta_byte_list.add(stop_index - 1);
@@ -1050,7 +1097,7 @@ public class DeltaWriter
 			    		start_index = (int)delta_byte_list.get(k * 3);
 			    		stop_index  = (int)delta_byte_list.get(k * 3 + 1);
 			    		delta_min   =  (int)delta_byte_list.get(k * 3 + 2);
-			    		System.out.print(start_index + ":" + stop_index + ":" + delta_min + " ");
+			    		//System.out.print(start_index + ":" + stop_index + ":" + delta_min + " ");
 			    		
 			    		int segment_length = stop_index - start_index + 1;
 			    		byte[] segment_bytes = new byte[segment_length];
@@ -1072,7 +1119,7 @@ public class DeltaWriter
 			    	System.out.println();
 			    	double compression_rate = segmented_zip_bytes;
 			    	compression_rate /= new_xdim * new_ydim;
-			    	System.out.println("Compression rate from zipped segmented deltas is " + String.format("%.4f", compression_rate));
+			    	//System.out.println("Compression rate from zipped segmented deltas is " + String.format("%.4f", compression_rate));
 			    }
 			    System.out.println();
 			    
