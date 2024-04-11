@@ -229,13 +229,16 @@ public class SimpleReader
 		    	}
 		    	
 		    	int [] table = (int [])table_list.get(i);
+		    	
+		    	
+		    	int [] delta = new int[1];
 		    	if(pixel_quant == 0)
 		    	{
-		    		int [] delta = new int[xdim * ydim];
+		    		delta = new int[xdim * ydim];
 		    	    int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
-				    
+		    	
 				    if(delta_type == 0)
 				    {
 				        int [] current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, xdim , ydim, init[i]);
@@ -289,7 +292,6 @@ public class SimpleReader
 				    {
 				    	System.out.println("Delta type " + delta_type + " not supported.");
 				    }
-				    
 		    	}
 		    	else
 		    	{
@@ -297,12 +299,39 @@ public class SimpleReader
 			        factor       /= 10;
 			        int _xdim = xdim - (int)(factor * (xdim / 2 - 2));
 			        int _ydim = ydim - (int)(factor * (ydim / 2 - 2));
-			        int [] delta = new int[_xdim * _ydim];
+			        delta = new int[_xdim * _ydim];
 			        
 			        int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 				    for(int j = 1; j < delta.length; j++)
 				       delta[j] += delta_min[i];
 				    
+				    if(delta_type == 0)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, _xdim , _ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+					    channel_list.add(resized_channel);
+				    }
+				    else if(delta_type == 1)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, _xdim , _ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+					    channel_list.add(resized_channel);
+				    }
+				    else if(delta_type == 2)
+				    {
+				        int [] current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, _xdim , _ydim, init[i]);
+				        if(channel_id[i] > 2)
+				           for(int j = 0; j < current_channel.length; j++)
+							    current_channel[j] += min[i];
+				        int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+					    channel_list.add(resized_channel);
+				    }
 				    if(delta_type == 3)
 				    {
 				    	int [] current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, _xdim , _ydim, init[i]);
