@@ -53,14 +53,6 @@ public class SimpleReader
 	
 	public SimpleReader(String filename)
 	{
-		String [] channel_string = new String[6];
-		channel_string[0] = new String("blue");
-		channel_string[1] = new String("green");
-		channel_string[2] = new String("red");
-		channel_string[3] = new String("blue-green");
-		channel_string[4] = new String("red-green");
-		channel_string[5] = new String("red-blue");
-		
 		try
 		{
 			long start = System.nanoTime();
@@ -110,20 +102,15 @@ public class SimpleReader
 						map_table[k] = in.readShort();
 					short byte_length = in.readShort();
 					byte [] map_string    = new byte[byte_length];
-				    in.read(map_string, 0, byte_length);
-				  
+				    in.read(map_string, 0, byte_length); 
 				    byte increment  = in.readByte();
-				    
-				  
 				    short dimension = in.readShort();
 				    byte [] map = new byte[dimension];
 				    
 				    byte iterations = StringMapper.getIterations(map_string);
 				    int  size = 0;
 				    if(iterations == 0)
-				    {
 				        size = StringMapper.unpackStrings2(map_string, map_table, map);
-				    }
 				    else if(iterations < 16)
 				    {
 				    	byte [] decompressed_string = StringMapper.decompressZeroStrings(map_string);
@@ -250,28 +237,31 @@ public class SimpleReader
 			
 			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 			
-			Thread [] shift_thread = new Thread[3];
-			for(int i = 0; i < 3; i++)
+			if(pixel_shift > 0)
 			{
-		        if(i == 0)
+				Thread [] shift_thread = new Thread[3];
+				for(int i = 0; i < 3; i++)
 				{
-			    	shift_thread[i] = new Thread(new Shifter(blue, pixel_shift));
-			    	shift_thread[i].start();
-			    }
-				else if(i == 1)
-				{
-					shift_thread[i] = new Thread(new Shifter(green, pixel_shift));
-				    shift_thread[i].start();	 
+			        if(i == 0)
+					{
+				    	shift_thread[i] = new Thread(new Shifter(blue, pixel_shift));
+				    	shift_thread[i].start();
+				    }
+					else if(i == 1)
+					{
+						shift_thread[i] = new Thread(new Shifter(green, pixel_shift));
+					    shift_thread[i].start();	 
+					}
+					else
+					{
+						shift_thread[i] = new Thread(new Shifter(red, pixel_shift));
+				    	shift_thread[i].start();	
+					}
 				}
-				else
-				{
-					shift_thread[i] = new Thread(new Shifter(red, pixel_shift));
-			    	shift_thread[i].start();	
-				}
+				for(int i = 0; i < 3; i++)
+				    	shift_thread[i].join();
 			}
-			for(int i = 0; i < 3; i++)
-			    	shift_thread[i].join();
-		
+			
 			for(int i = 0; i < ydim; i++)
 			{
 				for(int j = 0; j < xdim; j++)
@@ -337,7 +327,6 @@ public class SimpleReader
 		    for(int i = 0; i < pixel.length; i++)
 		        pixel[i] <<= pixel_shift;
 		}
-		
 	}
 	
 	class Decompressor implements Runnable 
@@ -352,32 +341,29 @@ public class SimpleReader
 		{
 			byte [] string = (byte [])string_list.get(i);
 			byte iterations = (byte)(string[string.length - 1] & 31);
+			byte [] decompressed_string = new byte[xdim * ydim * 4];
 			if(iterations != 0)
 	    	{
-	    		byte [] decompressed_string = new byte[xdim * ydim * 4];
 	    		int decompressed_length = 0;
 	    	    if(iterations < 16)
 	    	        decompressed_length = StringMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
 	    	    else
 	    	        decompressed_length = StringMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
-	    	    
-	    	    int byte_length = decompressed_length / 8;
-	    	    if(decompressed_length % 8 != 0)
-	    	        byte_length++;
-	    	    
-	    	    string = new byte[byte_length + 1];
-	    	    for(int j = 0; j < byte_length; j++)
-	    	        string[j] = decompressed_string[j];
 	    	}
 	    	
 	    	int [] table = (int [])table_list.get(i);
 	    	int [] channel_id = DeltaMapper.getChannels(set_id);
 	    	int [] delta;
-	    	
+	    	int number_unpacked = 0;
 	    	if(pixel_quant == 0)
 	    	{
 	    		delta = new int[xdim * ydim];
-	    	    int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+	    		
+	    		if(iterations == 0)
+	    	        number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+	    		else
+	    			number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+	    		
 			    for(int j = 1; j < delta.length; j++)
 			       delta[j] += delta_min[i];
 	    	}
@@ -389,7 +375,10 @@ public class SimpleReader
 		        _ydim = ydim - (int)(factor * (ydim / 2 - 2));
 		        delta = new int[_xdim * _ydim];
 		        
-		        int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+		        if(iterations == 0)
+		            number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+		        else
+		        	number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 			    for(int j = 1; j < delta.length; j++)
 			       delta[j] += delta_min[i];	
 	    	}
