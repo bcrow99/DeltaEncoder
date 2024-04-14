@@ -537,9 +537,9 @@ public class SimpleWriter
 			table_list.clear();
 			string_list.clear();
 			channel_data.clear();
-			
-			
 			map_list.clear();
+			
+			
 			for(int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
@@ -590,7 +590,7 @@ public class SimpleWriter
 				}
 				else if(delta_type == 6)
 				{
-					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				    int sum = (int)result.get(0);
@@ -614,7 +614,6 @@ public class SimpleWriter
 		            }	
 			        zero_one_ratio  /= map_length;
 			        
-			        System.out.println("Zero ratio was " + zero_one_ratio);
 			        byte[] map_compression_string = new byte[1];
 			        if(zero_one_ratio > .5)
 					    map_compression_string   = StringMapper.compressZeroStrings(map_string, map_length);
@@ -626,7 +625,7 @@ public class SimpleWriter
 				    System.out.println("The string compression rate for the map was " + String.format("%.4f", compression_rate));
 				    
 				    Deflater deflater = new Deflater();
-			    	deflater.setInput(map);
+			    	deflater.setInput(map_compression_string);
 			    	byte [] zipped_string = new byte[2 * map.length];
 	            	deflater.finish();
 	            	int zipped_length = deflater.deflate(zipped_string);
@@ -634,7 +633,7 @@ public class SimpleWriter
 	            	
 	            	compression_rate = zipped_length;
 	            	compression_rate /= map.length;
-	            	System.out.println("The zip compression rate for the map was " + String.format("%.4f", compression_rate));
+	            	System.out.println("The zipped string compression rate for the map was " + String.format("%.4f", compression_rate));
 				   
 				    // The ideal sum for function 2 produces a slightly larger
 				    // number because the last delta in each row is simply assigned
@@ -651,9 +650,9 @@ public class SimpleWriter
 				
 				for(int k = 1; k < delta.length; k++)
 					delta[k] -= channel_delta_min[j];
-				byte [] string         = new byte[xdim * ydim * 4];
+				byte [] string         = new byte[xdim * ydim * 16];
 				channel_length[j]      = StringMapper.packStrings2(delta, string_table, string);
-					
+			
 				double zero_one_ratio = new_xdim * new_ydim;
 	            if(histogram.length > 1)
 	            {
@@ -673,7 +672,7 @@ public class SimpleWriter
 				    if(channel_string_type[i] != 0)
 				    	System.out.println("Unexpected string type for 0 string.");
 				    channel_iterations[i]        = StringMapper.getIterations(compression_string);
-				    string_list.add(compression_string);
+				    string_list.add(compression_string);   
 		        }   
 		        else
 		        {
@@ -698,7 +697,7 @@ public class SimpleWriter
 			    
 			    if(channel_length[j] != channel_compressed_length[j])
 			    {
-			    	byte [] decompressed_string = new byte[xdim * ydim * 4];
+			    	byte [] decompressed_string = new byte[xdim * ydim * 16];
 			    	int decompressed_length = 0;
 			    	if(channel_string_type[i] == 0)
 			    		decompressed_length = StringMapper.decompressZeroStrings(string, channel_compressed_length[j], decompressed_string);
@@ -750,11 +749,13 @@ public class SimpleWriter
 			    else if(delta_type == 6)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromIdealDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
+			    
 				if(j > 2)
 					for(int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
+				
 				if(new_xdim != xdim && new_ydim != ydim)
 				{
 					int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
@@ -888,7 +889,6 @@ public class SimpleWriter
 					
 					int pixel = 0;
 					
-		    		
 					pixel |= blue[k] << 16;
 					
 				    pixel |= green[k] << 8;
@@ -962,11 +962,10 @@ public class SimpleWriter
 		                    out.writeShort(table[k]);
                     }
 		            
-		            if(delta_type == 5)
+		            if(delta_type == 5  || delta_type == 6)
 		            {
 		            	byte [] map = (byte [])map_list.get(i);
 		            	
-		            
 		            	ArrayList result  = StringMapper.getHistogram(map);
 		            	int min_value     = (int)result.get(0);
 		            	int [] histogram  = (int [])result.get(1);
@@ -990,24 +989,25 @@ public class SimpleWriter
 				        zero_one_ratio  /= map_length;
 				        
 				        out.writeShort(string_table.length);
+				       
 			            for(int k = 0; k < string_table.length; k++)
 			                out.writeShort(string_table[k]);
-				        
+			            
 				        if(zero_one_ratio > .5)
 				        {
 				            byte[] compressed_map = StringMapper.compressZeroStrings(string, map_length);
-				            out.writeShort(compressed_map.length);
+				            out.writeInt(compressed_map.length);
 				            out.write(compressed_map, 0, compressed_map.length);
 				        }
 				        else
 				        {
 				        	byte[] compressed_map = StringMapper.compressOneStrings(string, map_length);	
-				        	out.writeShort(compressed_map.length);
+				        	out.writeInt(compressed_map.length);
 				            out.write(compressed_map, 0, compressed_map.length);
 				        }
-					
+				        
 			            out.writeByte(min_value);
-			            out.writeShort(map.length);
+			            out.writeInt(map.length);
 		            }
 		            
 	                byte [] string = (byte [])string_list.get(i);
@@ -1018,16 +1018,10 @@ public class SimpleWriter
 			    	byte [] zipped_string = new byte[2 *string.length];
 	            	deflater.finish();
 	            	int zipped_length = deflater.deflate(zipped_string);
-	            	deflater.end();
-	                
+	            	deflater.end(); 
 	                out.writeInt(zipped_length);
-	                
 	                out.write(zipped_string, 0, zipped_length);
-	                
-	                
-	                //out.write(string, 0, string.length);
 		        }
-		        
 		        
 		        out.flush();
 		        out.close();
