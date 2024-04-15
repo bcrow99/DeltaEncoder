@@ -411,12 +411,12 @@ public class SimpleReader
     		else if(delta_type == 5)
     		{
     			 byte [] map = (byte [])map_list.get(i);
-			     current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, xdim , ydim, init[i], map);
+			     current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim , current_ydim, init[i], map);
     		}
     		else if(delta_type == 6)
     		{
     			 byte [] map = (byte [])map_list.get(i);
-			     current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, xdim , ydim, init[i], map);
+			     current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim , current_ydim, init[i], map);
     		}
     		else
     		{
