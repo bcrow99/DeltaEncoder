@@ -1013,12 +1013,21 @@ public class SimpleWriter
 	                byte [] string = (byte [])string_list.get(i);
 	                out.writeInt(string.length);
 	                
+	                double string_compression_rate = string.length;
+	                string_compression_rate       /= xdim * ydim;
+	                System.out.println("String compression rate is " + String.format("%.4f", string_compression_rate));
 	                Deflater deflater = new Deflater();
 			    	deflater.setInput(string);
 			    	byte [] zipped_string = new byte[2 *string.length];
 	            	deflater.finish();
 	            	int zipped_length = deflater.deflate(zipped_string);
 	            	deflater.end(); 
+	            	
+	            	double zip_compression_rate = zipped_length;
+	            	zip_compression_rate       /= xdim * ydim;
+	                System.out.println("Zip compression rate is " + String.format("%.4f", zip_compression_rate));
+	                System.out.println();
+	            	
 	                out.writeInt(zipped_length);
 	                out.write(zipped_string, 0, zipped_length);
 		        }

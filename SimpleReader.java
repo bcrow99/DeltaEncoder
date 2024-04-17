@@ -39,7 +39,6 @@ public class SimpleReader
     int  compressed_length[] = new int[3];
     byte channel_iterations[] = new byte[3];
     
-	
 	public static void main(String[] args)
 	{
 		if (args.length != 1)
@@ -133,6 +132,8 @@ public class SimpleReader
 				    	    map[k] += increment;
 				    map_list.add(map);
 				}
+				
+				
 				int string_length = in.readInt();
 			    int zipped_length = in.readInt();
 			    byte [] zipped_string    = new byte[zipped_length];
@@ -341,14 +342,15 @@ public class SimpleReader
 		{
 			byte [] string = (byte [])string_list.get(i);
 			byte iterations = (byte)(string[string.length - 1] & 31);
-			byte [] decompressed_string = new byte[xdim * ydim * 16];
+			byte[] decompressed_string = new byte[1];
+			int decompressed_length = 0;
+			
 			if(iterations != 0)
 	    	{
-	    		int decompressed_length = 0;
-	    	    if(iterations < 16)
-	    	        decompressed_length = StringMapper.decompressZeroStrings(string, compressed_length[i], decompressed_string);
-	    	    else
-	    	        decompressed_length = StringMapper.decompressOneStrings(string, compressed_length[i], decompressed_string);
+				if(iterations < 16)
+	    	    	decompressed_string = StringMapper.decompressZeroStrings(string);
+				else
+					decompressed_string = StringMapper.decompressOneStrings(string);
 	    	}
 	    	
 	    	int [] table = (int [])table_list.get(i);
@@ -410,13 +412,13 @@ public class SimpleReader
     			current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim , current_ydim, init[i]);
     		else if(delta_type == 5)
     		{
-    			 byte [] map = (byte [])map_list.get(i);
-			     current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim , current_ydim, init[i], map);
+    			byte [] map = (byte [])map_list.get(i);
+			    current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim , current_ydim, init[i], map);
     		}
     		else if(delta_type == 6)
     		{
-    			 byte [] map = (byte [])map_list.get(i);
-			     current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim , current_ydim, init[i], map);
+    			byte [] map = (byte [])map_list.get(i);
+			    current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim , current_ydim, init[i], map);
     		}
     		else
     		{
