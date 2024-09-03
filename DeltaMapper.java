@@ -1132,7 +1132,7 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             		    // Setting the first value to 5 to mark the delta type mixed.
-            			dst[j] = 5;
+            			dst[j] = 0;
             		else
             		{
             			// We don't have any vertical or diagonal deltas to check
@@ -1290,7 +1290,7 @@ public class DeltaMapper
         dst[0] = init_value;
         int value = init_value;
         
-        if(src[0] != 5)
+        if(src[0] != 0)
         	System.out.println("Wrong code.");
         
         for(int i = 1; i < xdim; i++)
@@ -1512,7 +1512,7 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             		    // Setting the first value to 4 to mark the delta type mixed.
-            			dst[j] = 5;
+            			dst[j] = 0;
             		else
             		{
             			// We don't have any vertical or diagonal deltas to check
@@ -1926,23 +1926,13 @@ public class DeltaMapper
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
     {
-        int[]    dst      = new int[xdim * ydim];
-        
-        
-        int size = (xdim - 2) * (ydim - 1);
-        
-        byte[]    map      = new byte[size];
-        byte[][]  neighbor = new byte[size][4];
+    	int size = xdim * ydim;
+    	
+    	int[]  delta    = new int[size];
+        byte[] map      = new byte[size];
+        int[]  neighbor = new int[size];
        
-      
-        int init_value     = src[0];
-        int value          = init_value;
-        int delta          = 0;
-        
-        int sum            = 0;
-        
         int k = 0;
-        int m = 0;
         for(int i = 0; i < ydim; i++)
         {
         	if(i == 0)
@@ -1951,234 +1941,777 @@ public class DeltaMapper
                 {
             	    if(j == 0)
             	    {
-            		    // Setting the first value to 6 to mark the delta type ideal.
-            			dst[k] = 6;
+            		    // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k + 1];
+            	    	int b = src[k] - src[k + xdim];
+            	    	int c = src[k] - src[k + xdim + 1];
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k]   = 6;	
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];	
+            	    		map[k]   = 7;
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            	    	
             			k++;
             	    }
-            		else
+            		else if(j < xdim - 1)
             		{
-            		    delta        = src[k] - value;
-                        value       += delta;
+            			// We have a set of 5 possible deltas to use.
+            			int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k + 1];
+            	    	int c = src[k] - src[k + xdim - 1];
+            	    	int d = src[k] - src[k + xdim];
+            	    	int e = src[k] - src[k + xdim + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k]   = 5;
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            			
                         k++;
+            		}
+            		else if(j == xdim - 1)
+            		{
+            			 // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k + xdim - 1];
+            	    	int c = src[k] - src[k + xdim];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k]   = 5;	
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];	
+            	    		map[k]   = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	
+            			k++;	
             		}
             	}
             }
-        	else
+        	else if(i < ydim - 1)
         	{
         		for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
             	    {
-            	    	delta          = src[k] - init_value;
-            	    	init_value     = src[k];
-            	    	k++;
+            	    	// We have a set of 5 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim];
+            	    	int b = src[k] - src[k - xdim + 1];
+            	    	int c = src[k] - src[k + 1];
+            	    	int d = src[k] - src[k + xdim];
+            	    	int e = src[k] - src[k + xdim + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;	
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            	    	
+            			k++;
             	    }
             	    else if(j < xdim - 1)
             	    {
-            	    	//We have a set of 4 possible deltas to use.
-            	    	int a = src[k] - src[k - 1];
-            	    	int b = src[k] - src[k - xdim];
-            	    	int c = src[k] - src[k - xdim - 1];
-            	    	int d = src[k] - src[k - xdim + 1];
+            	    	// We have a set of 8 possible deltas to use.
             	    	
-            	    	if(Math.abs(a) <= Math.abs(b) && Math.abs(a) <= Math.abs(c) && Math.abs(a) <= Math.abs(d))
-            	    	    neighbor[m][0] = 1;
-            	    	if(Math.abs(b) <= Math.abs(a) && Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(d))
-            	    		neighbor[m][1] = 1;
-            	    	if(Math.abs(c) <= Math.abs(a) && Math.abs(c) <= Math.abs(b) && Math.abs(c) <= Math.abs(d))
-            	    		neighbor[m][2] = 1;
-            	    	if(Math.abs(d) <= Math.abs(a) && Math.abs(d) <= Math.abs(b) && Math.abs(d) <= Math.abs(c))
-            	    		neighbor[m][3] = 1;
+            	    	int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim + 1];
+            	    	int d = src[k] - src[k - 1];
+            	    	int e = src[k] - src[k + 1];
+            	    	int f = src[k] - src[k + xdim - 1];
+            	    	int g = src[k] - src[k + xdim];
+            	    	int h = src[k] - src[k + xdim + 1];
+            	    	
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)) && (Math.abs(a) <= Math.abs(f)) && (Math.abs(a) <= Math.abs(g)) && (Math.abs(a) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)) && (Math.abs(b) <= Math.abs(f)) && (Math.abs(b) <= Math.abs(g)) && (Math.abs(b) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)) && (Math.abs(c) <= Math.abs(f)) && (Math.abs(c) <= Math.abs(g)) && (Math.abs(c) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)) && (Math.abs(d) <= Math.abs(f)) && (Math.abs(d) <= Math.abs(g)) && (Math.abs(d) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k] = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(e) <= Math.abs(f)) && (Math.abs(e) <= Math.abs(g)) && (Math.abs(e) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k] = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(f) <= Math.abs(g)) && (Math.abs(f) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k] = 5;	
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(g) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;	
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            	    	
         	    	    k++;
-        	    	    m++;
+        	    	    
             	    }
-            	    else
+            	    else if(j == xdim - 1)
             	    {
+            	    	// We have a set of 5 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - 1];
+            	    	int d = src[k] - src[k + xdim - 1];
+            	    	int e = src[k] - src[k + xdim];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 4;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k] = 5;
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;	
+            	    		neighbor[k + xdim]++;
+            	    	}
         	    	    k++;	
             	    }
                 }
         	}
-        }
-        
-        int [] total = new int[4];
-        for(int i = 0; i < size; i++)
-        {
-            for(int j = 0; j < 4; j++)	
-            	total[j] += neighbor[i][j];
-        }
-        System.out.println();
-        Hashtable rank_table = new Hashtable();
-        ArrayList key_list   = new ArrayList();
-        boolean[] is_assigned = new boolean[size];
-        for(int i = 0; i < 4; i++)
-        {
-        	key_list.add(total[i]);
-        	rank_table.put(total[i], i);
-        	System.out.println(i + " " + total[i]);
-        }
-        System.out.println();
-        Collections.sort(key_list, Collections.reverseOrder());
-        for(int i = 0; i < 4; i++)
-        {
-        	int key   = (int)key_list.get(i);
-        	int index = (int)rank_table.get(key);
-        	System.out.println(index + " " + key);
-        	for(int j = 0; j < size; j++)
-        	{
-        		if(neighbor[j][index] == 1 && !is_assigned[j])
-        		{
-        			map[j] = (byte)index;
-        		    is_assigned[j] = true;
-        		}
-        		
-        		if(neighbor[j][index] != 0 && neighbor[j][index] != 1)
-        		{
-        			System.out.println("Unexpected value.");
-        		}
-        	}
-        }
-        
-        boolean all_assigned = true;
-        for(int i = 0; i < size; i++)
-        {
-        	if(is_assigned[i] == false)
-        		all_assigned = false;
-        }
-        
-        init_value     = src[0];
-        value          = init_value;
-        delta          = 0;
-        sum            = 0;
-        
-        k = 0;
-        m = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-        	if(i == 0)
+        	else if(i == ydim - 1)
         	{
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
             	    {
-            		    // Setting the first value to 6 to mark the delta type ideal.
-            			dst[k] = 6;
+            		    // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim];
+            	    	int b = src[k] - src[k - xdim + 1];
+            	    	int c = src[k] - src[k + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;	
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];	
+            	    		map[k]   = 4;
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	
             			k++;
             	    }
-            		else
+            		else if(j < xdim - 1)
             		{
-            		    delta        = src[k] - value;
-                        value       += delta;
-                        dst[k]       = delta;
-                        sum         += Math.abs(delta);
+            			// We have a set of 5 possible deltas to use.
+            			int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim + 1];
+            	    	int d = src[k] - src[k - 1];
+            	    	int e = src[k] - src[k + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k] = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k] = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            			
                         k++;
             		}
-            	}
-            }
-        	else
-        	{
-        		for(int j = 0; j < xdim; j++)
-                {
-            	    if(j == 0)
-            	    {
-            	    	delta          = src[k] - init_value;
-            	    	init_value     = src[k];
-            	    	dst[k]         = delta;
-            	    	sum           += Math.abs(delta);
-            	    	k++;
-            	    }
-            	    else if(j < xdim - 1)
-            	    {
-            	    	int a = src[k] - src[k - 1];
+            		else if(j == xdim - 1)
+            		{
+            			 // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim - 1];
             	    	int b = src[k] - src[k - xdim];
-            	    	int c = src[k] - src[k - xdim - 1];
-            	    	int d = src[k] - src[k - xdim + 1];
+            	    	int c = src[k] - src[k - 1];
             	    	
-            	    	if(map[m] == 0)
-            	    		delta = a;
-            	    	else if(map[m] == 1)
-            	    		delta = b;
-            	    	else if(map[m] == 2)
-            	    		delta = c;
-            	    	else if(map[m] == 3)
-            	    		delta = d;
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];	
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
             	    	
-            	    	dst[k] = delta;	
-            	    	sum   += Math.abs(delta);
-        	    	    k++;
-        	    	    m++;
-            	    }
-            	    else
-            	    {
-            	    	delta  = src[k] - src[k - 1];
-            	    	dst[k] = delta;
-            	    	sum   += Math.abs(delta);
-        	    	    k++;	
-            	    }
-                }
+            			k++;	
+            		}
+            	}	
         	}
         }
+        
+        int index = 0;
+        int value = neighbor[0];
         
         ArrayList result = new ArrayList();
-        result.add(sum);
-        result.add(dst);
+        result.add(value);
+        result.add(index);
+        result.add(delta);
         result.add(map);
         return result;
     }
  
     
-    public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
+    public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, int init_index, byte [] map)
     {
-    	int[] dst = new int[xdim * ydim];
-        dst[0] = init_value;
-        int value = init_value;
+        int size = xdim * ydim;
         
-        if(src[0] != 6)
-        	System.out.println("Wrong code.");
+        int [] dst = new int[size];
         
-        for(int i = 1; i < xdim; i++)
+        boolean [] is_assigned        = new boolean[size];
+        boolean [] neighbors_assigned = new boolean[size];
+        boolean    complete           = false;
+        boolean    same_result        = false;
+        
+        
+        
+        dst[init_index] = init_value;
+        
+        is_assigned[init_index] = true;
+        
+        int current_number = 1;
+        int previous_number = 1;
+        
+       
+        while(!complete && !same_result)
         {
-        	value += src[i];
-        	dst[i] = value;
-        }
-        
-        int m = 0;
-        for(int i = 1; i < ydim; i++)
-        {
-            for(int j = 0; j < xdim; j++)	
+        	int k = 0;
+            for(int i = 0; i < ydim; i++)
             {
-            	int k = i * xdim + j;
-            	if(j == 0)
-            	{
-            	    init_value += src[k];
-            	    dst[k]     = init_value;
-            	    value      = init_value;
-            	}
-            	else if(j < xdim - 1)
-            	{
-            		int n = map[m]; 
-            		if(n == 0)
-            		    value = dst[k - 1];
-            		else if(n == 1)
-            		    value = dst[k - xdim];
-            		else if(n == 2)
-            		    value = dst[k - xdim - 1];
-            		else if(n == 3)
-            			value = dst[k - xdim + 1];
-            	    value += src[i * xdim + j];
-            	    dst[k] = value;
-            	    m++;
-            	}
-            	else
-            	{
-            	    value = dst[k - 1];
-            	    value += src[k];
-            	    dst[k] = value;
-            	}
+                if(i == 0) 
+                {
+                    for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                            if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	if(!is_assigned[k + 1])
+                            	{
+                            	    if(map[k + 1] == 3)	
+                            	    {
+                            	        dst[k + 1] = dst[k] - src[k + 1];
+                            	        is_assigned[k + 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim])
+                            	{
+                            		if(map[k + xdim] == 1)	
+                            	    {
+                            	        dst[k + xdim] = dst[k] - src[k + xdim];
+                            	        is_assigned[k + xdim] = true;
+                            	    }	
+                            	}
+                            	if(!is_assigned[k + xdim + 1])
+                            	{
+                            		if(map[k + xdim + 1] == 0)	
+                            	    {
+                            		    dst[k + xdim + 1] = dst[k] - src[k + xdim + 1];
+                        	            is_assigned[k + xdim + 1] = true;
+                            	    }
+                            	}
+                            	if(is_assigned[k + 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            		neighbors_assigned[k] = true;	
+                            	k++;
+                            }
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		
+                    	    	if(!is_assigned[k - 1])
+                            	{
+                            	    if(map[k - 1] == 4)	
+                            	    {
+                            	        dst[k - 1]         = dst[k] - src[k - 1];
+                            	        is_assigned[k - 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + 1])
+                            	{
+                            		if(map[k + 1] == 3)	
+                            	    {
+                            	        dst[k + 1]         = dst[k] - src[k + 1];
+                            	        is_assigned[k + 1] = true;
+                            	    }	
+                            	}
+                            	if(!is_assigned[k + xdim - 1])
+                            	{
+                            		if(map[k + xdim - 1] == 2)	
+                            	    {
+                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
+                        	            is_assigned[k + xdim - 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim])
+                            	{
+                            		if(map[k + xdim] == 1)	
+                            	    {
+                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
+                        	            is_assigned[k + xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim + 1])
+                            	{
+                            		if(map[k + xdim + 1] == 0)	
+                            	    {
+                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
+                        	            is_assigned[k + xdim + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            		neighbors_assigned[k] = true;	
+                    	    	
+                    	    	k++;
+                            }   	
+                        }
+                        else
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 3 neighbors.
+                        		if(is_assigned[k] && !neighbors_assigned[k])
+                                {
+                                	if(!is_assigned[k - 1])
+                                	{
+                                	    if(map[k - 1] == 4)	
+                                	    {
+                                	        dst[k - 1] = dst[k] - src[k - 1];
+                                	        is_assigned[k - 1] = true;
+                                	    }
+                                	}
+                                	if(!is_assigned[k + xdim - 1])
+                                	{
+                                		if(map[k + xdim - 1] == 2)	
+                                	    {
+                                	        dst[k + xdim - 1] = dst[k] - src[k + xdim - 1];
+                                	        is_assigned[k + xdim - 1] = true;
+                                	    }	
+                                	}
+                                	if(!is_assigned[k + xdim])
+                                	{
+                                		if(map[k + xdim] == 1)	
+                                	    {
+                                		    dst[k + xdim] = dst[k] - src[k + xdim];
+                            	            is_assigned[k + xdim] = true;
+                                	    }
+                                	}
+                                	
+                                	if(is_assigned[k - 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim])
+                                		neighbors_assigned[k] = true;
+                                	
+                                	k++;
+                                }
+                            }	
+                        }
+                    }
+                }
+                else if(i < ydim - 1)
+                {
+                	for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		if(!is_assigned[k - xdim])
+                            	{
+                            	    if(map[k - xdim] == 6)	
+                            	    {
+                            	        dst[k - xdim]         = dst[k] - src[k - xdim];
+                            	        is_assigned[k - xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k - xdim + 1])
+                            	{
+                            		if(map[k - xdim + 1] == 5)	
+                            	    {
+                            	        dst[k - xdim + 1]         = dst[k] - src[k + - xdim + 1];
+                            	        is_assigned[k - xdim + 1] = true;
+                            	    }	
+                            	}
+                            	if(!is_assigned[k + 1])
+                            	{
+                            		if(map[k + 1] == 3)	
+                            	    {
+                            		    dst[k + 1]         = dst[k] - src[k + 1];
+                        	            is_assigned[k + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	
+                            	if(!is_assigned[k + xdim])
+                            	{
+                            		if(map[k + xdim] == 1)	
+                            	    {
+                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
+                        	            is_assigned[k + xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim + 1])
+                            	{
+                            		if(map[k + xdim + 1] == 0)	
+                            	    {
+                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
+                        	            is_assigned[k + xdim + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            		neighbors_assigned[k] = true;	
+                    	    	
+                    	    	k++;
+                            }   	
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 8 neighbors.
+                        		
+                        		int a = src[k] - src[k - xdim - 1];
+                    	    	int b = src[k] - src[k - xdim];
+                    	    	int c = src[k] - src[k - xdim + 1];
+                    	    	int d = src[k] - src[k - 1];
+                    	    	int e = src[k] - src[k + 1];
+                    	    	int f = src[k] - src[k + xdim - 1];
+                    	    	int g = src[k] - src[k + xdim];
+                    	    	int h = src[k] - src[k + xdim + 1];
+                    	    	
+                    	    	
+                    	    	if(!is_assigned[k - xdim - 1])
+                            	{
+                            		if(map[k - xdim - 1] == 5)	
+                            	    {
+                            	        dst[k - xdim - 1]         = dst[k] - src[k - xdim - 1];
+                            	        is_assigned[k - xdim - 1] = true;
+                            	    }	
+                            	}
+                    	    	if(!is_assigned[k - xdim])
+                            	{
+                            	    if(map[k - xdim] == 6)	
+                            	    {
+                            	        dst[k - xdim]         = dst[k] - src[k - xdim];
+                            	        is_assigned[k - xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k - xdim + 1])
+                            	{
+                            		if(map[k - xdim + 1] == 5)	
+                            	    {
+                            	        dst[k - xdim + 1]         = dst[k] - src[k - xdim + 1];
+                            	        is_assigned[k - xdim + 1] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[k - 1])
+                            	{
+                            		if(map[k - 1] == 4)	
+                            	    {
+                            		    dst[k - 1]         = dst[k] - src[k - 1];
+                        	            is_assigned[k - 1] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[k + 1])
+                            	{
+                            		if(map[k + 1] == 3)	
+                            	    {
+                            		    dst[k + 1]         = dst[k] - src[k + 1];
+                        	            is_assigned[k + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	
+                            	if(!is_assigned[k + xdim - 1])
+                            	{
+                            		if(map[k + xdim - 1] == 2)	
+                            	    {
+                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
+                        	            is_assigned[k + xdim - 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim])
+                            	{
+                            		if(map[k + xdim] == 1)	
+                            	    {
+                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
+                        	            is_assigned[k + xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim + 1])
+                            	{
+                            		if(map[k + xdim + 1] == 0)	
+                            	    {
+                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
+                        	            is_assigned[k + xdim + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	
+                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            		neighbors_assigned[k] = true;	
+                    	    	
+                    	    	k++;
+                    	    	
+                    	    	
+                    	    	
+                    	    	
+                    	    	
+                    	    	
+                    	    	
+                            }   	
+                        }
+                        else
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		
+                        		if(!is_assigned[k - 1])
+                            	{
+                            	    if(map[k - 1] == 4)	
+                            	    {
+                            	        dst[k - 1]         = dst[k] - src[k - 1];
+                            	        is_assigned[k - 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + 1])
+                            	{
+                            		if(map[k + 1] == 3)	
+                            	    {
+                            	        dst[k + 1]         = dst[k] - src[k + 1];
+                            	        is_assigned[k + 1] = true;
+                            	    }	
+                            	}
+                            	if(!is_assigned[k + xdim - 1])
+                            	{
+                            		if(map[k + xdim - 1] == 2)	
+                            	    {
+                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
+                        	            is_assigned[k + xdim - 1] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim])
+                            	{
+                            		if(map[k + xdim] == 1)	
+                            	    {
+                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
+                        	            is_assigned[k + xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[k + xdim + 1])
+                            	{
+                            		if(map[k + xdim + 1] == 0)	
+                            	    {
+                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
+                        	            is_assigned[k + xdim + 1] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            		neighbors_assigned[k] = true;	
+                    	    	
+                    	    	k++;
+                            }   	
+                        }
+                    }    	
+                }
+                else
+                {
+                	for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 3 neighbors.
+                            }    	
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                            }   	
+                        }
+                        else
+                        {
+                        	if(is_assigned[k])
+                            {
+                            	// Check 3 neighbors.
+                            }      	
+                        }
+                    }	
+                }
             }
         }
+        
         return dst;
     }
- 
    
     public static int[] getChannels(int set_id)
     {
