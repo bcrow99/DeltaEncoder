@@ -2255,13 +2255,13 @@ public class DeltaMapper
             	    	else if((Math.abs(d) <= Math.abs(e)))
             	    	{
             	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k] = 3;
+            	    		map[k]   = 3;
             	    		neighbor[k - 1]++;
             	    	}
             	    	else
             	    	{
             	    		delta[k] = src[k] - src[k + 1];
-            	    		map[k] = 4;	
+            	    		map[k]   = 4;	
             	    		neighbor[k + 1]++;
             	    	}
             			
@@ -2299,12 +2299,22 @@ public class DeltaMapper
         	}
         }
         
-        int index = 0;
-        int value = neighbor[0];
+        // Index and value of most connected pixel.
+        int max_index = 0;
+        int max_value = src[0];
+        
+        for(int i = 1; i < size; i++)
+        {
+        	if(neighbor[i] > neighbor[max_index])
+        	{
+        		max_index = i;
+        		max_value = src[i];
+        	}
+        }
         
         ArrayList result = new ArrayList();
-        result.add(value);
-        result.add(index);
+        result.add(max_value);
+        result.add(max_index);
         result.add(delta);
         result.add(map);
         return result;
@@ -2315,23 +2325,17 @@ public class DeltaMapper
     {
         int size = xdim * ydim;
         
-        int [] dst = new int[size];
-        
+        int []     dst                = new int[size]; 
         boolean [] is_assigned        = new boolean[size];
         boolean [] neighbors_assigned = new boolean[size];
         boolean    complete           = false;
         boolean    same_result        = false;
         
+        dst[init_index]         = init_value; 
+        is_assigned[init_index] = true;  
+        int current_number      = 1;
+        int previous_number     = 1;
         
-        
-        dst[init_index] = init_value;
-        
-        is_assigned[init_index] = true;
-        
-        int current_number = 1;
-        int previous_number = 1;
-        
-       
         while(!complete && !same_result)
         {
         	int k = 0;
@@ -2345,83 +2349,111 @@ public class DeltaMapper
                         {
                             if(is_assigned[k] && !neighbors_assigned[k])
                             {
-                            	if(!is_assigned[k + 1])
+                            	// Check 3 neighbors.
+                            	int m = k + xdim + 1;
+                            	int n = k + xdim;
+                            	int p = k + 1;
+                            	
+                            	int a = 0;
+                            	int b = 1;
+                            	int c = 3;
+                            	
+                            	if(!is_assigned[m])
                             	{
-                            	    if(map[k + 1] == 3)	
+                            	    if(map[m] == a)	
                             	    {
-                            	        dst[k + 1] = dst[k] - src[k + 1];
-                            	        is_assigned[k + 1] = true;
+                            	        dst[m] = dst[k] - src[m];
+                            	        is_assigned[m] = true;
                             	    }
                             	}
-                            	if(!is_assigned[k + xdim])
+                            	
+                            	if(!is_assigned[n])
                             	{
-                            		if(map[k + xdim] == 1)	
+                            		if(map[n] == b)	
                             	    {
-                            	        dst[k + xdim] = dst[k] - src[k + xdim];
-                            	        is_assigned[k + xdim] = true;
+                            	        dst[n] = dst[k] - src[n];
+                            	        is_assigned[n] = true;
                             	    }	
                             	}
-                            	if(!is_assigned[k + xdim + 1])
+                            	
+                            	if(!is_assigned[p])
                             	{
-                            		if(map[k + xdim + 1] == 0)	
+                            		if(map[p] == c)	
                             	    {
-                            		    dst[k + xdim + 1] = dst[k] - src[k + xdim + 1];
-                        	            is_assigned[k + xdim + 1] = true;
+                            		    dst[p] = dst[k] - src[p];
+                        	            is_assigned[p] = true;
                             	    }
                             	}
-                            	if(is_assigned[k + 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
-                            		neighbors_assigned[k] = true;	
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;
+                            	
                             	k++;
                             }
                         }
                         else if(j < xdim - 1)
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
+                        		int m = k + xdim + 1;
+                        		int n = k + xdim;
+                        		int p = k + xdim - 1;
+                        		int q = k + 1;
+                        		int r = k - 1;
                         		
-                    	    	if(!is_assigned[k - 1])
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 2;
+                        		int d = 3;
+                        		int e = 4;
+                        		
+                    	    	if(!is_assigned[m])
                             	{
-                            	    if(map[k - 1] == 4)	
+                            	    if(map[m] == a)	
                             	    {
-                            	        dst[k - 1]         = dst[k] - src[k - 1];
-                            	        is_assigned[k - 1] = true;
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
                             	    }
                             	}
-                            	if(!is_assigned[k + 1])
+                    	    	
+                            	if(!is_assigned[n])
                             	{
-                            		if(map[k + 1] == 3)	
+                            		if(map[n] == b)	
                             	    {
-                            	        dst[k + 1]         = dst[k] - src[k + 1];
-                            	        is_assigned[k + 1] = true;
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
                             	    }	
                             	}
-                            	if(!is_assigned[k + xdim - 1])
+                            	
+                            	if(!is_assigned[p])
                             	{
-                            		if(map[k + xdim - 1] == 2)	
+                            		if(map[p] == c)	
                             	    {
-                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
-                        	            is_assigned[k + xdim - 1] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k + xdim])
-                            	{
-                            		if(map[k + xdim] == 1)	
-                            	    {
-                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
-                        	            is_assigned[k + xdim] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k + xdim + 1])
-                            	{
-                            		if(map[k + xdim + 1] == 0)	
-                            	    {
-                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
-                        	            is_assigned[k + xdim + 1] = true;
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
                             	    }
                             	}
                             	
-                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
                     	    	
                     	    	k++;
@@ -2429,33 +2461,43 @@ public class DeltaMapper
                         }
                         else
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
-                            	// Check 3 neighbors.
                         		if(is_assigned[k] && !neighbors_assigned[k])
                                 {
-                                	if(!is_assigned[k - 1])
+                        			// Check 3 neighbors.
+                        			int m = k + xdim;
+                        			int n = k + xdim - 1;
+                        			int p = k - 1;
+                        			
+                        			int a = 1;
+                        			int b = 2;
+                        			int c = 4;
+                        			
+                                	if(!is_assigned[m])
                                 	{
-                                	    if(map[k - 1] == 4)	
+                                	    if(map[m] == a)	
                                 	    {
-                                	        dst[k - 1] = dst[k] - src[k - 1];
-                                	        is_assigned[k - 1] = true;
+                                	        dst[m]         = dst[k] - src[m];
+                                	        is_assigned[m] = true;
                                 	    }
                                 	}
-                                	if(!is_assigned[k + xdim - 1])
+                                	
+                                	if(!is_assigned[n])
                                 	{
-                                		if(map[k + xdim - 1] == 2)	
+                                		if(map[n] == b)	
                                 	    {
-                                	        dst[k + xdim - 1] = dst[k] - src[k + xdim - 1];
-                                	        is_assigned[k + xdim - 1] = true;
+                                	        dst[n] = dst[k] - src[n];
+                                	        is_assigned[n] = true;
                                 	    }	
                                 	}
-                                	if(!is_assigned[k + xdim])
+                                	
+                                	if(!is_assigned[p])
                                 	{
-                                		if(map[k + xdim] == 1)	
+                                		if(map[p] == c)	
                                 	    {
-                                		    dst[k + xdim] = dst[k] - src[k + xdim];
-                            	            is_assigned[k + xdim] = true;
+                                		    dst[p] = dst[k] - src[p];
+                            	            is_assigned[p] = true;
                                 	    }
                                 	}
                                 	
@@ -2474,53 +2516,67 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
-                        		if(!is_assigned[k - xdim])
+                        		int m = k + xdim + 1;
+                        		int n = k + xdim;
+                        		int p = k + 1;
+                        		int q = k - xdim + 1;
+                        		int r = k - xdim;
+                        		
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 3;
+                        		int d = 5;
+                        		int e = 6;
+                        		
+                        		if(!is_assigned[m])
                             	{
-                            	    if(map[k - xdim] == 6)	
+                            	    if(map[m] == a)	
                             	    {
-                            	        dst[k - xdim]         = dst[k] - src[k - xdim];
-                            	        is_assigned[k - xdim] = true;
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
                             	    }
                             	}
-                            	if(!is_assigned[k - xdim + 1])
+                        		
+                            	if(!is_assigned[n])
                             	{
-                            		if(map[k - xdim + 1] == 5)	
+                            		if(map[n] == b)	
                             	    {
-                            	        dst[k - xdim + 1]         = dst[k] - src[k + - xdim + 1];
-                            	        is_assigned[k - xdim + 1] = true;
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
                             	    }	
                             	}
-                            	if(!is_assigned[k + 1])
+                            	
+                            	if(!is_assigned[p])
                             	{
-                            		if(map[k + 1] == 3)	
+                            		if(map[p] == c)	
                             	    {
-                            		    dst[k + 1]         = dst[k] - src[k + 1];
-                        	            is_assigned[k + 1] = true;
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
                             	    }
                             	}
                             	
-                            	
-                            	if(!is_assigned[k + xdim])
+                            	if(!is_assigned[q])
                             	{
-                            		if(map[k + xdim] == 1)	
+                            		if(map[q] == d)	
                             	    {
-                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
-                        	            is_assigned[k + xdim] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k + xdim + 1])
-                            	{
-                            		if(map[k + xdim + 1] == 0)	
-                            	    {
-                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
-                        	            is_assigned[k + xdim + 1] = true;
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
                             	    }
                             	}
                             	
-                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
                     	    	
                     	    	k++;
@@ -2528,151 +2584,169 @@ public class DeltaMapper
                         }
                         else if(j < xdim - 1)
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 8 neighbors.
                         		
-                        		int a = src[k] - src[k - xdim - 1];
-                    	    	int b = src[k] - src[k - xdim];
-                    	    	int c = src[k] - src[k - xdim + 1];
-                    	    	int d = src[k] - src[k - 1];
-                    	    	int e = src[k] - src[k + 1];
-                    	    	int f = src[k] - src[k + xdim - 1];
-                    	    	int g = src[k] - src[k + xdim];
-                    	    	int h = src[k] - src[k + xdim + 1];
+                    	    	int m = k + xdim + 1;
+                    	    	int n = k + xdim;
+                    	    	int p = k + xdim - 1;
+                    	    	int q = k + 1;
+                    	    	int r = k - 1;
+                    	    	int s = k - xdim + 1;
+                    	    	int t = k - xdim;
+                    	    	int u = k - xdim - 1;
                     	    	
+                    	    	int a = 0;
+                    	    	int b = 1;
+                    	    	int c = 2;
+                    	    	int d = 3;
+                    	    	int e = 4;
+                    	    	int f = 5;
+                    	    	int g = 6;
+                    	    	int h = 7;
                     	    	
-                    	    	if(!is_assigned[k - xdim - 1])
+                    	    	if(!is_assigned[m])
                             	{
-                            		if(map[k - xdim - 1] == 5)	
+                            		if(map[m] == a)	
                             	    {
-                            	        dst[k - xdim - 1]         = dst[k] - src[k - xdim - 1];
-                            	        is_assigned[k - xdim - 1] = true;
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
                             	    }	
                             	}
-                    	    	if(!is_assigned[k - xdim])
+                    	    	
+                    	    	if(!is_assigned[n])
                             	{
-                            	    if(map[k - xdim] == 6)	
+                            		if(map[n] == b)	
                             	    {
-                            	        dst[k - xdim]         = dst[k] - src[k - xdim];
-                            	        is_assigned[k - xdim] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k - xdim + 1])
-                            	{
-                            		if(map[k - xdim + 1] == 5)	
-                            	    {
-                            	        dst[k - xdim + 1]         = dst[k] - src[k - xdim + 1];
-                            	        is_assigned[k - xdim + 1] = true;
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
                             	    }	
                             	}
-                            	
-                            	if(!is_assigned[k - 1])
+                    	    	
+                    	    	if(!is_assigned[p])
                             	{
-                            		if(map[k - 1] == 4)	
+                            		if(map[p] == c)	
                             	    {
-                            		    dst[k - 1]         = dst[k] - src[k - 1];
-                        	            is_assigned[k - 1] = true;
-                            	    }
+                            	        dst[p]         = dst[k] - src[p];
+                            	        is_assigned[p] = true;
+                            	    }	
                             	}
-                            	
-                            	if(!is_assigned[k + 1])
+                    	    
+                    	    	if(!is_assigned[q])
                             	{
-                            		if(map[k + 1] == 3)	
+                            		if(map[q] == d)	
                             	    {
-                            		    dst[k + 1]         = dst[k] - src[k + 1];
-                        	            is_assigned[k + 1] = true;
-                            	    }
+                            	        dst[q]         = dst[k] - src[q];
+                            	        is_assigned[q] = true;
+                            	    }	
                             	}
-                            	
-                            	
-                            	if(!is_assigned[k + xdim - 1])
+                    
+                    	    	if(!is_assigned[r])
                             	{
-                            		if(map[k + xdim - 1] == 2)	
+                            		if(map[r] == e)	
                             	    {
-                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
-                        	            is_assigned[k + xdim - 1] = true;
-                            	    }
+                            	        dst[r]         = dst[k] - src[r];
+                            	        is_assigned[r] = true;
+                            	    }	
                             	}
-                            	if(!is_assigned[k + xdim])
+                    	    
+                    	    	if(!is_assigned[s])
                             	{
-                            		if(map[k + xdim] == 1)	
+                            		if(map[s] == f)	
                             	    {
-                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
-                        	            is_assigned[k + xdim] = true;
-                            	    }
+                            	        dst[s]         = dst[k] - src[s];
+                            	        is_assigned[s] = true;
+                            	    }	
                             	}
-                            	if(!is_assigned[k + xdim + 1])
+                    	    
+                    	    	if(!is_assigned[t])
                             	{
-                            		if(map[k + xdim + 1] == 0)	
+                            		if(map[t] == g)	
                             	    {
-                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
-                        	            is_assigned[k + xdim + 1] = true;
-                            	    }
+                            	        dst[t]         = dst[k] - src[t];
+                            	        is_assigned[t] = true;
+                            	    }	
                             	}
-                            	
-                            	
-                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                    	    	
+                    	    	
+                    	    	if(!is_assigned[u])
+                            	{
+                            		if(map[u] == h)	
+                            	    {
+                            	        dst[u]         = dst[k] - src[u];
+                            	        is_assigned[u] = true;
+                            	    }	
+                            	}
+                    	    	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r] && is_assigned[s] && is_assigned[t] && is_assigned[u])
                             		neighbors_assigned[k] = true;	
                     	    	
                     	    	k++;
-                    	    	
-                    	    	
-                    	    	
-                    	    	
-                    	    	
-                    	    	
-                    	    	
                             }   	
                         }
                         else
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
+                        		int m = k - xdim + 1;
+                        		int n = k - xdim;
+                        		int p = k - xdim - 1;
+                        		int q = k + 1;
+                        		int r = k - 1;
                         		
-                        		if(!is_assigned[k - 1])
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 2;
+                        	    int d = 3;
+                        	    int e = 4;
+                        		
+                        		if(!is_assigned[m])
                             	{
-                            	    if(map[k - 1] == 4)	
+                            	    if(map[m] == a)	
                             	    {
-                            	        dst[k - 1]         = dst[k] - src[k - 1];
-                            	        is_assigned[k - 1] = true;
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
                             	    }
                             	}
-                            	if(!is_assigned[k + 1])
+                        		
+                            	if(!is_assigned[n])
                             	{
-                            		if(map[k + 1] == 3)	
+                            		if(map[n] == b)	
                             	    {
-                            	        dst[k + 1]         = dst[k] - src[k + 1];
-                            	        is_assigned[k + 1] = true;
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
                             	    }	
                             	}
-                            	if(!is_assigned[k + xdim - 1])
+                            	
+                            	if(!is_assigned[p])
                             	{
-                            		if(map[k + xdim - 1] == 2)	
+                            		if(map[p] == c)	
                             	    {
-                            		    dst[k + xdim - 1]         = dst[k] - src[k + xdim - 1];
-                        	            is_assigned[k + xdim - 1] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k + xdim])
-                            	{
-                            		if(map[k + xdim] == 1)	
-                            	    {
-                            		    dst[k + xdim]         = dst[k] - src[k + xdim];
-                        	            is_assigned[k + xdim] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[k + xdim + 1])
-                            	{
-                            		if(map[k + xdim + 1] == 0)	
-                            	    {
-                            		    dst[k + xdim + 1]         = dst[k] - src[k + xdim + 1];
-                        	            is_assigned[k + xdim + 1] = true;
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
                             	    }
                             	}
                             	
-                            	if(is_assigned[k - 1] && is_assigned[k + 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim] && is_assigned[k + xdim + 1])
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
                     	    	
                     	    	k++;
@@ -2686,30 +2760,185 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
-                            	// Check 3 neighbors.
+                        		// Check 3 neighbors.
+                        		int m = k + 1;
+                        		int n = k - xdim;
+                        		int p = k - xdim + 1;
+                        		
+                        		int a = 3;
+                        		int b = 6;
+                        		int c = 7;
+                        		
+                    	    	if(!is_assigned[m])
+                            	{
+                            		if(map[m] == a)	
+                            	    {
+                            		    dst[m] = dst[k] - src[m];
+                        	            is_assigned[m] = true;
+                            	    }
+                            	}
+                    	    	
+                    	    	if(!is_assigned[n])
+                            	{
+                            	    if(map[n] == b)	
+                            	    {
+                            	        dst[n] = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }
+                            	}
+                    	    	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            	        dst[p] = dst[k] - src[p];
+                            	        is_assigned[p] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;	
+                            	k++;
                             }    	
                         }
                         else if(j < xdim - 1)
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k]  && !neighbors_assigned[k])
                             {
-                            	// Check 5 neighbors.
+                        		// Check 5 neighbors.
+                        		int m = k + 1;
+                        		int n = k - 1;
+                        		int p = k - xdim + 1;
+                        		int q = k - xdim;
+                    			int r = k - xdim - 1;
+                    			
+                    			int a = 3;
+                    			int b = 4;
+                    			int c = 5;
+                    			int d = 6;
+                    			int e = 7;
+                    	    	
+                    			if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                        		
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[k - xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
+                            		neighbors_assigned[k] = true;	
+                    	    	
+                    	    	k++;	
                             }   	
                         }
                         else
                         {
-                        	if(is_assigned[k])
+                        	if(is_assigned[k] && !neighbors_assigned[k])
                             {
-                            	// Check 3 neighbors.
+                        		// Check 3 neighbors.
+                        		int m = k - 1;
+                        		int n = k - xdim;
+                    	    	int p = k - xdim - 1;
+                    	    	
+                    	    	int a = 4;
+                    	    	int b = 6;
+                    	    	int c = 7;
+                    	    	
+                    	    	if(!is_assigned[m])
+                            	{
+                            		if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }	
+                            	}
+                    	    	
+                    	    	if(!is_assigned[n])
+                            	{
+                            	    if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }
+                            	}
+                    	    	
+                    	    	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                    	    	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;
+                            	
+                            	k++;
                             }      	
                         }
                     }	
                 }
             }
+            
+            current_number = 0;
+            for(int i = 0; i < size; i++)
+            	if(is_assigned[i])
+            		current_number++;
+            if(current_number == size)
+            	complete = true;
+            else if(current_number == previous_number)
+            	same_result = true;
+            previous_number = current_number;
+            	
         }
         
+        if(complete)
+        	System.out.println("Function completed.");
+        else
+        {
+        	System.out.println("Function did not complete.");
+        	System.out.println(current_number + " values out of " + size + " were assigned.");
+        }
         return dst;
     }
    
