@@ -2309,14 +2309,21 @@ public class DeltaMapper
         	{
         		max_index = i;
         		max_value = src[i];
+        		//System.out.println("Max number is " + neighbor[i]);
         	}
         }
         
+        //System.out.println("Most connected value is " + neighbor[max_index]);
         ArrayList result = new ArrayList();
         result.add(max_value);
         result.add(max_index);
         result.add(delta);
         result.add(map);
+        
+        //System.out.println("Most connected value is " + max_value);
+        //System.out.println("Most connected index is " + max_index);
+        //System.out.println("Returning from delta function.");
+        //System.out.println();
         return result;
     }
  
@@ -2336,9 +2343,28 @@ public class DeltaMapper
         int current_number      = 1;
         int previous_number     = 1;
         
+        for(int i = 0; i < size; i++)
+        {
+        	if(is_assigned[i] == true)
+        	    System.out.println("Value " + i + " has been assigned.");
+        }
+        
+        
+        int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	for(int j = 0; j < xdim; j++)
+        	{
+        		if(is_assigned[k])
+        			System.out.println("Value " + k + " has been assigned.");	
+        		k++;
+        	}			
+        }
+        
         while(!complete && !same_result)
         {
-        	int k = 0;
+        	System.out.println("Got here 0.");
+        	k = 0;
             for(int i = 0; i < ydim; i++)
             {
                 if(i == 0) 
@@ -2347,6 +2373,8 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 1.");		
                             if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 3 neighbors.
@@ -2386,16 +2414,18 @@ public class DeltaMapper
                             	}
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
-                            		neighbors_assigned[k] = true;
-                            	
-                            	k++;
+                            		neighbors_assigned[k] = true;	
                             }
+                            k++;
                         }
                         else if(j < xdim - 1)
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 2.");	
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
+                        		
                         		int m = k + xdim + 1;
                         		int n = k + xdim;
                         		int p = k + xdim - 1;
@@ -2455,16 +2485,18 @@ public class DeltaMapper
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
-                    	    	
-                    	    	k++;
-                            }   	
+                            }   
+                        	k++;
                         }
                         else
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 3.");	
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		if(is_assigned[k] && !neighbors_assigned[k])
                                 {
+                        			System.out.println("Got here 3.");
                         			// Check 3 neighbors.
                         			int m = k + xdim;
                         			int n = k + xdim - 1;
@@ -2502,10 +2534,9 @@ public class DeltaMapper
                                 	}
                                 	
                                 	if(is_assigned[k - 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim])
-                                		neighbors_assigned[k] = true;
-                                	
-                                	k++;
+                                		neighbors_assigned[k] = true;	
                                 }
+                        		k++;
                             }	
                         }
                     }
@@ -2516,9 +2547,12 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 4.");	
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
+                        		System.out.println("Got here 4.");
                         		int m = k + xdim + 1;
                         		int n = k + xdim;
                         		int p = k + 1;
@@ -2578,16 +2612,15 @@ public class DeltaMapper
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
-                    	    	
-                    	    	k++;
-                            }   	
+                            } 
+                        	k++;
                         }
                         else if(j < xdim - 1)
                         {
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 8 neighbors.
-                        		
+                        		System.out.println("Got here 5.");
                     	    	int m = k + xdim + 1;
                     	    	int n = k + xdim;
                     	    	int p = k + xdim - 1;
@@ -2681,15 +2714,17 @@ public class DeltaMapper
                     	    	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r] && is_assigned[s] && is_assigned[t] && is_assigned[u])
                             		neighbors_assigned[k] = true;	
-                    	    	
-                    	    	k++;
-                            }   	
+                            } 
+                        	k++;
                         }
                         else
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 6.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
+                        		System.out.println("Got here 6.");
                         		int m = k - xdim + 1;
                         		int n = k - xdim;
                         		int p = k - xdim - 1;
@@ -2748,9 +2783,8 @@ public class DeltaMapper
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
                             		neighbors_assigned[k] = true;	
-                    	    	
-                    	    	k++;
-                            }   	
+                            } 
+                        	k++;
                         }
                     }    	
                 }
@@ -2760,9 +2794,12 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 7.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		// Check 3 neighbors.
+                        		System.out.println("Got here 7.");
                         		int m = k + 1;
                         		int n = k - xdim;
                         		int p = k - xdim + 1;
@@ -2800,14 +2837,17 @@ public class DeltaMapper
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
                             		neighbors_assigned[k] = true;	
-                            	k++;
-                            }    	
+                            } 
+                        	k++;
                         }
                         else if(j < xdim - 1)
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 8.");
                         	if(is_assigned[k]  && !neighbors_assigned[k])
                             {
                         		// Check 5 neighbors.
+                        		System.out.println("Got here 8.");
                         		int m = k + 1;
                         		int n = k - 1;
                         		int p = k - xdim + 1;
@@ -2865,16 +2905,18 @@ public class DeltaMapper
                             	}
                             	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
-                            		neighbors_assigned[k] = true;	
-                    	    	
-                    	    	k++;	
-                            }   	
+                            		neighbors_assigned[k] = true;		
+                            } 
+                        	k++;
                         }
                         else
                         {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 9.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		// Check 3 neighbors.
+                        		System.out.println("Got here 9.");
                         		int m = k - 1;
                         		int n = k - xdim;
                     	    	int p = k - xdim - 1;
@@ -2912,9 +2954,8 @@ public class DeltaMapper
                     	    	
                             	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
                             		neighbors_assigned[k] = true;
-                            	
-                            	k++;
-                            }      	
+                            } 
+                        	k++;
                         }
                     }	
                 }
@@ -2929,6 +2970,7 @@ public class DeltaMapper
             else if(current_number == previous_number)
             	same_result = true;
             previous_number = current_number;
+            System.out.println("Current number is " + current_number);
             	
         }
         
