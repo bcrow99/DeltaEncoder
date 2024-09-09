@@ -1923,6 +1923,675 @@ public class DeltaMapper
         return dst;
     }
     
+    
+    public static ArrayList getDeltaListFromValues(int src[], int xdim, int ydim)
+    {
+    	ArrayList delta_list = new ArrayList();
+    	
+    	int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	if(i == 0)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k + 1];
+            	    	int b = src[k] - src[k + xdim];
+            	    	int c = src[k] - src[k + xdim + 1];
+            	    	
+            	    	int [][] table = new int[3][3];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		table[0][0] = a;
+            	    		table[0][1] = 4;
+            	    		if((Math.abs(b) <= Math.abs(c)))
+            	    		{
+            	    		    table[1][0] = b;
+            	    		    table[1][1] = 6;
+            	    		    
+            	    		    table[2][0] = c;
+            	    		    table[2][1] = 7;
+            	    		}
+            	    		else
+            	    		{
+            	    			table[2][0] = b;
+            	    		    table[2][1] = 6;
+            	    		    
+            	    		    table[1][0] = c;
+            	    		    table[1][1] = 7;   	
+            	    		}
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		table[0][0] = b;
+            	    		table[0][1] = 6;	
+            	    		if((Math.abs(a) <= Math.abs(c)))
+            	    		{
+            	    			table[1][0] = a;
+                	    		table[1][1] = 4;
+                	    		
+                	    		table[2][0] = c;
+            	    		    table[2][1] = 7;
+            	    		}
+            	    		else
+            	    		{
+            	    			table[1][0] = c;
+            	    		    table[1][1] = 7;
+            	    		    
+            	    		    table[2][0] = a;
+                	    		table[2][1] = 4;
+            	    		}
+            	    	}
+            	    	
+            	    	delta_list.add(table);
+            	    	
+            			k++;
+            	    }
+            		else if(j < xdim - 1)
+            		{
+            			// We have a set of 5 possible deltas to use.
+            			int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k + 1];
+            	    	int c = src[k] - src[k + xdim - 1];
+            	    	int d = src[k] - src[k + xdim];
+            	    	int e = src[k] - src[k + xdim + 1];
+            	    	
+            	    	int [][] table = new int[5][5];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		table[0][0] = a;
+            	    		table[0][1] = 3;
+            	    		
+            	    		if(Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(d) && Math.abs(b) <= Math.abs(e))
+            	    		{
+            	    			table[1][0] = b;
+                	    		table[1][1] = 4;   	
+                	    		
+                	    		if(Math.abs(c) <= Math.abs(d) && Math.abs(c) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = c;
+                    	    		table[2][1] = 5; 
+                    	    		
+                    	    		if(Math.abs(d) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = d;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;   	
+                    	    		}
+                	    		}
+                	    		else if(Math.abs(d) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = d;
+                    	    		table[1][1] = 6;  
+                    	    		
+                    	    		if(Math.abs(c) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = c;
+                        	    		table[3][1] = 5; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = c;
+                        	    		table[4][1] = 5;   	
+                    	    		}
+                	    		}
+                	    		else
+                	    		{
+                	    			table[2][0] = e;
+                    	    		table[1][1] = 7;   
+                    	    		
+                    	    		if(Math.abs(c) <= Math.abs(d))
+                    	    		{
+                    	    			table[3][0] = c;
+                        	    		table[3][1] = 5; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = d;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = c;
+                        	    		table[4][1] = 5;   	
+                    	    		}
+                	    		}
+            	    		}
+            	    		/////////
+            	    		else if(Math.abs(c) <= Math.abs(d) && Math.abs(c) <= Math.abs(e))
+            	    		{
+            	    			table[1][0] = c;
+                	    		table[1][1] = 5;	
+                	    		
+                	    		if(Math.abs(b) <= Math.abs(d) && Math.abs(b) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = b;
+                    	    		table[2][1] = 4; 
+                    	    		
+                    	    		if(Math.abs(d) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = d;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;   	
+                    	    		}
+                	    		}
+                	    		else if(Math.abs(d) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = d;
+                    	    		table[1][1] = 6;  
+                    	    		
+                    	    		if(Math.abs(b) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = b;
+                        	    		table[3][1] = 4; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = b;
+                        	    		table[4][1] = 4;   	
+                    	    		}
+                	    		}
+                	    		else
+                	    		{
+                	    			table[2][0] = e;
+                    	    		table[1][1] = 7;   
+                    	    		
+                    	    		if(Math.abs(b) <= Math.abs(d))
+                    	    		{
+                    	    			table[3][0] = b;
+                        	    		table[3][1] = 4; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = d;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = b;
+                        	    		table[4][1] = 4;   	
+                    	    		}
+                	    		}
+                	    		//////////////////////////////////////
+            	    		}
+            	    		else if(Math.abs(d) <= Math.abs(e))
+            	    		{
+            	    			table[1][0] = d;
+                	    		table[1][1] = 6;  
+                	    		
+                	    		if(Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = b;
+                    	    		table[2][1] = 4; 
+                    	    		
+                    	    		if(Math.abs(c) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = c;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;   	
+                    	    		}
+                	    		}
+                	    		else if(Math.abs(d) <= Math.abs(e))
+                	    		{
+                	    			table[2][0] = d;
+                    	    		table[1][1] = 6;  
+                    	    		
+                    	    		if(Math.abs(b) <= Math.abs(e))
+                    	    		{
+                    	    			table[3][0] = b;
+                        	    		table[3][1] = 4; 
+                        	    		
+                        	    		table[4][0] = e;
+                        	    		table[4][1] = 7;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = e;
+                        	    		table[3][1] = 7; 
+                        	    		
+                        	    		table[4][0] = b;
+                        	    		table[4][1] = 4;   	
+                    	    		}
+                	    		}
+                	    		else
+                	    		{
+                	    			table[2][0] = e;
+                    	    		table[1][1] = 7;   
+                    	    		
+                    	    		if(Math.abs(b) <= Math.abs(d))
+                    	    		{
+                    	    			table[3][0] = b;
+                        	    		table[3][1] = 4; 
+                        	    		
+                        	    		table[4][0] = d;
+                        	    		table[4][1] = 6;
+                    	    		}
+                    	    		else
+                    	    		{
+                    	    			table[3][0] = d;
+                        	    		table[3][1] = 6; 
+                        	    		
+                        	    		table[4][0] = b;
+                        	    		table[4][1] = 4;   	
+                    	    		}
+                	    		}
+                	    		
+                	    		
+                	    		
+                	    		
+                	    		
+                	    		
+                	    		
+            	    		}
+            	    		else
+            	    		{
+            	    			table[1][0] = d;
+                	    		table[1][1] = 6;   	
+            	    		}
+            	    	}
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k]   = 5;
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            			
+                        k++;
+            		}
+            		else if(j == xdim - 1)
+            		{
+            			 // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - 1];
+            	    	int b = src[k] - src[k + xdim - 1];
+            	    	int c = src[k] - src[k + xdim];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k]   = 5;	
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];	
+            	    		map[k]   = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	
+            			k++;	
+            		}
+            	}
+            }
+        	else if(i < ydim - 1)
+        	{
+        		for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            	    	// We have a set of 5 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim];
+            	    	int b = src[k] - src[k - xdim + 1];
+            	    	int c = src[k] - src[k + 1];
+            	    	int d = src[k] - src[k + xdim];
+            	    	int e = src[k] - src[k + xdim + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;	
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            	    	
+            			k++;
+            	    }
+            	    else if(j < xdim - 1)
+            	    {
+            	    	// We have a set of 8 possible deltas to use.
+            	    	
+            	    	int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim + 1];
+            	    	int d = src[k] - src[k - 1];
+            	    	int e = src[k] - src[k + 1];
+            	    	int f = src[k] - src[k + xdim - 1];
+            	    	int g = src[k] - src[k + xdim];
+            	    	int h = src[k] - src[k + xdim + 1];
+            	    	
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)) && (Math.abs(a) <= Math.abs(f)) && (Math.abs(a) <= Math.abs(g)) && (Math.abs(a) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)) && (Math.abs(b) <= Math.abs(f)) && (Math.abs(b) <= Math.abs(g)) && (Math.abs(b) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)) && (Math.abs(c) <= Math.abs(f)) && (Math.abs(c) <= Math.abs(g)) && (Math.abs(c) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)) && (Math.abs(d) <= Math.abs(f)) && (Math.abs(d) <= Math.abs(g)) && (Math.abs(d) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k] = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(e) <= Math.abs(f)) && (Math.abs(e) <= Math.abs(g)) && (Math.abs(e) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k] = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	else if((Math.abs(f) <= Math.abs(g)) && (Math.abs(f) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k] = 5;	
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(g) <= Math.abs(h)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;	
+            	    		neighbor[k + xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim + 1];
+            	    		map[k] = 7;	
+            	    		neighbor[k + xdim + 1]++;
+            	    	}
+            	    	
+        	    	    k++;
+        	    	    
+            	    }
+            	    else if(j == xdim - 1)
+            	    {
+            	    	// We have a set of 5 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - 1];
+            	    	int d = src[k] - src[k + xdim - 1];
+            	    	int e = src[k] - src[k + xdim];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 4;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim - 1];
+            	    		map[k] = 5;
+            	    		neighbor[k + xdim - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + xdim];
+            	    		map[k] = 6;	
+            	    		neighbor[k + xdim]++;
+            	    	}
+        	    	    k++;	
+            	    }
+                }
+        	}
+        	else if(i == ydim - 1)
+        	{
+                for(int j = 0; j < xdim; j++)
+                {
+            	    if(j == 0)
+            	    {
+            		    // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim];
+            	    	int b = src[k] - src[k - xdim + 1];
+            	    	int c = src[k] - src[k + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;	
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];	
+            	    		map[k]   = 4;
+            	    		neighbor[k + 1]++;
+            	    	}
+            	    	
+            			k++;
+            	    }
+            		else if(j < xdim - 1)
+            		{
+            			// We have a set of 5 possible deltas to use.
+            			int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - xdim + 1];
+            	    	int d = src[k] - src[k - 1];
+            	    	int e = src[k] - src[k + 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim + 1];
+            	    		map[k]   = 2;
+            	    		neighbor[k - xdim + 1]++;
+            	    	}
+            	    	else if((Math.abs(d) <= Math.abs(e)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k + 1];
+            	    		map[k]   = 4;	
+            	    		neighbor[k + 1]++;
+            	    	}
+            			
+                        k++;
+            		}
+            		else if(j == xdim - 1)
+            		{
+            			 // We have a set of 3 possible deltas to use.
+            	    	int a = src[k] - src[k - xdim - 1];
+            	    	int b = src[k] - src[k - xdim];
+            	    	int c = src[k] - src[k - 1];
+            	    	
+            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim - 1];
+            	    		map[k]   = 0;
+            	    		neighbor[k - xdim - 1]++;
+            	    	}
+            	    	else if((Math.abs(b) <= Math.abs(c)))
+            	    	{
+            	    		delta[k] = src[k] - src[k - xdim];
+            	    		map[k]   = 1;	
+            	    		neighbor[k - xdim]++;
+            	    	}
+            	    	else
+            	    	{
+            	    		delta[k] = src[k] - src[k - 1];	
+            	    		map[k]   = 3;
+            	    		neighbor[k - 1]++;
+            	    	}
+            	    	
+            			k++;	
+            		}
+            	}	
+        	}
+        }
+    	
+    	
+    	
+    	
+    	return delta_list;
+    }
+    
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
     {
