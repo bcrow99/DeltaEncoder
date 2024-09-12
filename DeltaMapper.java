@@ -1923,7 +1923,6 @@ public class DeltaMapper
         return dst;
     }
     
-    
     public static ArrayList getDeltaListFromValues(int src[], int xdim, int ydim)
     {
     	ArrayList delta_list = new ArrayList();
@@ -1942,53 +1941,67 @@ public class DeltaMapper
             	    	int b = src[k] - src[k + xdim];
             	    	int c = src[k] - src[k + xdim + 1];
             	    	
-            	    	int [][] table = new int[3][3];
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 4;
+            	    	list_a.add(location);
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
-            	    	{
-            	    		table[0][0] = a;
-            	    		table[0][1] = 4;
-            	    		if((Math.abs(b) <= Math.abs(c)))
-            	    		{
-            	    		    table[1][0] = b;
-            	    		    table[1][1] = 6;
-            	    		    
-            	    		    table[2][0] = c;
-            	    		    table[2][1] = 7;
-            	    		}
-            	    		else
-            	    		{
-            	    			table[2][0] = b;
-            	    		    table[2][1] = 6;
-            	    		    
-            	    		    table[1][0] = c;
-            	    		    table[1][1] = 7;   	
-            	    		}
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)))
-            	    	{
-            	    		table[0][0] = b;
-            	    		table[0][1] = 6;	
-            	    		if((Math.abs(a) <= Math.abs(c)))
-            	    		{
-            	    			table[1][0] = a;
-                	    		table[1][1] = 4;
-                	    		
-                	    		table[2][0] = c;
-            	    		    table[2][1] = 7;
-            	    		}
-            	    		else
-            	    		{
-            	    			table[1][0] = c;
-            	    		    table[1][1] = 7;
-            	    		    
-            	    		    table[2][0] = a;
-                	    		table[2][1] = 4;
-            	    		}
-            	    	}
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 6;
+            	    	list_b.add(location);
             	    	
-            	    	delta_list.add(table);
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 7;
+            	    	list_c.add(location);
             	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    
+    		    		double addend = 0.00000001; 
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		
+    		    		/*
+    		    		System.out.println("Table:");
+    		    		for(int m = 0; m < table.length; m++)
+    		    			System.out.println(table[m][0] + " " + table[m][1]);
+    		    		*/
+    		    		
+    		    		delta_list.add(table);
+    		    		
             			k++;
             	    }
             		else if(j < xdim - 1)
@@ -2000,299 +2013,90 @@ public class DeltaMapper
             	    	int d = src[k] - src[k + xdim];
             	    	int e = src[k] - src[k + xdim + 1];
             	    	
-            	    	int [][] table = new int[5][5];
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 3;
+            	    	list_a.add(location);
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		table[0][0] = a;
-            	    		table[0][1] = 3;
-            	    		
-            	    		if(Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(d) && Math.abs(b) <= Math.abs(e))
-            	    		{
-            	    			table[1][0] = b;
-                	    		table[1][1] = 4;   	
-                	    		
-                	    		if(Math.abs(c) <= Math.abs(d) && Math.abs(c) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = c;
-                    	    		table[2][1] = 5; 
-                    	    		
-                    	    		if(Math.abs(d) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = d;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;   	
-                    	    		}
-                	    		}
-                	    		else if(Math.abs(d) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = d;
-                    	    		table[1][1] = 6;  
-                    	    		
-                    	    		if(Math.abs(c) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = c;
-                        	    		table[3][1] = 5; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = c;
-                        	    		table[4][1] = 5;   	
-                    	    		}
-                	    		}
-                	    		else
-                	    		{
-                	    			table[2][0] = e;
-                    	    		table[1][1] = 7;   
-                    	    		
-                    	    		if(Math.abs(c) <= Math.abs(d))
-                    	    		{
-                    	    			table[3][0] = c;
-                        	    		table[3][1] = 5; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = d;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = c;
-                        	    		table[4][1] = 5;   	
-                    	    		}
-                	    		}
-            	    		}
-            	    		/////////
-            	    		else if(Math.abs(c) <= Math.abs(d) && Math.abs(c) <= Math.abs(e))
-            	    		{
-            	    			table[1][0] = c;
-                	    		table[1][1] = 5;	
-                	    		
-                	    		if(Math.abs(b) <= Math.abs(d) && Math.abs(b) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = b;
-                    	    		table[2][1] = 4; 
-                    	    		
-                    	    		if(Math.abs(d) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = d;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;   	
-                    	    		}
-                	    		}
-                	    		else if(Math.abs(d) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = d;
-                    	    		table[1][1] = 6;  
-                    	    		
-                    	    		if(Math.abs(b) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = b;
-                        	    		table[3][1] = 4; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = b;
-                        	    		table[4][1] = 4;   	
-                    	    		}
-                	    		}
-                	    		else
-                	    		{
-                	    			table[2][0] = e;
-                    	    		table[1][1] = 7;   
-                    	    		
-                    	    		if(Math.abs(b) <= Math.abs(d))
-                    	    		{
-                    	    			table[3][0] = b;
-                        	    		table[3][1] = 4; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = d;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = b;
-                        	    		table[4][1] = 4;   	
-                    	    		}
-                	    		}
-                	    		//////////////////////////////////////
-            	    		}
-            	    		else if(Math.abs(d) <= Math.abs(e))
-            	    		{
-            	    			table[1][0] = d;
-                	    		table[1][1] = 6;  
-                	    		
-                	    		if(Math.abs(b) <= Math.abs(c) && Math.abs(b) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = b;
-                    	    		table[2][1] = 4; 
-                    	    		
-                    	    		if(Math.abs(c) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = c;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;   	
-                    	    		}
-                	    		}
-                	    		else if(Math.abs(d) <= Math.abs(e))
-                	    		{
-                	    			table[2][0] = d;
-                    	    		table[1][1] = 6;  
-                    	    		
-                    	    		if(Math.abs(b) <= Math.abs(e))
-                    	    		{
-                    	    			table[3][0] = b;
-                        	    		table[3][1] = 4; 
-                        	    		
-                        	    		table[4][0] = e;
-                        	    		table[4][1] = 7;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = e;
-                        	    		table[3][1] = 7; 
-                        	    		
-                        	    		table[4][0] = b;
-                        	    		table[4][1] = 4;   	
-                    	    		}
-                	    		}
-                	    		else
-                	    		{
-                	    			table[2][0] = e;
-                    	    		table[1][1] = 7;   
-                    	    		
-                    	    		if(Math.abs(b) <= Math.abs(d))
-                    	    		{
-                    	    			table[3][0] = b;
-                        	    		table[3][1] = 4; 
-                        	    		
-                        	    		table[4][0] = d;
-                        	    		table[4][1] = 6;
-                    	    		}
-                    	    		else
-                    	    		{
-                    	    			table[3][0] = d;
-                        	    		table[3][1] = 6; 
-                        	    		
-                        	    		table[4][0] = b;
-                        	    		table[4][1] = 4;   	
-                    	    		}
-                	    		}
-                	    		
-                	    		
-                	    		
-                	    		
-                	    		
-                	    		
-                	    		
-            	    		}
-            	    		else
-            	    		{
-            	    			table[1][0] = d;
-                	    		table[1][1] = 6;   	
-            	    		}
-            	    	}
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 4;
+            	    	list_b.add(location);
             	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 5;
+            	    	list_c.add(location);
             	    	
+            	    	double _d = Math.abs(d);
+            	    	ArrayList list_d = new ArrayList();
+            	    	list_d.add(d);
+            	    	location = 6;
+            	    	list_d.add(location);
             	    	
+            	    	double _e = Math.abs(e);
+            	    	ArrayList list_e = new ArrayList();
+            	    	list_e.add(e);
+            	    	location = 7;
+            	    	list_e.add(location);
             	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k]   = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k]   = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + 1];
-            	    		map[k]   = 4;	
-            	    		neighbor[k + 1]++;
-            	    	}
-            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim - 1];
-            	    		map[k]   = 5;
-            	    		neighbor[k + xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(d) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim];
-            	    		map[k] = 6;
-            	    		neighbor[k + xdim]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim + 1];
-            	    		map[k] = 7;	
-            	    		neighbor[k + xdim + 1]++;
-            	    	}
-            			
+    		    		
+    		    		double addend = 0.00000001;
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		if(delta_table.containsKey(_d))
+    		    		{
+    		    			_d += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_d, list_d);
+    		    		key_list.add(_d);
+    		    		
+    		    		if(delta_table.containsKey(_e))
+    		    		{
+    		    			_e += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_e, list_e);
+    		    		key_list.add(_e);
+    		    		
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		delta_list.add(table);
+    		    		
                         k++;
             		}
             		else if(j == xdim - 1)
@@ -2302,24 +2106,67 @@ public class DeltaMapper
             	    	int b = src[k] - src[k + xdim - 1];
             	    	int c = src[k] - src[k + xdim];
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k]   = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim - 1];
-            	    		map[k]   = 5;	
-            	    		neighbor[k + xdim - 1]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim];	
-            	    		map[k]   = 6;
-            	    		neighbor[k + xdim]++;
-            	    	}
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 3;
+            	    	list_a.add(location);
+            	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 5;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 6;
+            	    	list_c.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    
+    		    		double addend = 0.00000001; 
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		
+    		    		/*
+    		    		System.out.println("Table:");
+    		    		for(int m = 0; m < table.length; m++)
+    		    			System.out.println(table[m][0] + " " + table[m][1]);
+    		    		System.out.println();
+    		    		*/
+    		    		
+    		    		delta_list.add(table);
             	    	
             			k++;	
             		}
@@ -2338,37 +2185,100 @@ public class DeltaMapper
             	    	int d = src[k] - src[k + xdim];
             	    	int e = src[k] - src[k + xdim + 1];
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim + 1];
-            	    		map[k]   = 2;	
-            	    		neighbor[k - xdim + 1]++;
-            	    	}
-            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + 1];
-            	    		map[k]   = 4;
-            	    		neighbor[k + 1]++;
-            	    	}
-            	    	else if((Math.abs(d) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim];
-            	    		map[k] = 6;
-            	    		neighbor[k + xdim]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim + 1];
-            	    		map[k] = 7;	
-            	    		neighbor[k + xdim + 1]++;
-            	    	}
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 1;
+            	    	list_a.add(location);
             	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 2;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 4;
+            	    	list_c.add(location);
+            	    	
+            	    	double _d = Math.abs(d);
+            	    	ArrayList list_d = new ArrayList();
+            	    	list_d.add(d);
+            	    	location = 6;
+            	    	list_d.add(location);
+            	    	
+            	    	double _e = Math.abs(e);
+            	    	ArrayList list_e = new ArrayList();
+            	    	list_e.add(e);
+            	    	location = 7;
+            	    	list_e.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    	
+    		    		
+    		    		double addend = 0.00000001;
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		if(delta_table.containsKey(_d))
+    		    		{
+    		    			_d += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_d, list_d);
+    		    		key_list.add(_d);
+    		    		
+    		    		if(delta_table.containsKey(_e))
+    		    		{
+    		    			_e += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_e, list_e);
+    		    		key_list.add(_e);
+    		    		
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		delta_list.add(table);
+    		    		
+    		    		/*
+    		    		if(i == 1)
+    		    		{
+    		    		System.out.println("Table:");
+    		    		for(int m = 0; m < table.length; m++)
+    		    			System.out.println(table[m][0] + " " + table[m][1]);
+    		    		System.out.println();
+    		    		}
+    		    		*/
+    		    		
             			k++;
             	    }
             	    else if(j < xdim - 1)
@@ -2383,100 +2293,249 @@ public class DeltaMapper
             	    	int f = src[k] - src[k + xdim - 1];
             	    	int g = src[k] - src[k + xdim];
             	    	int h = src[k] - src[k + xdim + 1];
+            	    
+            	    	
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 0;
+            	    	list_a.add(location);
+            	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 1;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 2;
+            	    	list_c.add(location);
+            	    	
+            	    	double _d = Math.abs(d);
+            	    	ArrayList list_d = new ArrayList();
+            	    	list_d.add(d);
+            	    	location = 3;
+            	    	list_d.add(location);
+            	    	
+            	    	double _e = Math.abs(e);
+            	    	ArrayList list_e = new ArrayList();
+            	    	list_e.add(e);
+            	    	location = 4;
+            	    	list_e.add(location);
+            	    	
+            	    	double _f = Math.abs(f);
+            	    	ArrayList list_f = new ArrayList();
+            	    	list_f.add(f);
+            	    	location = 5;
+            	    	list_f.add(location);
+            	    	
+            	    	double _g = Math.abs(g);
+            	    	ArrayList list_g = new ArrayList();
+            	    	list_g.add(g);
+            	    	location = 6;
+            	    	list_g.add(location);
+            	    	
+            	    	double _h = Math.abs(h);
+            	    	ArrayList list_h = new ArrayList();
+            	    	list_h.add(h);
+            	    	location = 7;
+            	    	list_h.add(location);
             	    	
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)) && (Math.abs(a) <= Math.abs(f)) && (Math.abs(a) <= Math.abs(g)) && (Math.abs(a) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim - 1];
-            	    		map[k]   = 0;
-            	    		neighbor[k - xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)) && (Math.abs(b) <= Math.abs(f)) && (Math.abs(b) <= Math.abs(g)) && (Math.abs(b) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;	
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)) && (Math.abs(c) <= Math.abs(f)) && (Math.abs(c) <= Math.abs(g)) && (Math.abs(c) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim + 1];
-            	    		map[k]   = 2;
-            	    		neighbor[k - xdim + 1]++;
-            	    	}
-            	    	else if((Math.abs(d) <= Math.abs(e)) && (Math.abs(d) <= Math.abs(f)) && (Math.abs(d) <= Math.abs(g)) && (Math.abs(d) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k] = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	else if((Math.abs(e) <= Math.abs(f)) && (Math.abs(e) <= Math.abs(g)) && (Math.abs(e) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + 1];
-            	    		map[k] = 4;	
-            	    		neighbor[k + 1]++;
-            	    	}
-            	    	else if((Math.abs(f) <= Math.abs(g)) && (Math.abs(f) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim - 1];
-            	    		map[k] = 5;	
-            	    		neighbor[k + xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(g) <= Math.abs(h)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim];
-            	    		map[k] = 6;	
-            	    		neighbor[k + xdim]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim + 1];
-            	    		map[k] = 7;	
-            	    		neighbor[k + xdim + 1]++;
-            	    	}
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
             	    	
-        	    	    k++;
-        	    	    
+    		    		
+    		    		double addend = 0.00000001;
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		if(delta_table.containsKey(_d))
+    		    		{
+    		    			_d += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_d, list_d);
+    		    		key_list.add(_d);
+    		    		
+    		    		if(delta_table.containsKey(_e))
+    		    		{
+    		    			_e += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_e, list_e);
+    		    		key_list.add(_e);
+    		    		
+    		    		if(delta_table.containsKey(_f))
+    		    		{
+    		    			_f += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_f, list_f);
+    		    		key_list.add(_f);
+    		    		
+    		    		if(delta_table.containsKey(_g))
+    		    		{
+    		    			_g += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_g, list_g);
+    		    		key_list.add(_g);
+    		    		
+    		    		if(delta_table.containsKey(_h))
+    		    		{
+    		    			_h += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_h, list_h);
+    		    		key_list.add(_h);
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		delta_list.add(table);
+    		    		
+    		    		/*
+    		    		if(j == 1 && i == 1)
+    		    		{
+    		    		    System.out.println("Table:");
+    		    		    for(int m = 0; m < table.length; m++)
+    		    			    System.out.println(table[m][0] + " " + table[m][1]);
+    		    		    System.out.println();
+    		    		}
+    		    	    */
+    		    		
+        	    	    k++;	
             	    }
             	    else if(j == xdim - 1)
             	    {
-            	    	// We have a set of 5 possible deltas to use.
             	    	int a = src[k] - src[k - xdim - 1];
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - 1];
             	    	int d = src[k] - src[k + xdim - 1];
             	    	int e = src[k] - src[k + xdim];
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim - 1];
-            	    		map[k]   = 0;
-            	    		neighbor[k - xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;	
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k]   = 4;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	else if((Math.abs(d) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim - 1];
-            	    		map[k] = 5;
-            	    		neighbor[k + xdim - 1]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + xdim];
-            	    		map[k] = 6;	
-            	    		neighbor[k + xdim]++;
-            	    	}
-        	    	    k++;	
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 0;
+            	    	list_a.add(location);
+            	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 1;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 3;
+            	    	list_c.add(location);
+            	    	
+            	    	double _d = Math.abs(d);
+            	    	ArrayList list_d = new ArrayList();
+            	    	list_d.add(d);
+            	    	location = 5;
+            	    	list_d.add(location);
+            	    	
+            	    	double _e = Math.abs(e);
+            	    	ArrayList list_e = new ArrayList();
+            	    	list_e.add(e);
+            	    	location = 6;
+            	    	list_e.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    	
+    		    		
+    		    		double addend = 0.00000001;
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		if(delta_table.containsKey(_d))
+    		    		{
+    		    			_d += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_d, list_d);
+    		    		key_list.add(_d);
+    		    		
+    		    		if(delta_table.containsKey(_e))
+    		    		{
+    		    			_e += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_e, list_e);
+    		    		key_list.add(_e);
+    		    		
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		delta_list.add(table);
+    		    		
+    		    		/*
+    		    		if(i == 1)
+    		    		{
+    		    		    System.out.println("Table:");
+    		    		    for(int m = 0; m < table.length; m++)
+    		    			    System.out.println(table[m][0] + " " + table[m][1]);
+    		    		    System.out.println();
+    		    		}
+    		    	    */
+    		    		
+    		    		k++;
             	    }
                 }
         	}
@@ -2491,24 +2550,68 @@ public class DeltaMapper
             	    	int b = src[k] - src[k - xdim + 1];
             	    	int c = src[k] - src[k + 1];
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim + 1];
-            	    		map[k]   = 2;	
-            	    		neighbor[k - xdim + 1]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + 1];	
-            	    		map[k]   = 4;
-            	    		neighbor[k + 1]++;
-            	    	}
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 1;
+            	    	list_a.add(location);
+            	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 2;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 4;
+            	    	list_c.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    
+    		    		double addend = 0.00000001; 
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		
+    		    		/*
+    		    		System.out.println("Table:");
+    		    		for(int m = 0; m < table.length; m++)
+    		    			System.out.println(table[m][0] + " " + table[m][1]);
+    		    		System.out.println();
+    		    		*/
+    		    		
+    		    		delta_list.add(table);
+            	    	
             	    	
             			k++;
             	    }
@@ -2520,38 +2623,102 @@ public class DeltaMapper
             	    	int c = src[k] - src[k - xdim + 1];
             	    	int d = src[k] - src[k - 1];
             	    	int e = src[k] - src[k + 1];
+            	
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 0;
+            	    	list_a.add(location);
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)) && (Math.abs(a) <= Math.abs(d)) && (Math.abs(a) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim - 1];
-            	    		map[k]   = 0;
-            	    		neighbor[k - xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)) && (Math.abs(b) <= Math.abs(d)) && (Math.abs(b) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;	
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else if((Math.abs(c) <= Math.abs(d)) && (Math.abs(c) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim + 1];
-            	    		map[k]   = 2;
-            	    		neighbor[k - xdim + 1]++;
-            	    	}
-            	    	else if((Math.abs(d) <= Math.abs(e)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];
-            	    		map[k]   = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k + 1];
-            	    		map[k]   = 4;	
-            	    		neighbor[k + 1]++;
-            	    	}
-            			
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 1;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 2;
+            	    	list_c.add(location);
+            	    	
+            	    	double _d = Math.abs(d);
+            	    	ArrayList list_d = new ArrayList();
+            	    	list_d.add(d);
+            	    	location = 3;
+            	    	list_d.add(location);
+            	    	
+            	    	double _e = Math.abs(e);
+            	    	ArrayList list_e = new ArrayList();
+            	    	list_e.add(e);
+            	    	location = 4;
+            	    	list_e.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    	
+    		    		
+    		    		double addend = 0.00000001;
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		if(delta_table.containsKey(_d))
+    		    		{
+    		    			_d += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_d, list_d);
+    		    		key_list.add(_d);
+    		    		
+    		    		if(delta_table.containsKey(_e))
+    		    		{
+    		    			_e += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_e, list_e);
+    		    		key_list.add(_e);
+    		    		
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		delta_list.add(table);
+    		    		
+    		    		/*
+    		    		if(j == 1)
+    		    		{
+    		    		    System.out.println("Table:");
+    		    		    for(int m = 0; m < table.length; m++)
+    		    			    System.out.println(table[m][0] + " " + table[m][1]);
+    		    		    System.out.println();
+    		    		}
+    		    	    */
+    		    		
+    		    		
                         k++;
             		}
             		else if(j == xdim - 1)
@@ -2561,36 +2728,81 @@ public class DeltaMapper
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - 1];
             	    	
-            	    	if((Math.abs(a) <= Math.abs(b)) && (Math.abs(a) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim - 1];
-            	    		map[k]   = 0;
-            	    		neighbor[k - xdim - 1]++;
-            	    	}
-            	    	else if((Math.abs(b) <= Math.abs(c)))
-            	    	{
-            	    		delta[k] = src[k] - src[k - xdim];
-            	    		map[k]   = 1;	
-            	    		neighbor[k - xdim]++;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta[k] = src[k] - src[k - 1];	
-            	    		map[k]   = 3;
-            	    		neighbor[k - 1]++;
-            	    	}
+            	    	double _a = Math.abs(a);
+            	    	ArrayList list_a = new ArrayList();
+            	    	list_a.add(a);
+            	    	int location = 0;
+            	    	list_a.add(location);
+            	    	
+            	    	double _b = Math.abs(b);
+            	    	ArrayList list_b = new ArrayList();
+            	    	list_b.add(b);
+            	    	location = 1;
+            	    	list_b.add(location);
+            	    	
+            	    	double _c = Math.abs(c);
+            	    	ArrayList list_c = new ArrayList();
+            	    	list_c.add(c);
+            	    	location = 3;
+            	    	list_c.add(location);
+            	    	
+            	    	Hashtable <Double, ArrayList> delta_table = new Hashtable <Double, ArrayList>();
+            	    	ArrayList key_list = new ArrayList();
+            	    
+    		    		double addend = 0.00000001; 
+    		    		
+    		    		delta_table.put(_a, list_a);
+    		    		key_list.add(_a);
+    		    		
+    		    		if(delta_table.containsKey(_b))
+    		    		{
+    		    			_b += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_b, list_b);
+    		    		key_list.add(_b);
+    		    		
+    		    		if(delta_table.containsKey(_c))
+    		    		{
+    		    			_c += addend;
+    		    			addend *= 2;
+    		    		}
+    		    		delta_table.put(_c, list_c);
+    		    		key_list.add(_c);
+    		    		
+    		    		Collections.sort(key_list);
+    		    		
+    		    		int [][] table = new int[key_list.size()][2];
+    		    		for(int m = 0; m < key_list.size(); m++)
+    		    		{
+    		    		   double key = (double)key_list.get(m);
+    		    		   ArrayList current_delta_list = delta_table.get(key);
+    		    		   table[m][0] = (int)current_delta_list.get(0);
+    		    		   table[m][1] = (int)current_delta_list.get(1);
+    		    		}
+    		    		
+    		    		/*
+    		    		System.out.println("Table:");
+    		    		for(int m = 0; m < table.length; m++)
+    		    			System.out.println(table[m][0] + " " + table[m][1]);
+    		    		System.out.println();
+    		    		*/
+    		    		
+    		    		delta_list.add(table);
             	    	
             			k++;	
             		}
             	}	
         	}
         }
-    	
-    	
-    	
-    	
+        
     	return delta_list;
     }
+   
+    
+    
+    
+    
     
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
@@ -2995,9 +3207,683 @@ public class DeltaMapper
         //System.out.println();
         return result;
     }
- 
     
     public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, int init_index, byte [] map)
+    {
+        int size = xdim * ydim;
+        
+        int []     dst                = new int[size]; 
+        boolean [] is_assigned        = new boolean[size];
+        boolean [] neighbors_assigned = new boolean[size];
+        boolean    complete           = false;
+        boolean    same_result        = false;
+        
+        dst[init_index]         = init_value; 
+        is_assigned[init_index] = true;  
+        int current_number      = 1;
+        int previous_number     = 1;
+        
+        for(int i = 0; i < size; i++)
+        {
+        	if(is_assigned[i] == true)
+        	    System.out.println("Value " + i + " has been assigned.");
+        }
+        
+        
+        int k = 0;
+        for(int i = 0; i < ydim; i++)
+        {
+        	for(int j = 0; j < xdim; j++)
+        	{
+        		if(is_assigned[k])
+        			System.out.println("Value " + k + " has been assigned.");	
+        		k++;
+        	}			
+        }
+        
+        while(!complete && !same_result)
+        {
+        	System.out.println("Got here 0.");
+        	k = 0;
+            for(int i = 0; i < ydim; i++)
+            {
+                if(i == 0) 
+                {
+                    for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 1.");		
+                            if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	// Check 3 neighbors.
+                            	int m = k + xdim + 1;
+                            	int n = k + xdim;
+                            	int p = k + 1;
+                            	
+                            	int a = 0;
+                            	int b = 1;
+                            	int c = 3;
+                            	
+                            	if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m] = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n] = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p] = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;	
+                            }
+                            k++;
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 2.");	
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		
+                        		int m = k + xdim + 1;
+                        		int n = k + xdim;
+                        		int p = k + xdim - 1;
+                        		int q = k + 1;
+                        		int r = k - 1;
+                        		
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 2;
+                        		int d = 3;
+                        		int e = 4;
+                        		
+                    	    	if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                    	    	
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
+                            		neighbors_assigned[k] = true;	
+                            }   
+                        	k++;
+                        }
+                        else
+                        {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 3.");	
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                        		if(is_assigned[k] && !neighbors_assigned[k])
+                                {
+                        			System.out.println("Got here 3.");
+                        			// Check 3 neighbors.
+                        			int m = k + xdim;
+                        			int n = k + xdim - 1;
+                        			int p = k - 1;
+                        			
+                        			int a = 1;
+                        			int b = 2;
+                        			int c = 4;
+                        			
+                                	if(!is_assigned[m])
+                                	{
+                                	    if(map[m] == a)	
+                                	    {
+                                	        dst[m]         = dst[k] - src[m];
+                                	        is_assigned[m] = true;
+                                	    }
+                                	}
+                                	
+                                	if(!is_assigned[n])
+                                	{
+                                		if(map[n] == b)	
+                                	    {
+                                	        dst[n] = dst[k] - src[n];
+                                	        is_assigned[n] = true;
+                                	    }	
+                                	}
+                                	
+                                	if(!is_assigned[p])
+                                	{
+                                		if(map[p] == c)	
+                                	    {
+                                		    dst[p] = dst[k] - src[p];
+                            	            is_assigned[p] = true;
+                                	    }
+                                	}
+                                	
+                                	if(is_assigned[k - 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim])
+                                		neighbors_assigned[k] = true;	
+                                }
+                        		k++;
+                            }	
+                        }
+                    }
+                }
+                else if(i < ydim - 1)
+                {
+                	for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 4.");	
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		System.out.println("Got here 4.");
+                        		int m = k + xdim + 1;
+                        		int n = k + xdim;
+                        		int p = k + 1;
+                        		int q = k - xdim + 1;
+                        		int r = k - xdim;
+                        		
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 3;
+                        		int d = 5;
+                        		int e = 6;
+                        		
+                        		if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                        		
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
+                            		neighbors_assigned[k] = true;	
+                            } 
+                        	k++;
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	// Check 8 neighbors.
+                        		System.out.println("Got here 5.");
+                    	    	int m = k + xdim + 1;
+                    	    	int n = k + xdim;
+                    	    	int p = k + xdim - 1;
+                    	    	int q = k + 1;
+                    	    	int r = k - 1;
+                    	    	int s = k - xdim + 1;
+                    	    	int t = k - xdim;
+                    	    	int u = k - xdim - 1;
+                    	    	
+                    	    	int a = 0;
+                    	    	int b = 1;
+                    	    	int c = 2;
+                    	    	int d = 3;
+                    	    	int e = 4;
+                    	    	int f = 5;
+                    	    	int g = 6;
+                    	    	int h = 7;
+                    	    	
+                    	    	if(!is_assigned[m])
+                            	{
+                            		if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }	
+                            	}
+                    	    	
+                    	    	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                    	    	
+                    	    	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            	        dst[p]         = dst[k] - src[p];
+                            	        is_assigned[p] = true;
+                            	    }	
+                            	}
+                    	    
+                    	    	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            	        dst[q]         = dst[k] - src[q];
+                            	        is_assigned[q] = true;
+                            	    }	
+                            	}
+                    
+                    	    	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            	        dst[r]         = dst[k] - src[r];
+                            	        is_assigned[r] = true;
+                            	    }	
+                            	}
+                    	    
+                    	    	if(!is_assigned[s])
+                            	{
+                            		if(map[s] == f)	
+                            	    {
+                            	        dst[s]         = dst[k] - src[s];
+                            	        is_assigned[s] = true;
+                            	    }	
+                            	}
+                    	    
+                    	    	if(!is_assigned[t])
+                            	{
+                            		if(map[t] == g)	
+                            	    {
+                            	        dst[t]         = dst[k] - src[t];
+                            	        is_assigned[t] = true;
+                            	    }	
+                            	}
+                    	    	
+                    	    	
+                    	    	if(!is_assigned[u])
+                            	{
+                            		if(map[u] == h)	
+                            	    {
+                            	        dst[u]         = dst[k] - src[u];
+                            	        is_assigned[u] = true;
+                            	    }	
+                            	}
+                    	    	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r] && is_assigned[s] && is_assigned[t] && is_assigned[u])
+                            		neighbors_assigned[k] = true;	
+                            } 
+                        	k++;
+                        }
+                        else
+                        {
+                        	if(is_assigned[k])
+                        		System.out.println("Got here 6.");
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                            	// Check 5 neighbors.
+                        		System.out.println("Got here 6.");
+                        		int m = k - xdim + 1;
+                        		int n = k - xdim;
+                        		int p = k - xdim - 1;
+                        		int q = k + 1;
+                        		int r = k - 1;
+                        		
+                        		int a = 0;
+                        		int b = 1;
+                        		int c = 2;
+                        	    int d = 3;
+                        	    int e = 4;
+                        		
+                        		if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                        		
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[q] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
+                            		neighbors_assigned[k] = true;	
+                            } 
+                        	k++;
+                        }
+                    }    	
+                }
+                else
+                {
+                	for(int j = 0; j < xdim; j++)	
+                    {
+                        if(j == 0)	
+                        {
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                        		// Check 3 neighbors.
+                        		int m = k + 1;
+                        		int n = k - xdim;
+                        		int p = k - xdim + 1;
+                        		
+                        		int a = 3;
+                        		int b = 6;
+                        		int c = 7;
+                        		
+                    	    	if(!is_assigned[m])
+                            	{
+                            		if(map[m] == a)	
+                            	    {
+                            		    dst[m] = dst[k] - src[m];
+                        	            is_assigned[m] = true;
+                            	    }
+                            	}
+                    	    	
+                    	    	if(!is_assigned[n])
+                            	{
+                            	    if(map[n] == b)	
+                            	    {
+                            	        dst[n] = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }
+                            	}
+                    	    	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            	        dst[p] = dst[k] - src[p];
+                            	        is_assigned[p] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;	
+                            } 
+                        	k++;
+                        }
+                        else if(j < xdim - 1)
+                        {
+                        	if(is_assigned[k]  && !neighbors_assigned[k])
+                            {
+                        		// Check 5 neighbors.
+                        		
+                        		int m = k + 1;
+                        		int n = k - 1;
+                        		int p = k - xdim + 1;
+                        		int q = k - xdim;
+                    			int r = k - xdim - 1;
+                    			
+                    			int a = 3;
+                    			int b = 4;
+                    			int c = 5;
+                    			int d = 6;
+                    			int e = 7;
+                    	    	
+                    			if(!is_assigned[m])
+                            	{
+                            	    if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }
+                            	}
+                        		
+                            	if(!is_assigned[n])
+                            	{
+                            		if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }	
+                            	}
+                            	
+                            	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                            	
+                            	if(!is_assigned[q])
+                            	{
+                            		if(map[q] == d)	
+                            	    {
+                            		    dst[q]         = dst[k] - src[q];
+                        	            is_assigned[k - xdim] = true;
+                            	    }
+                            	}
+                            	if(!is_assigned[r])
+                            	{
+                            		if(map[r] == e)	
+                            	    {
+                            		    dst[r]         = dst[k] - src[r];
+                        	            is_assigned[r] = true;
+                            	    }
+                            	}
+                            	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
+                            		neighbors_assigned[k] = true;		
+                            } 
+                        	k++;
+                        }
+                        else
+                        {
+                        	if(is_assigned[k] && !neighbors_assigned[k])
+                            {
+                        		int m = k - 1;
+                        		int n = k - xdim;
+                    	    	int p = k - xdim - 1;
+                    	    	
+                    	    	int a = 4;
+                    	    	int b = 6;
+                    	    	int c = 7;
+                    	    	
+                    	    	if(!is_assigned[m])
+                            	{
+                            		if(map[m] == a)	
+                            	    {
+                            	        dst[m]         = dst[k] - src[m];
+                            	        is_assigned[m] = true;
+                            	    }	
+                            	}
+                    	    	
+                    	    	if(!is_assigned[n])
+                            	{
+                            	    if(map[n] == b)	
+                            	    {
+                            	        dst[n]         = dst[k] - src[n];
+                            	        is_assigned[n] = true;
+                            	    }
+                            	}
+                    	    	
+                    	    	if(!is_assigned[p])
+                            	{
+                            		if(map[p] == c)	
+                            	    {
+                            		    dst[p]         = dst[k] - src[p];
+                        	            is_assigned[p] = true;
+                            	    }
+                            	}
+                    	    	
+                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
+                            		neighbors_assigned[k] = true;
+                            } 
+                        	k++;
+                        }
+                    }	
+                }
+            }
+            
+            current_number = 0;
+            for(int i = 0; i < size; i++)
+            	if(is_assigned[i])
+            		current_number++;
+            if(current_number == size)
+            	complete = true;
+            else if(current_number == previous_number)
+            	same_result = true;
+            previous_number = current_number;
+            System.out.println("Current number is " + current_number);
+            	
+        }
+        
+        if(complete)
+        	System.out.println("Function completed.");
+        else
+        {
+        	System.out.println("Function did not complete.");
+        	System.out.println(current_number + " values out of " + size + " were assigned.");
+        }
+        return dst;
+    }
+   
+    // Get an ideal delta set and a map of which pixels are used.
+    public static ArrayList getIdealDeltasFromValues3(int src[], int xdim, int ydim, ArrayList delta_list)
+    {
+    	int size = xdim * ydim;
+    	
+    	int[]  delta    = new int[size];
+        byte[] map      = new byte[size];
+        
+        int x = xdim / 2;
+        int y = ydim / 2;
+        
+        int i = y * xdim + x;
+        
+        int [][] table = (int [][])delta_list.get(i);
+        
+        System.out.println("Delta list for center pixel:");
+        for(int k = 0; k < table.length; k++)
+        {
+        	System.out.println(table[k][0] + " " + table[k][1]);
+        }
+        System.out.println();
+        ArrayList result = new ArrayList();
+        return result;
+    }
+    
+    
+    
+    
+    public static int[] getValuesFromIdealDeltas3(int [] src, int xdim, int ydim, int init_value, int init_index, byte [] map)
     {
         int size = xdim * ydim;
         
@@ -3653,6 +4539,10 @@ public class DeltaMapper
         return dst;
     }
    
+    
+    
+    
+    
     public static int[] getChannels(int set_id)
     {
     	int [] channel = new int[3];
