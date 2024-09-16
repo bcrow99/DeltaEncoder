@@ -2799,10 +2799,173 @@ public class DeltaMapper
     	return delta_list;
     }
    
+    public static int getNeighborIndex(int x, int y, int xdim, int location)
+    {
+    	int k = y * xdim + x;
+    	
+    	if(location == 0)
+    		k = k - xdim - 1;
+    	else if(location == 1)
+    		k = k - xdim;
+    	else if(location == 2)
+    		k = k - xdim + 1;
+    	else if(location == 3)
+    		k = k - 1;
+    	else if(location == 4)
+    		k = k + 1;
+    	if(location == 5)
+    		k = k + xdim - 1;
+    	if(location == 6)
+    		k = k + xdim;
+    	if(location == 7)
+    		k = k + xdim + 1;
+    	
+    	return k;
+    }
     
+    public static int getInverseLocation(int location)
+    {
+    	int inverse_location = 0;
+    	if(location == 0)
+    		inverse_location = 7;
+    	else if(location == 1)
+    		inverse_location = 6;
+    	else if(location == 2)
+    		inverse_location = 5;
+    	else if(location == 3)
+    		inverse_location = 4;
+    	else if(location == 4)
+    		inverse_location = 3;
+    	else if(location == 5)
+    		inverse_location = 2;
+    	else if(location == 6)
+    		inverse_location = 1;
+    	else if(location == 7)
+    		inverse_location = 0;
+    	
+    	return inverse_location;
+    }
     
-    
-    
+    // Get an ideal delta set and a map of which pixels are used.
+    public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim, ArrayList delta_list)
+    {
+    	int size = xdim * ydim;
+    	
+    	int[]     delta       = new int[size];
+        byte[]    map         = new byte[size];
+        boolean[] is_assigned = new boolean[size];
+       
+        int x = xdim / 2;
+        int y = ydim / 2;
+        int i = y * xdim + x;
+        
+        int init_value = src[i];
+        int [][] table   = (int [][])delta_list.get(i);
+        
+        // Used only for error checking.
+        delta[i] = 0;
+        
+        map[i]   = (byte)table[0][1];
+        is_assigned[i] = true;
+        
+        int current_delta = table[0][0];
+        
+        int j = getNeighborIndex(x, y, xdim, table[0][1]);
+        int k = getInverseLocation(table[0][1]);
+        
+        delta[j] = -table[0][0];
+        map[j]   = (byte)k;
+        is_assigned[j] = true;
+        
+        i = j;
+        table = (int[][])delta_list.get(i);
+        x = i % xdim;
+        y = i / xdim;
+        
+        
+        //System.out.println("Neighbor table for pixel 2:");
+		outer: for(int m = 0; m < table.length; m++)
+		{
+			int n = getNeighborIndex(x, y, xdim, table[m][1]); 
+			if(!is_assigned[n])
+			{
+				//System.out.println("Unassigned neighbor.");
+				//System.out.println(table[m][0] + " " + table[m][1]);
+				
+				
+				int _x = n % xdim;
+				int _y = n / xdim;
+				j = getNeighborIndex(_x, _y, xdim, table[m][1]);
+				k = getInverseLocation(table[m][1]);
+				delta[j] = -table[m][0];
+		        map[j]   = (byte)k;
+		        is_assigned[j] = true;
+				break outer;
+			}
+			else
+			{
+				//System.out.println("Assigned neighbor.");	
+			    //System.out.println(table[m][0] + " " + table[m][1]);
+			}
+		}
+		
+		//System.out.println();
+        
+		int p = 3;
+		boolean neighbor_unassigned = true;
+		
+		
+		while(p < size && neighbor_unassigned == true)
+		{
+		    i = j;
+		    table = (int[][])delta_list.get(i);
+	        x = i % xdim;
+	        y = i / xdim;
+	        
+	        //System.out.println("Neighbor table for pixel 2:");
+	        boolean value_assigned = false;
+			outer: for(int m = 0; m < table.length; m++)
+			{
+				int n = getNeighborIndex(x, y, xdim, table[m][1]); 
+				if(!is_assigned[n])
+				{
+					//System.out.println("Unassigned neighbor.");
+					//System.out.println(table[m][0] + " " + table[m][1]);
+					
+					
+					int _x = n % xdim;
+					int _y = n / xdim;
+					j = getNeighborIndex(_x, _y, xdim, table[m][1]);
+					k = getInverseLocation(table[m][1]);
+					delta[j] = -table[m][0];
+			        map[j]   = (byte)k;
+			        is_assigned[j] = true;
+			        value_assigned = true;
+					break outer;
+				}
+				else
+				{
+					//System.out.println("Assigned neighbor.");	
+				    //System.out.println(table[m][0] + " " + table[m][1]);
+				}
+			}
+			if(value_assigned == false)
+				neighbor_unassigned = false;
+			p++;
+			//System.out.println();
+		}
+		
+		System.out.println("Number of pixels assigned is " + p);
+		System.out.println("Number of pixels is " + size);
+		
+       
+        ArrayList result = new ArrayList();
+        result.add(init_value);
+        result.add(delta);
+        result.add(map);
+        
+        return result;
+    }
     
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
@@ -3208,680 +3371,149 @@ public class DeltaMapper
         return result;
     }
     
-    public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, int init_index, byte [] map)
+    
+    
+    
+    public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
         int size = xdim * ydim;
         
         int []     dst                = new int[size]; 
-        boolean [] is_assigned        = new boolean[size];
-        boolean [] neighbors_assigned = new boolean[size];
-        boolean    complete           = false;
-        boolean    same_result        = false;
+     
+        int x = xdim / 2;
+        int y = ydim / 2;
         
-        dst[init_index]         = init_value; 
-        is_assigned[init_index] = true;  
-        int current_number      = 1;
-        int previous_number     = 1;
+        int i = y * xdim + x;
         
-        for(int i = 0; i < size; i++)
+        if(src[i] != 0)
+        	System.out.println("Wrong code.");
+        
+        dst[i]         = init_value; 
+        int next_pixel = map[i];
+        
+        int p = 1;
+        int current_value = init_value;
+        while(p < size)
         {
-        	if(is_assigned[i] == true)
-        	    System.out.println("Value " + i + " has been assigned.");
-        }
-        
-        
-        int k = 0;
-        for(int i = 0; i < ydim; i++)
-        {
-        	for(int j = 0; j < xdim; j++)
+        	int j = 0;
+        	if(next_pixel == 0)
+        	    j = i - xdim - 1;
+        	else if(next_pixel == 1)
+        		j = i - xdim;
+        	else if(next_pixel == 2)
+        		j = i - xdim + 1;
+        	else if(next_pixel == 3)
+        		j = i - 1;
+        	else if(next_pixel == 4)
+        		j = i + 1;
+        	else if(next_pixel == 5)
+        		j = i + xdim - 1;
+        	else if(next_pixel == 6)
+        		j = i + xdim;
+        	else if(next_pixel == 1)
+        		j = i + xdim + 1;
+        	try
         	{
-        		if(is_assigned[k])
-        			System.out.println("Value " + k + " has been assigned.");	
-        		k++;
-        	}			
+        	    dst[j] = current_value + src[j];
+        	    current_value = dst[j];
+        	    next_pixel = map[j];
+        	}
+        	catch(Exception e)
+        	{
+        	    System.out.println("i = " + i + ", j = " + j + ", p = " + p);
+        	    System.exit(1);
+        	}
+        	
+        	i = j;
+        	p++;
         }
         
-        while(!complete && !same_result)
-        {
-        	System.out.println("Got here 0.");
-        	k = 0;
-            for(int i = 0; i < ydim; i++)
-            {
-                if(i == 0) 
-                {
-                    for(int j = 0; j < xdim; j++)	
-                    {
-                        if(j == 0)	
-                        {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 1.");		
-                            if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                            	// Check 3 neighbors.
-                            	int m = k + xdim + 1;
-                            	int n = k + xdim;
-                            	int p = k + 1;
-                            	
-                            	int a = 0;
-                            	int b = 1;
-                            	int c = 3;
-                            	
-                            	if(!is_assigned[m])
-                            	{
-                            	    if(map[m] == a)	
-                            	    {
-                            	        dst[m] = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n] = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p] = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
-                            		neighbors_assigned[k] = true;	
-                            }
-                            k++;
-                        }
-                        else if(j < xdim - 1)
-                        {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 2.");	
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                            	// Check 5 neighbors.
-                        		
-                        		int m = k + xdim + 1;
-                        		int n = k + xdim;
-                        		int p = k + xdim - 1;
-                        		int q = k + 1;
-                        		int r = k - 1;
-                        		
-                        		int a = 0;
-                        		int b = 1;
-                        		int c = 2;
-                        		int d = 3;
-                        		int e = 4;
-                        		
-                    	    	if(!is_assigned[m])
-                            	{
-                            	    if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }
-                            	}
-                    	    	
-                            	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p]         = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[q])
-                            	{
-                            		if(map[q] == d)	
-                            	    {
-                            		    dst[q]         = dst[k] - src[q];
-                        	            is_assigned[q] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[r])
-                            	{
-                            		if(map[r] == e)	
-                            	    {
-                            		    dst[r]         = dst[k] - src[r];
-                        	            is_assigned[r] = true;
-                            	    }
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
-                            		neighbors_assigned[k] = true;	
-                            }   
-                        	k++;
-                        }
-                        else
-                        {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 3.");	
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                        		if(is_assigned[k] && !neighbors_assigned[k])
-                                {
-                        			System.out.println("Got here 3.");
-                        			// Check 3 neighbors.
-                        			int m = k + xdim;
-                        			int n = k + xdim - 1;
-                        			int p = k - 1;
-                        			
-                        			int a = 1;
-                        			int b = 2;
-                        			int c = 4;
-                        			
-                                	if(!is_assigned[m])
-                                	{
-                                	    if(map[m] == a)	
-                                	    {
-                                	        dst[m]         = dst[k] - src[m];
-                                	        is_assigned[m] = true;
-                                	    }
-                                	}
-                                	
-                                	if(!is_assigned[n])
-                                	{
-                                		if(map[n] == b)	
-                                	    {
-                                	        dst[n] = dst[k] - src[n];
-                                	        is_assigned[n] = true;
-                                	    }	
-                                	}
-                                	
-                                	if(!is_assigned[p])
-                                	{
-                                		if(map[p] == c)	
-                                	    {
-                                		    dst[p] = dst[k] - src[p];
-                            	            is_assigned[p] = true;
-                                	    }
-                                	}
-                                	
-                                	if(is_assigned[k - 1] && is_assigned[k + xdim - 1] && is_assigned[k + xdim])
-                                		neighbors_assigned[k] = true;	
-                                }
-                        		k++;
-                            }	
-                        }
-                    }
-                }
-                else if(i < ydim - 1)
-                {
-                	for(int j = 0; j < xdim; j++)	
-                    {
-                        if(j == 0)	
-                        {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 4.");	
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                            	// Check 5 neighbors.
-                        		System.out.println("Got here 4.");
-                        		int m = k + xdim + 1;
-                        		int n = k + xdim;
-                        		int p = k + 1;
-                        		int q = k - xdim + 1;
-                        		int r = k - xdim;
-                        		
-                        		int a = 0;
-                        		int b = 1;
-                        		int c = 3;
-                        		int d = 5;
-                        		int e = 6;
-                        		
-                        		if(!is_assigned[m])
-                            	{
-                            	    if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }
-                            	}
-                        		
-                            	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p]         = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[q])
-                            	{
-                            		if(map[q] == d)	
-                            	    {
-                            		    dst[q]         = dst[k] - src[q];
-                        	            is_assigned[q] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[r])
-                            	{
-                            		if(map[r] == e)	
-                            	    {
-                            		    dst[r]         = dst[k] - src[r];
-                        	            is_assigned[r] = true;
-                            	    }
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
-                            		neighbors_assigned[k] = true;	
-                            } 
-                        	k++;
-                        }
-                        else if(j < xdim - 1)
-                        {
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                            	// Check 8 neighbors.
-                        		System.out.println("Got here 5.");
-                    	    	int m = k + xdim + 1;
-                    	    	int n = k + xdim;
-                    	    	int p = k + xdim - 1;
-                    	    	int q = k + 1;
-                    	    	int r = k - 1;
-                    	    	int s = k - xdim + 1;
-                    	    	int t = k - xdim;
-                    	    	int u = k - xdim - 1;
-                    	    	
-                    	    	int a = 0;
-                    	    	int b = 1;
-                    	    	int c = 2;
-                    	    	int d = 3;
-                    	    	int e = 4;
-                    	    	int f = 5;
-                    	    	int g = 6;
-                    	    	int h = 7;
-                    	    	
-                    	    	if(!is_assigned[m])
-                            	{
-                            		if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }	
-                            	}
-                    	    	
-                    	    	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                    	    	
-                    	    	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            	        dst[p]         = dst[k] - src[p];
-                            	        is_assigned[p] = true;
-                            	    }	
-                            	}
-                    	    
-                    	    	if(!is_assigned[q])
-                            	{
-                            		if(map[q] == d)	
-                            	    {
-                            	        dst[q]         = dst[k] - src[q];
-                            	        is_assigned[q] = true;
-                            	    }	
-                            	}
-                    
-                    	    	if(!is_assigned[r])
-                            	{
-                            		if(map[r] == e)	
-                            	    {
-                            	        dst[r]         = dst[k] - src[r];
-                            	        is_assigned[r] = true;
-                            	    }	
-                            	}
-                    	    
-                    	    	if(!is_assigned[s])
-                            	{
-                            		if(map[s] == f)	
-                            	    {
-                            	        dst[s]         = dst[k] - src[s];
-                            	        is_assigned[s] = true;
-                            	    }	
-                            	}
-                    	    
-                    	    	if(!is_assigned[t])
-                            	{
-                            		if(map[t] == g)	
-                            	    {
-                            	        dst[t]         = dst[k] - src[t];
-                            	        is_assigned[t] = true;
-                            	    }	
-                            	}
-                    	    	
-                    	    	
-                    	    	if(!is_assigned[u])
-                            	{
-                            		if(map[u] == h)	
-                            	    {
-                            	        dst[u]         = dst[k] - src[u];
-                            	        is_assigned[u] = true;
-                            	    }	
-                            	}
-                    	    	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r] && is_assigned[s] && is_assigned[t] && is_assigned[u])
-                            		neighbors_assigned[k] = true;	
-                            } 
-                        	k++;
-                        }
-                        else
-                        {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 6.");
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                            	// Check 5 neighbors.
-                        		System.out.println("Got here 6.");
-                        		int m = k - xdim + 1;
-                        		int n = k - xdim;
-                        		int p = k - xdim - 1;
-                        		int q = k + 1;
-                        		int r = k - 1;
-                        		
-                        		int a = 0;
-                        		int b = 1;
-                        		int c = 2;
-                        	    int d = 3;
-                        	    int e = 4;
-                        		
-                        		if(!is_assigned[m])
-                            	{
-                            	    if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }
-                            	}
-                        		
-                            	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p]         = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[q])
-                            	{
-                            		if(map[q] == d)	
-                            	    {
-                            		    dst[q]         = dst[k] - src[q];
-                        	            is_assigned[q] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[r])
-                            	{
-                            		if(map[r] == e)	
-                            	    {
-                            		    dst[r]         = dst[k] - src[r];
-                        	            is_assigned[r] = true;
-                            	    }
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
-                            		neighbors_assigned[k] = true;	
-                            } 
-                        	k++;
-                        }
-                    }    	
-                }
-                else
-                {
-                	for(int j = 0; j < xdim; j++)	
-                    {
-                        if(j == 0)	
-                        {
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                        		// Check 3 neighbors.
-                        		int m = k + 1;
-                        		int n = k - xdim;
-                        		int p = k - xdim + 1;
-                        		
-                        		int a = 3;
-                        		int b = 6;
-                        		int c = 7;
-                        		
-                    	    	if(!is_assigned[m])
-                            	{
-                            		if(map[m] == a)	
-                            	    {
-                            		    dst[m] = dst[k] - src[m];
-                        	            is_assigned[m] = true;
-                            	    }
-                            	}
-                    	    	
-                    	    	if(!is_assigned[n])
-                            	{
-                            	    if(map[n] == b)	
-                            	    {
-                            	        dst[n] = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }
-                            	}
-                    	    	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            	        dst[p] = dst[k] - src[p];
-                            	        is_assigned[p] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
-                            		neighbors_assigned[k] = true;	
-                            } 
-                        	k++;
-                        }
-                        else if(j < xdim - 1)
-                        {
-                        	if(is_assigned[k]  && !neighbors_assigned[k])
-                            {
-                        		// Check 5 neighbors.
-                        		
-                        		int m = k + 1;
-                        		int n = k - 1;
-                        		int p = k - xdim + 1;
-                        		int q = k - xdim;
-                    			int r = k - xdim - 1;
-                    			
-                    			int a = 3;
-                    			int b = 4;
-                    			int c = 5;
-                    			int d = 6;
-                    			int e = 7;
-                    	    	
-                    			if(!is_assigned[m])
-                            	{
-                            	    if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }
-                            	}
-                        		
-                            	if(!is_assigned[n])
-                            	{
-                            		if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }	
-                            	}
-                            	
-                            	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p]         = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                            	
-                            	if(!is_assigned[q])
-                            	{
-                            		if(map[q] == d)	
-                            	    {
-                            		    dst[q]         = dst[k] - src[q];
-                        	            is_assigned[k - xdim] = true;
-                            	    }
-                            	}
-                            	if(!is_assigned[r])
-                            	{
-                            		if(map[r] == e)	
-                            	    {
-                            		    dst[r]         = dst[k] - src[r];
-                        	            is_assigned[r] = true;
-                            	    }
-                            	}
-                            	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p] && is_assigned[q] && is_assigned[r])
-                            		neighbors_assigned[k] = true;		
-                            } 
-                        	k++;
-                        }
-                        else
-                        {
-                        	if(is_assigned[k] && !neighbors_assigned[k])
-                            {
-                        		int m = k - 1;
-                        		int n = k - xdim;
-                    	    	int p = k - xdim - 1;
-                    	    	
-                    	    	int a = 4;
-                    	    	int b = 6;
-                    	    	int c = 7;
-                    	    	
-                    	    	if(!is_assigned[m])
-                            	{
-                            		if(map[m] == a)	
-                            	    {
-                            	        dst[m]         = dst[k] - src[m];
-                            	        is_assigned[m] = true;
-                            	    }	
-                            	}
-                    	    	
-                    	    	if(!is_assigned[n])
-                            	{
-                            	    if(map[n] == b)	
-                            	    {
-                            	        dst[n]         = dst[k] - src[n];
-                            	        is_assigned[n] = true;
-                            	    }
-                            	}
-                    	    	
-                    	    	if(!is_assigned[p])
-                            	{
-                            		if(map[p] == c)	
-                            	    {
-                            		    dst[p]         = dst[k] - src[p];
-                        	            is_assigned[p] = true;
-                            	    }
-                            	}
-                    	    	
-                            	if(is_assigned[m] && is_assigned[n] && is_assigned[p])
-                            		neighbors_assigned[k] = true;
-                            } 
-                        	k++;
-                        }
-                    }	
-                }
-            }
-            
-            current_number = 0;
-            for(int i = 0; i < size; i++)
-            	if(is_assigned[i])
-            		current_number++;
-            if(current_number == size)
-            	complete = true;
-            else if(current_number == previous_number)
-            	same_result = true;
-            previous_number = current_number;
-            System.out.println("Current number is " + current_number);
-            	
-        }
-        
-        if(complete)
-        	System.out.println("Function completed.");
-        else
-        {
-        	System.out.println("Function did not complete.");
-        	System.out.println(current_number + " values out of " + size + " were assigned.");
-        }
         return dst;
     }
+
    
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues3(int src[], int xdim, int ydim, ArrayList delta_list)
     {
     	int size = xdim * ydim;
     	
-    	int[]  delta    = new int[size];
-        byte[] map      = new byte[size];
+    	int[]     delta       = new int[size];
+        byte[]    map         = new byte[size];
+        boolean[] is_assigned = new boolean[size];
         
         int x = xdim / 2;
         int y = ydim / 2;
-        
         int i = y * xdim + x;
+        
+        int initial_value = src[i];
+        delta[i]          = 7;
+        map[i]            = 0;
+        is_assigned[i]    = true;
+        
         
         int [][] table = (int [][])delta_list.get(i);
         
-        System.out.println("Delta list for center pixel:");
-        for(int k = 0; k < table.length; k++)
+        int current_delta = table[0][0];
+        int location      = table[0][1];
+        
+        System.out.println("Smallest delta for center pixel is " + current_delta + " with pixel " + location);
+        
+        int j = getNeighborIndex(x, y, xdim, location);
+        int k = getInverseLocation(location);
+        
+        map[j] = (byte)k;
+        delta[j] = -current_delta;
+        is_assigned[j] = true;
+        int number_of_pixels = 2;
+        boolean unassigned_neighbors = true;
+       
+        while(unassigned_neighbors && number_of_pixels < size)
         {
-        	System.out.println(table[k][0] + " " + table[k][1]);
+        	i = j;
+        	table = (int [][])delta_list.get(i);
+        	
+        	boolean same_location = true;
+        	k = 0;
+        	while(same_location)
+        	{
+        		y = i / xdim;
+        		x = i % xdim;
+        		if(k < table.length)
+        		{
+        			current_delta = table[k][0];
+        	        int new_location  = table[k][1];
+        	        if(new_location == map[j])
+            	    	k++;
+        	        else
+        	        {
+        	            int m = getNeighborIndex(x, y, xdim, new_location);
+        	            if(is_assigned[m])
+        	        	    k++;
+        	            else
+        	            {
+        	                int inverse_location = getInverseLocation(new_location);
+        	                map[m]               = (byte)inverse_location;
+        	                delta[m]             = -current_delta;
+        	                same_location        = false;
+        	                j                    = m;	
+        	                number_of_pixels++;
+        	                System.out.println("Assigned delta " + m);
+        	                System.out.println("Number of pixels is " + number_of_pixels);
+        	                System.out.println();
+        	            }
+        	        }
+        		}
+        	    else
+        	    {
+        	    	same_location = false;
+        	    	unassigned_neighbors = false;
+        	    }
+        	}
         }
-        System.out.println();
+        
         ArrayList result = new ArrayList();
         return result;
     }
-    
-    
-    
     
     public static int[] getValuesFromIdealDeltas3(int [] src, int xdim, int ydim, int init_value, int init_index, byte [] map)
     {
