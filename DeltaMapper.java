@@ -2799,9 +2799,45 @@ public class DeltaMapper
     	return delta_list;
     }
    
+    public static ArrayList getNeighbors(int [] src, int x, int y, int xdim, int ydim)
+	{
+		ArrayList neighbors = new ArrayList();
+		
+		if(y > 0)
+		{
+			if(x > 1)
+			    neighbors.add(src[(y - 1) * xdim + x - 1]);
+			neighbors.add(src[(y - 1) * xdim + x]);
+			if(x < xdim - 1)
+			    neighbors.add(src[(y - 1) * xdim + x + 1]);
+		}
+		
+		if(x > 0)
+		{
+			neighbors.add(src[y * xdim + x - 1]);
+		}
+		if(x < xdim - 1)
+		{
+			neighbors.add(src[y * xdim + x + 1]);	
+		}
+		
+		if(y < ydim - 1)
+		{ 
+			if(x > 1)
+			    neighbors.add(src[(y + 1) * xdim + x - 1]);	
+			neighbors.add(src[(y + 1) * xdim + x]);
+			if(x < xdim - 1)
+			    neighbors.add(src[(y + 1) * xdim + x + 1]);
+		}
+		
+		return neighbors;
+	}
+    
     public static int getNeighborIndex(int x, int y, int xdim, int location)
     {
     	int k = y * xdim + x;
+    	//System.out.println("Index is " + k);
+    	//System.out.println("Location is " + location);
     	
     	if(location == 0)
     		k = k - xdim - 1;
@@ -2819,6 +2855,7 @@ public class DeltaMapper
     		k = k + xdim;
     	if(location == 7)
     		k = k + xdim + 1;
+    	//System.out.println("Neighbor index is " + k);
     	
     	return k;
     }
@@ -2854,115 +2891,184 @@ public class DeltaMapper
     	int[]     delta       = new int[size];
         byte[]    map         = new byte[size];
         boolean[] is_assigned = new boolean[size];
+        int[]     assignments = new int[size];
        
         int x = xdim / 2;
         int y = ydim / 2;
         int i = y * xdim + x;
         
+        
+        int p = 0;
+        
+        
         int init_value = src[i];
         int [][] table   = (int [][])delta_list.get(i);
         
-        // Used only for error checking.
-        delta[i] = 0;
-        
+        // Used only for error checking delta type.
+        delta[i] = 0; 
+       
+        int current_delta = table[0][0];
         map[i]   = (byte)table[0][1];
         is_assigned[i] = true;
+        assignments[i]++;
+        p++;
+       
         
-        int current_delta = table[0][0];
-        
+        // We know this pixel is unassigned.
         int j = getNeighborIndex(x, y, xdim, table[0][1]);
-        int k = getInverseLocation(table[0][1]);
-        
+        int k = getInverseLocation(table[0][1]); 
         delta[j] = -table[0][0];
         map[j]   = (byte)k;
         is_assigned[j] = true;
-        
-        i = j;
-        table = (int[][])delta_list.get(i);
-        x = i % xdim;
-        y = i / xdim;
+        assignments[j]++;
+        p++;
         
         
-        //System.out.println("Neighbor table for pixel 2:");
-		outer: for(int m = 0; m < table.length; m++)
-		{
-			int n = getNeighborIndex(x, y, xdim, table[m][1]); 
-			if(!is_assigned[n])
-			{
-				//System.out.println("Unassigned neighbor.");
-				//System.out.println(table[m][0] + " " + table[m][1]);
+        // Now we might be rerouted to an already assigned pixel.
+        boolean neighbor_unassigned = true;
+        while(p < size && neighbor_unassigned)
+        {
+            i = j;
+            x = i % xdim;
+            y = i / xdim;
+            table = (int[][])delta_list.get(i); 
+            outer: for(int m = 0; m < table.length; m++)
+		    {
+			    j = getNeighborIndex(x, y, xdim, table[m][1]); 
+			    if(!is_assigned[j])
+			    {
+				    //System.out.println("Unassigned neighbor at location " + table[m][1]);
 				
-				
-				int _x = n % xdim;
-				int _y = n / xdim;
-				j = getNeighborIndex(_x, _y, xdim, table[m][1]);
-				k = getInverseLocation(table[m][1]);
-				delta[j] = -table[m][0];
-		        map[j]   = (byte)k;
-		        is_assigned[j] = true;
-				break outer;
-			}
-			else
-			{
-				//System.out.println("Assigned neighbor.");	
-			    //System.out.println(table[m][0] + " " + table[m][1]);
-			}
-		}
-		
-		//System.out.println();
+				    k = getInverseLocation(table[m][1]);
+				    delta[j] = -table[m][0];
+		            map[j]   = (byte)k;
+		            is_assigned[j] = true;
+		            assignments[j]++;
+		            //System.out.println("Assigned pixel " + (n + 2));
+		            //System.out.println("Index is " + j);
+		            //System.out.println("Set location of value to " + map[j]);
+		            //System.out.println();
+		            p++;
+				    break outer;
+			    }
+			    else
+			    {
+				    //System.out.println("Assigned neighbor.");	
+			        //System.out.println(table[m][0] + " " + table[m][1]);
+			    	if(m == table.length - 1)
+			    		neighbor_unassigned = false;	
+			    }
+		    }
+        }
         
-		int p = 3;
-		boolean neighbor_unassigned = true;
+        //System.out.println("Number of assignments was " + p);
 		
-		
-		while(p < size && neighbor_unassigned == true)
-		{
-		    i = j;
-		    table = (int[][])delta_list.get(i);
+        int n = 0;
+        for(i = 0; i < size; i++)
+        	if(assignments[i] != 0)
+        		n++;
+        
+        System.out.println("Number of assigned deltas after one pass is " + n);
+        
+        n = 0;
+        for(i = 0; i < size; i++)
+	    {
 	        x = i % xdim;
 	        y = i / xdim;
 	        
-	        //System.out.println("Neighbor table for pixel 2:");
-	        boolean value_assigned = false;
-			outer: for(int m = 0; m < table.length; m++)
-			{
-				int n = getNeighborIndex(x, y, xdim, table[m][1]); 
-				if(!is_assigned[n])
-				{
-					//System.out.println("Unassigned neighbor.");
-					//System.out.println(table[m][0] + " " + table[m][1]);
-					
-					
-					int _x = n % xdim;
-					int _y = n / xdim;
-					j = getNeighborIndex(_x, _y, xdim, table[m][1]);
-					k = getInverseLocation(table[m][1]);
-					delta[j] = -table[m][0];
-			        map[j]   = (byte)k;
-			        is_assigned[j] = true;
-			        value_assigned = true;
-					break outer;
-				}
-				else
-				{
-					//System.out.println("Assigned neighbor.");	
-				    //System.out.println(table[m][0] + " " + table[m][1]);
-				}
-			}
-			if(value_assigned == false)
-				neighbor_unassigned = false;
-			p++;
-			//System.out.println();
+	    
+	        ArrayList neighbors = new ArrayList();
+	    
+	        if(assignments[i] == 0)
+	        {
+	            neighbors = getNeighbors(assignments, x, y, xdim, ydim);
+	            for(j = 0; j < neighbors.size(); j++)
+	            {
+	        	    k = (int)neighbors.get(j);
+	        	    if(k != 0)
+	        	    {
+	        		    assignments[i]++;
+	        	    }
+	            }
+	            if(assignments[i] != 0)
+		        	n++;
+	        }
+	        else
+	        	n++;
+	    }
+        
+        System.out.println("Number of assigned deltas after one dilation is " + n);
+        System.out.println();
+       
+        /*
+		boolean complete = false;
+		boolean same     = false;
+		
+		
+		int n = 0;
+		while(!complete && !same)
+		{
+		    for(i = 0; i < size; i++)
+		    {
+		        x = i % xdim;
+		        y = i / xdim;
+		        n = 0;
+		    
+		        ArrayList neighbors = new ArrayList();
+		    
+		        if(assignments[i] == 0)
+		        {
+		            neighbors = getNeighbors(assignments, x, y, xdim, ydim);
+		            for(j = 0; j < neighbors.size(); j++)
+		            {
+		        	    k = (int)neighbors.get(j);
+		        	    if(k != 0)
+		        		    assignments[i]++;
+		            }
+		            if(assignments[i] != 0)
+			        	n++;
+		        }
+		        else
+		        	n++;
+		    }
+		    if(n == size)
+		        complete = true;
+		    else if(n == p)
+		        same = true;
+		    else
+		    	p = n;
+		}
+        
+		if(!complete)
+			System.out.println("Function did not complete.");
+		
+		if(same)
+			System.out.println("n and p were equal");
+		else
+			System.out.println("n and p were not equal");
+		
+		int number_unassigned = 0;
+		for(i = 0; i < size; i++)
+		{
+			if(assignments[i] == 0)
+				number_unassigned++;	
 		}
 		
-		System.out.println("Number of pixels assigned is " + p);
+		System.out.println("Number of pixels assigned is " + n);
+		System.out.println("Number of unassigned pixels was " + number_unassigned);
 		System.out.println("Number of pixels is " + size);
+		System.out.println();
+		*/
 		
-       
+		
+		
         ArrayList result = new ArrayList();
         result.add(init_value);
         result.add(delta);
         result.add(map);
+        
+        
+        
         
         return result;
     }
@@ -3981,12 +4087,10 @@ public class DeltaMapper
                     {
                         if(j == 0)	
                         {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 7.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		// Check 3 neighbors.
-                        		System.out.println("Got here 7.");
+                        		
                         		int m = k + 1;
                         		int n = k - xdim;
                         		int p = k - xdim + 1;
@@ -4098,12 +4202,10 @@ public class DeltaMapper
                         }
                         else
                         {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 9.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		// Check 3 neighbors.
-                        		System.out.println("Got here 9.");
+                        		
                         		int m = k - 1;
                         		int n = k - xdim;
                     	    	int p = k - xdim - 1;
@@ -4171,10 +4273,6 @@ public class DeltaMapper
         return dst;
     }
    
-    
-    
-    
-    
     public static int[] getChannels(int set_id)
     {
     	int [] channel = new int[3];
