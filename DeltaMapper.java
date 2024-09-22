@@ -3099,6 +3099,7 @@ public class DeltaMapper
         seed_delta.add(delta[j]);
         seed_map.add(map[j]);
         is_assigned[j] = true;
+        is_seed[j]     = true;
         assignments[j]++;
         n++;
         
@@ -3127,6 +3128,7 @@ public class DeltaMapper
 		            seed_delta.add(delta[j]);
 		            seed_map.add(map[j]);
 		            is_assigned[j] = true;
+		            is_seed[j]     = true;
 		            assignments[j]++;
 		            n++;
 				    break outer;
@@ -3176,8 +3178,6 @@ public class DeltaMapper
         	                {
         	                    delta[i]       = table[m][0];
         	                    map[i]         = (byte)table[m][1];
-        	                    dilated_delta.add(delta[i]);
-        	                    dilated_map.add(map[i]);
         	                    is_assigned[i] = true;
         	                    assignments[i]++;
     	                    }
@@ -3201,6 +3201,81 @@ public class DeltaMapper
         }
         System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
         System.out.println();
+        
+        for(i = 0; i < size; i++)
+        {
+        	if(!is_seed[i])
+        	{
+        		dilated_delta.add(delta[i]);
+                dilated_map.add(map[i]);	
+        	}
+        }
+        
+        int  [] delta2 = new int[size];
+        int  [] value2 = new int[size];
+        byte [] map2    = new byte[size];
+        
+        
+        for(i = 0; i < size; i++)
+        {
+        	is_assigned[i] = false;
+        }
+        
+        x = xdim / 2;
+        y = ydim / 2;
+        i = y * xdim + x;
+        
+        
+        delta2[i]      = 0;
+        value2[i]      = init_value;
+        is_assigned[i] = true;
+        byte location  = (byte)seed_map.get(0);
+        map2[i]        = location;
+        j              =  getNeighborIndex(x, y, xdim, (int)location);
+        
+        int current_value = init_value;
+        for(k = 1; k < seed_delta.size(); k++)
+        {
+        	int _delta    = (int)seed_delta.get(k);
+        	delta2[j]     = _delta;
+        	value2[j]     = current_value + _delta;
+        	is_assigned[j] = true;
+        	map2[j]       = location;
+        	current_value = value2[j];
+        	
+        	i        = j;
+        	location = (byte)seed_map.get(k);
+        	x        = i % xdim;
+        	y        = i / xdim;
+        	j        =  getNeighborIndex(x, y, xdim, (int)location);
+        }
+        
+        for(k = 0; k < dilated_delta.size(); k++)
+        {
+        	i = 0;
+        	
+        	while(is_assigned[i])
+        		i++;
+        	int _delta = (int)dilated_delta.get(k);
+        	location   = (byte)dilated_map.get(k);
+        	delta2[i]  = _delta;
+        	map2[i]    = location;
+        	is_assigned[i] = true;
+        }
+        
+        boolean same = true;
+        for(i = 0; i < size; i++)
+        {
+        	if(delta[i] != delta2[i])
+        	{
+        		System.out.println("Deltas are different at index " + i);
+        		same = false;
+        		break;
+        	}
+        }
+        
+        if(same)
+        	System.out.println("Delta values constructed from lists are the same.");
         
         
 		
