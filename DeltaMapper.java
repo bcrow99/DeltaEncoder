@@ -3080,9 +3080,17 @@ public class DeltaMapper
         
         // Used only for error checking delta type.
         delta[i] = 0; 
-        seed_delta.add(delta[i]);
+        
+        
+        
+        
+        
+        
+        //seed_delta.add(delta[i]);
+        
+        System.out.println("Init value is " + init_value);
+        
        
-        //int current_delta = table[0][0];
         map[i]   = (byte)table[0][1];
         seed_map.add(map[i]);
         is_assigned[i] = true;
@@ -3092,17 +3100,174 @@ public class DeltaMapper
        
         
         // We know this pixel is unassigned.
-        int j = getNeighborIndex(x, y, xdim, table[0][1]);
-        int k = getInverseLocation(table[0][1]); 
-        delta[j] = -table[0][0];
-        map[j]   = (byte)k;
-        seed_delta.add(delta[j]);
-        seed_map.add(map[j]);
-        is_assigned[j] = true;
-        is_seed[j]     = true;
-        assignments[j]++;
+        i = getNeighborIndex(x, y, xdim, table[0][1]);
+        
+        delta[i] = -table[0][0];
+        seed_delta.add(delta[i]);
+        is_assigned[i] = true;
+        is_seed[i]     = true;
+        assignments[i]++;
         n++;
         
+        
+        int current_value = init_value + delta[i];
+        
+        System.out.println("First reconstructed value is " + current_value);
+        System.out.println("Src value is " + src[i]);
+        
+        // Tricky part here is we're getting delta and map values
+        // from different tables.  Also, the last location in the seed map
+        // does not get used.
+        table = (int[][])delta_list.get(i);
+        
+        // Now we need to start checking if the optimal delta corresponds to an already assigned pixel,
+        // in this special case the initial pixel.
+        
+        x = i % xdim;
+        y = i / xdim;
+        for(int j = 0; j < table.length; j++)
+        {
+            int k = getNeighborIndex(x, y, xdim, table[j][1]); 
+            if(is_assigned[k])
+            {
+            	System.out.println("Neighbor " + k + " is assigned");
+                System.out.println("Src value is " + src[k]);
+            }
+            else
+            {
+            	System.out.println("Neighbor " + k + " is unassigned");
+            	map[i] = (byte)table[j][1];
+            	seed_map.add(map[i]);
+            	delta[k] = -table[j][0];
+            	seed_delta.add(delta[k]);
+            	is_assigned[k] = true;
+                is_seed[k]     = true;
+                assignments[k]++;
+                n++;
+            	
+            	current_value += delta[k];
+            	System.out.println("Second reconstructed value is " + current_value);
+                System.out.println("Src value is " + src[k]);
+            	break;
+            }
+        }
+       
+        
+        // Depending on the dimensions of the image,
+        // we can iterate like this at least 8 times without
+        // running out of unassigned neighbors.
+        
+        i = getNeighborIndex(x, y, xdim, map[i]);
+        x = i % xdim;
+        y = i / xdim;
+        table = (int[][])delta_list.get(i);
+        for(int j = 0; j < table.length; j++)
+        {
+        	int k = getNeighborIndex(x, y, xdim, table[j][1]); 
+            if(!is_assigned[k])
+            {
+            	System.out.println("Neighbor " + k + " is unassigned");
+            	map[i]   = (byte)table[j][1];
+            	seed_map.add(map[i]);
+            	delta[k] = -table[j][0];
+            	seed_delta.add(delta[k]);
+            	is_assigned[k] = true;
+                is_seed[k]     = true;
+                assignments[k]++;
+                n++;
+            	
+            	current_value += delta[k];
+            	System.out.println("Third reconstructed value is " + current_value);
+                System.out.println("Src value is " + src[k]);
+                
+            	break;
+            }	
+        }
+        
+        
+        boolean neighbor_unassigned = true;
+        boolean first_index         = true;
+        while(n < size && neighbor_unassigned)
+        {
+        	i = getNeighborIndex(x, y, xdim, map[i]);
+            x = i % xdim;
+            y = i / xdim;
+            table = (int[][])delta_list.get(i);
+            int j = 0;
+            for(j = 0; j < table.length; j++)
+            {
+            	int k = getNeighborIndex(x, y, xdim, table[j][1]); 
+                if(!is_assigned[k])
+                {
+                	map[i]   = (byte)table[j][1];
+                	seed_map.add(map[i]);
+                	delta[k] = -table[j][0];
+                	seed_delta.add(delta[k]);
+                	is_assigned[k] = true;
+                    is_seed[k]     = true;
+                    assignments[k]++;
+                    n++;
+                	
+                	current_value += delta[k];
+                	
+                	if(current_value != src[k] && first_index)	
+                	{
+                	    int _x = k % xdim;
+                	    int _y = k / xdim;
+                	    first_index = false;
+                	    System.out.println("Reconstructed value " + current_value + " does not agree with source value " + src[k] + " at index " + k);
+                	    System.out.println("X is " + _x + ", y is " + _y);
+                	    System.out.println("Number of deltas collected is " + seed_delta.size());
+                	}
+                    
+                	break;
+                }	
+            }
+            if(j == table.length)
+            	neighbor_unassigned = false;
+        }
+      
+        System.out.println("Number of deltas assigned is " + n);
+        System.out.println("Length of delta list is " + seed_delta.size());
+        System.out.println("Length of location list is " + seed_map.size());
+        
+        
+        int  [] value = new int[size];
+        x = xdim / 2;
+        y = ydim / 2;
+        i = y * xdim + x;
+        value[i] = init_value;
+        
+        current_value = init_value;
+        
+        boolean values_agree = true;
+        for(int j = 0; j < seed_map.size(); j++)
+        {
+            byte location = (byte)seed_map.get(j);
+            int  _delta    = (int)seed_delta.get(j);
+            
+            int k = getNeighborIndex(x, y, xdim, (int)location);
+            value[k] = current_value + _delta;
+            current_value = value[k];
+            
+            if(src[k] != value[k])
+            	values_agree = false;
+        }
+        
+        if(values_agree)
+        	System.out.println("Reconstructed values agree with source values.");
+        else
+        	System.out.println("Reconstructed values do not agree with source values.");
+        
+        
+        
+        
+        
+        System.out.println();
+        
+        
+        
+        /*
         
         // Now we might be rerouted to an already assigned pixel.
         boolean neighbor_unassigned = true;
@@ -3111,7 +3276,8 @@ public class DeltaMapper
             i = j;
             x = i % xdim;
             y = i / xdim;
-            table = (int[][])delta_list.get(i); 
+            
+            
             int m = 0;
             outer: for(m = 0; m < table.length; m++)
 		    {
@@ -3122,7 +3288,7 @@ public class DeltaMapper
 			    	// to try and get the largest possible segment to seed the data space.
 			    	// Need to check if it completes when we only use optimal deltas.
 			  
-				    k = getInverseLocation(table[m][1]);
+				    int k = getInverseLocation(table[m][1]);
 				    delta[j] = -table[m][0];
 		            map[j]   = (byte)k;
 		            seed_delta.add(delta[j]);
@@ -3173,7 +3339,7 @@ public class DeltaMapper
         		
                         try
                         {
-        	                k = (int)neighbors.get(j);
+        	                int k = (int)neighbors.get(j);
         	                if(k != 0)
         	                {
         	                    delta[i]       = table[m][0];
@@ -3233,8 +3399,8 @@ public class DeltaMapper
         map2[i]        = location;
         j              =  getNeighborIndex(x, y, xdim, (int)location);
         
-        int current_value = init_value;
-        for(k = 1; k < seed_delta.size(); k++)
+        current_value = init_value;
+        for(int k = 1; k < seed_delta.size(); k++)
         {
         	int _delta    = (int)seed_delta.get(k);
         	delta2[j]     = _delta;
@@ -3250,7 +3416,7 @@ public class DeltaMapper
         	j        =  getNeighborIndex(x, y, xdim, (int)location);
         }
         
-        for(k = 0; k < dilated_delta.size(); k++)
+        for(int k = 0; k < dilated_delta.size(); k++)
         {
         	i = 0;
         	
@@ -3266,18 +3432,27 @@ public class DeltaMapper
         boolean same = true;
         for(i = 0; i < size; i++)
         {
-        	if(delta[i] != delta2[i])
+        	if(value2[i] != src[i])
         	{
-        		System.out.println("Deltas are different at index " + i);
+        		System.out.println("Values are different at index " + i);
+        		x = i % xdim;
+        		y = i / xdim;
+        		System.out.println("x = " + x + ", y = " + y);
+        		System.out.println("Original value is " + src[i] + ", reconstructed value is " + value2[i]);
+        		if(is_seed[i])
+        			System.out.println("This is a seed value.");
+        		else
+        			System.out.println("This is a dilated value.");
+        		
         		same = false;
         		break;
         	}
         }
         
         if(same)
-        	System.out.println("Delta values constructed from lists are the same.");
+        	System.out.println("Values constructed from lists are the same.");
         
-        
+        */
 		
         ArrayList result = new ArrayList();
         result.add(init_value);
