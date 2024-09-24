@@ -3081,13 +3081,6 @@ public class DeltaMapper
         // Used only for error checking delta type.
         delta[i] = 0; 
         
-        
-        
-        
-        
-        
-        //seed_delta.add(delta[i]);
-        
         System.out.println("Init value is " + init_value);
         
        
@@ -3112,12 +3105,11 @@ public class DeltaMapper
         
         int current_value = init_value + delta[i];
         
-        System.out.println("First reconstructed value is " + current_value);
-        System.out.println("Src value is " + src[i]);
+        //System.out.println("First reconstructed value is " + current_value);
+        //System.out.println("Src value is " + src[i]);
         
         // Tricky part here is we're getting delta and map values
-        // from different tables.  Also, the last location in the seed map
-        // does not get used.
+        // from different tables.  
         table = (int[][])delta_list.get(i);
         
         // Now we need to start checking if the optimal delta corresponds to an already assigned pixel,
@@ -3184,6 +3176,8 @@ public class DeltaMapper
             }	
         }
         
+        // After a certain number of iterations, we
+        // need to check if we've reached a dead end.
         
         boolean neighbor_unassigned = true;
         boolean first_index         = true;
@@ -3227,9 +3221,9 @@ public class DeltaMapper
             	neighbor_unassigned = false;
         }
       
-        System.out.println("Number of deltas assigned is " + n);
-        System.out.println("Length of delta list is " + seed_delta.size());
-        System.out.println("Length of location list is " + seed_map.size());
+        System.out.println("Number of seed deltas assigned is " + n);
+        System.out.println("Length of seed delta list is " + seed_delta.size());
+        System.out.println("Length of seed location list is " + seed_map.size());
         
         
         int  [] value = new int[size];
@@ -3237,6 +3231,11 @@ public class DeltaMapper
         y = ydim / 2;
         i = y * xdim + x;
         value[i] = init_value;
+        
+        //System.out.println("Source value is " + src[i]);
+        //System.out.println("Reconstructed value is " + value[i]);
+        //System.out.println();
+        
         
         current_value = init_value;
         
@@ -3246,72 +3245,29 @@ public class DeltaMapper
             byte location = (byte)seed_map.get(j);
             int  _delta    = (int)seed_delta.get(j);
             
-            int k = getNeighborIndex(x, y, xdim, (int)location);
-            value[k] = current_value + _delta;
-            current_value = value[k];
+            i = getNeighborIndex(x, y, xdim, (int)location);
+            x = i % xdim;
+            y = i / xdim;
+            value[i] = current_value + _delta;
+            current_value = value[i];
             
-            if(src[k] != value[k])
+            //System.out.println("Source value is " + src[i]);
+            //System.out.println("Reconstructed value is " + value[i]);
+            //System.out.println();
+            
+            if(src[i] != value[i])
             	values_agree = false;
         }
         
         if(values_agree)
-        	System.out.println("Reconstructed values agree with source values.");
+        	System.out.println("Reconstructed seed values agree with source values.");
         else
-        	System.out.println("Reconstructed values do not agree with source values.");
+        	System.out.println("Reconstructed seed values do not agree with source values.");
+        //System.out.println();
         
         
         
-        
-        
-        System.out.println();
-        
-        
-        
-        /*
-        
-        // Now we might be rerouted to an already assigned pixel.
-        boolean neighbor_unassigned = true;
-        while(n < size && neighbor_unassigned)
-        {
-            i = j;
-            x = i % xdim;
-            y = i / xdim;
-            
-            
-            int m = 0;
-            outer: for(m = 0; m < table.length; m++)
-		    {
-			    j = getNeighborIndex(x, y, xdim, table[m][1]); 
-			    if(!is_assigned[j])
-			    {
-				    // For now, not trying to select smallest delta
-			    	// to try and get the largest possible segment to seed the data space.
-			    	// Need to check if it completes when we only use optimal deltas.
-			  
-				    int k = getInverseLocation(table[m][1]);
-				    delta[j] = -table[m][0];
-		            map[j]   = (byte)k;
-		            seed_delta.add(delta[j]);
-		            seed_map.add(map[j]);
-		            is_assigned[j] = true;
-		            is_seed[j]     = true;
-		            assignments[j]++;
-		            n++;
-				    break outer;
-			    }
-			    else
-			    {
-				    //System.out.println("Assigned neighbor.");	
-			        //System.out.println(table[m][0] + " " + table[m][1]);	
-			    }
-		    }
-            if(m == table.length - 1)
-	    		neighbor_unassigned = false;
-        }
-       
-        System.out.println("Number of assigned deltas after 1 pass is " + n);
-       
-        
+        // Now we iterate until we populate the entire raster with delta values and locations.
         int previous_n = 0;
         int p          = 0;
         
@@ -3334,7 +3290,7 @@ public class DeltaMapper
                     outer: for(int m = 0; m < table.length; m++)
                     {
                         int location = table[m][1];
-                        j =  getLocationIndex(location_type, location);
+                        int j =  getLocationIndex(location_type, location);
                         ArrayList neighbors = getNeighbors(assignments, x, y, xdim, ydim);
         		
                         try
@@ -3366,84 +3322,83 @@ public class DeltaMapper
             
         }
         System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
-        System.out.println();
         
+        
+        
+        // Create the lists we'll use to populate the raster.
         for(i = 0; i < size; i++)
         {
         	if(!is_seed[i])
         	{
         		dilated_delta.add(delta[i]);
                 dilated_map.add(map[i]);	
+                is_assigned[i] = false;
         	}
         }
         
-        int  [] delta2 = new int[size];
-        int  [] value2 = new int[size];
-        byte [] map2    = new byte[size];
+        // Populate the raster.
+        for(i = 0; i < dilated_delta.size(); i++)
+        {
+        	int j = 0;
+        	while(is_assigned[j])
+        		j++;
+        	delta[j] = (int)dilated_delta.get(i);
+        	map[j]   = (byte)dilated_map.get(i);
+        	is_assigned[j] = true;
+        }
         
-        
+        int number_of_seeds = 0;
         for(i = 0; i < size; i++)
         {
-        	is_assigned[i] = false;
+        	if(!is_seed[i])
+        		is_assigned[i] = false;
+        	else
+        		number_of_seeds++;
         }
         
-        x = xdim / 2;
-        y = ydim / 2;
-        i = y * xdim + x;
-        
-        
-        delta2[i]      = 0;
-        value2[i]      = init_value;
-        is_assigned[i] = true;
-        byte location  = (byte)seed_map.get(0);
-        map2[i]        = location;
-        j              =  getNeighborIndex(x, y, xdim, (int)location);
-        
-        current_value = init_value;
-        for(int k = 1; k < seed_delta.size(); k++)
+        n = number_of_seeds;
+        p = 0;
+        while(n < size)
         {
-        	int _delta    = (int)seed_delta.get(k);
-        	delta2[j]     = _delta;
-        	value2[j]     = current_value + _delta;
-        	is_assigned[j] = true;
-        	map2[j]       = location;
-        	current_value = value2[j];
-        	
-        	i        = j;
-        	location = (byte)seed_map.get(k);
-        	x        = i % xdim;
-        	y        = i / xdim;
-        	j        =  getNeighborIndex(x, y, xdim, (int)location);
+        	n = 0;
+            for(i = 0; i < size; i++)	
+            {
+            	if(!is_assigned[i])
+            	{
+            		byte location = map[i];
+            		x = i % xdim;
+            		y = i / xdim;
+            		int j = getNeighborIndex(x, y, xdim, (int)location);
+            		if(is_assigned[j])
+            		{
+            			value[i] = value[j] + delta[i];
+            			is_assigned[i] = true;
+            			n++;
+            		}
+            	}
+            	else
+            		n++;
+            }
+            p++;
         }
         
-        for(int k = 0; k < dilated_delta.size(); k++)
-        {
-        	i = 0;
-        	
-        	while(is_assigned[i])
-        		i++;
-        	int _delta = (int)dilated_delta.get(k);
-        	location   = (byte)dilated_map.get(k);
-        	delta2[i]  = _delta;
-        	map2[i]    = location;
-        	is_assigned[i] = true;
-        }
+        System.out.println("Values reconstructed after " + p + " iterations.");
+        
         
         boolean same = true;
         for(i = 0; i < size; i++)
         {
-        	if(value2[i] != src[i])
+        	if(value[i] != src[i])
         	{
         		System.out.println("Values are different at index " + i);
         		x = i % xdim;
         		y = i / xdim;
         		System.out.println("x = " + x + ", y = " + y);
-        		System.out.println("Original value is " + src[i] + ", reconstructed value is " + value2[i]);
+        		System.out.println("Source value is " + src[i] + ", reconstructed value is " + value[i]);
         		if(is_seed[i])
         			System.out.println("This is a seed value.");
         		else
         			System.out.println("This is a dilated value.");
-        		
         		same = false;
         		break;
         	}
@@ -3451,9 +3406,10 @@ public class DeltaMapper
         
         if(same)
         	System.out.println("Values constructed from lists are the same.");
+        System.out.println();
         
-        */
-		
+        
+        
         ArrayList result = new ArrayList();
         result.add(init_value);
         result.add(seed_delta);
@@ -3466,6 +3422,7 @@ public class DeltaMapper
         return result;
     }
     
+    // This needs to be rewritten.
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
     {
