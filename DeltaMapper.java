@@ -3323,8 +3323,6 @@ public class DeltaMapper
         }
         System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
         
-        
-        
         // Create the lists we'll use to populate the raster.
         for(i = 0; i < size; i++)
         {
@@ -3408,10 +3406,12 @@ public class DeltaMapper
         	System.out.println("Values constructed from lists are the same.");
         System.out.println();
         
-        
-        
         ArrayList result = new ArrayList();
         result.add(init_value);
+        result.add(xdim);
+        result.add(ydim);
+        
+        
         result.add(seed_delta);
         result.add(seed_map);
         
@@ -3422,7 +3422,105 @@ public class DeltaMapper
         return result;
     }
     
-    // This needs to be rewritten.
+   
+
+    public static int[] getValuesFromIdealDeltas2(ArrayList delta_list)
+    {
+        int init_value = (int)delta_list.get(0);
+        int xdim       = (int)delta_list.get(1);
+        int ydim       = (int)delta_list.get(2);
+        int size       = xdim * ydim;
+        int[] value    = new int[size];
+        int x          = xdim / 2;
+        int y          = ydim / 2;
+        int i          = y * xdim + x;
+        
+        int[] delta    = new int[size];
+        byte[] map     = new byte[size];
+        int[] assigned  = new int[size];
+        boolean[] is_assigned = new boolean[size];
+        boolean[] is_seed     = new boolean[size];
+        
+        ArrayList seed_delta = (ArrayList)delta_list.get(3);
+        ArrayList seed_map   = (ArrayList)delta_list.get(4);
+        
+        value[i]       = init_value;
+        is_assigned[i] = true;
+        is_seed[i]     = true;
+        assigned[i]++;
+        
+        int current_value = init_value;
+        for(int j = 0; j < seed_map.size(); j++)
+        {
+            byte location = (byte)seed_map.get(j);
+            int  _delta    = (int)seed_delta.get(j);
+            i = getNeighborIndex(x, y, xdim, (int)location);
+            
+            value[i] = current_value + _delta;
+            is_assigned[i] = true;
+            is_seed[i]     = true;
+            assigned[i]++;
+           
+            x = i % xdim;
+            y = i / xdim;
+            current_value = value[i];
+        }
+        
+        ArrayList dilated_delta = (ArrayList)delta_list.get(5);
+        ArrayList dilated_map   = (ArrayList)delta_list.get(6);
+        
+        // Populate the raster.
+        for(i = 0; i < dilated_delta.size(); i++)
+        {
+        	int j = 0;
+        	while(is_assigned[j])
+        		j++;
+        	delta[j] = (int)dilated_delta.get(i);
+        	map[j]   = (byte)dilated_map.get(i);
+        	is_assigned[j] = true;
+        }
+        
+        int number_of_seeds = 0;
+        for(i = 0; i < size; i++)
+        {
+        	if(!is_seed[i])
+        		is_assigned[i] = false;
+        	else
+        		number_of_seeds++;
+        }
+        
+        int n = number_of_seeds;
+        int p = 0;
+        while(n < size)
+        {
+        	n = 0;
+            for(i = 0; i < size; i++)	
+            {
+            	if(!is_assigned[i])
+            	{
+            		byte location = map[i];
+            		x = i % xdim;
+            		y = i / xdim;
+            		int j = getNeighborIndex(x, y, xdim, (int)location);
+            		if(is_assigned[j])
+            		{
+            			value[i] = value[j] + delta[i];
+            			is_assigned[i] = true;
+            			n++;
+            		}
+            	}
+            	else
+            		n++;
+            }
+            p++;
+        }
+        
+        System.out.println("Values reconstructed after " + p + " iterations.");
+        
+        return value;
+    }
+    
+    
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
     {
@@ -3828,7 +3926,7 @@ public class DeltaMapper
     }
     
     
-    
+
     
     public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
