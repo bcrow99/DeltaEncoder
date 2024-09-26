@@ -1994,12 +1994,6 @@ public class DeltaMapper
     		    		   table[m][1] = (int)current_delta_list.get(1);
     		    		}
     		    		
-    		    		/*
-    		    		System.out.println("Table:");
-    		    		for(int m = 0; m < table.length; m++)
-    		    			System.out.println(table[m][0] + " " + table[m][1]);
-    		    		*/
-    		    		
     		    		delta_list.add(table);
     		    		
             			k++;
@@ -2269,22 +2263,11 @@ public class DeltaMapper
     		    		}
     		    		delta_list.add(table);
     		    		
-    		    		/*
-    		    		if(i == 1)
-    		    		{
-    		    		System.out.println("Table:");
-    		    		for(int m = 0; m < table.length; m++)
-    		    			System.out.println(table[m][0] + " " + table[m][1]);
-    		    		System.out.println();
-    		    		}
-    		    		*/
-    		    		
             			k++;
             	    }
             	    else if(j < xdim - 1)
             	    {
             	    	// We have a set of 8 possible deltas to use.
-            	    	
             	    	int a = src[k] - src[k - xdim - 1];
             	    	int b = src[k] - src[k - xdim];
             	    	int c = src[k] - src[k - xdim + 1];
@@ -3081,7 +3064,7 @@ public class DeltaMapper
         // Used only for error checking delta type.
         delta[i] = 0; 
         
-        System.out.println("Init value is " + init_value);
+        //System.out.println("Init value is " + init_value);
         
        
         map[i]   = (byte)table[0][1];
@@ -3122,12 +3105,12 @@ public class DeltaMapper
             int k = getNeighborIndex(x, y, xdim, table[j][1]); 
             if(is_assigned[k])
             {
-            	System.out.println("Neighbor " + k + " is assigned");
-                System.out.println("Src value is " + src[k]);
+            	//System.out.println("Neighbor " + k + " is assigned");
+                //System.out.println("Src value is " + src[k]);
             }
             else
             {
-            	System.out.println("Neighbor " + k + " is unassigned");
+            	//System.out.println("Neighbor " + k + " is unassigned");
             	map[i] = (byte)table[j][1];
             	seed_map.add(map[i]);
             	delta[k] = -table[j][0];
@@ -3138,8 +3121,8 @@ public class DeltaMapper
                 n++;
             	
             	current_value += delta[k];
-            	System.out.println("Second reconstructed value is " + current_value);
-                System.out.println("Src value is " + src[k]);
+            	//System.out.println("Second reconstructed value is " + current_value);
+                //System.out.println("Src value is " + src[k]);
             	break;
             }
         }
@@ -3158,7 +3141,7 @@ public class DeltaMapper
         	int k = getNeighborIndex(x, y, xdim, table[j][1]); 
             if(!is_assigned[k])
             {
-            	System.out.println("Neighbor " + k + " is unassigned");
+            	//System.out.println("Neighbor " + k + " is unassigned");
             	map[i]   = (byte)table[j][1];
             	seed_map.add(map[i]);
             	delta[k] = -table[j][0];
@@ -3169,8 +3152,8 @@ public class DeltaMapper
                 n++;
             	
             	current_value += delta[k];
-            	System.out.println("Third reconstructed value is " + current_value);
-                System.out.println("Src value is " + src[k]);
+            	//System.out.println("Third reconstructed value is " + current_value);
+                //System.out.println("Src value is " + src[k]);
                 
             	break;
             }	
@@ -3232,11 +3215,7 @@ public class DeltaMapper
         i = y * xdim + x;
         value[i] = init_value;
         
-        //System.out.println("Source value is " + src[i]);
-        //System.out.println("Reconstructed value is " + value[i]);
-        //System.out.println();
-        
-        
+       
         current_value = init_value;
         
         boolean values_agree = true;
@@ -3251,22 +3230,13 @@ public class DeltaMapper
             value[i] = current_value + _delta;
             current_value = value[i];
             
-            //System.out.println("Source value is " + src[i]);
-            //System.out.println("Reconstructed value is " + value[i]);
-            //System.out.println();
-            
             if(src[i] != value[i])
             	values_agree = false;
         }
         
-        if(values_agree)
-        	System.out.println("Reconstructed seed values agree with source values.");
-        else
+        if(!values_agree)
         	System.out.println("Reconstructed seed values do not agree with source values.");
-        //System.out.println();
-        
-        
-        
+       
         // Now we iterate until we populate the entire raster with delta values and locations.
         int previous_n = 0;
         int p          = 0;
@@ -3321,9 +3291,12 @@ public class DeltaMapper
             p++;
             
         }
-        System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
         
-        // Create the lists we'll use to populate the raster.
+        //System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
+        
+        // Create the lists we'll use to populate the raster and keep track of the sum of the deltas.
+        
+        int sum = 0;
         for(i = 0; i < size; i++)
         {
         	if(!is_seed[i])
@@ -3331,7 +3304,10 @@ public class DeltaMapper
         		dilated_delta.add(delta[i]);
                 dilated_map.add(map[i]);	
                 is_assigned[i] = false;
+                sum += delta[i];
         	}
+        	else
+        		sum += delta[i];
         }
         
         // Populate the raster.
@@ -3380,8 +3356,6 @@ public class DeltaMapper
             p++;
         }
         
-        System.out.println("Values reconstructed after " + p + " iterations.");
-        
         
         boolean same = true;
         for(i = 0; i < size; i++)
@@ -3402,14 +3376,15 @@ public class DeltaMapper
         	}
         }
         
-        if(same)
-        	System.out.println("Values constructed from lists are the same.");
-        System.out.println();
-        
         ArrayList result = new ArrayList();
-        result.add(init_value);
-        result.add(xdim);
-        result.add(ydim);
+        
+        
+        result.add(sum);
+        //result.add(init_value);
+        
+        
+       // result.add(xdim);
+        //result.add(ydim);
         
         
         result.add(seed_delta);
@@ -3422,13 +3397,9 @@ public class DeltaMapper
         return result;
     }
     
-   
-
-    public static int[] getValuesFromIdealDeltas2(ArrayList delta_list)
+  
+    public static int[] getValuesFromIdealDeltas2(ArrayList list, int xdim, int ydim, int init_value)
     {
-        int init_value = (int)delta_list.get(0);
-        int xdim       = (int)delta_list.get(1);
-        int ydim       = (int)delta_list.get(2);
         int size       = xdim * ydim;
         int[] value    = new int[size];
         int x          = xdim / 2;
@@ -3441,8 +3412,8 @@ public class DeltaMapper
         boolean[] is_assigned = new boolean[size];
         boolean[] is_seed     = new boolean[size];
         
-        ArrayList seed_delta = (ArrayList)delta_list.get(3);
-        ArrayList seed_map   = (ArrayList)delta_list.get(4);
+        ArrayList seed_delta = (ArrayList)list.get(1);
+        ArrayList seed_map   = (ArrayList)list.get(2);
         
         value[i]       = init_value;
         is_assigned[i] = true;
@@ -3466,8 +3437,8 @@ public class DeltaMapper
             current_value = value[i];
         }
         
-        ArrayList dilated_delta = (ArrayList)delta_list.get(5);
-        ArrayList dilated_map   = (ArrayList)delta_list.get(6);
+        ArrayList dilated_delta = (ArrayList)list.get(3);
+        ArrayList dilated_map   = (ArrayList)list.get(4);
         
         // Populate the raster.
         for(i = 0; i < dilated_delta.size(); i++)
@@ -3522,7 +3493,9 @@ public class DeltaMapper
     
     
     // Get an ideal delta set and a map of which pixels are used.
-    public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
+    // Currently no way to reconstruct values that is guaranteed to complete.
+    // Allows a way to get an idea of the practical limit to compression.
+    public static ArrayList getIdealDeltasFromValues3(int src[], int xdim, int ydim)
     {
     	int size = xdim * ydim;
     	
@@ -3928,7 +3901,7 @@ public class DeltaMapper
     
 
     
-    public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
+    public static int[] getValuesFromIdealDeltas3(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
         int size = xdim * ydim;
         
@@ -4237,7 +4210,6 @@ public class DeltaMapper
                             {
                         		if(is_assigned[k] && !neighbors_assigned[k])
                                 {
-                        			System.out.println("Got here 3.");
                         			// Check 3 neighbors.
                         			int m = k + xdim;
                         			int n = k + xdim - 1;
@@ -4460,12 +4432,9 @@ public class DeltaMapper
                         }
                         else
                         {
-                        	if(is_assigned[k])
-                        		System.out.println("Got here 6.");
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                             	// Check 5 neighbors.
-                        		System.out.println("Got here 6.");
                         		int m = k - xdim + 1;
                         		int n = k - xdim;
                         		int p = k - xdim - 1;
@@ -4538,7 +4507,6 @@ public class DeltaMapper
                         	if(is_assigned[k] && !neighbors_assigned[k])
                             {
                         		// Check 3 neighbors.
-                        		
                         		int m = k + 1;
                         		int n = k - xdim;
                         		int p = k - xdim + 1;

@@ -33,6 +33,8 @@ public class SimpleWriter
 	int [] channel_init;
 	int [] channel_min;
 	int [] channel_delta_min;
+	
+	
 	int [] channel_length;
 	int [] channel_compressed_length;
 	int [] channel_string_type;
@@ -45,6 +47,8 @@ public class SimpleWriter
 	double file_compression_rate;
 
 	ArrayList channel_list, table_list, string_list, channel_data, map_list;
+	
+	//ArrayList channel_list, table_list, string_list, channel_data, map_list;
 
 	boolean initialized = false;
 	
@@ -126,9 +130,12 @@ public class SimpleWriter
 		    channel_sum       = new int[6];
 		    channel_length    = new int[6];
             channel_compressed_length = new int[6];
+            
             channel_string_type = new int[3];
             channel_iterations  = new byte[3];
             channel_segmented   = new boolean[3];
+            
+            
 			
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
@@ -582,64 +589,37 @@ public class SimpleWriter
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
-				    
-				    if(map.length != new_ydim - 1)
-				    	System.out.println("Map length does not agree with image dimension.");
+				   
 				    map_list.add(map);
-				    int sum = (int)result.get(0);
-				    //System.out.println("Mixed sum is " + sum);	
 				}
 				else if(delta_type == 6)
 				{
 					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
-				    int sum = (int)result.get(0);
-				    
-				    
-				    byte [] map_string       = new byte[map.length];
-				    ArrayList histogram_list = StringMapper.getHistogram(map);
-				    int [] histogram         = (int[])histogram_list.get(1);
-					int [] string_table      = StringMapper.getRankTable(histogram);
-				    
-				    int map_length           = StringMapper.packStrings2(map, string_table, map_string);
-				    
-				    double zero_one_ratio = map.length;
-		            if(histogram.length > 1)
-		            {
-					    int min_value = Integer.MAX_VALUE;
-					    for(int k = 0; k < histogram.length; k++)
-						 if(histogram[k] < min_value)
-							min_value = histogram[k];
-					    zero_one_ratio -= min_value;
-		            }	
-			        zero_one_ratio  /= map_length;
-			        
-			        byte[] map_compression_string = new byte[1];
-			        if(zero_one_ratio > .5)
-					    map_compression_string   = StringMapper.compressZeroStrings(map_string, map_length);
-			        else
-			        	map_compression_string   = StringMapper.compressOneStrings(map_string, map_length);
-			        double compression_rate = map_compression_string.length;
-				    compression_rate /= map.length;
-				   
-				    Deflater deflater = new Deflater();
-			    	deflater.setInput(map_compression_string);
-			    	byte [] zipped_string = new byte[2 * map.length];
-	            	deflater.finish();
-	            	int zipped_length = deflater.deflate(zipped_string);
-	            	deflater.end();
-	            	
-	            	compression_rate = zipped_length;
-	            	compression_rate /= map.length;	
 				}
 				else if(delta_type == 7)
 				{
-					ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
-					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
-					int [] foo = DeltaMapper.getValuesFromIdealDeltas2(result);
+			        ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
+			        result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
+			        
+			        int x = new_xdim / 2;
+			        int y = new_ydim / 2;
+			        int m = y * new_xdim + x;
+			        
+			        int init_value = quantized_channel[m];
+			        
+					int [] foo = DeltaMapper.getValuesFromIdealDeltas2(result, new_xdim, new_ydim, init_value);
 					
-					
+					boolean same = true;
+					for(m = 0; m < new_xdim * new_ydim; m++)
+						if(foo[m] != quantized_channel[m])
+							same = false;
+					if(same)
+						System.out.println("Reconstructed value are the same as source values.");
+					else
+						System.out.println("Reconstructed value are not the same as source values.");	
+					System.out.println();
 					
 					
 					
@@ -655,44 +635,7 @@ public class SimpleWriter
 					int [] string_table      = StringMapper.getRankTable(histogram);
 				    
 				    int map_length           = StringMapper.packStrings2(map, string_table, map_string);
-				    
-				    double zero_one_ratio = map.length;
-		            if(histogram.length > 1)
-		            {
-					    int min_value = Integer.MAX_VALUE;
-					    for(int k = 0; k < histogram.length; k++)
-						 if(histogram[k] < min_value)
-							min_value = histogram[k];
-					    zero_one_ratio -= min_value;
-		            }	
-			        zero_one_ratio  /= map_length;
-			        
-			        byte[] map_compression_string = new byte[1];
-			        if(zero_one_ratio > .5)
-					    map_compression_string   = StringMapper.compressZeroStrings(map_string, map_length);
-			        else
-			        	map_compression_string   = StringMapper.compressOneStrings(map_string, map_length);
-			        double compression_rate = map_compression_string.length;
-				    compression_rate /= map.length;
-				    
-				    //System.out.println("The string compression rate for the map was " + String.format("%.4f", compression_rate));
-				    
-				    Deflater deflater = new Deflater();
-			    	deflater.setInput(map_compression_string);
-			    	byte [] zipped_string = new byte[2 * map.length];
-	            	deflater.finish();
-	            	int zipped_length = deflater.deflate(zipped_string);
-	            	deflater.end();
-	            	
-	            	compression_rate = zipped_length;
-	            	compression_rate /= map.length;
-	            	//System.out.println("The zipped string compression rate for the map was " + String.format("%.4f", compression_rate));
 				   
-				    // The ideal sum for function 2 produces a slightly larger
-				    // number because the last delta in each row is simply assigned
-				    // to the horizontal delta to make the map smaller.
-				    //System.out.println("Ideal sum is " + sum);	
-					
 				}
 				
                 int []    delta  = (int [])result.get(1);
@@ -740,7 +683,6 @@ public class SimpleWriter
 				    string_list.add(compression_string);  
 		        }
 			}
-			
 			
 			ArrayList resized_channel_list = new ArrayList();
 			
@@ -802,7 +744,7 @@ public class SimpleWriter
 			    	byte [] map = (byte[])map_list.get(i);
 			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 			    }
-			    else if(delta_type == 6)
+			    else if(delta_type == 6  || delta_type == 7)
 			    {
 			    	byte [] map = (byte[])map_list.get(i);
 			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
