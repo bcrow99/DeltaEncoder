@@ -3518,7 +3518,6 @@ public class DeltaMapper
                     table = (int[][])delta_list.get(i);
 	        
                     outer: for(int m = 0; m < table.length; m++)
-                    //outer: for(int m = 0; m < 3; m++)
                     {
                         int location = table[m][1];
                         int j =  getLocationIndex(location_type, location);
@@ -3533,8 +3532,8 @@ public class DeltaMapper
         	                    map[i]         = (byte)table[m][1];
         	                    is_assigned[i] = true;
         	                    assignments[i]++;
+        	                    break outer;
     	                    }
-        	                //break outer;
     	                }   
         	            catch(Exception e)
         	            {
@@ -3668,20 +3667,20 @@ public class DeltaMapper
 	    
 	    System.out.println("Byte length of packed seed deltas is " + (seed_delta_length / 8));
 	    
-	    double zero_one_ratio = seed_delta.size();
+	    double zero_percentage = seed_delta.size();
         if(histogram.length > 1)
         {
 	        int min_value = Integer.MAX_VALUE;
 	        for(int k = 0; k < histogram.length; k++)
 		        if(histogram[k] < min_value)
 			        min_value = histogram[k];
-	        zero_one_ratio -= min_value;
+	        zero_percentage -= min_value;
         }	
-        zero_one_ratio  /= seed_delta_length;
+        zero_percentage  /= seed_delta_length;
         
-        System.out.println("Zero percentage of packed seed deltas is " + zero_one_ratio);
+        System.out.println("Zero percentage of packed seed deltas is " + String.format("%.2f", zero_percentage));
 
-        if(zero_one_ratio > .5)
+        if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(seed_delta_string, seed_delta_length);
 	        combined_byte_length += compression_string.length;
@@ -3693,7 +3692,7 @@ public class DeltaMapper
 	        combined_byte_length += compression_string.length;   
 	        System.out.println("Byte length of conpressed seed deltas is " + compression_string.length);
         }
-	    
+        System.out.println();
 	  
 	    byte [] dilated_delta_string = new byte[size * 16];
 	    int  [] _dilated_delta       = new int[dilated_delta.size()];
@@ -3702,30 +3701,28 @@ public class DeltaMapper
         
 	    int dilated_delta_length     = StringMapper.packStrings2(_dilated_delta, delta_table, dilated_delta_string);
 	    System.out.println("Byte length of packed dilated deltas is " + (dilated_delta_length / 8));
-	    zero_one_ratio = dilated_delta.size();
+	    zero_percentage = dilated_delta.size();
         if(histogram.length > 1)
         {
 	        int min_value = Integer.MAX_VALUE;
 	        for(int k = 0; k < histogram.length; k++)
 		        if(histogram[k] < min_value)
 			        min_value = histogram[k];
-	        zero_one_ratio -= min_value;
+	        zero_percentage -= min_value;
         }	
-        zero_one_ratio  /= dilated_delta_length;
-        System.out.println("Zero percentage of packed dilated deltas is " + zero_one_ratio);
-        
-        
-        if(zero_one_ratio > .5)
+        zero_percentage  /= dilated_delta_length;
+        System.out.println("Zero percentage of packed dilated deltas is " + String.format("%.2f", zero_percentage)); 
+        if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_delta_string, dilated_delta_length);
 	        combined_byte_length += compression_string.length;
-	        System.out.println("Byte length of conpressed seed deltas is " + compression_string.length);
+	        System.out.println("Byte length of conpressed dilated deltas is " + compression_string.length);
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(dilated_delta_string, dilated_delta_length);
 	        combined_byte_length += compression_string.length;   
-	        System.out.println("Byte length of conpressed seed deltas is " + compression_string.length);
+	        System.out.println("Byte length of conpressed dilated deltas is " + compression_string.length);
         }
 	    
 	  
