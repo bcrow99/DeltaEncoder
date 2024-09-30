@@ -1020,8 +1020,6 @@ public class DeltaMapper
         return dst;
     }
  
-  
-
     // This function returns the result from the standard png filters, using
     // the filter that produces the smallest delta sum for each row.
     public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
@@ -3658,6 +3656,8 @@ public class DeltaMapper
         int [] histogram         = (int[])histogram_list.get(1);
 	    int [] delta_table      = StringMapper.getRankTable(histogram);
 	    
+	    
+	    
 	    byte [] seed_delta_string = new byte[size * 16];
 	    int  [] _seed_delta       = new int[seed_delta.size()];
 	    for(i = 0; i < seed_delta.size(); i++)
@@ -3726,11 +3726,18 @@ public class DeltaMapper
         }
 	    
 	  
-	    /*
+	    combined_byte_length += delta_table.length;
+        
+        
+        
+        
 	    histogram_list = StringMapper.getHistogram(map);
-        int map_min           = (int)histogram_list.get(0);  
+        
         // Shouldn't make any difference if this is zero or not,
         // as long as it's non negative.
+	    // Most of the time it should be 0, but the amount of compression
+	    // should depend only on the range in any case.
+        int map_min           = (int)histogram_list.get(0);  
         System.out.println("Map min returned with histogram was " + map_min);
         histogram         = (int[])histogram_list.get(1);
 	    int [] map_table      = StringMapper.getRankTable(histogram);
@@ -3738,28 +3745,26 @@ public class DeltaMapper
 	    byte [] seed_map_string = new byte[size * 16];
 	    int  [] _seed_map        = new int[seed_map.size()];
 	    
-	    // Shouldn't make any difference, but will check.
-	    // Most of the time it should be 0, but the amount of compression
-	    // should depend only on the range in any case.
+	    // Check whether or not subtracting makes any difference.
 	    for(i = 0; i < seed_map.size(); i++)
 	    	_seed_map[i] = (byte)seed_map.get(i) - map_min;
 	    	
 	    int seed_map_length     = StringMapper.packStrings2(_seed_map, map_table, seed_delta_string);
 	    
-	    zero_one_ratio = seed_map.size();
+	    zero_percentage = seed_map.size();
         if(histogram.length > 1)
         {
 	        int min_value = Integer.MAX_VALUE;
 	        for(int k = 0; k < histogram.length; k++)
 		        if(histogram[k] < min_value)
 			        min_value = histogram[k];
-	        zero_one_ratio -= min_value;
+	        zero_percentage -= min_value;
         }	
-        zero_one_ratio  /= seed_map_length / 8 + 1;
+        zero_percentage  /= seed_map_length;
         
         
 
-        if(zero_one_ratio > .5)
+        if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(seed_map_string, seed_map_length);
 	        combined_byte_length += compression_string.length;
@@ -3777,20 +3782,20 @@ public class DeltaMapper
 	    for(i = 0; i < seed_delta.size(); i++)
 	    	_dilated_map[i] = (byte)dilated_map.get(i) - map_min;
         
-	    int dilated_map_length     = StringMapper.packStrings2(_dilated_delta, delta_table, dilated_delta_string);
+	    int dilated_map_length     = StringMapper.packStrings2(_dilated_map, map_table, dilated_delta_string);
 	    
-	    zero_one_ratio = dilated_map.size();
+	    zero_percentage = dilated_map.size();
         if(histogram.length > 1)
         {
 	        int min_value = Integer.MAX_VALUE;
 	        for(int k = 0; k < histogram.length; k++)
 		        if(histogram[k] < min_value)
 			        min_value = histogram[k];
-	        zero_one_ratio -= min_value;
+	        zero_percentage -= min_value;
         }	
-        zero_one_ratio  /= dilated_map_length / 8 + 1;
+        zero_percentage  /= dilated_map_length;
 
-        if(zero_one_ratio > .5)
+        if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_map_string, dilated_map_length);
 	        combined_byte_length += compression_string.length;
@@ -3801,7 +3806,8 @@ public class DeltaMapper
         	byte [] compression_string   = StringMapper.compressOneStrings(dilated_map_string, dilated_map_length);
 	        combined_byte_length += compression_string.length;   
         }
-	    */
+	   
+        combined_byte_length += map_table.length;
         
         ArrayList result = new ArrayList();
         // If the function failed, return an empty list.
