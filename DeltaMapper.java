@@ -3620,22 +3620,6 @@ public class DeltaMapper
         int     delta_min = Integer.MAX_VALUE;
         for(i = 0; i < size; i++)
         {   
-        	if(same)
-        	{
-        	    if(value[i] != src[i])
-        	    {
-        		    System.out.println("Values are different at index " + i);
-        		    x = i % xdim;
-        		    y = i / xdim;
-        		    System.out.println("x = " + x + ", y = " + y);
-        		    System.out.println("Source value is " + src[i] + ", reconstructed value is " + value[i]);
-        		    if(is_seed[i])
-        			    System.out.println("This is a seed value.");
-        		    else
-        			    System.out.println("This is a dilated value.");
-        		    same = false;
-        	    }
-        	}
         	// Collect the minimum from the delta raster and apply it to both segments, and so only require one string
         	// table later that we can apply to both segments after we do a histogram of the entire raster.
         	// The histogram should return the same value.   
@@ -3655,9 +3639,7 @@ public class DeltaMapper
         //System.out.println("Delta min returned with histogram was " + _delta_min);
         int [] histogram         = (int[])histogram_list.get(1);
 	    int [] delta_table      = StringMapper.getRankTable(histogram);
-	    
-	    
-	    
+	   
 	    byte [] seed_delta_string = new byte[size * 16];
 	    int  [] _seed_delta       = new int[seed_delta.size()];
 	    for(i = 0; i < seed_delta.size(); i++)
@@ -3728,9 +3710,6 @@ public class DeltaMapper
 	  
 	    combined_byte_length += delta_table.length;
         
-        
-        
-        
 	    histogram_list = StringMapper.getHistogram(map);
         
         // Shouldn't make any difference if this is zero or not,
@@ -3745,11 +3724,14 @@ public class DeltaMapper
 	    byte [] seed_map_string = new byte[size * 16];
 	    int  [] _seed_map        = new int[seed_map.size()];
 	    
+	    
+	    int separated_map_length = 0;
+	    
 	    // Check whether or not subtracting makes any difference.
 	    for(i = 0; i < seed_map.size(); i++)
 	    	_seed_map[i] = (byte)seed_map.get(i) - map_min;
 	    	
-	    int seed_map_length     = StringMapper.packStrings2(_seed_map, map_table, seed_delta_string);
+	    int seed_map_length     = StringMapper.packStrings2(_seed_map, map_table, seed_map_string);
 	    
 	    zero_percentage = seed_map.size();
         if(histogram.length > 1)
@@ -3767,22 +3749,22 @@ public class DeltaMapper
         if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(seed_map_string, seed_map_length);
-	        combined_byte_length += compression_string.length;
+	        separated_map_length += compression_string.length;
 	        
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(seed_map_string, seed_map_length);
-	        combined_byte_length += compression_string.length;   
+        	separated_map_length += compression_string.length;   
         }
 	    
-	    
+        
 	    byte [] dilated_map_string = new byte[size * 16];
 	    int  [] _dilated_map       = new int[dilated_map.size()];
 	    for(i = 0; i < seed_delta.size(); i++)
 	    	_dilated_map[i] = (byte)dilated_map.get(i) - map_min;
         
-	    int dilated_map_length     = StringMapper.packStrings2(_dilated_map, map_table, dilated_delta_string);
+	    int dilated_map_length     = StringMapper.packStrings2(_dilated_map, map_table, dilated_map_string);
 	    
 	    zero_percentage = dilated_map.size();
         if(histogram.length > 1)
@@ -3798,21 +3780,57 @@ public class DeltaMapper
         if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_map_string, dilated_map_length);
-	        combined_byte_length += compression_string.length;
+	        separated_map_length += compression_string.length;
 	        
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(dilated_map_string, dilated_map_length);
-	        combined_byte_length += compression_string.length;   
+        	separated_map_length += compression_string.length;   
         }
 	   
+        
+        byte [] combined_map_string = new byte[size * 16];
+	   
+        
+	    int original_map_length     = StringMapper.packStrings2(map, map_table, combined_map_string);
+	    
+	    zero_percentage = map.length;
+        if(histogram.length > 1)
+        {
+	        int min_value = Integer.MAX_VALUE;
+	        for(int k = 0; k < histogram.length; k++)
+		        if(histogram[k] < min_value)
+			        min_value = histogram[k];
+	        zero_percentage -= min_value;
+        }	
+        zero_percentage  /= original_map_length;
+
+        int combined_map_length = 0;
+        if(zero_percentage > .5)
+        {
+	        byte [] compression_string   = StringMapper.compressZeroStrings(combined_map_string, original_map_length);
+	        combined_map_length += compression_string.length;
+        }   
+        else
+        {
+        	byte [] compression_string   = StringMapper.compressOneStrings(combined_map_string, original_map_length);
+        	combined_map_length += compression_string.length;   
+        }
+	   
+        System.out.println("Separated map length is " + separated_map_length);
+        System.out.println("Combined map length is " + combined_map_length);
+        System.out.println();
+        
+        if(combined_map_length < separated_map_length)
+        	combined_byte_length += combined_map_length;
+        else
+        	combined_byte_length += separated_map_length;
+      
         combined_byte_length += map_table.length;
         
         ArrayList result = new ArrayList();
-        // If the function failed, return an empty list.
-        if(!same)
-        	return result;
+       
         result.add(sum);
         result.add(seed_delta);
         result.add(seed_map);
@@ -3822,7 +3840,6 @@ public class DeltaMapper
         return result;
     }
     
-  
     public static int[] getValuesFromIdealDeltas2(ArrayList list, int xdim, int ydim, int init_value)
     {
         int size       = xdim * ydim;
