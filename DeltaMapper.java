@@ -3708,9 +3708,9 @@ public class DeltaMapper
 	    int  [] _dilated_delta       = new int[dilated_delta.size()];
 	    for(i = 0; i < dilated_delta.size(); i++)
 	    	_dilated_delta[i] = (int)dilated_delta.get(i) - delta_min;
-        
+	    
 	    int dilated_delta_length     = StringMapper.packStrings2(_dilated_delta, delta_table, dilated_delta_string);
-	    System.out.println("Byte length of packed dilated deltas is " + (dilated_delta_length / 8));
+	    System.out.println("Byte length of packed dilated deltas using common table is " + (dilated_delta_length / 8));
 	    zero_percentage = dilated_delta.size();
         if(histogram.length > 1)
         {
@@ -4436,7 +4436,7 @@ public class DeltaMapper
         	}
         }
         
-        // Index and value of most connected pixel.
+        // Index and value of first completely connected pixel.
         int max_index = 0;
         int max_value = src[0];
         
