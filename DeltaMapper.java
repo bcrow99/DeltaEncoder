@@ -3667,12 +3667,40 @@ public class DeltaMapper
 	        byte [] compression_string   = StringMapper.compressZeroStrings(seed_delta_string, seed_delta_length);
 	        combined_byte_length += compression_string.length;
 	        System.out.println("Byte length of compressed seed deltas is " + compression_string.length);
+	        
+	        Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	System.out.println("Byte length of zipped compressed seed deltas is " + zipped_length);
+        	
+        	if(compression_string.length < zipped_length)
+        		combined_byte_length += compression_string.length;
+        	else
+        		combined_byte_length += zipped_length;
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(seed_delta_string, seed_delta_length);
-	        combined_byte_length += compression_string.length;   
-	        System.out.println("Byte length of conpressed seed deltas is " + compression_string.length);
+	        
+	        System.out.println("Byte length of compressed seed deltas is " + compression_string.length);
+	        
+	        Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	System.out.println("Byte length of zipped compressed seed deltas is " + zipped_length);
+        	
+        	if(compression_string.length < zipped_length)
+        		combined_byte_length += compression_string.length;
+        	else
+        		combined_byte_length += zipped_length;
         }
         System.out.println();
 	  
@@ -3697,14 +3725,44 @@ public class DeltaMapper
         if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_delta_string, dilated_delta_length);
-	        combined_byte_length += compression_string.length;
-	        System.out.println("Byte length of conpressed dilated deltas is " + compression_string.length);
+	        
+	        System.out.println("Byte length of compressed dilated deltas is " + compression_string.length);
+	        
+	        
+	        Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	System.out.println("Byte length of zipped compressed dilated deltas is " + zipped_length);
+        	
+        	if(compression_string.length < zipped_length)
+        		combined_byte_length += compression_string.length;
+        	else
+        		combined_byte_length += zipped_length;
         }   
+        
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(dilated_delta_string, dilated_delta_length);
-	        combined_byte_length += compression_string.length;   
-	        System.out.println("Byte length of conpressed dilated deltas is " + compression_string.length);
+	           
+	        System.out.println("Byte length of compressed dilated deltas is " + compression_string.length);
+	        
+	        Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	System.out.println("Byte length of zipped compressed dilated deltas is " + zipped_length);
+        	
+        	if(compression_string.length < zipped_length)
+        		combined_byte_length += compression_string.length;
+        	else
+        		combined_byte_length += zipped_length;
         }
 	    
 	  
@@ -3725,7 +3783,8 @@ public class DeltaMapper
 	    int  [] _seed_map        = new int[seed_map.size()];
 	    
 	    
-	    int separated_map_length = 0;
+	    int separated_map_length        = 0;
+	    int zipped_separated_map_length = 0;
 	    
 	    // Check whether or not subtracting makes any difference.
 	    for(i = 0; i < seed_map.size(); i++)
@@ -3743,22 +3802,38 @@ public class DeltaMapper
 	        zero_percentage -= min_value;
         }	
         zero_percentage  /= seed_map_length;
-        
-        
-
+      
         if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(seed_map_string, seed_map_length);
 	        separated_map_length += compression_string.length;
+	        
+	        Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_separated_map_length += zipped_length;
 	        
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(seed_map_string, seed_map_length);
         	separated_map_length += compression_string.length;   
+        	
+        	Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_separated_map_length += zipped_length;
+        	
         }
 	    
-        
 	    byte [] dilated_map_string = new byte[size * 16];
 	    int  [] _dilated_map       = new int[dilated_map.size()];
 	    for(i = 0; i < seed_delta.size(); i++)
@@ -3782,14 +3857,31 @@ public class DeltaMapper
 	        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_map_string, dilated_map_length);
 	        separated_map_length += compression_string.length;
 	        
+	    	Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_separated_map_length += zipped_length;
+	        
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(dilated_map_string, dilated_map_length);
-        	separated_map_length += compression_string.length;   
+        	separated_map_length += compression_string.length; 
+        	
+        	Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_separated_map_length += zipped_length;
         }
 	   
-        
         byte [] combined_map_string = new byte[size * 16];
 	   
         
@@ -3807,25 +3899,57 @@ public class DeltaMapper
         zero_percentage  /= original_map_length;
 
         int combined_map_length = 0;
+        int zipped_combined_map_length = 0;
         if(zero_percentage > .5)
         {
 	        byte [] compression_string   = StringMapper.compressZeroStrings(combined_map_string, original_map_length);
 	        combined_map_length += compression_string.length;
+	        
+	    	Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_combined_map_length += zipped_length;
         }   
         else
         {
         	byte [] compression_string   = StringMapper.compressOneStrings(combined_map_string, original_map_length);
         	combined_map_length += compression_string.length;   
+        	
+        	Deflater deflater = new Deflater();
+	    	deflater.setInput(compression_string);
+	    	byte [] zipped_string = new byte[2 * compression_string.length];
+        	deflater.finish();
+        	int zipped_length = deflater.deflate(zipped_string);
+        	deflater.end(); 
+        	
+        	zipped_combined_map_length += zipped_length;
         }
 	   
         System.out.println("Separated map length is " + separated_map_length);
+        System.out.println("Zipped separated map length is " + zipped_separated_map_length);
         System.out.println("Combined map length is " + combined_map_length);
+        System.out.println("Zipped combined map length is " + zipped_combined_map_length);
         System.out.println();
         
         if(combined_map_length < separated_map_length)
-        	combined_byte_length += combined_map_length;
+        {
+        	if(combined_map_length < zipped_combined_map_length)
+        	    combined_byte_length += combined_map_length;
+        	else
+        		 combined_byte_length += zipped_combined_map_length;
+        }
         else
-        	combined_byte_length += separated_map_length;
+        {
+        	if(separated_map_length < zipped_separated_map_length)
+        	    combined_byte_length += separated_map_length;
+        	else
+        		 combined_byte_length += zipped_separated_map_length;
+        	
+        }
       
         combined_byte_length += map_table.length;
         
