@@ -358,11 +358,8 @@ public class StringMapper
         for(int i = 0; i < size; i++)
         {
             int j = src[i];
-            //System.out.println("Value is " + j);
             int k = table[j];
-            //System.out.println("Lookup value is " + k);
-            //System.out.println();
-            
+           
             if(k == 0)
             {
                 start_bit++;
@@ -580,6 +577,7 @@ public class StringMapper
     }
     
     // Zero bit/zero string functions.
+    // Zero bits correspond to stop bits in our implementation.
     
     public static int compressZeroBits(byte src[], int size, byte dst[]) 
 	{
@@ -1192,7 +1190,7 @@ public class StringMapper
     }
    
     // One bit/one string functions.
-
+    // One bits correspond to run bits in this implementation.
     public static int compressOneBits(byte src[], int size, byte dst[])
     {
         for(int i = 0; i < dst.length; i++)
@@ -1499,7 +1497,7 @@ public class StringMapper
     	catch(Exception e)
     	{
     		System.out.println(e.toString());
-    		System.out.println("Exiting compressOneStrings2 with exception.");
+    		System.out.println("Exiting compressOneStrings with exception.");
     	}
     	return current_length;
     }
@@ -1525,8 +1523,12 @@ public class StringMapper
     		    	extra_bits = (byte)(8 - extra_bits);
     		    extra_bits     <<= 5;
     		    
-    		    dst[byte_length] = extra_bits;
-    		    
+    		    // Need to set iterations to 16 to allow getting the type.
+    		    // Might possibly break the segmentation in the adaptive writer/reader.
+    		    dst[byte_length]  = 16;
+                
+    		    dst[byte_length] |= extra_bits;
+    		  
     	        return dst;
     	    }
             else
