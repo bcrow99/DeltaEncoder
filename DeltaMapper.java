@@ -3463,7 +3463,7 @@ public class DeltaMapper
             	neighbor_unassigned = false;
         }
       
-        System.out.println("Number of seed deltas assigned is " + n);
+        System.out.println("Number of seed pixels assigned is " + n);
         System.out.println("Length of seed delta list is " + seed_delta.size());
         System.out.println("Length of seed location list is " + seed_map.size());
         
@@ -3613,7 +3613,6 @@ public class DeltaMapper
             }
             p++;
         }
-        
         
         boolean same = true;
         
