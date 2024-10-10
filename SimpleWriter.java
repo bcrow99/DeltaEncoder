@@ -45,6 +45,8 @@ public class SimpleWriter
 	double file_compression_rate;
 
 	ArrayList channel_list, table_list, string_list, channel_data, map_list;
+	
+	ArrayList delta_min_list, seed_length_list;
 
 	boolean initialized = false;
 	
@@ -59,7 +61,7 @@ public class SimpleWriter
 			System.exit(0);
 		}
 		String prefix       = new String("");
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		
 		String filename     = new String(args[0]);
 	
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -95,6 +97,10 @@ public class SimpleWriter
 		    table_list  = new ArrayList();
 		    string_list = new ArrayList();
 		    map_list    = new ArrayList();
+		    
+		    // Dedicated lists for delta type 7.
+		    delta_min_list = new ArrayList();
+		    seed_length_list = new ArrayList();
 		    
 		    channel_data = new ArrayList();
 		 
@@ -565,72 +571,60 @@ public class SimpleWriter
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Horizontal sum is " + sum);	
 				}
 				else if(delta_type == 1)
 				{
 					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-				    //System.out.println("Vertical sum is " + sum);
 				}
 				else if(delta_type == 2)
 				{
 					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Average sum is " + sum);
 				}
 				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Paeth sum is " + sum);	
 				}
 				else if(delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					//System.out.println("Gradient sum is " + sum);	
 				}
 				else if(delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int sum = (int)result.get(0);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
 				else if(delta_type == 6)
 				{
 					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+					int sum = (int)result.get(0);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
 				else if(delta_type == 7)
 				{
 			        ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
-			        result = DeltaMapper.getIdealDeltaStringsFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
-			        int byte_length = (int)result.get(5);
+			        result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
 			        
-			        double compression_amount = byte_length;
-			        compression_amount /= (xdim * ydim);
-			        System.out.println("Compression is " + String.format("%.4f", compression_amount));
-			        System.out.println();
-			        
-			        /*
-				    byte [] seed_map     = (byte [])result.get(2);
-				    byte [] dilation_map = (byte [])result.get(4);
+			        int sum = (int)result.get(0);
+				    ArrayList seed_map     = (ArrayList)result.get(2);
+				    ArrayList dilation_map = (ArrayList)result.get(4);
 				    ArrayList list = new ArrayList();
 				    list.add(seed_map);
 				    list.add(dilation_map);
 				    map_list.add(list);
-				    */
+				    
+				    seed_length_list.add(seed_map.size());
 				}
 		
-				int [] delta = new int[1];
-				
-				
 				if(delta_type != 7)
 				{
-                    delta  = (int [])result.get(1);
-               
+					int [] delta  = (int [])result.get(1);
 				    ArrayList histogram_list = StringMapper.getHistogram(delta);
 			        channel_delta_min[j]     = (int)histogram_list.get(0);
 			        int [] histogram         = (int[])histogram_list.get(1);
@@ -669,14 +663,124 @@ public class SimpleWriter
 				        channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
 				        channel_string_type[i]       = StringMapper.getType(compression_string);
 				        channel_iterations[i]        = StringMapper.getIterations(compression_string);
-				        if(channel_string_type[i] != 1 && channel_iterations[i] != 0)
+				        if(channel_string_type[i] != 1)
 				    	    System.out.println("Unexpected string type for 1 string.");
 				        string_list.add(compression_string);  
 		            }
 				}
 				else if(delta_type == 7)
 				{
+					// The channel bit length, type, and iterations are already contained in the compression strings.
+				    // For now we won't bother setting the channel data like we do the other delta types, 
+					// which is redundant information useful for error checking and debugging but not really required.
+					// The issue is that this delta type requires saving pairs of values, not single values.
+					// The delta minimums still need to be stored.
+					// For now we'll have an array list just for delta type 7, where we will attach channel lists.
 					
+					ArrayList channel_delta_min_list = new ArrayList();
+					ArrayList channel_table_list     = new ArrayList();
+					
+					ArrayList seed_delta_list  = (ArrayList)result.get(1);
+					int [] seed_delta = new int[seed_delta_list.size()];
+					for(int k = 0; k < seed_delta.length; k++)
+						seed_delta[k] = (int)seed_delta_list.get(k);
+					ArrayList histogram_list = StringMapper.getHistogram(seed_delta);
+					int seed_delta_min       = (int)histogram_list.get(0);
+					
+					// Get the delta min for the seed deltas.
+					channel_delta_min_list.add(seed_delta_min);
+					
+					int [] histogram         = (int[])histogram_list.get(1);
+					
+					int [] seed_string_table = StringMapper.getRankTable(histogram);
+					for(int k = 0; k < seed_delta.length; k++)
+					    seed_delta[k] -= seed_delta_min;
+				    byte [] seed_string = new byte[new_xdim * new_ydim * 16];
+				    
+				    int seed_length      = StringMapper.packStrings2(seed_delta, seed_string_table, seed_string);
+				    
+				    channel_table_list.add(seed_string_table);
+					
+				    double zero_percentage = new_xdim * new_ydim;
+	                if(histogram.length > 1)
+	                {
+				        int min_value = Integer.MAX_VALUE;
+				        for(int k = 0; k < histogram.length; k++)
+					        if(histogram[k] < min_value)
+						        min_value = histogram[k];
+				        zero_percentage -= min_value;
+	                }	
+		            zero_percentage  /= seed_length;
+		    
+		            ArrayList channel_string_list = new ArrayList();
+		            if(zero_percentage > .5)	
+		            {
+		            	System.out.println("Seed string contains more zeros.");
+				        byte [] compression_string   = StringMapper.compressZeroStrings(seed_string, seed_length);
+				        channel_string_list.add(compression_string);   
+				        System.out.println("Seed compression string has length " + compression_string.length);
+		            }
+		            else
+		            {
+		            	System.out.println("Seed string contains more ones.");
+		            	byte [] compression_string   = StringMapper.compressOneStrings(seed_string, seed_length);
+				        channel_string_list.add(compression_string);  
+				        System.out.println("Seed compression string has length " + compression_string.length);
+		            }
+		            
+		            
+					
+					ArrayList dilated_delta_list = (ArrayList)result.get(3);
+					int [] dilated_delta = new int[dilated_delta_list.size()];
+					
+					histogram_list = StringMapper.getHistogram(dilated_delta);
+					int dilated_delta_min       = (int)histogram_list.get(0);
+					
+					// Get the delta min for the dilated deltas.
+					channel_delta_min_list.add(dilated_delta_min);
+					
+					// Add it to the main list.
+					delta_min_list.add(channel_delta_min_list);
+					
+					histogram         = (int[])histogram_list.get(1);
+					
+					int [] dilated_string_table = StringMapper.getRankTable(histogram);
+					for(int k = 0; k < dilated_delta.length; k++)
+					    dilated_delta[k] -= dilated_delta_min;
+				    byte [] dilated_string = new byte[new_xdim * new_ydim * 16];
+				    
+				    int dilated_length      = StringMapper.packStrings2(dilated_delta, dilated_string_table, dilated_string);
+				    
+				    channel_table_list.add(dilated_string_table);
+				    table_list.add(channel_table_list);
+					
+				    zero_percentage = new_xdim * new_ydim;
+	                if(histogram.length > 1)
+	                {
+				        int min_value = Integer.MAX_VALUE;
+				        for(int k = 0; k < histogram.length; k++)
+					        if(histogram[k] < min_value)
+						        min_value = histogram[k];
+				        zero_percentage -= min_value;
+	                }	
+		            zero_percentage  /= dilated_length;
+		    
+		            if(zero_percentage > .5)	
+		            {
+		            	System.out.println("Dilated string contains more zeros.");
+				        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_string, dilated_length);
+				        channel_string_list.add(compression_string);   
+				        System.out.println("Dilated compression string has length " + compression_string.length);
+		            }
+		            else
+		            {
+		            	System.out.println("Dilated string contains more ones.");
+		            	byte [] compression_string   = StringMapper.compressOneStrings(dilated_string, dilated_length);
+				        channel_string_list.add(compression_string);  
+				        System.out.println("Dilated compression string has length " + compression_string.length);
+		            }
+		            
+		            string_list.add(channel_string_list);
 				}
 			}
 			
@@ -684,80 +788,197 @@ public class SimpleWriter
 			
 			for(int i = 0; i < 3; i++)
 		    {
-			    byte [] string = (byte [])string_list.get(i);
-			    int  [] table  = (int [])table_list.get(i);
-			    int  [] delta  = new int[new_xdim * new_ydim]; 
-			    int j          = channel_id[i];
-			    
-			    if(channel_length[j] != channel_compressed_length[j])
-			    {
-			    	byte [] decompressed_string = new byte[xdim * ydim * 16];
-			    	int decompressed_length = 0;
-			    	if(channel_string_type[i] == 0)
-			    		decompressed_length = StringMapper.decompressZeroStrings(string, channel_compressed_length[j], decompressed_string);
-			    	else
-			    		decompressed_length = StringMapper.decompressOneStrings(string, channel_compressed_length[j], decompressed_string);
-			    	if(decompressed_length != channel_length[j])
-			    		System.out.println("Decompressed length different from original length.");
-			    	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-					if(number_unpacked != new_xdim * new_ydim)
-					    System.out.println("Number of values unpacked does not agree with image dimensions.");	
-			    }
-			    else
-			    {
-			    	int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
-					if(number_unpacked != new_xdim * new_ydim)
-					    System.out.println("Number of values unpacked does not agree with image dimensions.");	
-			    }
-			    
-			    for(int k = 1; k < delta.length; k++)
-			    	delta[k] += channel_delta_min[j];
-			    
-			    int [] channel = new int[0];
-			    
-			    if(delta_type == 0)
-			    {
-			    	channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim , new_ydim, channel_init[j]);
-			    }
-			    else if(delta_type == 1)
-			    {
-			        channel = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
-			    }
-			    else if(delta_type == 2)
-			    {
-			        channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
-			    }
-			    else if(delta_type == 3)
-			    {
-			        channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
-			    }
-			    else if(delta_type == 4)
-			    {
-			    	channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
-			    }
-			    else if(delta_type == 5)
-			    {
-			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
-			    }
-			    else if(delta_type == 6  || delta_type == 7)
-			    {
-			    	byte [] map = (byte[])map_list.get(i);
-			        channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
-			    }
-			    
-				if(j > 2)
-					for(int k = 0; k < channel.length; k++)
-						channel[k] += channel_min[j];
-				
-				if(new_xdim != xdim && new_ydim != ydim)
+		        int j          = channel_id[i];
+				if(delta_type != 7)
 				{
-					int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
-					resized_channel_list.add(resized_channel);
+			        byte [] string = (byte [])string_list.get(i);
+			        int  [] table  = (int [])table_list.get(i);
+			        int  [] delta  = new int[new_xdim * new_ydim]; 
+			    
+			    
+			        if(channel_length[j] != channel_compressed_length[j])
+			        {
+			    	    byte [] decompressed_string = new byte[xdim * ydim * 16];
+			    	    int decompressed_length = 0;
+			    	    if(channel_string_type[i] == 0)
+			    		    decompressed_length = StringMapper.decompressZeroStrings(string, channel_compressed_length[j], decompressed_string);
+			    	    else
+			    		    decompressed_length = StringMapper.decompressOneStrings(string, channel_compressed_length[j], decompressed_string);
+			    	    if(decompressed_length != channel_length[j])
+			    		    System.out.println("Decompressed length different from original length.");
+			    	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+					    if(number_unpacked != new_xdim * new_ydim)
+					        System.out.println("Number of values unpacked does not agree with image dimensions.");	
+			        }
+			        else
+			        {
+			    	    int number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+					    if(number_unpacked != new_xdim * new_ydim)
+					        System.out.println("Number of values unpacked does not agree with image dimensions.");	
+			        }
+			    
+			        for(int k = 1; k < delta.length; k++)
+			    	    delta[k] += channel_delta_min[j];
+			    
+			        int [] channel = new int[0];
+			    
+			        if(delta_type == 0)
+			        {
+			    	    channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+			        }
+			        else if(delta_type == 1)
+			        {
+			            channel = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			        }
+			        else if(delta_type == 2)
+			        {
+			            channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			        }
+			        else if(delta_type == 3)
+			        {
+			            channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			        }
+			        else if(delta_type == 4)
+			        {
+			    	    channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+			        }
+			        else if(delta_type == 5)
+			        {
+			    	    byte [] map = (byte[])map_list.get(i);
+			            channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			        }
+			        else if(delta_type == 6)
+			        {
+			    	    byte [] map = (byte[])map_list.get(i);
+			            channel = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			        }
+			    
+				    if(j > 2)
+					    for(int k = 0; k < channel.length; k++)
+						    channel[k] += channel_min[j];
+				
+				    if(new_xdim != xdim || new_ydim != ydim)
+				    {
+					    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
+					    resized_channel_list.add(resized_channel);
 				    
+				    }
+				    else
+					    resized_channel_list.add(channel);
+		        }
+				else if(delta_type == 7)
+				{
+					ArrayList channel_string_list = (ArrayList)string_list.get(i);
+			        ArrayList channel_table_list  = (ArrayList)table_list.get(i);	
+			        ArrayList channel_map_list    = (ArrayList)map_list.get(i);
+			        ArrayList channel_delta_min   = (ArrayList)delta_min_list.get(i);
+			        
+			        byte [] seed_string = (byte [])channel_string_list.get(0);
+			        byte [] dilated_string = (byte [])channel_string_list.get(1);
+			        
+			        int [] seed_table = (int [])channel_table_list.get(0);
+			        int [] dilated_table = (int [])channel_table_list.get(1);
+			      
+			        ArrayList seed_map = (ArrayList)channel_map_list.get(0);
+			        ArrayList dilated_map = (ArrayList)channel_map_list.get(1);
+			        
+			        int seed_delta_min = (int)channel_delta_min.get(0);
+			        int dilated_delta_min = (int)channel_delta_min.get(1);
+			        
+			        
+			        int  seed_length = (int)seed_length_list.get(i);
+			        int  dilated_length = new_xdim * new_ydim - seed_length - 1;
+			        int [] seed_delta = new int[seed_length];
+			        int [] dilated_delta = new int[dilated_length];
+			        
+			        int iter  = StringMapper.getIterations(seed_string);
+			        if(iter == 0 || iter == 16)
+			        {
+			        	System.out.println("String did not compress.");
+			        	int number_unpacked = StringMapper.unpackStrings2(seed_string, seed_table, seed_delta);
+					    if(number_unpacked != seed_length)
+					        System.out.println("Number of values unpacked does not agree with seed length.");	
+			        }
+			        else
+			        {
+			        	byte [] decompressed_string = new byte[xdim * ydim * 16];
+				        int  string_type = StringMapper.getType(seed_string);   
+				        int  bit_length  = StringMapper.getBitlength(seed_string); 
+				        int  decompressed_length = 0;
+				        if(string_type == 0)
+				        	decompressed_length = StringMapper.decompressZeroStrings(seed_string, bit_length, decompressed_string);	
+				        else
+				        	decompressed_length = StringMapper.decompressOneStrings(seed_string, bit_length, decompressed_string);
+				        System.out.println("String compressed.");
+			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, seed_table, seed_delta);
+					    if(number_unpacked != seed_length)
+					        System.out.println("Number of values unpacked does not agree with seed length.");
+					    else
+					    	System.out.println("Number of values unpacked agrees with seed length.");
+			        }
+			        
+
+			        ArrayList seed_delta_list = new ArrayList();
+			        for(int k = 0; k < seed_length; k++)
+			        	seed_delta_list.add(seed_delta[k] + seed_delta_min);
+			        
+			        
+			        iter = StringMapper.getIterations(dilated_string);
+			        if(iter == 0 || iter == 16)
+			        {
+			        	System.out.println("String did not compress.");
+			        	int number_unpacked = StringMapper.unpackStrings2(dilated_string, dilated_table, dilated_delta);
+					    if(number_unpacked != dilated_length)
+					        System.out.println("Number of values unpacked does not agree with dilated length.");	
+			        }
+			        else
+			        {
+			        	byte [] decompressed_string = new byte[xdim * ydim * 16];
+				        int  string_type = StringMapper.getType(dilated_string);   
+				        int  bit_length  = StringMapper.getBitlength(dilated_string); 
+				        int  decompressed_length = 0;
+				        if(string_type == 0)
+				        	decompressed_length = StringMapper.decompressZeroStrings(dilated_string, bit_length, decompressed_string);	
+				        else
+				        	decompressed_length = StringMapper.decompressOneStrings(dilated_string, bit_length, decompressed_string);
+				        System.out.println("String compressed.");
+			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, dilated_table, dilated_delta);
+					    if(number_unpacked != dilated_length)
+					        System.out.println("Number of values unpacked does not agree with dilated length.");
+					    else
+					    	System.out.println("Number of values unpacked agrees with dilated length.");  
+			        }
+			        
+			        ArrayList dilated_delta_list = new ArrayList();
+			        for(int k = 0; k < dilated_length; k++)
+			        	dilated_delta_list.add(dilated_delta[k] + dilated_delta_min);
+			        
+			        ArrayList list = new ArrayList();
+			        list.add(0);
+			        list.add(seed_delta_list);
+			        list.add(seed_map);
+			        list.add(dilated_delta_list);
+			        list.add(dilated_map);
+			        
+			        System.out.println("Got here.");
+			        System.out.println();
+			        int [] channel = DeltaMapper.getValuesFromIdealDeltas2(list, new_xdim , new_ydim, channel_init[j]);
+			        if(j > 2)
+					    for(int k = 0; k < channel.length; k++)
+						    channel[k] += channel_min[j];
+				
+				    if(new_xdim != xdim || new_ydim != ydim)
+				    {
+					    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
+					    resized_channel_list.add(resized_channel);
+				    
+				    }
+				    else
+					    resized_channel_list.add(channel);
+			        
+			        
+			        System.out.println();
 				}
-				else
-					resized_channel_list.add(channel);
 		    }
 			
 			int [] blue  = new int[xdim * ydim];
