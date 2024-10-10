@@ -44,7 +44,7 @@ public class SimpleWriter
 	long file_length;
 	double file_compression_rate;
 
-	ArrayList channel_list, table_list, string_list, channel_data, map_list;
+	ArrayList channel_list, table_list, string_list, map_list;
 	
 	ArrayList delta_min_list, seed_length_list;
 
@@ -61,11 +61,9 @@ public class SimpleWriter
 			System.exit(0);
 		}
 		String prefix       = new String("");
-		
 		String filename     = new String(args[0]);
 	
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
-		//SimpleWriter writer = new SimpleWriter(filename);
 	}
 
 	public SimpleWriter(String _filename)
@@ -102,7 +100,7 @@ public class SimpleWriter
 		    delta_min_list = new ArrayList();
 		    seed_length_list = new ArrayList();
 		    
-		    channel_data = new ArrayList();
+		    //channel_data = new ArrayList();
 		 
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
@@ -557,8 +555,10 @@ public class SimpleWriter
 			
 			table_list.clear();
 			string_list.clear();
-			channel_data.clear();
+			//channel_data.clear();
 			map_list.clear();
+			delta_min_list.clear(); 
+			seed_length_list.clear();
 			
 			for(int i = 0; i < 3; i++)
 			{
@@ -697,11 +697,11 @@ public class SimpleWriter
 					    seed_delta[k] -= seed_delta_min;
 				    byte [] seed_string = new byte[new_xdim * new_ydim * 16];
 				    
-				    int seed_length      = StringMapper.packStrings2(seed_delta, seed_string_table, seed_string);
+				    int seed_length = StringMapper.packStrings2(seed_delta, seed_string_table, seed_string);
 				    
 				    channel_table_list.add(seed_string_table);
 					
-				    double zero_percentage = new_xdim * new_ydim;
+				    double zero_percentage = seed_delta.length;
 	                if(histogram.length > 1)
 	                {
 				        int min_value = Integer.MAX_VALUE;
@@ -728,10 +728,11 @@ public class SimpleWriter
 				        System.out.println("Seed compression string has length " + compression_string.length);
 		            }
 		            
-		            
-					
 					ArrayList dilated_delta_list = (ArrayList)result.get(3);
+					System.out.println("Number of dilated deltas is" + dilated_delta_list.size());
 					int [] dilated_delta = new int[dilated_delta_list.size()];
+					for(int k = 0; k < dilated_delta.length; k++)
+						dilated_delta[k] = (int)dilated_delta_list.get(k);
 					
 					histogram_list = StringMapper.getHistogram(dilated_delta);
 					int dilated_delta_min       = (int)histogram_list.get(0);
@@ -750,11 +751,14 @@ public class SimpleWriter
 				    byte [] dilated_string = new byte[new_xdim * new_ydim * 16];
 				    
 				    int dilated_length      = StringMapper.packStrings2(dilated_delta, dilated_string_table, dilated_string);
-				    
+				    int byte_length = dilated_length / 8;
+				    if(dilated_length % 8 != 0)
+				    	byte_length++;
+				   
 				    channel_table_list.add(dilated_string_table);
 				    table_list.add(channel_table_list);
 					
-				    zero_percentage = new_xdim * new_ydim;
+				    zero_percentage = dilated_delta.length;
 	                if(histogram.length > 1)
 	                {
 				        int min_value = Integer.MAX_VALUE;
@@ -765,22 +769,37 @@ public class SimpleWriter
 	                }	
 		            zero_percentage  /= dilated_length;
 		    
+		            System.out.println("Dilated string zero percentage is " + zero_percentage);
 		            if(zero_percentage > .5)	
 		            {
-		            	System.out.println("Dilated string contains more zeros.");
+		            	
 				        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_string, dilated_length);
 				        channel_string_list.add(compression_string);   
 				        System.out.println("Dilated compression string has length " + compression_string.length);
+				        
+				        int  string_type = StringMapper.getType(compression_string);   
+				        int  bit_length  = StringMapper.getBitlength(compression_string); 
+				        int  iter        = StringMapper.getIterations(compression_string);
+				        
+				        System.out.println("Bit length is " + bit_length);
+				        System.out.println("String type is " + string_type);
+				        System.out.println("Iterations is " + iter);
 		            }
 		            else
 		            {
-		            	System.out.println("Dilated string contains more ones.");
 		            	byte [] compression_string   = StringMapper.compressOneStrings(dilated_string, dilated_length);
 				        channel_string_list.add(compression_string);  
 				        System.out.println("Dilated compression string has length " + compression_string.length);
+				        int  string_type = StringMapper.getType(compression_string);   
+				        int  bit_length  = StringMapper.getBitlength(compression_string); 
+				        int  iter        = StringMapper.getIterations(compression_string);
+				        
+				        System.out.println("Bit length is " + bit_length);
+				        System.out.println("String type is " + string_type);
+				        System.out.println("Iterations is " + iter);
 		            }
-		            
 		            string_list.add(channel_string_list);
+		            System.out.println();
 				}
 			}
 			
@@ -789,7 +808,8 @@ public class SimpleWriter
 			for(int i = 0; i < 3; i++)
 		    {
 		        int j          = channel_id[i];
-				if(delta_type != 7)
+				
+		        if(delta_type != 7)
 				{
 			        byte [] string = (byte [])string_list.get(i);
 			        int  [] table  = (int [])table_list.get(i);
@@ -960,8 +980,6 @@ public class SimpleWriter
 			        list.add(dilated_delta_list);
 			        list.add(dilated_map);
 			        
-			        System.out.println("Got here.");
-			        System.out.println();
 			        int [] channel = DeltaMapper.getValuesFromIdealDeltas2(list, new_xdim , new_ydim, channel_init[j]);
 			        if(j > 2)
 					    for(int k = 0; k < channel.length; k++)
@@ -975,8 +993,6 @@ public class SimpleWriter
 				    }
 				    else
 					    resized_channel_list.add(channel);
-			        
-			        
 			        System.out.println();
 				}
 		    }
