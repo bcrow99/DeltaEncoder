@@ -3129,9 +3129,9 @@ public class DeltaMapper
             	neighbor_unassigned = false;
         }
       
-        System.out.println("Number of seed deltas assigned is " + n);
-        System.out.println("Length of seed delta list is " + seed_delta.size());
-        System.out.println("Length of seed location list is " + seed_map.size());
+        System.out.println("Number of seed pixels assigned is " + n + " out of " + size + " total.");
+        //System.out.println("Length of seed delta list is " + seed_delta.size());
+        //System.out.println("Length of seed location list is " + seed_map.size());
         
         int  [] value = new int[size];
         x = xdim / 2;
@@ -3216,7 +3216,7 @@ public class DeltaMapper
             
         }
         
-        //System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
+        System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
         
         // Create the lists we'll use to populate the raster and keep track of the sum of the deltas.
         int sum = 0;
@@ -3279,7 +3279,7 @@ public class DeltaMapper
             p++;
         }
         
-        
+        /*
         boolean same = true;
         for(i = 0; i < size; i++)
         {
@@ -3298,7 +3298,9 @@ public class DeltaMapper
         		break;
         	}
         }
+        */
         
+        System.out.println();        
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(seed_delta);
@@ -3309,6 +3311,7 @@ public class DeltaMapper
     }
     
     // Get an ideal delta set and a map of which pixels are used.
+    // Probably inaccurate.
     public static ArrayList getIdealDeltaStringsFromValues2(int src[], int xdim, int ydim, ArrayList delta_list)
     {
     	int size = xdim * ydim;
