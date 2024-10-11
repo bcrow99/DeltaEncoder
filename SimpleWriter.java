@@ -60,9 +60,11 @@ public class SimpleWriter
 			System.out.println("Usage: java SimpleWriter <filename>");
 			System.exit(0);
 		}
+		
 		String prefix       = new String("");
+		
 		String filename     = new String(args[0]);
-	
+		
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
 	}
 
@@ -715,21 +717,17 @@ public class SimpleWriter
 		            ArrayList channel_string_list = new ArrayList();
 		            if(zero_percentage > .5)	
 		            {
-		            	System.out.println("Seed string contains more zeros.");
 				        byte [] compression_string   = StringMapper.compressZeroStrings(seed_string, seed_length);
 				        channel_string_list.add(compression_string);   
-				        System.out.println("Seed compression string has length " + compression_string.length);
 		            }
 		            else
 		            {
-		            	System.out.println("Seed string contains more ones.");
 		            	byte [] compression_string   = StringMapper.compressOneStrings(seed_string, seed_length);
 				        channel_string_list.add(compression_string);  
-				        System.out.println("Seed compression string has length " + compression_string.length);
 		            }
 		            
 					ArrayList dilated_delta_list = (ArrayList)result.get(3);
-					System.out.println("Number of dilated deltas is" + dilated_delta_list.size());
+					
 					int [] dilated_delta = new int[dilated_delta_list.size()];
 					for(int k = 0; k < dilated_delta.length; k++)
 						dilated_delta[k] = (int)dilated_delta_list.get(k);
@@ -769,37 +767,36 @@ public class SimpleWriter
 	                }	
 		            zero_percentage  /= dilated_length;
 		    
-		            System.out.println("Dilated string zero percentage is " + zero_percentage);
+		            //System.out.println("Dilated string zero percentage is " + String.format("%.2f", zero_percentage));
 		            if(zero_percentage > .5)	
 		            {
 		            	
 				        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_string, dilated_length);
 				        channel_string_list.add(compression_string);   
-				        System.out.println("Dilated compression string has length " + compression_string.length);
-				        
-				        int  string_type = StringMapper.getType(compression_string);   
-				        int  bit_length  = StringMapper.getBitlength(compression_string); 
-				        int  iter        = StringMapper.getIterations(compression_string);
-				        
-				        System.out.println("Bit length is " + bit_length);
-				        System.out.println("String type is " + string_type);
-				        System.out.println("Iterations is " + iter);
+				      
+				        //int  string_type = StringMapper.getType(compression_string);   
+				        //int  bit_length  = StringMapper.getBitlength(compression_string); 
+				        //int  iter        = StringMapper.getIterations(compression_string);
+				        //System.out.println("Dilated compression string has length " + compression_string.length);
+				        //System.out.println("Bit length is " + bit_length);
+				        //System.out.println("String type is " + string_type);
+				        //System.out.println("Iterations is " + iter);
 		            }
 		            else
 		            {
 		            	byte [] compression_string   = StringMapper.compressOneStrings(dilated_string, dilated_length);
 				        channel_string_list.add(compression_string);  
-				        System.out.println("Dilated compression string has length " + compression_string.length);
-				        int  string_type = StringMapper.getType(compression_string);   
-				        int  bit_length  = StringMapper.getBitlength(compression_string); 
-				        int  iter        = StringMapper.getIterations(compression_string);
-				        
-				        System.out.println("Bit length is " + bit_length);
-				        System.out.println("String type is " + string_type);
-				        System.out.println("Iterations is " + iter);
+
+				        //int  string_type = StringMapper.getType(compression_string);   
+				        //int  bit_length  = StringMapper.getBitlength(compression_string); 
+				        //int  iter        = StringMapper.getIterations(compression_string);
+				        //System.out.println("Dilated compression string has length " + compression_string.length);
+				        //System.out.println("Bit length is " + bit_length);
+				        //System.out.println("String type is " + string_type);
+				        //System.out.println("Iterations is " + iter);
 		            }
 		            string_list.add(channel_string_list);
-		            System.out.println();
+		            //System.out.println();
 				}
 			}
 			
@@ -914,7 +911,7 @@ public class SimpleWriter
 			        int iter  = StringMapper.getIterations(seed_string);
 			        if(iter == 0 || iter == 16)
 			        {
-			        	System.out.println("String did not compress.");
+			        	//System.out.println("String did not compress.");
 			        	int number_unpacked = StringMapper.unpackStrings2(seed_string, seed_table, seed_delta);
 					    if(number_unpacked != seed_length)
 					        System.out.println("Number of values unpacked does not agree with seed length.");	
@@ -929,12 +926,10 @@ public class SimpleWriter
 				        	decompressed_length = StringMapper.decompressZeroStrings(seed_string, bit_length, decompressed_string);	
 				        else
 				        	decompressed_length = StringMapper.decompressOneStrings(seed_string, bit_length, decompressed_string);
-				        System.out.println("String compressed.");
+				        //System.out.println("String compressed.");
 			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, seed_table, seed_delta);
 					    if(number_unpacked != seed_length)
 					        System.out.println("Number of values unpacked does not agree with seed length.");
-					    else
-					    	System.out.println("Number of values unpacked agrees with seed length.");
 			        }
 			        
 
@@ -946,7 +941,7 @@ public class SimpleWriter
 			        iter = StringMapper.getIterations(dilated_string);
 			        if(iter == 0 || iter == 16)
 			        {
-			        	System.out.println("String did not compress.");
+			        	//System.out.println("String did not compress.");
 			        	int number_unpacked = StringMapper.unpackStrings2(dilated_string, dilated_table, dilated_delta);
 					    if(number_unpacked != dilated_length)
 					        System.out.println("Number of values unpacked does not agree with dilated length.");	
@@ -961,12 +956,10 @@ public class SimpleWriter
 				        	decompressed_length = StringMapper.decompressZeroStrings(dilated_string, bit_length, decompressed_string);	
 				        else
 				        	decompressed_length = StringMapper.decompressOneStrings(dilated_string, bit_length, decompressed_string);
-				        System.out.println("String compressed.");
+				        //System.out.println("String compressed.");
 			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, dilated_table, dilated_delta);
 					    if(number_unpacked != dilated_length)
-					        System.out.println("Number of values unpacked does not agree with dilated length.");
-					    else
-					    	System.out.println("Number of values unpacked agrees with dilated length.");  
+					        System.out.println("Number of values unpacked does not agree with dilated length."); 
 			        }
 			        
 			        ArrayList dilated_delta_list = new ArrayList();
@@ -1166,32 +1159,73 @@ public class SimpleWriter
 		        	
 		        	out.writeInt(channel_init[j]);
 		        	
-		        	out.writeInt(channel_delta_min[j]);
+		        	if(delta_type != 7)
+		        	{
+		        	    out.writeInt(channel_delta_min[j]);
 		        
-		        	out.writeInt(channel_length[j]);
+		        	    out.writeInt(channel_length[j]);
 		        	
-		        	// If the string didn't compress, 
-		        	// this is the same as the uncompressed length.
-		        	out.writeInt(channel_compressed_length[j]);
+		        	    // If the string didn't compress, 
+		        	    // this is the same as the uncompressed length.
+		        	    out.writeInt(channel_compressed_length[j]);
 		        	
-		        	out.writeByte(channel_iterations[i]);
+		        	    out.writeByte(channel_iterations[i]);
 		        	
-		        	int [] table = (int[])table_list.get(i);
-		            out.writeShort(table.length);
+		        	    int [] table = (int[])table_list.get(i);
+		                out.writeShort(table.length);
 		         
-		            int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
-					int max_short_value = Short.MAX_VALUE * 2 + 1;
-					
-		            if(table.length <= max_byte_value)
-                    {
-		                for(int k = 0; k < table.length; k++)
-		                    out.writeByte(table[k]);
-                    }
-		            else 
-		            {
-		                for(int k = 0; k < table.length; k++)
-		                    out.writeShort(table[k]);
-                    }
+		                int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
+					   
+		                if(table.length <= max_byte_value)
+                        {
+		                    for(int k = 0; k < table.length; k++)
+		                        out.writeByte(table[k]);
+                         }
+		                else 
+		                {
+		                    for(int k = 0; k < table.length; k++)
+		                        out.writeShort(table[k]);
+                        }
+		        	}
+		        	else if(delta_type == 7)
+		        	{
+		        	    ArrayList channel_delta_min_list = (ArrayList)delta_min_list.get(i);
+		        	    int seed_delta_min = (int)channel_delta_min_list.get(0);
+		        	    int dilated_delta_min = (int)channel_delta_min_list.get(1);
+		        	    
+		        	    out.writeInt(seed_delta_min);
+		        	    out.writeInt(dilated_delta_min);
+		        	   
+		        	    ArrayList channel_table_list = (ArrayList)table_list.get(i);
+		        	    int [] seed_table = (int [])channel_table_list.get(0);
+		        	    int [] dilated_table = (int [])channel_table_list.get(1);
+		        	    
+		        	    int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
+		        	    
+		        	    out.writeShort(seed_table.length);   
+		                if(seed_table.length <= max_byte_value)
+                        {
+		                    for(int k = 0; k < seed_table.length; k++)
+		                        out.writeByte(seed_table[k]);
+                         }
+		                else 
+		                {
+		                    for(int k = 0; k < seed_table.length; k++)
+		                        out.writeShort(seed_table[k]);
+                        }
+		                
+		                out.writeShort(dilated_table.length);    
+		                if(dilated_table.length <= max_byte_value)
+                        {
+		                    for(int k = 0; k < dilated_table.length; k++)
+		                        out.writeByte(dilated_table[k]);
+                         }
+		                else 
+		                {
+		                    for(int k = 0; k < dilated_table.length; k++)
+		                        out.writeShort(dilated_table[k]);
+                        }
+		        	}
 		            
 		            if(delta_type == 5  || delta_type == 6)
 		            {
@@ -1240,27 +1274,103 @@ public class SimpleWriter
 			            out.writeByte(min_value);
 			            out.writeInt(map.length);
 		            }
-		            
-	                byte [] string = (byte [])string_list.get(i);
-	                out.writeInt(string.length);
+		            else if(delta_type == 7)
+		            {
+		            	
+		                ArrayList channel_map_list = (ArrayList)map_list.get(i);	
+		                
+		                ArrayList seed_map_list = (ArrayList)channel_map_list.get(0);
+		                ArrayList dilated_map_list = (ArrayList)channel_map_list.get(1);
+		                
+		                byte [] seed_map = new byte[seed_map_list.size()];
+		                for(int k = 0; k < seed_map.length; k++)
+		                	seed_map[k] = (byte)seed_map_list.get(k);
+		                
+		                byte [] dilated_map = new byte[dilated_map_list.size()];
+		                for(int k = 0; k < dilated_map.length; k++)
+		                	dilated_map[k] = (byte)dilated_map_list.get(k);
+		                
+		                //System.out.println("Got here.");
+		                
+		                
+		                out.writeInt(seed_map.length);
+		                
+		                // For now we'll simply zip the maps.
+		                // Probably the most compression is string packing first,
+		                // but it make the coding/decoding more complicated.
+		                Deflater deflater = new Deflater();
+	                    deflater.setInput(seed_map);
+	                    byte [] zipped_string = new byte[2 * seed_map.length];
+	                    deflater.finish();
+	                    int zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
+	                    out.writeInt(zipped_length);
+	                    //out.write(zipped_string, 0, zipped_length);
+	                    
+	                    out.writeInt(dilated_map.length);
+	                    
+	                    deflater = new Deflater();
+	                    deflater.setInput(dilated_map);
+	                    zipped_string = new byte[2 * dilated_map.length];
+	                    deflater.finish();
+	                    zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
+	                    out.writeInt(zipped_length);
+	                    out.write(zipped_string, 0, zipped_length);
+		            }
+		           
+		            if(delta_type != 7)
+		            {
+	                    byte [] string = (byte [])string_list.get(i);
+	                    out.writeInt(string.length);
 	                
-	                double string_compression_rate = string.length;
-	                string_compression_rate       /= xdim * ydim;
-	                System.out.println("String compression rate is " + String.format("%.4f", string_compression_rate));
-	                Deflater deflater = new Deflater();
-			    	deflater.setInput(string);
-			    	byte [] zipped_string = new byte[2 *string.length];
-	            	deflater.finish();
-	            	int zipped_length = deflater.deflate(zipped_string);
-	            	deflater.end(); 
+	                    double string_compression_rate = string.length;
+	                    string_compression_rate       /= xdim * ydim;
+	                    //System.out.println("String compression rate is " + String.format("%.4f", string_compression_rate));
+	                    Deflater deflater = new Deflater();
+	                    deflater.setInput(string);
+	                    byte [] zipped_string = new byte[2 *string.length];
+	                    deflater.finish();
+	                    int zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
 	            	
-	            	double zip_compression_rate = zipped_length;
-	            	zip_compression_rate       /= xdim * ydim;
-	                System.out.println("Zip compression rate is " + String.format("%.4f", zip_compression_rate));
-	                System.out.println();
+	            	    double zip_compression_rate = zipped_length;
+	            	    zip_compression_rate       /= xdim * ydim;
+	            	    //System.out.println("Zip compression rate is " + String.format("%.4f", zip_compression_rate));
+	            	    //System.out.println();
 	            	
-	                out.writeInt(zipped_length);
-	                out.write(zipped_string, 0, zipped_length);
+	            	    out.writeInt(zipped_length);
+	            	    out.write(zipped_string, 0, zipped_length);
+		            }
+		            else if(delta_type == 7)
+		            {
+		                ArrayList channel_string_list = (ArrayList)	string_list.get(i);
+		                
+		                byte [] seed_string = (byte [])channel_string_list.get(0);
+		                byte [] dilated_string = (byte [])channel_string_list.get(1);
+		                
+		                out.writeInt(seed_string.length);
+		                Deflater deflater = new Deflater();
+	                    deflater.setInput(seed_string);
+	                    byte [] zipped_string = new byte[2 * seed_string.length];
+	                    deflater.finish();
+	                    int zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
+		                
+	                    out.writeInt(zipped_length);
+	            	    out.write(zipped_string, 0, zipped_length);
+	            	    
+	            	    out.writeInt(dilated_string.length);
+		                deflater = new Deflater();
+	                    deflater.setInput(dilated_string);
+	                    zipped_string = new byte[2 * dilated_string.length];
+	                    deflater.finish();
+	                    zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
+		                
+	                    out.writeInt(zipped_length);
+	            	    out.write(zipped_string, 0, zipped_length);
+		            }
 		        }
 		        
 		        out.flush();
