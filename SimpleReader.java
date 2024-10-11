@@ -65,33 +65,49 @@ public class SimpleReader
 		    delta_type         = in.readByte();
 		    int [] channel_id  = DeltaMapper.getChannels(set_id);
 		    
+		    if(delta_type > 7)
+		    {
+		    	System.out.println("Delta type not supported.");
+		    	System.exit(0);
+		    }
+		    
 		    for(int i = 0; i < 3; i++)
 		    {
 		    	int j = channel_id[i];
 		    	min[i] = in.readInt();
 		    	init[i] = in.readInt();
-		    	delta_min[i] = in.readInt();
-		    	length[i] = in.readInt();
-		    	compressed_length[i] = in.readInt();
-		    	channel_iterations[i] = in.readByte();
-				int table_length = in.readShort();
-				int [] table = new int[table_length];
-				int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
-				if(table.length <= max_byte_value)
-				{
-				    for(int k = 0; k < table_length; k++)
+		    	
+		    	if(delta_type < 7)
+		    	{
+		    	    delta_min[i] = in.readInt();
+		    	    length[i] = in.readInt();
+		    	    compressed_length[i] = in.readInt();
+		    	    channel_iterations[i] = in.readByte();
+				    int table_length = in.readShort();
+				    int [] table = new int[table_length];
+				    int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
+				    if(table.length <= max_byte_value)
 				    {
-				    	table[k] = in.readByte();
-				    	if(table[k] < 0)
-	            			table[k] = max_byte_value + 1 + table[k];
+				        for(int k = 0; k < table_length; k++)
+				        {
+				    	    table[k] = in.readByte();
+				    	    if(table[k] < 0)
+	            			    table[k] = max_byte_value + 1 + table[k];
+				        }
 				    }
-				}
-				else
-				{
-					for(int k = 0; k < table_length; k++)
-				    	table[k] = in.readShort();
-				}
-				table_list.add(table);
+				    else
+				    {
+					    for(int k = 0; k < table_length; k++)
+				    	    table[k] = in.readShort();
+				    }
+				    table_list.add(table);
+		    	}
+		    	else
+		    	{
+		    		System.out.println("Debugging delta type 7.");
+		    		System.exit(0);
+		    		
+		    	}
 				
 				if(delta_type == 5 || delta_type == 6)
 				{
