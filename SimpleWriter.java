@@ -620,10 +620,13 @@ public class SimpleWriter
 			        ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
 			        result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
 			        int sum = (int)result.get(0);
-			        System.out.println("Delta sum of ideal deltas (8) is " + sum);
+			        System.out.println("Delta sum from type 7 is " + sum);
 			        
 			        sum = DeltaMapper.getIdealDeltaSum(delta_list);
 			        System.out.println("Ideal delta sum is " + sum);
+			        
+			        sum = DeltaMapper.getWorstlDeltaSum(delta_list);
+			        System.out.println("Worst delta sum is " + sum);
 			        
 				    ArrayList seed_map     = (ArrayList)result.get(2);
 				    ArrayList dilation_map = (ArrayList)result.get(4);
