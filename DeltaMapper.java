@@ -2976,6 +2976,23 @@ public class DeltaMapper
     	return inverse_location;
     }
     
+    // Get the ideal delta sum.
+    public static int getIdealDeltaSum(ArrayList delta_list)
+    {
+    	int sum = 0;
+    	
+    	for(int i = 0; i < delta_list.size(); i++)
+    	{
+    		int [][] table   = (int [][])delta_list.get(i);
+    		
+    		int delta = table[0][0];
+    		
+    		sum += Math.abs(delta);
+    	}
+    	
+        return sum;
+    }
+    
     // Get an ideal delta set and a map of which pixels are used.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim, ArrayList delta_list)
     {
@@ -3276,26 +3293,6 @@ public class DeltaMapper
             p++;
         }
         
-        /*
-        boolean same = true;
-        for(i = 0; i < size; i++)
-        {
-        	if(value[i] != src[i])
-        	{
-        		System.out.println("Values are different at index " + i);
-        		x = i % xdim;
-        		y = i / xdim;
-        		System.out.println("x = " + x + ", y = " + y);
-        		System.out.println("Source value is " + src[i] + ", reconstructed value is " + value[i]);
-        		if(is_seed[i])
-        			System.out.println("This is a seed value.");
-        		else
-        			System.out.println("This is a dilated value.");
-        		same = false;
-        		break;
-        	}
-        }
-        */
         
         System.out.println();        
         ArrayList result = new ArrayList();
