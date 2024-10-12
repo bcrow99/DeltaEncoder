@@ -3218,8 +3218,8 @@ public class DeltaMapper
         
         System.out.println("Number of assigned deltas after " + p + " dilations is " + n);
         
-        // Create the lists we'll use to populate the raster and keep track of the sum of the deltas.
-        int sum = 0;
+        // Create the lists we'll use to populate the raster.
+        
         for(i = 0; i < size; i++)
         {
         	if(!is_seed[i])
@@ -3227,10 +3227,7 @@ public class DeltaMapper
         		dilated_delta.add(delta[i]);
                 dilated_map.add(map[i]);	
                 is_assigned[i] = false;
-                sum += delta[i];
         	}
-        	else
-        		sum += delta[i];
         }
         
         // Populate the raster.
@@ -3302,6 +3299,13 @@ public class DeltaMapper
         
         System.out.println();        
         ArrayList result = new ArrayList();
+        
+        int sum = 0;
+        
+        for(i = 0; i < seed_delta.size(); i++)
+            sum += Math.abs((int)seed_delta.get(i));
+        for(i = 0; i < dilated_delta.size(); i++)
+            sum += Math.abs((int)dilated_delta.get(i));
         result.add(sum);
         result.add(seed_delta);
         result.add(seed_map);
@@ -3311,7 +3315,7 @@ public class DeltaMapper
     }
     
     // Get an ideal delta set and a map of which pixels are used.
-    // Probably inaccurate.
+    // The byte length returned is probably inaccurate.
     public static ArrayList getIdealDeltaStringsFromValues2(int src[], int xdim, int ydim, ArrayList delta_list)
     {
     	int size = xdim * ydim;
