@@ -60,8 +60,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 		
-		//String prefix       = new String("");
-		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix       = new String("");
+		
 		String filename     = new String(args[0]);
 		
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -567,41 +567,48 @@ public class SimpleWriter
 				int [] quantized_channel = (int[])quantized_channel_list.get(j);
 				
 				ArrayList result = new ArrayList();
+				
+				ArrayList delta_list = DeltaMapper.getDeltaListFromValues2(quantized_channel, new_xdim, new_ydim);
+				
+				int ideal_sum = DeltaMapper.getIdealDeltaSum(delta_list);
+		        int worst_sum = DeltaMapper.getWorstlDeltaSum(delta_list);
+		        System.out.println("Ideal delta sum is " + ideal_sum);
+		        System.out.println("Worst delta sum is " + worst_sum);
 				if(delta_type == 0)
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of horizontal deltas is " + sum);
+					System.out.println("Sum of horizontal deltas is " + sum);
 				}
 				else if(delta_type == 1)
 				{
 					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of vertical deltas is " + sum);
+					System.out.println("Sum of vertical deltas is " + sum);
 				}
 				else if(delta_type == 2)
 				{
 					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of averaged horizontal and vertical deltas is " + sum);
+					System.out.println("Sum of averaged horizontal and vertical deltas is " + sum);
 				}
 				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of paeth deltas is " + sum);
+					System.out.println("Sum of paeth deltas is " + sum);
 				}
 				else if(delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of gradient deltas is " + sum);
+					System.out.println("Sum of gradient deltas is " + sum);
 				}
 				else if(delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of mixed deltas is " + sum);
+					System.out.println("Sum of mixed deltas is " + sum);
 					
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
@@ -610,23 +617,16 @@ public class SimpleWriter
 				{
 					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Delta sum of ideal deltas (4) is " + sum);
-					
+					System.out.println("Sum of ideal deltas (4) is " + sum);
+				
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
 				else if(delta_type == 7)
 				{
-			        ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
-			        result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim, delta_list);
+			        result = DeltaMapper.getIdealDeltasFromValues3(quantized_channel, new_xdim, new_ydim, delta_list);
 			        int sum = (int)result.get(0);
-			        System.out.println("Delta sum from type 7 is " + sum);
-			        
-			        sum = DeltaMapper.getIdealDeltaSum(delta_list);
-			        System.out.println("Ideal delta sum is " + sum);
-			        
-			        sum = DeltaMapper.getWorstlDeltaSum(delta_list);
-			        System.out.println("Worst delta sum is " + sum);
+			        System.out.println("Sum of ideal deltas (8) is " + sum);
 			        
 				    ArrayList seed_map     = (ArrayList)result.get(2);
 				    ArrayList dilation_map = (ArrayList)result.get(4);
@@ -635,8 +635,10 @@ public class SimpleWriter
 				    list.add(dilation_map);
 				    map_list.add(list);
 				    
+				    // Don't need this.
 				    seed_length_list.add(seed_map.size());
 				}
+				System.out.println();
 		
 				if(delta_type != 7)
 				{
@@ -991,7 +993,6 @@ public class SimpleWriter
 			        if(j > 2)
 					    for(int k = 0; k < channel.length; k++)
 						    channel[k] += channel_min[j];
-				
 				    if(new_xdim != xdim || new_ydim != ydim)
 				    {
 					    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
@@ -1235,7 +1236,7 @@ public class SimpleWriter
                         {
 		                    for(int k = 0; k < dilated_table.length; k++)
 		                        out.writeByte(dilated_table[k]);
-                         }
+                        }
 		                else 
 		                {
 		                    for(int k = 0; k < dilated_table.length; k++)
@@ -1312,6 +1313,8 @@ public class SimpleWriter
 		            	int [] string_table = StringMapper.getRankTable(histogram);
 					
 						byte [] string = new byte[seed_map.length * 16];
+						for(int k = 0; k < seed_map.length; k++)
+							seed_map[k] -= min_value;
 						int map_bit_length = StringMapper.packStrings2(seed_map, string_table, string);
 						
 						double zero_one_ratio = seed_map.length;
@@ -1347,8 +1350,6 @@ public class SimpleWriter
 			            out.writeByte(min_value);
 		                out.writeInt(seed_map.length);
 		                
-		                
-		                
                         histogram_list  = StringMapper.getHistogram(dilated_map);
 		            	
 		                min_value     = (int)histogram_list.get(0);
@@ -1356,7 +1357,10 @@ public class SimpleWriter
 		            	string_table = StringMapper.getRankTable(histogram);
 					
 						string = new byte[dilated_map.length * 16];
+						for(int k = 0; k < dilated_map.length; k++)
+							dilated_map[k] -= min_value;
 						map_bit_length = StringMapper.packStrings2(dilated_map, string_table, string);
+						
 						
 						zero_one_ratio = dilated_map.length;
 			            if(histogram.length > 1)
@@ -1390,6 +1394,7 @@ public class SimpleWriter
 				        
 			            out.writeByte(min_value);
 		                out.writeInt(dilated_map.length);
+		                
 		                
 		                
 		                
