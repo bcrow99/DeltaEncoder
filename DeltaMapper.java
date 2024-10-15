@@ -4244,6 +4244,7 @@ public class DeltaMapper
         // in this special case the initial pixel.
         x = i % xdim;
         y = i / xdim;
+        
         for(int j = 0; j < table.length; j++)
         {
             int k = getNeighborIndex(x, y, xdim, table[j][1]); 
@@ -4262,8 +4263,8 @@ public class DeltaMapper
             	break;
             }
         }
-       
         
+       
         // Depending on the dimensions of the image,
         // we can iterate like this at least 8 times without
         // running out of unassigned neighbors.
@@ -4306,6 +4307,110 @@ public class DeltaMapper
             for(j = 0; j < table.length; j++)
             {
             	int k = getNeighborIndex(x, y, xdim, table[j][1]); 
+            	// This code increases the size of the seed segment,
+            	// but does not significantly increase the overall
+            	// compression. There is a slight increase, because
+            	// the seed segment compresses at a higher rate
+            	// than the dilated segment.
+            	// Probably not worth complicating the code.
+            	
+            	/*
+            	if(!is_assigned[k])
+                {
+            		int abs_value = Math.abs(table[j][0]);
+            		ArrayList index_list = new ArrayList();
+            		
+            		index_list.add(j);
+            		
+            		while(j < table.length - 1)
+            		{
+            			j++;
+            			k = getNeighborIndex(x, y, xdim, table[j][1]);
+            			if(!is_assigned[k])
+            			{
+            				if(abs_value == Math.abs(table[j][0]))
+            				{
+            					index_list.add(j);
+            				}
+            				else
+            					j = table.length;
+            			}
+            		}
+            		if(index_list.size() == 1)
+            		{
+            		    j = (int)index_list.get(0);
+            		    k = getNeighborIndex(x, y, xdim, table[j][1]);
+            		    map[i]   = (byte)table[j][1];
+                    	seed_map.add(map[i]);
+                    	delta[k] = -table[j][0];
+                    	seed_delta.add(delta[k]);
+                    	is_assigned[k] = true;
+                        is_seed[k]     = true;
+                        assignments[k]++;
+                        n++;
+                    	
+                    	current_value += delta[k];
+                    	
+                    	j = 0;
+                    	break;
+            		}
+            		else
+            		{
+            			System.out.println("Got here.");
+            			// We have a list of indices of the neighbors
+            			// with equal deltas.
+            			// Now we'll make a list of how many unassigned
+            			// neighbors they have.
+            			ArrayList number_of_unassigned_neighbors = new ArrayList();
+            			for(int m = 0; m < index_list.size(); m++)
+            			{
+            				j = (int)index_list.get(m);
+            				k = getNeighborIndex(x, y, xdim, table[j][1]);
+            				int neighbor_x = k % xdim;
+            				int neighbor_y = k / xdim;
+            				ArrayList neighbor_list = getNeighbors(assignments, neighbor_x, neighbor_y, xdim, ydim);
+            				
+            				int number_of_neighbors = 0;
+            				for(int p = 0; p < neighbor_list.size(); p++)
+            				{
+            					int q = (int)neighbor_list.get(p);
+            					if(q == 0)
+            						number_of_neighbors++;
+            				}
+            				number_of_unassigned_neighbors.add(number_of_neighbors);
+            			}
+            			
+            			int max_index = 0;
+            			int max_number = (int)number_of_unassigned_neighbors.get(0);
+            			for(int m = 1; m < index_list.size(); m++)
+            			{
+            				int current_number = (int)number_of_unassigned_neighbors.get(m);
+            				if(current_number > max_number)
+            				{
+            					max_index = m;
+            					max_number = current_number;
+            				}
+            			}
+            			
+            			j = (int)index_list.get(max_index);
+            		    k = getNeighborIndex(x, y, xdim, table[j][1]);
+            		    map[i]   = (byte)table[j][1];
+                    	seed_map.add(map[i]);
+                    	delta[k] = -table[j][0];
+                    	seed_delta.add(delta[k]);
+                    	is_assigned[k] = true;
+                        is_seed[k]     = true;
+                        assignments[k]++;
+                        n++;
+                    	
+                    	current_value += delta[k];
+                    	j = 0;
+                    	break;
+            		}
+                }
+            	*/
+            	
+            	
                 if(!is_assigned[k])
                 {
                 	map[i]   = (byte)table[j][1];
@@ -4318,16 +4423,6 @@ public class DeltaMapper
                     n++;
                 	
                 	current_value += delta[k];
-                	
-                	if(current_value != src[k] && first_index)	
-                	{
-                	    int _x = k % xdim;
-                	    int _y = k / xdim;
-                	    first_index = false;
-                	    System.out.println("Reconstructed value " + current_value + " does not agree with source value " + src[k] + " at index " + k);
-                	    System.out.println("X is " + _x + ", y is " + _y);
-                	    System.out.println("Number of deltas collected is " + seed_delta.size());
-                	}
                     
                 	break;
                 }	
@@ -4372,13 +4467,15 @@ public class DeltaMapper
         int previous_n = 0;
         int p          = 0;
         int threshold  = 1;
-        System.out.println("Threshold is " + threshold);
+        
+        
+        //System.out.println("Threshold is " + threshold);
         while(n < size)
         {
         	if(n == previous_n)
         	{
         		threshold++;
-        		System.out.println("Threshold is " + threshold);
+        		//System.out.println("Threshold is " + threshold);
         	}
             previous_n = n;
             n = 0;
