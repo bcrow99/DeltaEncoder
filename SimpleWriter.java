@@ -61,7 +61,7 @@ public class SimpleWriter
 		}
 		
 		String prefix       = new String("");
-		
+		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -643,48 +643,19 @@ public class SimpleWriter
 				if(delta_type != 7)
 				{
 					int [] delta  = (int [])result.get(1);
-				    ArrayList histogram_list = StringMapper.getHistogram(delta);
-			        channel_delta_min[j]     = (int)histogram_list.get(0);
-			        int [] histogram         = (int[])histogram_list.get(1);
-				    int [] string_table = StringMapper.getRankTable(histogram);
-				    table_list.add(string_table);
-				
-				    for(int k = 1; k < delta.length; k++)
-					    delta[k] -= channel_delta_min[j];
-				    byte [] string         = new byte[xdim * ydim * 16];
-				    channel_length[j]      = StringMapper.packStrings2(delta, string_table, string);
-			
-				    double zero_one_ratio = new_xdim * new_ydim;
-	                if(histogram.length > 1)
-	                {
-				        int min_value = Integer.MAX_VALUE;
-				        for(int k = 0; k < histogram.length; k++)
-					        if(histogram[k] < min_value)
-						        min_value = histogram[k];
-				        zero_one_ratio -= min_value;
-	                }	
-		            zero_one_ratio  /= channel_length[j];
-		    
-		            if(zero_one_ratio > .5)
-		            {
-				        byte [] compression_string   = StringMapper.compressZeroStrings(string, channel_length[j]);
-				        channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
-				        channel_string_type[i]       = StringMapper.getType(compression_string);
-				        if(channel_string_type[i] != 0)
-				    	    System.out.println("Unexpected string type for 0 string.");
-				        channel_iterations[i]        = StringMapper.getIterations(compression_string);
-				        string_list.add(compression_string);   
-		            }   
-		            else
-		            {
-		        	    byte [] compression_string   = StringMapper.compressOneStrings(string, channel_length[j]);
-				        channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
-				        channel_string_type[i]       = StringMapper.getType(compression_string);
-				        channel_iterations[i]        = StringMapper.getIterations(compression_string);
-				        if(channel_string_type[i] != 1)
-				    	    System.out.println("Unexpected string type for 1 string.");
-				        string_list.add(compression_string);  
-		            }
+					
+					ArrayList delta_string_list = StringMapper.getStringList(delta);
+					channel_delta_min[j]        = (int)delta_string_list.get(0);
+					channel_length[j]           = (int)delta_string_list.get(1);
+					int [] string_table         = (int [])delta_string_list.get(2);
+					byte [] compression_string  = (byte [])delta_string_list.get(3);
+					
+					table_list.add(string_table);
+					string_list.add(compression_string);
+					
+					channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
+			        channel_string_type[i]       = StringMapper.getType(compression_string);
+			        channel_iterations[i]        = StringMapper.getIterations(compression_string);
 				}
 				else if(delta_type == 7)
 				{
@@ -694,125 +665,44 @@ public class SimpleWriter
 					// The issue is that this delta type requires saving pairs of values, not single values.
 					// The delta minimums still need to be stored.
 					// For now we'll have an array list just for delta type 7, where we will attach channel lists.
+					// We'll attach lists of strings and maps that we attach to the string list and map list.
 					
 					ArrayList channel_delta_min_list = new ArrayList();
 					ArrayList channel_table_list     = new ArrayList();
+					ArrayList channel_string_list    = new ArrayList();
 					
 					ArrayList seed_delta_list  = (ArrayList)result.get(1);
 					int [] seed_delta = new int[seed_delta_list.size()];
 					for(int k = 0; k < seed_delta.length; k++)
 						seed_delta[k] = (int)seed_delta_list.get(k);
-					ArrayList histogram_list = StringMapper.getHistogram(seed_delta);
-					int seed_delta_min       = (int)histogram_list.get(0);
 					
-					// Get the delta min for the seed deltas.
+					ArrayList seed_delta_string_list = StringMapper.getStringList2(seed_delta);
+					int seed_delta_min               = (int)seed_delta_string_list.get(0);
+					int [] seed_string_table         = (int [])seed_delta_string_list.get(2);
+					byte [] seed_compression_string  = (byte [])seed_delta_string_list.get(3);
+					
 					channel_delta_min_list.add(seed_delta_min);
+					channel_table_list.add(seed_string_table);
+					channel_string_list.add(seed_compression_string);
 					
-					int [] histogram         = (int[])histogram_list.get(1);
-					
-					int [] seed_string_table = StringMapper.getRankTable(histogram);
-					for(int k = 0; k < seed_delta.length; k++)
-					    seed_delta[k] -= seed_delta_min;
-				    byte [] seed_string = new byte[new_xdim * new_ydim * 16];
-				    
-				    int seed_length = StringMapper.packStrings2(seed_delta, seed_string_table, seed_string);
-				    
-				    channel_table_list.add(seed_string_table);
-					
-				    double zero_percentage = seed_delta.length;
-	                if(histogram.length > 1)
-	                {
-				        int min_value = Integer.MAX_VALUE;
-				        for(int k = 0; k < histogram.length; k++)
-					        if(histogram[k] < min_value)
-						        min_value = histogram[k];
-				        zero_percentage -= min_value;
-	                }	
-		            zero_percentage  /= seed_length;
-		    
-		            ArrayList channel_string_list = new ArrayList();
-		            if(zero_percentage > .5)	
-		            {
-				        byte [] compression_string   = StringMapper.compressZeroStrings(seed_string, seed_length);
-				        channel_string_list.add(compression_string);   
-		            }
-		            else
-		            {
-		            	byte [] compression_string   = StringMapper.compressOneStrings(seed_string, seed_length);
-				        channel_string_list.add(compression_string);  
-		            }
-		            
-					ArrayList dilated_delta_list = (ArrayList)result.get(3);
+                    ArrayList dilated_delta_list = (ArrayList)result.get(3);
 					
 					int [] dilated_delta = new int[dilated_delta_list.size()];
 					for(int k = 0; k < dilated_delta.length; k++)
 						dilated_delta[k] = (int)dilated_delta_list.get(k);
 					
-					histogram_list = StringMapper.getHistogram(dilated_delta);
-					int dilated_delta_min       = (int)histogram_list.get(0);
+					ArrayList dilated_delta_string_list = StringMapper.getStringList2(dilated_delta);
+					int dilated_delta_min               = (int)dilated_delta_string_list.get(0);
+					int [] dilated_string_table         = (int [])dilated_delta_string_list.get(2);
+					byte [] dilated_compression_string  = (byte [])dilated_delta_string_list.get(3);
 					
-					// Get the delta min for the dilated deltas.
 					channel_delta_min_list.add(dilated_delta_min);
+					channel_table_list.add(dilated_string_table);
+					channel_string_list.add(dilated_compression_string);
 					
-					// Add it to the main list.
 					delta_min_list.add(channel_delta_min_list);
-					
-					histogram         = (int[])histogram_list.get(1);
-					
-					int [] dilated_string_table = StringMapper.getRankTable(histogram);
-					for(int k = 0; k < dilated_delta.length; k++)
-					    dilated_delta[k] -= dilated_delta_min;
-				    byte [] dilated_string = new byte[new_xdim * new_ydim * 16];
-				    
-				    int dilated_length      = StringMapper.packStrings2(dilated_delta, dilated_string_table, dilated_string);
-				    int byte_length = dilated_length / 8;
-				    if(dilated_length % 8 != 0)
-				    	byte_length++;
-				   
-				    channel_table_list.add(dilated_string_table);
-				    table_list.add(channel_table_list);
-					
-				    zero_percentage = dilated_delta.length;
-	                if(histogram.length > 1)
-	                {
-				        int min_value = Integer.MAX_VALUE;
-				        for(int k = 0; k < histogram.length; k++)
-					        if(histogram[k] < min_value)
-						        min_value = histogram[k];
-				        zero_percentage -= min_value;
-	                }	
-		            zero_percentage  /= dilated_length;
-		    
-		            //System.out.println("Dilated string zero percentage is " + String.format("%.2f", zero_percentage));
-		            if(zero_percentage > .5)	
-		            {
-		            	
-				        byte [] compression_string   = StringMapper.compressZeroStrings(dilated_string, dilated_length);
-				        channel_string_list.add(compression_string);   
-				      
-				        //int  string_type = StringMapper.getType(compression_string);   
-				        //int  bit_length  = StringMapper.getBitlength(compression_string); 
-				        //int  iter        = StringMapper.getIterations(compression_string);
-				        //System.out.println("Dilated compression string has length " + compression_string.length);
-				        //System.out.println("Bit length is " + bit_length);
-				        //System.out.println("String type is " + string_type);
-				        //System.out.println("Iterations is " + iter);
-		            }
-		            else
-		            {
-		            	byte [] compression_string   = StringMapper.compressOneStrings(dilated_string, dilated_length);
-				        channel_string_list.add(compression_string);  
-
-				        //int  string_type = StringMapper.getType(compression_string);   
-				        //int  bit_length  = StringMapper.getBitlength(compression_string); 
-				        //int  iter        = StringMapper.getIterations(compression_string);
-				        //System.out.println("Dilated compression string has length " + compression_string.length);
-				        //System.out.println("Bit length is " + bit_length);
-				        //System.out.println("String type is " + string_type);
-				        //System.out.println("Iterations is " + iter);
-		            }
-		            string_list.add(channel_string_list);
-		            //System.out.println();
+					table_list.add(channel_table_list);
+					string_list.add(channel_string_list);
 				}
 			}
 			
