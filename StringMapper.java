@@ -578,7 +578,6 @@ public class StringMapper
     
     // Zero bit/zero string functions.
     // Zero bits correspond to stop bits in our implementation.
-    
     public static int compressZeroBits(byte src[], int size, byte dst[]) 
 	{
 		for (int i = 0; i < dst.length; i++)
@@ -592,13 +591,17 @@ public class StringMapper
 		int j = 0;
 		int k = 0;
 
-		try {
-			for (i = 0; i < size; i++) {
-				if ((src[k] & (mask << j)) == 0 && i < size - 1) {
+		try 
+		{
+			for (i = 0; i < size; i++) 
+			{
+				if ((src[k] & (mask << j)) == 0 && i < size - 1) 
+				{
 					i++;
 					j++;
 
-					if (j == 8) {
+					if (j == 8) 
+					{
 						j = 0;
 						k++;
 					}
@@ -1878,6 +1881,51 @@ public class StringMapper
     	return ratio;
     }
     
+    public static ArrayList getStringList(int [] value)
+    {
+        ArrayList string_list = new ArrayList();
+        
+        ArrayList histogram_list = StringMapper.getHistogram(value);
+        int min_value            = (int)histogram_list.get(0);
+        int [] histogram         = (int[])histogram_list.get(1);
+	    int [] string_table      = StringMapper.getRankTable(histogram);
+	    
+	    // This will break if we pack something where the first
+	    // value is not a code.
+	    for(int i = 1; i < value.length; i++)
+	    	value[i] -= min_value;
+	    byte [] string           = new byte[value.length * 16];
+	    int bit_length           = StringMapper.packStrings2(value, string_table, string);
+	    
+	    
+	    string_list.add(min_value);
+	    string_list.add(bit_length);
+	    string_list.add(string_table);
+	    
+	    
+	    double zero_percentage   = value.length;
+        if(histogram.length > 1)
+        {
+	        int min_histogram_value = Integer.MAX_VALUE;
+	        for(int k = 0; k < histogram.length; k++)
+		        if(histogram[k] < min_histogram_value)
+			        min_histogram_value = histogram[k];
+	        zero_percentage -= min_histogram_value;
+        }	
+        zero_percentage  /= bit_length;
+        if(zero_percentage > .5)
+        {
+	        byte [] compression_string   = StringMapper.compressZeroStrings(string, bit_length);
+	        string_list.add(compression_string);
+        }
+        else
+        {
+        	byte [] compression_string   = StringMapper.compressOneStrings(string, bit_length);	
+        	string_list.add(compression_string);
+        }
+        
+        return string_list;
+    }
     
     public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
     {
