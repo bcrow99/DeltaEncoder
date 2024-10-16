@@ -1927,6 +1927,101 @@ public class StringMapper
         return string_list;
     }
     
+    // Packing and compressing arrays where the first value
+    // is not a code.
+    public static ArrayList getStringList2(int [] value)
+    {
+        ArrayList string_list = new ArrayList();
+        
+        ArrayList histogram_list = StringMapper.getHistogram(value);
+        int min_value            = (int)histogram_list.get(0);
+        int [] histogram         = (int[])histogram_list.get(1);
+	    int [] string_table      = StringMapper.getRankTable(histogram);
+	    
+	    for(int i = 0; i < value.length; i++)
+	    	value[i] -= min_value;
+	    byte [] string           = new byte[value.length * 16];
+	    int bit_length           = StringMapper.packStrings2(value, string_table, string);
+	    
+	    
+	    string_list.add(min_value);
+	    string_list.add(bit_length);
+	    string_list.add(string_table);
+	    
+	    
+	    double zero_percentage   = value.length;
+        if(histogram.length > 1)
+        {
+	        int min_histogram_value = Integer.MAX_VALUE;
+	        for(int k = 0; k < histogram.length; k++)
+		        if(histogram[k] < min_histogram_value)
+			        min_histogram_value = histogram[k];
+	        zero_percentage -= min_histogram_value;
+        }	
+        zero_percentage  /= bit_length;
+        if(zero_percentage > .5)
+        {
+	        byte [] compression_string   = StringMapper.compressZeroStrings(string, bit_length);
+	        string_list.add(compression_string);
+        }
+        else
+        {
+        	byte [] compression_string   = StringMapper.compressOneStrings(string, bit_length);	
+        	string_list.add(compression_string);
+        }
+        
+        return string_list;
+    }
+    
+    
+    public static ArrayList getStringList2(byte [] value)
+    {
+        ArrayList string_list = new ArrayList();
+        
+        ArrayList histogram_list = StringMapper.getHistogram(value);
+        int min_value            = (int)histogram_list.get(0);
+        int [] histogram         = (int[])histogram_list.get(1);
+	    int [] string_table      = StringMapper.getRankTable(histogram);
+	    
+	    for(int i = 0; i < value.length; i++)
+	    	value[i] -= min_value;
+	    byte [] string           = new byte[value.length * 16];
+	    int bit_length           = StringMapper.packStrings2(value, string_table, string);
+	    
+	    
+	    string_list.add(min_value);
+	    string_list.add(bit_length);
+	    string_list.add(string_table);
+	    
+	    
+	    double zero_percentage   = value.length;
+        if(histogram.length > 1)
+        {
+	        int min_histogram_value = Integer.MAX_VALUE;
+	        for(int k = 0; k < histogram.length; k++)
+		        if(histogram[k] < min_histogram_value)
+			        min_histogram_value = histogram[k];
+	        zero_percentage -= min_histogram_value;
+        }	
+        zero_percentage  /= bit_length;
+        if(zero_percentage > .5)
+        {
+	        byte [] compression_string   = StringMapper.compressZeroStrings(string, bit_length);
+	        string_list.add(compression_string);
+        }
+        else
+        {
+        	byte [] compression_string   = StringMapper.compressOneStrings(string, bit_length);	
+        	string_list.add(compression_string);
+        }
+        
+        return string_list;
+    }
+    
+    
+    
+    
+    
     public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
     {
     	int  positive = 0;

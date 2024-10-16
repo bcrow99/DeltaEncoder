@@ -61,7 +61,6 @@ public class SimpleWriter
 		}
 		
 		String prefix       = new String("");
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -97,11 +96,9 @@ public class SimpleWriter
 		    string_list = new ArrayList();
 		    map_list    = new ArrayList();
 		    
-		    // Dedicated lists for delta type 7.
+		    // Dedicated list for delta type 7.
 		    delta_min_list = new ArrayList();
-		    seed_length_list = new ArrayList();
-		    
-		    //channel_data = new ArrayList();
+		 
 		 
 		    channel_string    = new String[6];
 		    channel_string[0] = new String("blue");
@@ -663,9 +660,8 @@ public class SimpleWriter
 				    // For now we won't bother setting the channel data like we do the other delta types, 
 					// which is redundant information useful for error checking and debugging but not really required.
 					// The issue is that this delta type requires saving pairs of values, not single values.
-					// The delta minimums still need to be stored.
-					// For now we'll have an array list just for delta type 7, where we will attach channel lists.
-					// We'll attach lists of strings and maps that we attach to the string list and map list.
+					// We'll attach lists of strings and maps that we attach to the string list and map list,
+					// and have created a dedicated delta min list for delta type 7.
 					
 					ArrayList channel_delta_min_list = new ArrayList();
 					ArrayList channel_table_list     = new ArrayList();
@@ -1138,48 +1134,23 @@ public class SimpleWriter
 		            {
 		            	byte [] map = (byte [])map_list.get(i);
 		            	
-		            	ArrayList result  = StringMapper.getHistogram(map);
-		            	int min_value     = (int)result.get(0);
-		            	int [] histogram  = (int [])result.get(1);
-		            	int value_range   = (int)result.get(2);
-		            	int [] string_table = StringMapper.getRankTable(histogram);
-					
-		            	for(int k = 0; k < map.length; k++)
-							map[k] -= min_value;
-						byte [] string = new byte[map.length * 2];
-						int map_length = StringMapper.packStrings2(map, string_table, string);
-						
-						double zero_one_ratio = map.length;
-			            if(histogram.length > 1)
-			            {
-						    int min_histogram_value = Integer.MAX_VALUE;
-						    for(int k = 0; k < histogram.length; k++)
-							if(histogram[k] < min_histogram_value)
-								min_histogram_value = histogram[k];
-						    zero_one_ratio -= min_histogram_value;
-			            }	
-				        zero_one_ratio  /= map_length;
-				        
-				        out.writeShort(string_table.length);
-				       
-			            for(int k = 0; k < string_table.length; k++)
+		            	ArrayList map_string_list = StringMapper.getStringList2(map);
+						int map_min               = (int)map_string_list.get(0);
+						int map_bit_length        = (int)map_string_list.get(1);
+						int [] string_table       = (int [])map_string_list.get(2);
+						byte [] compressed_map    = (byte [])map_string_list.get(3);
+		            	
+						out.writeShort(string_table.length);
+						for(int k = 0; k < string_table.length; k++)
 			                out.writeShort(string_table[k]);
-			            
-				        if(zero_one_ratio > .5)
-				        {
-				            byte[] compressed_map = StringMapper.compressZeroStrings(string, map_length);
-				            out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        else
-				        {
-				        	byte[] compressed_map = StringMapper.compressOneStrings(string, map_length);	
-				        	out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        
-			            out.writeByte(min_value);
+		            	
+						out.writeInt(compressed_map.length);
+			            out.write(compressed_map, 0, compressed_map.length);
+		            	
+			            out.writeByte(map_min);
 			            out.writeInt(map.length);
+		            	
+		            	
 		            }
 		            else if(delta_type == 7)
 		            {
@@ -1191,156 +1162,84 @@ public class SimpleWriter
 		                byte [] seed_map = new byte[seed_map_list.size()];
 		                for(int k = 0; k < seed_map.length; k++)
 		                	seed_map[k] = (byte)seed_map_list.get(k);
+		            
+		                ArrayList map_string_list = StringMapper.getStringList2(seed_map);
+						int map_min               = (int)map_string_list.get(0);
+						int map_bit_length        = (int)map_string_list.get(1);
+						int [] string_table       = (int [])map_string_list.get(2);
+						byte [] compressed_map    = (byte [])map_string_list.get(3);
 		                
+		                
+						out.writeShort(string_table.length);
+						for(int k = 0; k < string_table.length; k++)
+			                out.writeShort(string_table[k]);
+		            	
+						out.writeInt(compressed_map.length);
+			            out.write(compressed_map, 0, compressed_map.length);
+		            	
+			            out.writeByte(map_min);
+			            out.writeInt(seed_map.length);
+			            
+			            Deflater deflater = new Deflater();
+	                    deflater.setInput(compressed_map);
+	                    byte [] zipped_string = new byte[2 * compressed_map.length];
+	                    deflater.finish();
+	                    int zipped_length = deflater.deflate(zipped_string);
+	                    deflater.end(); 
+			            
+			            System.out.println("Compressed seed map length was " +  compressed_map.length);
+			            System.out.println("Zipped compressed seed map length was " +  zipped_length);
+			            
 		                byte [] dilated_map = new byte[dilated_map_list.size()];
 		                for(int k = 0; k < dilated_map.length; k++)
 		                	dilated_map[k] = (byte)dilated_map_list.get(k);
 		              
-		                ArrayList histogram_list  = StringMapper.getHistogram(seed_map);
-		            	
-		                int min_value     = (int)histogram_list.get(0);
-		            	int [] histogram  = (int [])histogram_list.get(1);
-		            	int [] string_table = StringMapper.getRankTable(histogram);
-					
-						byte [] string = new byte[seed_map.length * 16];
-						for(int k = 0; k < seed_map.length; k++)
-							seed_map[k] -= min_value;
-						int map_bit_length = StringMapper.packStrings2(seed_map, string_table, string);
-						
-						double zero_one_ratio = seed_map.length;
-			            if(histogram.length > 1)
-			            {
-						    int min_histogram_value = Integer.MAX_VALUE;
-						    for(int k = 0; k < histogram.length; k++)
-							if(histogram[k] < min_histogram_value)
-								min_histogram_value = histogram[k];
-						    zero_one_ratio -= min_histogram_value;
-			            }	
-				        zero_one_ratio  /= map_bit_length;
-				        
-				        
-				        out.writeShort(string_table.length);
-				       
-			            for(int k = 0; k < string_table.length; k++)
+		                
+		                map_string_list = StringMapper.getStringList2(dilated_map);
+						map_min         = (int)map_string_list.get(0);
+						map_bit_length  = (int)map_string_list.get(1);
+						string_table    = (int [])map_string_list.get(2);
+						compressed_map  = (byte [])map_string_list.get(3);
+		                
+		                out.writeShort(string_table.length);
+						for(int k = 0; k < string_table.length; k++)
 			                out.writeShort(string_table[k]);
-			            
-				        if(zero_one_ratio > .5)
-				        {
-				            byte[] compressed_map = StringMapper.compressZeroStrings(string, map_bit_length);
-				            out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        else
-				        {
-				        	byte[] compressed_map = StringMapper.compressOneStrings(string, map_bit_length);	
-				        	out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        
-			            out.writeByte(min_value);
-		                out.writeInt(seed_map.length);
-		                
-                        histogram_list  = StringMapper.getHistogram(dilated_map);
 		            	
-		                min_value     = (int)histogram_list.get(0);
-		            	histogram  = (int [])histogram_list.get(1);
-		            	string_table = StringMapper.getRankTable(histogram);
-					
-						string = new byte[dilated_map.length * 16];
-						for(int k = 0; k < dilated_map.length; k++)
-							dilated_map[k] -= min_value;
-						map_bit_length = StringMapper.packStrings2(dilated_map, string_table, string);
-						
-						
-						zero_one_ratio = dilated_map.length;
-			            if(histogram.length > 1)
-			            {
-						    int min_histogram_value = Integer.MAX_VALUE;
-						    for(int k = 0; k < histogram.length; k++)
-							if(histogram[k] < min_histogram_value)
-								min_histogram_value = histogram[k];
-						    zero_one_ratio -= min_histogram_value;
-			            }	
-				        zero_one_ratio  /= map_bit_length;
-				        
-				        
-				        out.writeShort(string_table.length);
-				       
-			            for(int k = 0; k < string_table.length; k++)
-			                out.writeShort(string_table[k]);
-			            
-				        if(zero_one_ratio > .5)
-				        {
-				            byte[] compressed_map = StringMapper.compressZeroStrings(string, map_bit_length);
-				            out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        else
-				        {
-				        	byte[] compressed_map = StringMapper.compressOneStrings(string, map_bit_length);	
-				        	out.writeInt(compressed_map.length);
-				            out.write(compressed_map, 0, compressed_map.length);
-				        }
-				        
-			            out.writeByte(min_value);
-		                out.writeInt(dilated_map.length);
+						out.writeInt(compressed_map.length);
+			            out.write(compressed_map, 0, compressed_map.length);
+		            	
+			            out.writeByte(map_min);
+			            out.writeInt(dilated_map.length);
 		                
 		                
-		                
-		                
-		                // This is not working on the unzipping end. 
-		                // Looks like the exact same code that works in
-		                // other parts of the program.
-		                // Not a very significant source of compression.
-		                
-		                /*
-		                Deflater deflater = new Deflater();
-	                    deflater.setInput(seed_map);
-	                    byte [] zipped_string = new byte[2 * seed_map.length];
-	                    deflater.finish();
-	                    int zipped_length = deflater.deflate(zipped_string);
-	                    deflater.end(); 
-	                    out.writeInt(zipped_length);
-	                    out.write(zipped_string, 0, zipped_length);
-	                    
-	                    System.out.println("Seed map length is " + seed_map.length);
-	                    System.out.println("Zipped length is " + zipped_length);
-	                    
-	                    out.writeInt(dilated_map.length);
-	                    
-	                    deflater = new Deflater();
-	                    deflater.setInput(dilated_map);
-	                    zipped_string = new byte[2 * dilated_map.length];
+			            deflater = new Deflater();
+	                    deflater.setInput(compressed_map);
+	                    zipped_string = new byte[2 * compressed_map.length];
 	                    deflater.finish();
 	                    zipped_length = deflater.deflate(zipped_string);
 	                    deflater.end(); 
-	                    out.writeInt(zipped_length);
-	                    out.write(zipped_string, 0, zipped_length);
-	                    */
+			            
+			            System.out.println("Compressed dilated map length was " +  compressed_map.length);
+			            System.out.println("Zipped compressed dilated map length was " +  zipped_length);
+			            System.out.println();
 		            }
 		           
 		            if(delta_type != 7)
 		            {
 	                    byte [] string = (byte [])string_list.get(i);
-	                    out.writeInt(string.length);
-	                
-	                    double string_compression_rate = string.length;
-	                    string_compression_rate       /= xdim * ydim;
-	                    //System.out.println("String compression rate is " + String.format("%.4f", string_compression_rate));
 	                    Deflater deflater = new Deflater();
 	                    deflater.setInput(string);
-	                    byte [] zipped_string = new byte[2 *string.length];
+	                    byte [] zipped_string = new byte[2 * string.length];
 	                    deflater.finish();
 	                    int zipped_length = deflater.deflate(zipped_string);
 	                    deflater.end(); 
-	            	
-	            	    double zip_compression_rate = zipped_length;
-	            	    zip_compression_rate       /= xdim * ydim;
-	            	    //System.out.println("Zip compression rate is " + String.format("%.4f", zip_compression_rate));
-	            	    //System.out.println();
-	            	
-	            	    out.writeInt(zipped_length);
+	                    
+	                    out.writeInt(string.length);
+	                    out.writeInt(zipped_length);
 	            	    out.write(zipped_string, 0, zipped_length);
+	            	    System.out.println("Compressed delta length was " +  string.length);
+			            System.out.println("Zipped compressed delta length was " +  zipped_length);
+			            System.out.println();
 		            }
 		            else if(delta_type == 7)
 		            {
@@ -1349,33 +1248,33 @@ public class SimpleWriter
 		                byte [] seed_string = (byte [])channel_string_list.get(0);
 		                byte [] dilated_string = (byte [])channel_string_list.get(1);
 		                
-		                out.writeInt(seed_string.length);
 		                Deflater deflater = new Deflater();
 	                    deflater.setInput(seed_string);
 	                    byte [] zipped_string = new byte[2 * seed_string.length];
 	                    deflater.finish();
 	                    int zipped_length = deflater.deflate(zipped_string);
 	                    deflater.end(); 
-		                
+	                    
+	                    out.writeInt(seed_string.length);
 	                    out.writeInt(zipped_length);
 	            	    out.write(zipped_string, 0, zipped_length);
 	            	    
-	            	    System.out.println("Original length of seed string was " + seed_string.length);
+	            	    System.out.println("Length of seed delta string was " + seed_string.length);
 	            	    System.out.println("Zipped length was " + zipped_length);
 	            	    
-	            	    out.writeInt(dilated_string.length);
+	            	    
 		                deflater = new Deflater();
 	                    deflater.setInput(dilated_string);
 	                    zipped_string = new byte[2 * dilated_string.length];
 	                    deflater.finish();
 	                    zipped_length = deflater.deflate(zipped_string);
 	                    deflater.end(); 
-		                
+	                    
+	                    out.writeInt(dilated_string.length);
 	                    out.writeInt(zipped_length);
 	            	    out.write(zipped_string, 0, zipped_length);
 	            	    
-
-	            	    System.out.println("Original length of dilated string was " + dilated_string.length);
+	            	    System.out.println("Length of dilated delta string was " + dilated_string.length);
 	            	    System.out.println("Zipped length was " + zipped_length);
 		            }
 		        }
