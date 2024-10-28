@@ -285,11 +285,120 @@ public class SimpleReader3
 		            string_list.add(string);
 		            */
 					int number_of_segments = in.readInt();
-					System.out.println("Number of segments is " + number_of_segments);
-					int string_length      = in.readInt();
-					byte[] string          = new byte[string_length];
-					in.read(string, 0, string_length);
-					string_list.add(string);
+					
+					if(number_of_segments == 1)
+					{
+						int string_length = in.readInt();
+						byte [] string = new byte[string_length];
+						
+				        int zipped_length = in.readInt();
+				        if(zipped_length == 0)
+				        	in.read(string, 0, string_length);   
+				        else
+				        {
+				        	byte [] zipped_string    = new byte[zipped_length];
+				            in.read(zipped_string, 0, zipped_length);
+				            Inflater inflater = new Inflater();
+				            inflater.setInput(zipped_string, 0, zipped_length);
+				            int unzipped_length = inflater.inflate(string);
+				            if(unzipped_length != string_length)
+				        	    System.out.println("Unzipped string not expected length.");    	
+				        }
+				        
+				        string_list.add(string);
+					}
+					else
+					{
+						ArrayList compressed_string_list = new ArrayList();
+						
+						int max_segment_length = in.readInt();
+						System.out.println("Max segment is " + max_segment_length);
+					    for(int k = 0; k < number_of_segments; k++)	
+					    {
+					    	int string_length = 0;
+					    	int zipped_length = 0;
+					    	if(max_segment_length <= Byte.MAX_VALUE)
+					    	{
+					    	    string_length = in.readByte();
+					    	    zipped_length = in.readByte();
+					    	}
+					    	else if(max_segment_length <= Short.MAX_VALUE)
+					    	{
+					    	    string_length = in.readShort();
+					    	    zipped_length = in.readShort();
+					    	}
+					    	else
+					    	{
+					    	    string_length = in.readInt();
+					    	    zipped_length = in.readInt();
+					    	}
+					    	
+							byte [] current_string = new byte[string_length];
+							
+					        if(zipped_length == 0)
+					        	in.read(current_string, 0, string_length);   
+					        else
+					        {
+					        	System.out.println("Got here.");
+					        	System.out.println("k is " + k);
+					        	
+					        	byte [] zipped_string    = new byte[zipped_length];
+					            in.read(zipped_string, 0, zipped_length);
+					            Inflater inflater = new Inflater();
+					            inflater.setInput(zipped_string, 0, zipped_length);
+					            int unzipped_length = inflater.inflate(current_string);
+					            if(unzipped_length != string_length)
+					        	    System.out.println("Unzipped string not expected length.");    	
+					        }
+					        
+					        compressed_string_list.add(current_string);    	
+					    }
+					    
+					    ArrayList decompressed_string_list = new ArrayList();
+					    for(int k = 0; k < compressed_string_list.size(); k++)
+					    {
+					    	byte [] current_string = (byte[])compressed_string_list.get(k);
+					    	int string_type        = StringMapper.getType(current_string);
+					    	if(string_type == 0)
+					    	{
+					    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
+					    	    decompressed_string_list.add(decompressed_string);
+					    	}
+					    	else
+					    	{
+					    	    byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
+					    	    decompressed_string_list.add(decompressed_string);
+					    	}
+					    }
+					    
+					    int string_length = 0;
+					    for(int k = 0; k < decompressed_string_list.size(); k++)
+					    {
+					        byte [] current_string = (byte [])decompressed_string_list.get(k);
+					        string_length += current_string.length;
+					    }
+					    
+					    byte [] string = new byte[string_length + 1];
+					    int offset = 0;
+					    for(int k = 0; k < decompressed_string_list.size(); k++)
+					    {
+					        byte [] current_string = (byte [])decompressed_string_list.get(k);
+					        
+					        for(int m = offset; m < current_string.length + offset; m++)
+					        {
+					        	int n     = 0;
+					        	string[m] = current_string[n++];
+					        }
+					        
+					        offset += current_string.length;
+					    }
+					    
+					    // Append the bitlength and 0 iterations.
+					    int odd_bits = length[i] % 8;
+					    string[string.length - 1] = (byte)odd_bits;
+					    string[string.length - 1] <<= 5;
+					    string_list.add(string);
+					}
 				}
 				else if(delta_type == 7)
 				{
