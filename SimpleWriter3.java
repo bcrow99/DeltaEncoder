@@ -1324,19 +1324,17 @@ public class SimpleWriter3
 		     	             
 		     	             // A list of compressed strings.
 		     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
-		     	            
+		     	             number_of_segments = segment_string.size();
 		     	             // Helps figure out whether we need a byte, short or int to send segment lengths.
 		    				 int max_segment_byte_length = (int)segment_data_list.get(2);
 		    				 
-		    				 out.writeInt(max_segment_byte_length);
-		    				
-		    				 number_of_segments = segment_string.size();
-		    				 
 		    				 out.writeInt(number_of_segments);
-		    				 
+		    				 out.writeInt(max_segment_byte_length); 
+		    				
 		    				 for(int k = 0; k < number_of_segments; k++)
 		    				 {
 		    				     byte[] current_string = (byte [])segment_string.get(k); 
+		    				     out.writeInt(current_string.length);
 		    				    
 		    				     Deflater deflater = new Deflater();
 		 	                     deflater.setInput(string);
