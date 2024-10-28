@@ -344,8 +344,6 @@ public class SimpleWriter3
 						JSlider slider = (JSlider) e.getSource();
 						segment_length = slider.getValue();
 						segment_value.setText(" " + segment_length + " ");
-						if(slider.getValueIsAdjusting() == false)
-							apply_item.doClick();
 					}
 				};
 				segment_slider.addChangeListener(segment_slider_handler);
@@ -614,43 +612,43 @@ public class SimpleWriter3
 				
 				int ideal_sum = DeltaMapper.getIdealDeltaSum(delta_list);
 		        int worst_sum = DeltaMapper.getWorstlDeltaSum(delta_list);
-		        System.out.println("Ideal delta sum is " + ideal_sum);
-		        System.out.println("Worst delta sum is " + worst_sum);
+		        //System.out.println("Ideal delta sum is " + ideal_sum);
+		        //System.out.println("Worst delta sum is " + worst_sum);
 				if(delta_type == 0)
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of horizontal deltas is " + sum);
+					//System.out.println("Sum of horizontal deltas is " + sum);
 				}
 				else if(delta_type == 1)
 				{
 					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of vertical deltas is " + sum);
+					//System.out.println("Sum of vertical deltas is " + sum);
 				}
 				else if(delta_type == 2)
 				{
 					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of averaged horizontal and vertical deltas is " + sum);
+					//System.out.println("Sum of averaged horizontal and vertical deltas is " + sum);
 				}
 				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of paeth deltas is " + sum);
+					//System.out.println("Sum of paeth deltas is " + sum);
 				}
 				else if(delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of gradient deltas is " + sum);
+					//System.out.println("Sum of gradient deltas is " + sum);
 				}
 				else if(delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of mixed deltas is " + sum);
+					//System.out.println("Sum of mixed deltas is " + sum);
 					
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
@@ -659,7 +657,7 @@ public class SimpleWriter3
 				{
 					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of ideal deltas (4) is " + sum);
+					//System.out.println("Sum of ideal deltas (4) is " + sum);
 				
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
@@ -668,7 +666,7 @@ public class SimpleWriter3
 				{
 			        result = DeltaMapper.getIdealDeltasFromValues3(quantized_channel, new_xdim, new_ydim, delta_list);
 			        int sum = (int)result.get(0);
-			        System.out.println("Sum of ideal deltas (8) is " + sum);
+			        //System.out.println("Sum of ideal deltas (8) is " + sum);
 			        
 				    ArrayList seed_map     = (ArrayList)result.get(2);
 				    ArrayList dilation_map = (ArrayList)result.get(4);
@@ -1272,36 +1270,32 @@ public class SimpleWriter3
 		            // There is only one segment, which itself might or might not be segmented.
 		            if(delta_type != 7)
 		            {
-		            	// Reducing the complexity of the code and the amount of processing 
-		            	// by not zipping the compressed data, which does not provide much
-		            	// extra compression.
-		            	
-		            	/*
-	                    byte [] string = (byte [])string_list.get(i);
-	                    Deflater deflater = new Deflater();
-	                    deflater.setInput(string);
-	                    byte [] zipped_string = new byte[2 * string.length];
-	                    deflater.finish();
-	                    int zipped_length = deflater.deflate(zipped_string);
-	                    deflater.end(); 
-	                    
-	                    out.writeInt(string.length);
-	                    out.writeInt(zipped_length);
-	            	    out.write(zipped_string, 0, zipped_length);
-	            	    System.out.println("Compressed delta length was " +  string.length);
-			            System.out.println("Zipped compressed delta length was " +  zipped_length);
-			            System.out.println();
-			            */
-		            	
-		            	 
 		            	 byte [] string = (byte [])string_list.get(i);
 		            	 int number_of_segments = 1;
 		            	 if(segment_length == 0)
 		            	 {
 		            		 System.out.println("String will be unsegmented.");
 		            		 out.writeInt(number_of_segments);
-			            	 out.writeInt(string.length);
-			            	 out.write(string, 0, string.length);
+		            		 out.writeInt(string.length);
+		            		 
+		            		 // Zipping the segment.
+		            		 Deflater deflater = new Deflater();
+			                 deflater.setInput(string);
+			                 byte [] zipped_string = new byte[2 * string.length];
+			                 deflater.finish();
+			                 int zipped_length = deflater.deflate(zipped_string);
+			                 deflater.end(); 
+			                   
+			                 if(zipped_length < string.length)
+			                 {
+			                     out.writeInt(zipped_length);
+			            	     out.write(zipped_string, 0, zipped_length); 
+			                 }
+			                 else
+			                 {
+			                	 out.writeInt(0);
+			                	 out.write(string, 0, string.length);
+			                 }
 		            	 }
 		            	 else
 		            	 {
@@ -1338,16 +1332,58 @@ public class SimpleWriter3
 		    				
 		    				 number_of_segments = segment_string.size();
 		    				 
+		    				 out.writeInt(number_of_segments);
+		    				 
 		    				 for(int k = 0; k < number_of_segments; k++)
 		    				 {
 		    				     byte[] current_string = (byte [])segment_string.get(k); 
-		    				     if(max_segment_byte_length < 80192)
-		 		            	    out.writeByte(current_string.length);
-		 		            	 else if(max_segment_byte_length <= Short.MAX_VALUE)
-		 		            		out.writeShort(current_string.length);	
-		 		            	 else
-		 		            	    out.writeInt(current_string.length);
-		    				     out.write(current_string, 0, current_string.length); 
+		    				    
+		    				     Deflater deflater = new Deflater();
+		 	                     deflater.setInput(string);
+		 	                     byte [] zipped_string = new byte[2 * current_string.length];
+		 	                     deflater.finish();
+		 	                     int zipped_length = deflater.deflate(zipped_string);
+		 	                     deflater.end(); 
+		    				     
+		 	                     if(max_segment_byte_length <= Byte.MAX_VALUE)
+		 	                     {
+		 	                    	 if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeByte(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeByte(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }
+		 	                     }
+		 	                     else if(max_segment_byte_length <= Short.MAX_VALUE)
+		 	                     {
+		 	                    	 if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeShort(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeShort(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }	 
+		 	                     }
+		 	                     else
+		 	                     {
+		 	                    	if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeInt(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeInt(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }	 
+		 	                     }
 		    				 }
 		            	 }
 		            }
@@ -1358,34 +1394,228 @@ public class SimpleWriter3
 		                byte [] seed_string = (byte [])channel_string_list.get(0);
 		                byte [] dilated_string = (byte [])channel_string_list.get(1);
 		                
-		                Deflater deflater = new Deflater();
-	                    deflater.setInput(seed_string);
-	                    byte [] zipped_string = new byte[2 * seed_string.length];
-	                    deflater.finish();
-	                    int zipped_length = deflater.deflate(zipped_string);
-	                    deflater.end(); 
-	                    
-	                    out.writeInt(seed_string.length);
-	                    out.writeInt(zipped_length);
-	            	    out.write(zipped_string, 0, zipped_length);
-	            	    
-	            	    System.out.println("Length of seed delta string was " + seed_string.length);
-	            	    System.out.println("Zipped length was " + zipped_length);
-	            	    
-	            	    
-		                deflater = new Deflater();
-	                    deflater.setInput(dilated_string);
-	                    zipped_string = new byte[2 * dilated_string.length];
-	                    deflater.finish();
-	                    zipped_length = deflater.deflate(zipped_string);
-	                    deflater.end(); 
-	                    
-	                    out.writeInt(dilated_string.length);
-	                    out.writeInt(zipped_length);
-	            	    out.write(zipped_string, 0, zipped_length);
-	            	    
-	            	    System.out.println("Length of dilated delta string was " + dilated_string.length);
-	            	    System.out.println("Zipped length was " + zipped_length);
+		            	
+		            	 int number_of_segments = 1;
+		            	 if(segment_length == 0)
+		            	 {
+		            		 System.out.println("Strings will be unsegmented.");
+		            		 out.writeInt(number_of_segments);
+		            		 
+		            		 byte[] current_string = seed_string;
+	    					 Deflater deflater = new Deflater();
+	 	                     deflater.setInput(current_string);
+	 	                     byte [] zipped_string = new byte[2 * current_string.length];
+	 	                     deflater.finish();
+		                     int zipped_length = deflater.deflate(zipped_string);
+		                     deflater.end(); 
+		                     
+		                     if(zipped_length < current_string.length)
+		                     {
+		                         out.writeInt(current_string.length);
+		                         out.writeInt(zipped_length);
+			            	     out.write(zipped_string, 0, zipped_length);
+		                     }
+		                     else
+		                     {
+		                    	 out.writeInt(current_string.length);
+		                         out.writeInt(0);
+			            	     out.write(current_string, 0, current_string.length);	 
+		                     }
+		                    	 
+			            	 current_string    = dilated_string;
+	    					 deflater = new Deflater();
+	 	                     deflater.setInput(current_string);
+	 	                     zipped_string = new byte[2 * current_string.length];
+	 	                     deflater.finish();
+		                     zipped_length = deflater.deflate(zipped_string);
+		                     deflater.end(); 
+		                     
+	 		            	 if(zipped_length < current_string.length)
+		                     {
+		                         out.writeInt(current_string.length);
+		                         out.writeInt(zipped_length);
+			            	     out.write(zipped_string, 0, zipped_length);
+		                     }
+		                     else
+		                     {
+		                    	 out.writeInt(current_string.length);
+		                         out.writeInt(0);
+			            	     out.write(current_string, 0, current_string.length);	 
+		                     }
+		                    	
+		            	 }
+		            	 else
+		            	 {
+		            	     System.out.println("Strings will be segmented.");
+		            		 int bitlength  = StringMapper.getBitlength(seed_string);
+		            		 int max_length = bitlength / 2;
+		     	             int remainder  = max_length % 8;
+		     	             max_length    -= remainder;
+		     	            
+		     	             double factor = Math.pow(2,  21 - segment_length);
+		     	        
+		     	             int minimum_segment_length = (int)(factor * 32);
+		     	            
+		     	             if(minimum_segment_length < max_length)
+		     	             {
+		     	                remainder = minimum_segment_length % 8;
+		     	                minimum_segment_length -= remainder;
+		     	             }
+		     	             else
+		     	            	minimum_segment_length = max_length;
+		     	             
+		     	             //System.out.println("Minimum segment length is " + minimum_segment_length);
+		     	             //System.out.println();
+		     	             
+		     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(seed_string, bitlength, minimum_segment_length);
+		     	             
+		     	             // A list of compressed strings.
+		     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
+		     	             number_of_segments = segment_string.size();
+		     	             // Helps figure out whether we need a byte, short or int to send segment lengths.
+		    				 int max_segment_byte_length = (int)segment_data_list.get(2);
+		    				 
+		    				 
+		    				 out.writeInt(number_of_segments);
+		    				 out.writeInt(max_segment_byte_length);
+		    				
+		    				 
+		    				 
+		    				 for(int k = 0; k < number_of_segments; k++)
+		    				 {
+		    				     byte[] current_string = (byte [])segment_string.get(k); 
+		    					 Deflater deflater = new Deflater();
+		 	                     deflater.setInput(current_string);
+		 	                     byte [] zipped_string = new byte[2 * current_string.length];
+		 	                     deflater.finish();
+			                     int zipped_length = deflater.deflate(zipped_string);
+			                     deflater.end(); 
+			                     
+			                     if(max_segment_byte_length <= Byte.MAX_VALUE)
+		 	                     {
+		 	                    	 if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeByte(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeByte(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }
+		 	                     }
+		 	                     else if(max_segment_byte_length <= Short.MAX_VALUE)
+		 	                     {
+		 	                    	 if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeShort(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeShort(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }	 
+		 	                     }
+		 	                     else
+		 	                     {
+		 	                    	if(zipped_length < current_string.length)
+			    				     {
+			 	                    	out.writeInt(zipped_length);
+				 	            	    out.write(zipped_string, 0, zipped_length);	 
+			    				     }	
+		 	                    	 else
+		 	                    	 {
+		 	                    	     out.writeInt(0);
+				 	            	     out.write(current_string, 0, current_string.length);		 
+		 	                    	 }	 
+		 	                     }
+		    				 }
+		            	 }
+		                
+		            	 int bitlength = StringMapper.getBitlength(dilated_string);
+	            		 int max_length = bitlength / 2;
+	     	             int remainder  = max_length % 8;
+	     	             max_length    -= remainder;
+	     	            
+	     	             double factor = Math.pow(2,  21 - segment_length);
+	     	        
+	     	             int minimum_segment_length = (int)(factor * 32);
+	     	            
+	     	             if(minimum_segment_length < max_length)
+	     	             {
+	     	                remainder = minimum_segment_length % 8;
+	     	                minimum_segment_length -= remainder;
+	     	             }
+	     	             else
+	     	            	minimum_segment_length = max_length;
+	     	             
+	     	             //System.out.println("Minimum segment length is " + minimum_segment_length);
+	     	             //System.out.println();
+	     	             
+	     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(dilated_string, bitlength, minimum_segment_length);
+	     	             
+	     	             // A list of compressed strings.
+	     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
+	     	             number_of_segments = segment_string.size();
+	     	             // Helps figure out whether we need a byte, short or int to send segment lengths.
+	    				 int max_segment_byte_length = (int)segment_data_list.get(2);
+	    				 
+	    				 out.writeInt(number_of_segments);
+	    				 out.writeInt(max_segment_byte_length);
+	    				
+	    				 
+	    				 
+	    				 for(int k = 0; k < number_of_segments; k++)
+	    				 {
+	    					 byte[] current_string = (byte [])segment_string.get(k);
+	    					 Deflater deflater = new Deflater();
+	 	                     deflater.setInput(current_string);
+	 	                     byte [] zipped_string = new byte[2 * current_string.length];
+	 	                     deflater.finish();
+		                     int zipped_length = deflater.deflate(zipped_string);
+		                     deflater.end(); 
+		                     
+		                     if(max_segment_byte_length <= Byte.MAX_VALUE)
+	 	                     {
+	 	                    	 if(zipped_length < current_string.length)
+		    				     {
+		 	                    	out.writeByte(zipped_length);
+			 	            	    out.write(zipped_string, 0, zipped_length);	 
+		    				     }	
+	 	                    	 else
+	 	                    	 {
+	 	                    	     out.writeByte(0);
+			 	            	     out.write(current_string, 0, current_string.length);		 
+	 	                    	 }
+	 	                     }
+	 	                     else if(max_segment_byte_length <= Short.MAX_VALUE)
+	 	                     {
+	 	                    	 if(zipped_length < current_string.length)
+		    				     {
+		 	                    	out.writeShort(zipped_length);
+			 	            	    out.write(zipped_string, 0, zipped_length);	 
+		    				     }	
+	 	                    	 else
+	 	                    	 {
+	 	                    	     out.writeShort(0);
+			 	            	     out.write(current_string, 0, current_string.length);		 
+	 	                    	 }	 
+	 	                     }
+	 	                     else
+	 	                     {
+	 	                    	if(zipped_length < current_string.length)
+		    				     {
+		 	                    	out.writeInt(zipped_length);
+			 	            	    out.write(zipped_string, 0, zipped_length);	 
+		    				     }	
+	 	                    	 else
+	 	                    	 {
+	 	                    	     out.writeInt(0);
+			 	            	     out.write(current_string, 0, current_string.length);		 
+	 	                    	 }	 
+	 	                     }
+	    				 }
 		            }
 		        }
 		        
