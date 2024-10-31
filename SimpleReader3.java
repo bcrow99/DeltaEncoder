@@ -75,16 +75,23 @@ public class SimpleReader3
 		    
 		    for(int i = 0; i < 3; i++)
 		    {
+		    	System.out.println("Getting channel " + i);
+		    	
 		    	int j = channel_id[i];
 		    	min[i] = in.readInt();
 		    	init[i] = in.readInt();
 		    	
+		    	System.out.println("Init value is " + init[i]);
+		    	
 		    	if(delta_type < 7)
 		    	{
+		    		System.out.println("Getting channel parameters.");
 		    	    delta_min[i] = in.readInt();
 		    	    length[i] = in.readInt();
 		    	    compressed_length[i] = in.readInt();
 		    	    channel_iterations[i] = in.readByte();
+		    	    
+		    	    System.out.println("Got channel parameters.");
 				    int table_length = in.readShort();
 				    int [] table = new int[table_length];
 				    int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
@@ -103,6 +110,8 @@ public class SimpleReader3
 				    	    table[k] = in.readShort();
 				    }
 				    table_list.add(table);
+				    
+				    System.out.println("Added table");
 		    	}
 		    	else
 		    	{
@@ -265,9 +274,10 @@ public class SimpleReader3
 				        for(int k = 0; k < map.length; k++)
 				    	    map[k] += increment;
 				    channel_map_list.add(map);
-				    
 				    map_list.add(channel_map_list);
 				}
+				System.out.println("Finished getting tables.");
+				
 				
 				if(delta_type != 7)
 				{
@@ -286,15 +296,21 @@ public class SimpleReader3
 		            */
 					int number_of_segments = in.readInt();
 					
+					System.out.println("Number of segments is " + number_of_segments);
+					
+					
 					if(number_of_segments == 1)
 					{
-						int string_length = in.readInt();
-						byte [] string = new byte[string_length];
-						
-				        int zipped_length = in.readInt();
+						int     string_length = in.readInt();
+						byte [] string        = new byte[string_length];
+				        int     zipped_length = in.readInt();
+				        
+				        System.out.println("String length is " + string_length);
+				        System.out.println("Zipped length is " + zipped_length);
+				        
 				        if(zipped_length == 0)
 				        	in.read(string, 0, string_length);   
-				        else
+				        else  
 				        {
 				        	byte [] zipped_string    = new byte[zipped_length];
 				            in.read(zipped_string, 0, zipped_length);
@@ -306,15 +322,31 @@ public class SimpleReader3
 				        }
 				        
 				        string_list.add(string);
+				        System.out.println("Added unsegmented string to string list for channel " + i);
 					}
 					else
 					{
+						System.out.println("Number of segments is " + number_of_segments);
 						ArrayList compressed_string_list = new ArrayList();
 						
 						int max_segment_length = in.readInt();
-						System.out.println("Max segment is " + max_segment_length);
+						//System.out.println("Max segment is " + max_segment_length);
 					    for(int k = 0; k < number_of_segments; k++)	
 					    {
+					    	int string_length = in.readInt();
+					    	byte [] current_string = new byte[string_length];
+					    	in.read(current_string, 0, string_length);
+					    	
+					    	int type       = StringMapper.getType(current_string);
+					    	int iterations = StringMapper.getIterations(current_string);
+					    	int bitlength  = StringMapper.getBitlength(current_string);
+					    	
+					    	
+					    	System.out.println("String " + k + " has type " + type + ", " + iterations + " iterations, and bitlength " + bitlength);
+					    	
+					    	if(bitlength % 8 != 0)
+					    		System.out.println("Bitlength not multiple of 8.");
+					    	/*
 					    	int string_length = 0;
 					    	int zipped_length = 0;
 					    	if(max_segment_length <= Byte.MAX_VALUE)
@@ -333,15 +365,16 @@ public class SimpleReader3
 					    	    zipped_length = in.readInt();
 					    	}
 					    	
+					    	System.out.println("String length is " + string_length);
+					    	System.out.println("Zipped length is " + zipped_length);
+					    	System.out.println();
 							byte [] current_string = new byte[string_length];
+							
 							
 					        if(zipped_length == 0)
 					        	in.read(current_string, 0, string_length);   
 					        else
 					        {
-					        	System.out.println("Got here.");
-					        	System.out.println("k is " + k);
-					        	
 					        	byte [] zipped_string    = new byte[zipped_length];
 					            in.read(zipped_string, 0, zipped_length);
 					            Inflater inflater = new Inflater();
@@ -350,55 +383,90 @@ public class SimpleReader3
 					            if(unzipped_length != string_length)
 					        	    System.out.println("Unzipped string not expected length.");    	
 					        }
-					        
+					        */
+					    	
 					        compressed_string_list.add(current_string);    	
 					    }
 					    
+					    
 					    ArrayList decompressed_string_list = new ArrayList();
-					    for(int k = 0; k < compressed_string_list.size(); k++)
+					    for(int k = 0; k < compressed_string_list.size(); k++)					    
 					    {
 					    	byte [] current_string = (byte[])compressed_string_list.get(k);
-					    	int string_type        = StringMapper.getType(current_string);
-					    	if(string_type == 0)
-					    	{
-					    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
-					    	    decompressed_string_list.add(decompressed_string);
-					    	}
+					    	int     string_type    = StringMapper.getType(current_string);
+					    	int     iterations     = StringMapper.getIterations(current_string);
+					    	
+					    	if(iterations == 0 || iterations == 16)
+					    		decompressed_string_list.add(current_string);	
 					    	else
 					    	{
-					    	    byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
-					    	    decompressed_string_list.add(decompressed_string);
+					    		if(string_type == 0)
+						    	{
+						    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
+						    	    decompressed_string_list.add(decompressed_string);
+						    	}
+						    	else
+						    	{
+						    	    byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
+						    	    decompressed_string_list.add(decompressed_string);
+						    	}	
 					    	}
 					    }
 					    
+					    // Create buffer to put concatenated strings.
 					    int string_length = 0;
 					    for(int k = 0; k < decompressed_string_list.size(); k++)
 					    {
 					        byte [] current_string = (byte [])decompressed_string_list.get(k);
-					        string_length += current_string.length;
+					        string_length += current_string.length - 1;
 					    }
+					    // Add byte for odd bits.
+					    string_length++; 
+					    byte [] string = new byte[string_length];
 					    
-					    byte [] string = new byte[string_length + 1];
+					    // Concatenate strings less trailing byte with individual string information.
 					    int offset = 0;
-					    for(int k = 0; k < decompressed_string_list.size(); k++)
+					    for(int k = 0; k < number_of_segments; k++)
 					    {
 					        byte [] current_string = (byte [])decompressed_string_list.get(k);
 					        
-					        for(int m = offset; m < current_string.length + offset; m++)
+					        
+					        /*
+					        int bitlength = StringMapper.getBitlength(current_string);  
+					        if(bitlength % 8 != 0 && k < number_of_segments - 1)
+					        	System.out.println("Bitlength is not a multiple of 8.");
+					        */
+					        
+					        
+					        int byte_length = current_string.length - 1;
+					       
+					        for(int m = offset; m < byte_length + offset; m++)
 					        {
 					        	int n     = 0;
-					        	string[m] = current_string[n++];
+					        	string[m] = current_string[n];
+					        	n++;
 					        }
 					        
-					        offset += current_string.length;
+					        offset += byte_length;
 					    }
 					    
-					    // Append the bitlength and 0 iterations.
-					    int odd_bits = length[i] % 8;
-					    string[string.length - 1] = (byte)odd_bits;
-					    string[string.length - 1] <<= 5;
+					    // Append the extra bits and iterations to the concatenated string. 
+					    byte extra_bits = (byte)(length[i] % 8);
+			            if(extra_bits != 0)
+			            	extra_bits = (byte)(8 - extra_bits);
+			            extra_bits <<= 5;
+			            string[string.length - 1] = extra_bits;
+			            
+			            System.out.println("Channel iterations is " + channel_iterations[i]);
+			            
+			            string[string.length - 1] |= channel_iterations[i];
+			            
 					    string_list.add(string);
+					    
+					    System.out.println("Concatenated segments for channel " + i);
 					}
+					System.out.println("Finished channel " + i);
+					System.out.println();
 				}
 				else if(delta_type == 7)
 				{
@@ -430,13 +498,15 @@ public class SimpleReader3
 		            string_list.add(channel_string_list);
 				}
 		    }
+		    
+		    System.out.println("Got here.");
 		    long stop = System.nanoTime();
 		    long time = stop - start;
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
 		    
 		   
-		    //int cores = Runtime.getRuntime().availableProcessors();
-		    //System.out.println("There are " + cores + " processors available.");
+		    int cores = Runtime.getRuntime().availableProcessors();
+		    System.out.println("There are " + cores + " processors available.");
 		    start = System.nanoTime();
 		    
 		    Thread [] decompression_thread = new Thread[3];
@@ -555,9 +625,11 @@ public class SimpleReader3
 					int k     = i * xdim + j;
 					int pixel = 0;
 					
-					pixel |= blue[k] << 16;
+					//pixel |= blue[k] << 16;
+					pixel |= green[k] << 16;
 					pixel |= green[k] << 8;
-					pixel |= red[k];
+					pixel |= green[k];
+					//pixel |= red[k];
 				    image.setRGB(j, i, pixel);
 				}
 			}
@@ -630,8 +702,15 @@ public class SimpleReader3
 			{
 			    byte [] string    = (byte [])string_list.get(i);
 			    int [] table      = (int [])table_list.get(i);
-		    	
 			    int iterations    = StringMapper.getIterations(string);
+			    int type          = StringMapper.getType(string);
+			    int bitlength     = StringMapper.getBitlength(string);
+			    
+			    if(channel_iterations[i] != iterations)
+			        System.out.println("Iterations appended to string does not agree with channel " + i + " information.");
+			    if(compressed_length[i] != bitlength)
+			    	System.out.println("Bit length appended to string does not agree with channel " + i + " information.");
+			    
 			    if(iterations < 16 && iterations != 0)
 			    	string = StringMapper.decompressZeroStrings(string);
 			    else if(iterations > 16)
