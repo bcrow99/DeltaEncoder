@@ -147,6 +147,8 @@ public class SegmentMapper
 		int string_iterations = StringMapper.getIterations(string);
 		int string_bitlength  = StringMapper.getBitlength(string);
 		
+		System.out.println("Original string length is " + string_bitlength);
+		
 		int number_of_segments = string_bitlength / minimum_bitlength;
 		int segment_bitlength      = minimum_bitlength;
 		int segment_bytelength     = minimum_bitlength / 8;
@@ -224,16 +226,10 @@ public class SegmentMapper
 		
 		// Finished constructing initial list.
 		
-		
 		// The int for the segment byte length, and the trailing byte with segment information.
-		// As the number of segments increase and the segment lengths decrease, the int can
+		// As the number of segments increase and the segment lengths decrease, the int might
 		// be replaced by a short or byte.
-		
-		// Not currently using this in the merging process, but there might be situations
-		// where a more compressed segment should be merged with a less compressed segment,
-		// if the difference in compression is less than the overhead.
 		int overhead = 40;
-		
 		int current_number_of_segments = number_of_segments;
 		int previous_number_of_segments = 0;
 		
@@ -251,8 +247,12 @@ public class SegmentMapper
 			int number_of_uncompressed_segments = 0;
 			int number_of_compressed_segments   = 0;
 			
+			System.out.println("Starting merge.");
+			
 			for(int i = 0; i < current_number_of_segments; i++) 
 			{
+				//System.out.println();
+				//System.out.println("Number of segments is " + current_number_of_segments);
 				byte [] current_segment = (byte[])segment_list.get(i);
 				if(i < current_number_of_segments - 1)
 				{
@@ -261,59 +261,205 @@ public class SegmentMapper
 				    int current_iterations = StringMapper.getIterations(current_segment);
 				    int next_iterations    = StringMapper.getIterations(next_segment);
 				    
+				    // The current segment and the next segment have the same type
+			    	// and similar zero ratios if they have the same number of iterations.
 				    if(current_iterations == next_iterations)
 				    {
-				        int merged_length = current_segment.length + next_segment.length - 1; 
-				        byte [] merged_segment = new byte[merged_length];
+				    	// Get the combined bit length of the two segments to compare
+				        // with the merged bit length minus overhead.
+				        int current_bitlength   = StringMapper.getBitlength(current_segment);
+				        int next_bitlength      = StringMapper.getBitlength(next_segment);
+				        int combined_bitlength  = current_bitlength + next_bitlength;
 				        
-				        for(int j = 0; j < current_segment.length - 1; j++)
-				        	merged_segment[j] = current_segment[j];
-				        int offset = current_segment.length - 1;
-				        for(int j = 0; j < next_segment.length - 1; j++)
-				        	merged_segment[offset + j] = next_segment[j]; 
-				        
-				        int current_bitlength = StringMapper.getBitlength(current_segment);
-				        int next_bitlength    = StringMapper.getBitlength(next_segment);
-				        int merged_bitlength  = current_bitlength + next_bitlength;
-				        
-				        // If we merged the final segment, we have to add the extra bits.
-				        int modulus = merged_bitlength % 8;
-				        if(modulus != 0)
+				        if(current_iterations == 0 || current_iterations == 16)
 				        {
-				        	byte extra_bits = (byte)(8 - modulus);
-				        	extra_bits <<= 5;
-							merged_segment[merged_segment.length - 1] = extra_bits;	
+				        	System.out.println("Merging uncompressed segments.");
+				            int modulus = current_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Segment " + i + " is uneven.");
+				            else
+				            	System.out.println("Segment " + i + " is even.");
+				            modulus = next_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Segment " + (i + 1) + " is uneven.");
+				            else
+				            	System.out.println("Segment " + (i + 1) + " is even.");
+				            modulus = combined_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Combined segment is uneven.");
+				            else
+				            	System.out.println("Combined segment is even.");
+				            System.out.println();
+				            
+				            int bytelength         = current_segment.length + next_segment.length - 1;
+				            byte [] merged_segment = new byte[bytelength];
+				            
+
+				    	    for(int k = 0; k < current_segment.length - 1; k++)
+				    	    	merged_segment[k] = current_segment[k];
+				    	    int offset = current_segment.length - 1;
+				    	    for(int k = 0; k < next_segment.length - 1; k++)
+				    	    	merged_segment[k + offset] = next_segment[k];
+				    	    modulus = combined_bitlength % 8;
+				    	    if(modulus != 0)
+				    	    {
+				    	    	byte extra_bits = (byte)(8 - modulus);
+				    	    	extra_bits    <<= 5;
+				    	    	merged_segment[merged_segment.length - 1] = extra_bits;
+				    	    }
+				    	    
+				    	    merged_segment[merged_segment.length - 1] |= current_iterations;
+				    	    merged_list.add(merged_segment);
+				    	    i++;
 				        }
-				        merged_segment[merged_segment.length - 1] |= iterations;
-				        
-				        if(merged_segment.length > max_segment_bytelength)
-				        	max_segment_bytelength = merged_segment.length;	
-                        merged_list.add(merged_segment);
-                        i++;
+				        else
+				        {
+				        	byte [] decompressed_current_segment = current_segment;
+				    		byte [] decompressed_next_segment    = next_segment;   	
+				    		if(current_iterations < 16)
+				    		{
+				    			decompressed_current_segment = StringMapper.decompressZeroStrings(current_segment);
+				    	        decompressed_next_segment    = StringMapper.decompressZeroStrings(next_segment);   	
+				    		}
+				    		else
+				    		{
+				    			decompressed_current_segment = StringMapper.decompressOneStrings(current_segment);
+				    	        decompressed_next_segment    = StringMapper.decompressOneStrings(next_segment);	
+				    		}
+				    		
+				    		int decompressed_current_bitlength  = StringMapper.getBitlength(decompressed_current_segment);
+			    	        int decompressed_next_bitlength     = StringMapper.getBitlength(decompressed_next_segment); 
+				    		int decompressed_combined_bitlength = decompressed_current_bitlength + decompressed_next_bitlength;
+				    		
+				    		/*
+				    		int modulus = decompressed_current_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Segment " + i + " is uneven.");
+				            else
+				            	System.out.println("Segment " + i + " is even.");
+				            modulus = decompressed_next_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Segment " + (i + 1) + " is uneven.");
+				            else
+				            	System.out.println("Segment " + (i + 1) + " is even.");
+				            modulus = decompressed_combined_bitlength % 8;
+				            if(modulus != 0)
+				            	System.out.println("Combined segment is uneven.");
+				            else
+				            	System.out.println("Combined segment is even.");
+				            */
+				            
+				            int bytelength = decompressed_current_segment.length + decompressed_next_segment.length - 1;
+				            byte [] uncompressed_merged_segment = new byte[bytelength];
+				            
+				            for(int k = 0; k < decompressed_current_segment.length - 1; k++)
+				    	    	uncompressed_merged_segment[k] = decompressed_current_segment[k];
+				    	    int offset = decompressed_current_segment.length - 1;
+				    	    for(int k = 0; k < decompressed_next_segment.length - 1; k++)
+				    	    	uncompressed_merged_segment[k + offset] = decompressed_next_segment[k];
+				    	    
+				    	    int modulus = decompressed_combined_bitlength % 8;
+				    	    if(modulus != 0)
+				    	    {
+				    	    	byte extra_bits = (byte)(8 - modulus);
+				    	    	extra_bits    <<= 5;
+				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] = extra_bits;
+				    	    	System.out.println("Segments "  + i + " and " + (i + 1) + " combined are uneven");
+				    	    }
+				    	    
+				    	    byte [] merged_segment = new byte[1];
+				    	    if(current_iterations > 15)
+				    	    {
+				    	        uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;
+				    	        merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
+				    	    }
+				    	    else
+				    	    	merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);	
+				    	    
+				    	    int merged_bitlength = StringMapper.getBitlength(merged_segment);
+				    	    if(merged_bitlength - 40 < combined_bitlength)
+				    	    {
+				    	    	merged_list.add(merged_segment);
+					    	    i++;	
+				    	    }
+				    	    else
+				    	    {
+				    	    	merged_list.add(current_segment); 
+				    	    }
+				        }
 				    }
 				    else
-				    	merged_list.add(current_segment); 	
-				}
+				    {
+				    	merged_list.add(current_segment);	
+				    }
+			    }
 				else if(i == current_number_of_segments - 1)
-				{
-					merged_list.add(current_segment);	
-				}
-			}
+			    {
+				    merged_list.add(current_segment);	
+			    }
+		    }
+		  
+			System.out.println("Finished merge.");
 			
-			if(merged_list.size() < segment_list.size())
-			{
-				segment_list.clear();
-				for(int i = 0; i < merged_list.size(); i++)
-				{
-				    byte [] current_segment = (byte [])	merged_list.get(i);
-				    segment_list.add(current_segment);
-				}
-			}
+			// Scan merged list.
 			
-			current_number_of_segments = merged_list.size();
+			int segmented_bitlength = 0;
+		    current_number_of_segments = merged_list.size();
+		    if(merged_list.size() < segment_list.size())
+		    {
+			    segment_list.clear();
+			    for(int i = 0; i < merged_list.size(); i++)
+			    {
+			        byte [] current_segment = (byte [])	merged_list.get(i); 
+			        
+			        int current_iterations = StringMapper.getIterations(current_segment);
+			        if(current_iterations == 0 || current_iterations == 16)
+			        {
+			        	int current_bitlength = StringMapper.getBitlength(current_segment);
+			        	if(current_bitlength % 8 != 0)
+			        	{
+			        		System.out.println("Uncompressed segment at index " + i + " has uneven bit length.");
+			        		System.out.println("There are " + current_number_of_segments + " segments.");
+			        		segmented_bitlength += current_bitlength;
+			        	}
+			        }
+			        else
+			        {
+			        	if(current_iterations < 16)
+			    		{
+			    			byte [] decompressed_current_segment = StringMapper.decompressZeroStrings(current_segment);
+			    			int current_bitlength = StringMapper.getBitlength(decompressed_current_segment);
+			    			if(current_bitlength % 8 != 0)
+				        	{
+				        		System.out.println("Compressed 0 segment at index " + i + " has uneven bit length.");
+				        		System.out.println("There are " + current_number_of_segments + " segments.");
+				        	}
+			    			segmented_bitlength += current_bitlength;
+			    		}
+			    		else
+			    		{
+			    			byte [] decompressed_current_segment = StringMapper.decompressOneStrings(current_segment);
+			    			int current_bitlength = StringMapper.getBitlength(decompressed_current_segment);
+			    			if(current_bitlength % 8 != 0)
+				        	{
+				        		System.out.println("Compressed 1 segment at index " + i + " has uneven bit length.");
+				        		System.out.println("There are " + current_number_of_segments + " segments.");
+				        	}
+			    			segmented_bitlength += current_bitlength;
+			    		}
+			        }
+			        segment_list.add(current_segment);
+			    }
+			    System.out.println("Scanned merge list.");
+			    System.out.println("Segmented bitlength is " + segmented_bitlength);
+		    }
+		    System.out.println();
+		    
 		}
 		
 		list.add(segment_list);
+		
+		
 		list.add(max_segment_bytelength);
 		
 		return list;
@@ -720,6 +866,7 @@ public class SegmentMapper
 				overhead = 40;
 		}
 		
+		/*
 		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
 		System.out.println("Number of iterations merging segments was " + iterations);
 		System.out.println("Number of merged segments was " + previous_compressed_data.size());
@@ -730,7 +877,7 @@ public class SegmentMapper
 		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
 		System.out.println("Number of uncompressed segments is " + number_of_uncompressed_segments);
 		System.out.println();
-		
+		*/
 		
 		ArrayList segment_data = new ArrayList();
 		segment_data.add(previous_compressed_length);
