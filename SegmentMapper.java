@@ -31,7 +31,7 @@ public class SegmentMapper
 		// Add byte for string information.
 		last_segment_bytelength++;
 		
-		// Get information that goes in last byte.
+		// Get information that goes in last byte of last segment.
 		byte extra_bits = 0;
 		if(remainder != 0)
 		{
@@ -44,80 +44,195 @@ public class SegmentMapper
 		// the last segment.
 		ArrayList segment_list = new ArrayList();
 	
-        // Leading mask.
-		byte [] leading_mask  = new byte[7];
-		leading_mask[0] = 1;
-		leading_mask[1] = 3;
-		leading_mask[2] = 7;
-		leading_mask[3] = 15;
-		leading_mask[4] = 31;
-		leading_mask[5] = 63;
-		leading_mask[6] = 127;
         
-        // Trailing mask.
-		byte [] trailing_mask  = new byte[7];
-		trailing_mask[0] = -2;
-		trailing_mask[1] = -4;
-		trailing_mask[2] = -8;
-		trailing_mask[3] = -16;
-		trailing_mask[4] = -32;
-		trailing_mask[5] = -64;
-		trailing_mask[6] = -128;
-		
-		
 		if(bitlength % 8 == 0)
 		{
-		int i;
+		    int i;
 		
-		for(i = 0; i < number_of_segments - 1; i++)
-		{
-			byte [] segment = new byte[segment_bytelength];
-	    	for(int j = 0; j < segment.length - 1; j++)
-				segment[j] = string[i * (segment_bytelength - 1) + j];
+		    for(i = 0; i < number_of_segments - 1; i++)
+		    {
+			    byte [] segment = new byte[segment_bytelength];
+	    	    for(int j = 0; j < segment.length - 1; j++)
+				    segment[j] = string[i * (segment_bytelength - 1) + j];
 	    	
-	    	double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
-	    	byte iterations   = 0;
-			if (zero_ratio < .5)
-				iterations = 16;
-			segment[segment.length - 1] = iterations;
-			segment_list.add(segment);	
-		}
+	    	    double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
+	    	    byte iterations   = 0;
+			    if (zero_ratio < .5)
+				    iterations = 16;
+			    segment[segment.length - 1] = iterations;
+			    segment_list.add(segment);	
+		    }
 		
-		i = number_of_segments - 1; 
+		    i = number_of_segments - 1; 
 		
-		byte [] segment = new byte[last_segment_bytelength];   
-    	for(int j = 0; j < segment.length - 1; j++)
-			segment[j] = string[i * (segment_bytelength - 1) + j];
+		    byte [] segment = new byte[last_segment_bytelength];   
+    	    for(int j = 0; j < segment.length - 1; j++)
+			    segment[j] = string[i * (segment_bytelength - 1) + j];
  
-    	double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
-    	byte iterations   = 0;
-		if (zero_ratio < .5)
-			iterations = 16;
-		segment[segment.length - 1] = iterations;
-		segment_list.add(segment);
+    	    double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
+    	    byte iterations   = 0;
+		    if (zero_ratio < .5)
+			    iterations = 16;
+		    segment[segment.length - 1] = iterations;
+		    segment_list.add(segment);
 		
 		
-		for(i = 0; i < number_of_segments; i++)
-		{
-			segment = (byte [])segment_list.get(i);
-			int type = StringMapper.getType(segment);
-			if(type == 0)
-			{
-				byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
-				if(compressed_segment.length < segment.length)
-					segment_list.set(i, compressed_segment);
-					
-			}
-			else
-			{
-				byte [] compressed_segment = StringMapper.compressOneStrings(segment);
-				if(compressed_segment.length < segment.length)
-					segment_list.set(i, compressed_segment);
-			}
-		}
+		    for(i = 0; i < number_of_segments; i++)
+		    {
+			    segment = (byte [])segment_list.get(i);
+			    int type = StringMapper.getType(segment);
+			    if(type == 0)
+			    {
+				    byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
+				    if(compressed_segment.length < segment.length)
+					    segment_list.set(i, compressed_segment);	
+			    }
+			    else
+			    {
+				    byte [] compressed_segment = StringMapper.compressOneStrings(segment);
+			        if(compressed_segment.length < segment.length)
+			            segment_list.set(i, compressed_segment);
+			    }
+		    }
 		}
 		else
 		{
+			// The information for a segment will always be collected from at least
+			// two bytes in the string, although there might be intermediate bytes.
+			
+			// Leading mask used to collect bit values from leading byte in string.
+			// It's also used to separate intermediate bytes.
+		    byte [] leading_mask  = new byte[7];
+			leading_mask[0] = -2;
+			leading_mask[1] = -4;
+			leading_mask[2] = -8;
+			leading_mask[3] = -16;
+			leading_mask[4] = -32;
+			leading_mask[5] = -64;
+			leading_mask[6] = -128;
+			
+			// Trailing mask used to collect collect bit values from intermediate bytes and trailing byte in the string.
+			byte [] trailing_mask  = new byte[7];
+			trailing_mask[0] = 1;
+			trailing_mask[1] = 3;
+			trailing_mask[2] = 7;
+			trailing_mask[3] = 15;
+			trailing_mask[4] = 31;
+			trailing_mask[5] = 63;
+			trailing_mask[6] = 127;
+	        
+			
+			int i;
+			
+			// Subtract the first and last string bytes and the information byte
+			// to get the number of intermediate bytes, which might be 0.
+			int intermediate_bytes = segment_bytelength - 3; 
+		   
+			int string_bit_offset  = 0;
+		    for(i = 0; i < number_of_segments - 1; i++)
+		    {
+			    byte [] segment = new byte[segment_bytelength];
+			    
+			    // Calculate this at the beginning and use it later, because
+			    // the string_bit_offset will be getting incremented and we
+			    // want to use the initial value.
+			    int trailing_bit_offset = string_bit_offset + segment_bitlength;
+			    int string_byte_offset = string_bit_offset / 8;
+			    int modulus = string_bit_offset % 8;
+			    if(modulus == 0)
+			    {
+			    	segment[0] = string[string_byte_offset];
+			    	string_bit_offset += 8;
+			    	string_byte_offset++;
+			    	int j;
+			    	for(j = 0; j < intermediate_bytes; j++)
+			    	{
+			    		segment[j] = string[string_byte_offset];
+				    	string_bit_offset += 8;
+				    	string_byte_offset++;	
+			    	}
+			    	
+			    	modulus = trailing_bit_offset % 8;
+			    	string_bit_offset += 8 - modulus;
+			    	// The modulus has to be non-zero but we'll do an error check.
+			    	if(modulus == 0)
+			    	    System.out.println("Trailing modulus is zero when leading byte was even.");
+			    	
+			    	
+			    	// We don't increment the byte offset, which means the following
+			    	// leading byte will have to be divided and the first segment right shifted,
+			    	// and the second segment left shifted. We don't have to any shifting in
+			    	// this case.  We don't really have to do any masking either since the 
+			    	// extra bits should be ignored, but we'll set the extra bits to zero.
+			    	// It might help debugging the bit stream, or even the compression rate
+			    	// if the segments are small enough relative to the number of extra bits.
+			    	
+			    	int k             = 7 - modulus;
+			    	byte mask         = trailing_mask[k];
+			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
+			    	segment[j]        = masked_value;
+			    	
+			    	
+			    	j++;
+			    	if(j == segment_bytelength - 1)
+					{
+			    		extra_bits = 0;
+						if(modulus != 0)
+						{
+							extra_bits = (byte)(8 - modulus);
+						    extra_bits <<= 5;
+						}
+			    		segment[j] = extra_bits;
+			    		double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
+			    	    byte iterations   = 0;
+					    if (zero_ratio < .5)
+						    iterations = 16;
+					    segment[j] |= iterations;
+						
+					}
+					else
+						System.out.println("Wrong index " + j + " for segment byte length " + segment_bytelength);
+				    segment_list.add(segment);
+			    }
+			    else  // Modulus is uneven.
+			    {
+			    	
+			    }
+		    }
+		    
+		    i = number_of_segments - 1; 
+		
+		    byte [] segment = new byte[last_segment_bytelength];   
+    	    for(int j = 0; j < segment.length - 1; j++)
+			    segment[j] = string[i * (segment_bytelength - 1) + j];
+ 
+    	    double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
+    	    byte iterations   = 0;
+		    if (zero_ratio < .5)
+			    iterations = 16;
+		    segment[segment.length - 1] = iterations;
+		    segment_list.add(segment);
+		
+		
+		    for(i = 0; i < number_of_segments; i++)
+		    {
+			    segment = (byte [])segment_list.get(i);
+			    int type = StringMapper.getType(segment);
+			    if(type == 0)
+			    {
+				    byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
+				    if(compressed_segment.length < segment.length)
+					    segment_list.set(i, compressed_segment);	
+			    }
+			    else
+			    {
+				    byte [] compressed_segment = StringMapper.compressOneStrings(segment);
+			        if(compressed_segment.length < segment.length)
+			            segment_list.set(i, compressed_segment);
+			    }
+		    }	
+			
+			
 			
 		}
 		list.add(segment_list);
