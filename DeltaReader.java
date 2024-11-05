@@ -305,8 +305,6 @@ public class DeltaReader
 						byte [] string        = new byte[string_length];
 				        int     zipped_length = in.readInt();
 				        
-				        System.out.println("String length is " + string_length);
-				        System.out.println("Zipped length is " + zipped_length);
 				        
 				        if(zipped_length == 0)
 				        	in.read(string, 0, string_length);   
@@ -326,26 +324,42 @@ public class DeltaReader
 					}
 					else
 					{
-						System.out.println("Number of segments is " + number_of_segments);
 						ArrayList compressed_string_list = new ArrayList();
 						
-						int max_segment_length = in.readInt();
+						//int max_segment_length = in.readInt();
 						//System.out.println("Max segment is " + max_segment_length);
 					    for(int k = 0; k < number_of_segments; k++)	
 					    {
 					    	int string_length = in.readInt();
+					    	int zipped_length = in.readInt();
+					    	
 					    	byte [] current_string = new byte[string_length];
-					    	in.read(current_string, 0, string_length);
+					    	
+					    	if(zipped_length == 0)
+					        	in.read(current_string, 0, string_length);   
+					        else
+					        {
+					        	byte [] zipped_string    = new byte[zipped_length];
+					            in.read(zipped_string, 0, zipped_length);
+					            Inflater inflater = new Inflater();
+					            inflater.setInput(zipped_string, 0, zipped_length);
+					            int unzipped_length = inflater.inflate(current_string);
+					            if(unzipped_length != string_length)
+					        	    System.out.println("Unzipped string not expected length.");    	
+					        }
 					    	
 					    	int type       = StringMapper.getType(current_string);
 					    	int iterations = StringMapper.getIterations(current_string);
 					    	int bitlength  = StringMapper.getBitlength(current_string);
 					    	
+					    	//System.out.println("Finished processing segment " + k);
 					    	
+					    	/*
 					    	System.out.println("String " + k + " has type " + type + ", " + iterations + " iterations, and bitlength " + bitlength);
 					    	
 					    	if(bitlength % 8 != 0)
 					    		System.out.println("Bitlength not multiple of 8.");
+					    	*/
 					    	/*
 					    	int string_length = 0;
 					    	int zipped_length = 0;
@@ -364,27 +378,7 @@ public class DeltaReader
 					    	    string_length = in.readInt();
 					    	    zipped_length = in.readInt();
 					    	}
-					    	
-					    	System.out.println("String length is " + string_length);
-					    	System.out.println("Zipped length is " + zipped_length);
-					    	System.out.println();
-							byte [] current_string = new byte[string_length];
-							
-							
-					        if(zipped_length == 0)
-					        	in.read(current_string, 0, string_length);   
-					        else
-					        {
-					        	byte [] zipped_string    = new byte[zipped_length];
-					            in.read(zipped_string, 0, zipped_length);
-					            Inflater inflater = new Inflater();
-					            inflater.setInput(zipped_string, 0, zipped_length);
-					            int unzipped_length = inflater.inflate(current_string);
-					            if(unzipped_length != string_length)
-					        	    System.out.println("Unzipped string not expected length.");    	
-					        }
-					        */
-					    	
+					    	*/
 					        compressed_string_list.add(current_string);    	
 					    }
 					    
@@ -425,17 +419,32 @@ public class DeltaReader
 					    byte [] string = new byte[string_length];
 					    
 					    // Concatenate strings less trailing byte with individual string information.
+					    
+					    int offset = 0;
+					    int total_bitlength = 0;
+					    for(int k = 0; k < decompressed_string_list.size(); k++)
+						{
+							byte [] segment = (byte [])decompressed_string_list.get(k);
+							for(int m = 0; m < segment.length - 1; m++)
+								string[offset + m] = segment[m];	
+							offset += segment.length - 1;
+							int segment_bitlength = StringMapper.getBitlength(segment);
+							total_bitlength += segment_bitlength;
+						}
+						
+						if(total_bitlength % 8 != 0)
+						{
+							int modulus = total_bitlength % 8;
+							byte extra_bits = (byte)(8 - modulus);
+							extra_bits <<= 5;
+							string[string.length - 1] = extra_bits;
+						}
+						string[string.length - 1] |= channel_iterations[i];
+					    /*
 					    int offset = 0;
 					    for(int k = 0; k < number_of_segments; k++)
 					    {
 					        byte [] current_string = (byte [])decompressed_string_list.get(k);
-					        
-					        
-					        /*
-					        int bitlength = StringMapper.getBitlength(current_string);  
-					        if(bitlength % 8 != 0 && k < number_of_segments - 1)
-					        	System.out.println("Bitlength is not a multiple of 8.");
-					        */
 					        
 					        
 					        int byte_length = current_string.length - 1;
@@ -460,9 +469,11 @@ public class DeltaReader
 			            System.out.println("Channel iterations is " + channel_iterations[i]);
 			            
 			            string[string.length - 1] |= channel_iterations[i];
+			            */
+			            
+			            
 			            
 					    string_list.add(string);
-					    
 					    System.out.println("Concatenated segments for channel " + i);
 					}
 					System.out.println("Finished channel " + i);
@@ -625,11 +636,11 @@ public class DeltaReader
 					int k     = i * xdim + j;
 					int pixel = 0;
 					
-					//pixel |= blue[k] << 16;
-					pixel |= green[k] << 16;
+					pixel |= blue[k] << 16;
+					//pixel |= green[k] << 16;
 					pixel |= green[k] << 8;
-					pixel |= green[k];
-					//pixel |= red[k];
+					//pixel |= green[k];
+					pixel |= red[k];
 				    image.setRGB(j, i, pixel);
 				}
 			}

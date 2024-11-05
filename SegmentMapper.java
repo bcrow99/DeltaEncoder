@@ -6,7 +6,6 @@ import java.math.*;
 public class SegmentMapper 
 {
 	// This function returns a segment list with regular lengths.
-
 	public static ArrayList getSegmentedData(byte[] string, int bitlength) 
 	{
 		ArrayList list = new ArrayList();
@@ -138,7 +137,7 @@ public class SegmentMapper
 			    // want to use the initial value.
 			    int trailing_bit_offset = string_bit_offset + segment_bitlength;
 			    int string_byte_offset = string_bit_offset / 8;
-			    int modulus = string_bit_offset % 8;
+			    int modulus            = string_bit_offset % 8;
 			    if(modulus == 0)
 			    {
 			    	segment[0] = string[string_byte_offset];
@@ -167,11 +166,10 @@ public class SegmentMapper
 			    	// It might help debugging the bit stream, or even the compression rate
 			    	// if the segments are small enough relative to the number of extra bits.
 			    	
-			    	int k             = 7 - modulus;
+			    	int k             = 6 - (modulus - 1);
 			    	byte mask         = trailing_mask[k];
 			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
 			    	segment[j]        = masked_value;
-			    	
 			    	
 			    	j++;
 			    	if(j == segment_bytelength - 1)
@@ -194,9 +192,12 @@ public class SegmentMapper
 						System.out.println("Wrong index " + j + " for segment byte length " + segment_bytelength);
 				    segment_list.add(segment);
 			    }
-			    else  // Modulus is uneven.
+			    else  //Bit length is uneven.
 			    {
-			    	
+			    	int k             = 6 - (modulus - 1);
+			    	byte mask         = leading_mask[k];
+			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
+			    	//segment[j]        = masked_value;	
 			    }
 		    }
 		    
@@ -477,7 +478,7 @@ public class SegmentMapper
 					{
 						for(int j = 0; j < segment.length; j++)
 						{
-							if(segment[i] != decompressed_segment[i])
+							if(segment[j] != decompressed_segment[j])
 							{
 								System.out.println("Decompressed segment differs from original segment at byte index " + j);
 								break;
@@ -503,7 +504,7 @@ public class SegmentMapper
 					{
 						for(int j = 0; j < segment.length; j++)
 						{
-							if(segment[i] != decompressed_segment[i])
+							if(segment[j] != decompressed_segment[j])
 							{
 								System.out.println("Decompressed segment differs from original segment at byte index " + j);
 								break;

@@ -720,62 +720,14 @@ public class DeltaWriter
 	     	            else
 	     	                minimum_segment_length = max_length;
 	     	             
-	     	             //ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, bitlength, minimum_segment_length);
 	     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
 	     	             
 	     	             // A list of compressed strings.
-	     	             // ArrayList segments    = (ArrayList)segment_data_list.get(1);
 	     	             ArrayList  segments  = (ArrayList)segment_data_list.get(0);
 	     	             
 	     	             System.out.println("Number of segments from merge function is " + segments.size());
 	     	             System.out.println();
-	     	             
-	     	             /*
-	     	             int segmented_bitlength = 0;
-	     	             for(int k = 0; k < segments.size(); k++)
-	     	             {
-	     	            	 byte [] current_segment = (byte [])segments2.get(k);
-	     	            	 
-	     	            	 int current_iterations = StringMapper.getIterations(current_segment);
-	     	            	 if(current_iterations == 0 || current_iterations == 16)
-	     	            	 {
-	     	            		int current_bitlength  = StringMapper.getBitlength(current_segment); 
-	     	            		if(current_bitlength % 8 != 0)
-	     	            		{
-		     	            		System.out.println("Uncompressed segment " + k + " does not have an even bitlength.");
-		     	            		System.out.println("There are " + segments2.size() + " segments.");
-	     	            		}
-	     	            		segmented_bitlength   += current_bitlength;
-	     	            	 }
-	     	            	 else if(current_iterations < 16)
-	     	            	 {
-	     	            	    byte [] decompressed_segment = StringMapper.decompressZeroStrings(current_segment);
-	     	            	    int current_bitlength  = StringMapper.getBitlength(decompressed_segment); 
-	     	            		if(current_bitlength % 8 != 0)
-	     	            		{
-		     	            		System.out.println("Decompressed segment " + k + " does not have an even bitlength.");
-		     	            		System.out.println("There are " + segments2.size() + " segments.");
-	     	            		}
-	     	            		segmented_bitlength   += current_bitlength;
-	     	            	 }
-	     	            	 else
-	     	            	 {
-	     	            		byte [] decompressed_segment = StringMapper.decompressOneStrings(current_segment);
-	     	            	    int current_bitlength  = StringMapper.getBitlength(decompressed_segment); 
-	     	            		if(current_bitlength % 8 != 0)
-	     	            		{
-		     	            		System.out.println("Decompressed segment " + k + " does not have an even bitlength.");
-		     	            		System.out.println("There are " + segments2.size() + " segments.");
-	     	            		}
-	     	            		segmented_bitlength   += current_bitlength;	 
-	     	            	 }
-	     	             }
-	     	             
-	     	             System.out.println("Channel bitlength was " + channel_compressed_length[j]);
-	     	             System.out.println("Segmented bitlength was " + segmented_bitlength);
-	     	             System.out.println();
-	     	             */
-	     	             
+	     	            
 	     	             // The single merged segment should be identical to the original string.
 	     	             // For now, we'll add the original string.
 	     	             if(segments.size()  == 1)
@@ -1503,6 +1455,7 @@ public class DeltaWriter
 		            // There is only one segment, which itself might or might not be segmented.
 		            if(delta_type != 7)
 		            {
+		                /*
 		            	 byte [] string = (byte [])string_list.get(i);
 		            	 int number_of_segments = 1;
 		            	 
@@ -1530,14 +1483,17 @@ public class DeltaWriter
 		     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
 		     	             number_of_segments = segment_string.size();
 		            	 }
-		            	 
-		            	 
+		            	 */
+		            	 ArrayList segments = (ArrayList)segment_list.get(i);
+		            	 int number_of_segments = segments.size();
 		            	 out.writeInt(number_of_segments);
 		            	 
 		            	 if(number_of_segments == 1)
 		            	 {
-		            		 System.out.println("String will be unsegmented.");
+		            		 System.out.println("String is unsegmented.");
 		            		 
+		            		 //byte [] string = (byte [])segment_list.get(0);
+		            		 byte [] string = (byte [])string_list.get(i);
 		            		 out.writeInt(string.length);
 		            		 
 		            		 // Zipping the segment.
@@ -1568,26 +1524,34 @@ public class DeltaWriter
 		            	     System.out.println("String will be segmented.");
 		            		 
 		     	             // A list of compressed strings.
-		     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
-		     	             // Helps figure out whether we need a byte, short or int to send segment lengths.
-		    				 int max_segment_byte_length = (int)segment_data_list.get(2);
-		    				 
-		    				 out.writeInt(max_segment_byte_length); 
-		    				
+		     	            
 		    				 for(int k = 0; k < number_of_segments; k++)
 		    				 {
-		    				     byte[] current_string = (byte [])segment_string.get(k); 
-		    				     out.writeInt(current_string.length);
-		    				     out.write(current_string, 0, current_string.length);
-		    				     
-		    				     /*
+		    					 byte[] current_string = (byte [])segments.get(k); 
+		    					 out.writeInt(current_string.length); 
+		    					 
 		    				     Deflater deflater = new Deflater();
-		 	                     deflater.setInput(string);
+		 	                     deflater.setInput(current_string);
 		 	                     byte [] zipped_string = new byte[2 * current_string.length];
 		 	                     deflater.finish();
 		 	                     int zipped_length = deflater.deflate(zipped_string);
-		 	                     deflater.end(); 
+		 	                     deflater.end();
 		    				     
+		 	                     // Zipping doesn't help with a small very skewed distribution of values.
+		 	                     if(zipped_length < current_string.length)
+		 	                     {
+		 	                    	out.writeInt(zipped_length);
+		 	                        out.write(zipped_string, 0, zipped_length);	 
+		 	                     }
+		 	                     else
+		 	                     {
+		 	                    	out.writeInt(0);
+			    				    out.write(current_string, 0, current_string.length);   	 
+		 	                     }
+		    				     
+		    				     
+		    				     
+		    				     /*
 		 	                     if(max_segment_byte_length <= Byte.MAX_VALUE)
 		 	                     {
 		 	                        out.writeByte(current_string.length);
