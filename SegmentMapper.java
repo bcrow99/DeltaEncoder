@@ -669,13 +669,15 @@ public class SegmentMapper
 			    for(int i = 0; i < merged_list.size(); i++)
 			    {
 			        byte [] current_segment = (byte [])	merged_list.get(i); 
-			        
+			        if(current_segment.length > max_segment_bytelength)
+		        		max_segment_bytelength = current_segment.length;
 			        int current_iterations = StringMapper.getIterations(current_segment);
 			        if(current_iterations == 0 || current_iterations == 16)
 			        {
 			        	int current_bitlength = StringMapper.getBitlength(current_segment);
 			        	segmented_bitlength += current_bitlength;
 			        	segment_list.add(current_segment);
+			        		
 			        }
 			        else
 			        {
@@ -704,7 +706,6 @@ public class SegmentMapper
 		
 		ArrayList decompressed_segments = new ArrayList();
 		
-		//System.out.println("Scanning final segment list.");
 		int segmented_bitlength = 0;
 		for(int i = 0; i < segment_list.size(); i++)
 	    {
