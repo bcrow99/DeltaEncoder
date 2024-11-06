@@ -23,7 +23,7 @@ public class DeltaWriter
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
 	// This value is inversely related to the lengths of the segment.
-	int segment_length = 12;
+	int segment_length = 0;
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
@@ -330,7 +330,7 @@ public class DeltaWriter
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(20);
+				segment_slider.setMaximum(12);
 				segment_slider.setValue(segment_length);
 				JTextField segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -340,7 +340,11 @@ public class DeltaWriter
 					{
 						JSlider slider = (JSlider) e.getSource();
 						segment_length = slider.getValue();
-						segment_value.setText(" " + segment_length + " ");
+						if(slider.getValueIsAdjusting() == false)
+						{
+							apply_item.doClick();
+							segment_value.setText(" " + segment_length + " ");
+						}
 					}
 				};
 				segment_slider.addChangeListener(segment_slider_handler);
@@ -704,22 +708,20 @@ public class DeltaWriter
 			        else
 			        {
 			        	int bitlength  = StringMapper.getBitlength(compression_string);
-	            		int max_length = bitlength / 2;
-	     	            int remainder  = max_length % 8;
-	     	            max_length    -= remainder;
+			        	int original_number_of_segments = (int)Math.pow(2,  segment_length);
+			        	
+	            		int minimum_segment_length = bitlength / original_number_of_segments;
+	     	            int remainder  = minimum_segment_length % 8;
 	     	            
-	     	            // Set minimum length of a segment.
-	     	            double factor = Math.pow(2,  21 - segment_length);
-	     	            int minimum_segment_length = (int)(factor * 32);
+	     	            minimum_segment_length -= remainder;
+	     	            // Check this.
+	     	            if(minimum_segment_length < 40)
+	     	            	minimum_segment_length = 40;
+     	                
+     	                System.out.println("Minimum segment length is " + minimum_segment_length);
 	     	            
-	     	            if(minimum_segment_length < max_length)
-	     	            {
-	     	               remainder = minimum_segment_length % 8;
-	     	               minimum_segment_length -= remainder;
-	     	            }
-	     	            else
-	     	                minimum_segment_length = max_length;
-	     	             
+	     	            System.out.println("Original number of segments is " + original_number_of_segments);	     	            
+	     	            
 	     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
 	     	             
 	     	             // A list of compressed strings.
@@ -805,7 +807,6 @@ public class DeltaWriter
 			        int  [] table  = (int [])table_list.get(i);
 			        int  [] delta  = new int[new_xdim * new_ydim]; 
 			       
-			     
 			        ArrayList segments     = (ArrayList)segment_list.get(i);
 			        int number_of_segments = segments.size();
 			        System.out.println("The number of segments is " + number_of_segments);
@@ -1243,12 +1244,10 @@ public class DeltaWriter
 					int pixel = 0;
 					
 					pixel |= blue[k] << 16;
-					//pixel |= green[k] << 16;
-					
+				
 				    pixel |= green[k] << 8;
 					
 					pixel |= red[k];
-					//pixel |= green[k];
 					
 				    image.setRGB(j, i, pixel);
 				}
@@ -1455,35 +1454,6 @@ public class DeltaWriter
 		            // There is only one segment, which itself might or might not be segmented.
 		            if(delta_type != 7)
 		            {
-		                /*
-		            	 byte [] string = (byte [])string_list.get(i);
-		            	 int number_of_segments = 1;
-		            	 
-		            	 ArrayList segment_data_list = new ArrayList();
-		            	 if(segment_length != 0)
-		            	 {
-		            		 int bitlength = StringMapper.getBitlength(string);
-		            		 int max_length = bitlength / 2;
-		     	             int remainder  = max_length % 8;
-		     	             max_length    -= remainder;
-		     	            
-		     	             double factor = Math.pow(2,  21 - segment_length);
-		     	        
-		     	             int minimum_segment_length = (int)(factor * 32);
-		     	            
-		     	             if(minimum_segment_length < max_length)
-		     	             {
-		     	                remainder = minimum_segment_length % 8;
-		     	                minimum_segment_length -= remainder;
-		     	             }
-		     	             else
-		     	            	minimum_segment_length = max_length;
-		     	             
-		     	             segment_data_list = SegmentMapper.getMergedSegmentedData(string, bitlength, minimum_segment_length);	 
-		     	             ArrayList segment_string    = (ArrayList)segment_data_list.get(1);
-		     	             number_of_segments = segment_string.size();
-		            	 }
-		            	 */
 		            	 ArrayList segments = (ArrayList)segment_list.get(i);
 		            	 int number_of_segments = segments.size();
 		            	 out.writeInt(number_of_segments);
