@@ -64,8 +64,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 		
-		String prefix       = new String("");
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix       = new String("");
+		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -333,7 +333,7 @@ public class DeltaWriter
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(12);
+				segment_slider.setMaximum(14);
 				segment_slider.setValue(segment_length);
 				JTextField segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -714,12 +714,12 @@ public class DeltaWriter
 			        	int original_number_of_segments = (int)Math.pow(2,  segment_length);
 			        	
 	            		int minimum_segment_length = bitlength / original_number_of_segments;
-	     	            int remainder  = minimum_segment_length % 8;
-	     	            
-	     	            minimum_segment_length -= remainder;
+	            		int remainder = minimum_segment_length % 8;
+	            		minimum_segment_length -= remainder;
+	     	          
 	     	            // Check this.
-	     	            if(minimum_segment_length < 40)
-	     	            	minimum_segment_length = 40;
+	     	            if(minimum_segment_length < 16)
+	     	            	minimum_segment_length = 16;
      	                
      	                System.out.println("Minimum segment length is " + minimum_segment_length);
 	     	            
@@ -1465,23 +1465,15 @@ public class DeltaWriter
 		            	 
 		            	 if(number_of_segments == 1)
 		            	 {
-		            		 //System.out.println("String is unsegmented.");
-		            		 
-		            		 //byte [] string = (byte [])segment_list.get(0);
 		            		 byte [] string = (byte [])string_list.get(i);
 		            		 out.writeInt(string.length);
 		            		 
-		            		 // Zipping the segment.
 		            		 Deflater deflater = new Deflater();
 			                 deflater.setInput(string);
 			                 byte [] zipped_string = new byte[2 * string.length];
 			                 deflater.finish();
 			                 int zipped_length = deflater.deflate(zipped_string);
 			                 deflater.end(); 
-			                 
-			                 //System.out.println("String length is " + string.length);
-			                 //System.out.println("Zipped length is " + zipped_length);
-			                 //System.out.println();
 			                 
 			                 if(zipped_length < string.length)
 			                 {
