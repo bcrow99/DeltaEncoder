@@ -45,6 +45,8 @@ public class DeltaWriter
 	int  [] number_of_segments;
 	byte [] channel_iterations;
 	
+	int [] max_bytelength;
+	
 	long file_length;
 	double file_compression_rate;
 
@@ -62,8 +64,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 		
-		//String prefix       = new String("");
-		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix       = new String("");
+		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -136,6 +138,7 @@ public class DeltaWriter
             
             channel_string_type = new int[3];
             channel_iterations  = new byte[3];
+            max_bytelength      = new int[3];
             
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
@@ -726,6 +729,7 @@ public class DeltaWriter
 	     	             
 	     	             // A list of compressed strings.
 	     	             ArrayList  segments  = (ArrayList)segment_data_list.get(0);
+	     	             max_bytelength[i]    = (int)segment_data_list.get(1);
 	     	             
 	     	             System.out.println("Number of segments from merge function is " + segments.size());
 	     	             System.out.println();
@@ -809,24 +813,24 @@ public class DeltaWriter
 			       
 			        ArrayList segments     = (ArrayList)segment_list.get(i);
 			        int number_of_segments = segments.size();
-			        System.out.println("The number of segments is " + number_of_segments);
+			        //System.out.println("The number of segments is " + number_of_segments);
 			        if(number_of_segments == 1)
 			        {
 			        	byte [] current_string = (byte [])segments.get(0);
-			        	System.out.println("Length of original string was " + original_string.length);
-			            System.out.println("Length of string from segment list is " + current_string.length);
+			        	//System.out.println("Length of original string was " + original_string.length);
+			            //System.out.println("Length of string from segment list is " + current_string.length);
 			            
 			            int current_type       = StringMapper.getType(current_string);
 				        int current_iterations = StringMapper.getIterations(current_string);
 				        int current_bitlength  = StringMapper.getBitlength(current_string);
 			        	
-				        System.out.println("Original type is " + original_type + ", iterations is " + original_iterations + ", bitlength is " + original_bitlength);
-				        System.out.println("Current type is " + current_type + ", iterations is " + current_iterations + ", bitlength is " + current_bitlength);
-				        System.out.println();
+				        //System.out.println("Original type is " + original_type + ", iterations is " + original_iterations + ", bitlength is " + original_bitlength);
+				        //System.out.println("Current type is " + current_type + ", iterations is " + current_iterations + ", bitlength is " + current_bitlength);
+				        //System.out.println();
 			        	
 				        if(current_iterations == 0 || current_iterations == 16)
 				        {
-				        	System.out.println("Uncompressed.");
+				        	//System.out.println("Uncompressed.");
 				        	int number_unpacked = StringMapper.unpackStrings2(original_string, table, delta);
 				        	//int number_unpacked = StringMapper.unpackStrings2(current_string, table, delta);
 						    if(number_unpacked != new_xdim * new_ydim)
@@ -892,7 +896,6 @@ public class DeltaWriter
 					    byte [] reconstructed_string = new byte[string_length];
 					    
 					    // Concatenate strings less trailing byte with individual string information.
-					    
 					    int offset = 0;
 					    int total_bitlength = 0;
 					    for(int k = 0; k < decompressed_segments.size(); k++)
@@ -919,6 +922,7 @@ public class DeltaWriter
 				        int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
 				        int reconstructed_bitlength  = StringMapper.getBitlength(reconstructed_string);
 			        	
+				        /*
 				        System.out.println("Original type is " + original_type + ", iterations is " + original_iterations + ", bitlength is " + original_bitlength);
 				        System.out.println("Reconstructed type is " + reconstructed_type + ", iterations is " + reconstructed_iterations + ", bitlength is " + reconstructed_bitlength);
 				     
@@ -935,6 +939,7 @@ public class DeltaWriter
 				        		break;
 				        	}
 				        }
+				        */
 				        
 				        if(reconstructed_iterations == 0 || reconstructed_iterations == 16)
 				        {
@@ -1396,7 +1401,6 @@ public class DeltaWriter
 						int [] string_table       = (int [])map_string_list.get(2);
 						byte [] compressed_map    = (byte [])map_string_list.get(3);
 		                
-		                
 						out.writeShort(string_table.length);
 						for(int k = 0; k < string_table.length; k++)
 			                out.writeShort(string_table[k]);
@@ -1458,9 +1462,10 @@ public class DeltaWriter
 		            	 int number_of_segments = segments.size();
 		            	 out.writeInt(number_of_segments);
 		            	 
+		            	 
 		            	 if(number_of_segments == 1)
 		            	 {
-		            		 System.out.println("String is unsegmented.");
+		            		 //System.out.println("String is unsegmented.");
 		            		 
 		            		 //byte [] string = (byte [])segment_list.get(0);
 		            		 byte [] string = (byte [])string_list.get(i);
@@ -1474,9 +1479,9 @@ public class DeltaWriter
 			                 int zipped_length = deflater.deflate(zipped_string);
 			                 deflater.end(); 
 			                 
-			                 System.out.println("String length is " + string.length);
-			                 System.out.println("Zipped length is " + zipped_length);
-			                 System.out.println();
+			                 //System.out.println("String length is " + string.length);
+			                 //System.out.println("Zipped length is " + zipped_length);
+			                 //System.out.println();
 			                 
 			                 if(zipped_length < string.length)
 			                 {
@@ -1491,80 +1496,61 @@ public class DeltaWriter
 		            	 }
 		            	 else
 		            	 {
-		            	     System.out.println("String will be segmented.");
-		            		 
-		     	             // A list of compressed strings.
-		     	            
+		            		 int current_max_bytelength = 0;
+		            		 out.writeInt(max_bytelength[i]);
 		    				 for(int k = 0; k < number_of_segments; k++)
 		    				 {
 		    					 byte[] current_string = (byte [])segments.get(k); 
-		    					 out.writeInt(current_string.length); 
-		    					 
+		    					
 		    				     Deflater deflater = new Deflater();
 		 	                     deflater.setInput(current_string);
 		 	                     byte [] zipped_string = new byte[2 * current_string.length];
 		 	                     deflater.finish();
 		 	                     int zipped_length = deflater.deflate(zipped_string);
 		 	                     deflater.end();
-		    				     
-		 	                     // Zipping doesn't help with a small very skewed distribution of values.
-		 	                     if(zipped_length < current_string.length)
+		 	                     
+		 	                     if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 		 	                     {
-		 	                    	out.writeInt(zipped_length);
-		 	                        out.write(zipped_string, 0, zipped_length);	 
+		 	                         out.writeByte(current_string.length); 
+		 	                         if(zipped_length < current_string.length)
+		    				         {
+		 	                             out.writeByte(zipped_length);
+			 	            	         out.write(zipped_string, 0, zipped_length);	 
+		    				         }	
+	 	                    	     else
+	 	                    	     {
+	 	                    	         out.writeByte(0);
+			 	            	         out.write(current_string, 0, current_string.length);		 
+	 	                    	     }	
+		 	                     }
+		 	                     else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
+		 	                     {
+		 	                    	 out.writeShort(current_string.length); 
+		 	                         if(zipped_length < current_string.length)
+		    				         {
+		 	                             out.writeShort(zipped_length);
+			 	            	         out.write(zipped_string, 0, zipped_length);	 
+		    				         }	
+	 	                    	     else
+	 	                    	     {
+	 	                    	         out.writeShort(0);
+			 	            	         out.write(current_string, 0, current_string.length);		 
+	 	                    	     }	   	 
 		 	                     }
 		 	                     else
 		 	                     {
-		 	                    	out.writeInt(0);
-			    				    out.write(current_string, 0, current_string.length);   	 
+		 	                    	out.writeInt(current_string.length); 
+		 	                         if(zipped_length < current_string.length)
+		    				         {
+		 	                             out.writeInt(zipped_length);
+			 	            	         out.write(zipped_string, 0, zipped_length);	 
+		    				         }	
+	 	                    	     else
+	 	                    	     {
+	 	                    	         out.writeInt(0);
+			 	            	         out.write(current_string, 0, current_string.length);		 
+	 	                    	     }	   	 	 
 		 	                     }
-		    				     
-		    				     
-		    				     
-		    				     /*
-		 	                     if(max_segment_byte_length <= Byte.MAX_VALUE)
-		 	                     {
-		 	                        out.writeByte(current_string.length);
-		 	                        if(zipped_length < current_string.length)
-		 	                        {
-		 	                           out.writeByte(zipped_length);
-		 	                           out.write(zipped_string, 0, zipped_length);	 
-		 	                        }	
-		 	                        else
-		 	                    	{
-		 	                    	     out.writeByte(0);
-				 	            	     out.write(current_string, 0, current_string.length);		 
-		 	                    	 }
-		 	                     }
-		 	                     else if(max_segment_byte_length <= Short.MAX_VALUE)
-		 	                     {
-		 	                    	 out.writeShort(current_string.length);
-		 	                    	 if(zipped_length < current_string.length)
-			    				     {
-			 	                    	 out.writeShort(zipped_length);
-				 	            	     out.write(zipped_string, 0, zipped_length);	 
-			    				     }	
-		 	                    	 else
-		 	                    	 {
-		 	                    	     out.writeShort(0);
-				 	            	     out.write(current_string, 0, current_string.length);		 
-		 	                    	 }	 
-		 	                     }
-		 	                     else
-		 	                     {
-		 	                    	 out.writeInt(current_string.length); 
-		 	                    	 if(zipped_length < current_string.length)
-			    				     {
-			 	                    	out.writeInt(zipped_length);
-				 	            	    out.write(zipped_string, 0, zipped_length);	 
-			    				     }	
-		 	                    	 else
-		 	                    	 {
-		 	                    	     out.writeInt(0);
-				 	            	     out.write(current_string, 0, current_string.length);		 
-		 	                    	  }	 
-		 	                      }
-		 	                      */
 		    				  }
 		            	 }
 		            }

@@ -326,12 +326,57 @@ public class DeltaReader
 					{
 						ArrayList compressed_string_list = new ArrayList();
 						
-						//int max_segment_length = in.readInt();
-						//System.out.println("Max segment is " + max_segment_length);
+						int max_bytelength = in.readInt();
+						
+
+						int data_type = 0;
+						
+						if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
+							data_type = 0;
+						else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
+							data_type = 1;
+						else
+							data_type = 2;
+ 
+						if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
+						    System.out.println("Segment header can be an unsigned byte.");
+						else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
+						    System.out.println("Segment header can be an unsigned short.");
+						else
+							System.out.println("Segment header must be an int.");
+						
 					    for(int k = 0; k < number_of_segments; k++)	
 					    {
-					    	int string_length = in.readInt();
-					    	int zipped_length = in.readInt();
+					    	int string_length = 0;
+					    	int zipped_length = 0;
+					    	
+					    	if(data_type == 0)
+					    	{
+					    		string_length = in.readByte();
+						    	zipped_length = in.readByte(); 	
+						    	
+						    	if(string_length < 0)
+						    		string_length += Byte.MAX_VALUE * 2 + 2;
+						    	if(zipped_length < 0)
+						    		zipped_length += Byte.MAX_VALUE * 2 + 2;
+						    	
+						    	
+					    	}
+					    	else if(data_type == 1)
+					    	{
+					    		string_length = in.readShort();
+						    	zipped_length = in.readShort(); 
+						    	
+						    	if(string_length < 0)
+						    		string_length += Short.MAX_VALUE * 2 + 2;
+						    	if(zipped_length < 0)
+						    		zipped_length += Short.MAX_VALUE * 2 + 2;
+					    	}
+					    	else
+					    	{
+					    		string_length = in.readInt();
+						    	zipped_length = in.readInt();   	
+					    	}
 					    	
 					    	byte [] current_string = new byte[string_length];
 					    	
@@ -348,37 +393,6 @@ public class DeltaReader
 					        	    System.out.println("Unzipped string not expected length.");    	
 					        }
 					    	
-					    	int type       = StringMapper.getType(current_string);
-					    	int iterations = StringMapper.getIterations(current_string);
-					    	int bitlength  = StringMapper.getBitlength(current_string);
-					    	
-					    	//System.out.println("Finished processing segment " + k);
-					    	
-					    	/*
-					    	System.out.println("String " + k + " has type " + type + ", " + iterations + " iterations, and bitlength " + bitlength);
-					    	
-					    	if(bitlength % 8 != 0)
-					    		System.out.println("Bitlength not multiple of 8.");
-					    	*/
-					    	/*
-					    	int string_length = 0;
-					    	int zipped_length = 0;
-					    	if(max_segment_length <= Byte.MAX_VALUE)
-					    	{
-					    	    string_length = in.readByte();
-					    	    zipped_length = in.readByte();
-					    	}
-					    	else if(max_segment_length <= Short.MAX_VALUE)
-					    	{
-					    	    string_length = in.readShort();
-					    	    zipped_length = in.readShort();
-					    	}
-					    	else
-					    	{
-					    	    string_length = in.readInt();
-					    	    zipped_length = in.readInt();
-					    	}
-					    	*/
 					        compressed_string_list.add(current_string);    	
 					    }
 					    
@@ -440,39 +454,6 @@ public class DeltaReader
 							string[string.length - 1] = extra_bits;
 						}
 						string[string.length - 1] |= channel_iterations[i];
-					    /*
-					    int offset = 0;
-					    for(int k = 0; k < number_of_segments; k++)
-					    {
-					        byte [] current_string = (byte [])decompressed_string_list.get(k);
-					        
-					        
-					        int byte_length = current_string.length - 1;
-					       
-					        for(int m = offset; m < byte_length + offset; m++)
-					        {
-					        	int n     = 0;
-					        	string[m] = current_string[n];
-					        	n++;
-					        }
-					        
-					        offset += byte_length;
-					    }
-					    
-					    // Append the extra bits and iterations to the concatenated string. 
-					    byte extra_bits = (byte)(length[i] % 8);
-			            if(extra_bits != 0)
-			            	extra_bits = (byte)(8 - extra_bits);
-			            extra_bits <<= 5;
-			            string[string.length - 1] = extra_bits;
-			            
-			            System.out.println("Channel iterations is " + channel_iterations[i]);
-			            
-			            string[string.length - 1] |= channel_iterations[i];
-			            */
-			            
-			            
-			            
 					    string_list.add(string);
 					    System.out.println("Concatenated segments for channel " + i);
 					}
@@ -510,12 +491,10 @@ public class DeltaReader
 				}
 		    }
 		    
-		    System.out.println("Got here.");
 		    long stop = System.nanoTime();
 		    long time = stop - start;
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
 		    
-		   
 		    int cores = Runtime.getRuntime().availableProcessors();
 		    System.out.println("There are " + cores + " processors available.");
 		    start = System.nanoTime();
