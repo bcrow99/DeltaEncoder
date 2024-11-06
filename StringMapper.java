@@ -983,9 +983,11 @@ public class StringMapper
     	byte [] dst = new byte[1];
     	return dst;
     }
+  
     
     public static byte[] compressZeroStrings(byte[] src)
     {
+    	byte [] dst = new byte[1];
     	try
     	{
     		int bit_length = StringMapper.getBitlength(src);
@@ -995,7 +997,7 @@ public class StringMapper
     	    	int byte_length   = bit_length / 8;
     	    	if(bit_length % 8 != 0)
     	    		byte_length++;
-    	    	byte[] dst = new byte[byte_length + 1];
+    	    	dst = new byte[byte_length + 1];
     		    System.arraycopy(src, 0, dst, 0, byte_length);
     		    
     		    byte extra_bits = (byte)(bit_length % 8);
@@ -1023,7 +1025,7 @@ public class StringMapper
                     	extra_bits = (byte)(8 - extra_bits);
                     extra_bits <<= 5;
                     
-                    byte[] dst  = new byte[byte_length + 1];
+                    dst  = new byte[byte_length + 1];
                     System.arraycopy(buffer1,  0,  dst,  0,  byte_length);
                     dst[byte_length]  = 1;
                     dst[byte_length] |= extra_bits;
@@ -1052,7 +1054,7 @@ public class StringMapper
     			    int byte_length = compressed_length / 8;
     			    if(compressed_length % 8 != 0)
     			    	byte_length++;
-    			    byte[] dst = new byte[byte_length + 1];
+    			    dst = new byte[byte_length + 1];
     			    if(iterations % 2 == 0) 
     			    {
                         System.arraycopy(buffer2,  0,  dst,  0,  byte_length);
@@ -1075,11 +1077,8 @@ public class StringMapper
     	{
     		System.out.println(e.toString());
     		System.out.println("Exiting compressZeroStrings with an exception.");
+    		return dst;
     	}
-    	
-    	// Keep the compiler happy.
-    	byte [] dst = new byte[1];
-    	return dst;
     }
     
     
@@ -1605,6 +1604,7 @@ public class StringMapper
     
     public static byte[] compressOneStrings(byte[] src, int bit_length)
     {
+    	byte[] dst = new byte[1];
     	try
     	{
             int amount = getCompressionAmount(src, bit_length, 1);
@@ -1614,7 +1614,7 @@ public class StringMapper
     	    	int byte_length   = bit_length / 8;
     	    	if(bit_length % 8 != 0)
     	    		byte_length++;
-    	    	byte[] dst = new byte[byte_length + 1];
+    	    	dst = new byte[byte_length + 1];
     	    	
     		    System.arraycopy(src, 0, dst, 0, byte_length);
     		    
@@ -1649,7 +1649,7 @@ public class StringMapper
                     	extra_bits = (byte)(8 - extra_bits);
                     extra_bits <<= 5;
                     
-                    byte[] dst  = new byte[byte_length + 1];
+                    dst  = new byte[byte_length + 1];
                     System.arraycopy(buffer1,  0,  dst,  0,  byte_length);
                     
                     // Add 16 to indicate string type.
@@ -1683,7 +1683,7 @@ public class StringMapper
     			    int byte_length = compressed_length / 8;
     			    if(compressed_length % 8 != 0)
     			    	byte_length++;
-    			    byte[] dst = new byte[byte_length + 1];
+    			    dst = new byte[byte_length + 1];
     			    if(iterations % 2 == 0) 
                         System.arraycopy(buffer2,  0,  dst,  0,  byte_length);
     			    else
@@ -1695,7 +1695,6 @@ public class StringMapper
                     	extra_bits = (byte)(8 - extra_bits);
                     extra_bits <<= 5;
                     dst[byte_length] |= extra_bits;
-   
                     return dst;
     		    }
     	    }
@@ -1704,15 +1703,13 @@ public class StringMapper
     	{
     		System.out.println(e.toString());
     		System.out.println("Exiting compressOneStrings with an exception.");
+    		return dst;
     	}
-    	
-    	// Keep the compiler happy.
-    	byte [] dst = new byte[1];
-    	return dst;
     }
     
     public static byte[] compressOneStrings(byte[] src)
     {
+    	byte [] dst = new byte[1];
     	try
     	{
     		int bit_length = StringMapper.getBitlength(src);
@@ -1723,7 +1720,7 @@ public class StringMapper
     	    	int byte_length   = bit_length / 8;
     	    	if(bit_length % 8 != 0)
     	    		byte_length++;
-    	    	byte[] dst = new byte[byte_length + 1];
+    	    	dst = new byte[byte_length + 1];
     	    	
     		    System.arraycopy(src, 0, dst, 0, byte_length);
     		    
@@ -1758,7 +1755,7 @@ public class StringMapper
                     	extra_bits = (byte)(8 - extra_bits);
                     extra_bits <<= 5;
                     
-                    byte[] dst  = new byte[byte_length + 1];
+                    dst  = new byte[byte_length + 1];
                     System.arraycopy(buffer1,  0,  dst,  0,  byte_length);
                     
                     // Add 16 to indicate string type.
@@ -1792,7 +1789,7 @@ public class StringMapper
     			    int byte_length = compressed_length / 8;
     			    if(compressed_length % 8 != 0)
     			    	byte_length++;
-    			    byte[] dst = new byte[byte_length + 1];
+    			    dst = new byte[byte_length + 1];
     			    if(iterations % 2 == 0) 
                         System.arraycopy(buffer2,  0,  dst,  0,  byte_length);
     			    else
@@ -1813,13 +1810,9 @@ public class StringMapper
     	{
     		System.out.println(e.toString());
     		System.out.println("Exiting compressOneStrings with an exception.");
+    		return dst;
     	}
-    	
-    	// Keep the compiler happy.
-    	byte [] dst = new byte[1];
-    	return dst;
     }
-    
     
     public static int decompressOneStrings(byte src[], int length, byte dst[])
     {
@@ -1888,7 +1881,8 @@ public class StringMapper
             return current_length;
         }
     } 
-  
+    
+    
     // This function expects to find the number of iterations in the final
     // byte, as well as the number of odd bits determined by the bit length
     // subtracted from the byte length.
