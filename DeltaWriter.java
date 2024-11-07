@@ -1047,22 +1047,19 @@ public class DeltaWriter
 			        int iter  = StringMapper.getIterations(seed_string);
 			        if(iter == 0 || iter == 16)
 			        {
-			        	//System.out.println("String did not compress.");
 			        	int number_unpacked = StringMapper.unpackStrings2(seed_string, seed_table, seed_delta);
 					    if(number_unpacked != seed_length)
 					        System.out.println("Number of values unpacked does not agree with seed length.");	
 			        }
 			        else
 			        {
-			        	byte [] decompressed_string = new byte[xdim * ydim * 16];
-				        int  string_type = StringMapper.getType(seed_string);   
-				        int  bit_length  = StringMapper.getBitlength(seed_string); 
-				        int  decompressed_length = 0;
+			        	int  string_type = StringMapper.getType(seed_string);
+
+			        	byte [] decompressed_string = new byte[1];
 				        if(string_type == 0)
-				        	decompressed_length = StringMapper.decompressZeroStrings(seed_string, bit_length, decompressed_string);	
+				        	decompressed_string = StringMapper.decompressZeroStrings(seed_string);	
 				        else
-				        	decompressed_length = StringMapper.decompressOneStrings(seed_string, bit_length, decompressed_string);
-				        //System.out.println("String compressed.");
+				        	decompressed_string = StringMapper.decompressOneStrings(seed_string);
 			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, seed_table, seed_delta);
 					    if(number_unpacked != seed_length)
 					        System.out.println("Number of values unpacked does not agree with seed length.");
@@ -1084,18 +1081,16 @@ public class DeltaWriter
 			        }
 			        else
 			        {
-			        	byte [] decompressed_string = new byte[xdim * ydim * 16];
-				        int  string_type = StringMapper.getType(dilated_string);   
-				        int  bit_length  = StringMapper.getBitlength(dilated_string); 
-				        int  decompressed_length = 0;
+			        	int  string_type = StringMapper.getType(dilated_string);
+
+			        	byte [] decompressed_string = new byte[1];
 				        if(string_type == 0)
-				        	decompressed_length = StringMapper.decompressZeroStrings(dilated_string, bit_length, decompressed_string);	
+				        	decompressed_string = StringMapper.decompressZeroStrings(dilated_string);	
 				        else
-				        	decompressed_length = StringMapper.decompressOneStrings(dilated_string, bit_length, decompressed_string);
-				        //System.out.println("String compressed.");
+				        	decompressed_string = StringMapper.decompressOneStrings(dilated_string);
 			        	int number_unpacked = StringMapper.unpackStrings2(decompressed_string, dilated_table, dilated_delta);
-					    if(number_unpacked != dilated_length)
-					        System.out.println("Number of values unpacked does not agree with dilated length."); 
+			        	if(number_unpacked != dilated_length)
+					        System.out.println("Number of values unpacked does not agree with dilated length.");  
 			        }
 			        
 			        ArrayList dilated_delta_list = new ArrayList();
