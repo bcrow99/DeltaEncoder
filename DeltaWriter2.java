@@ -718,8 +718,8 @@ public class DeltaWriter2
 	            		minimum_segment_length -= remainder;
 	     	          
 	     	            // Check this.
-	     	            if(minimum_segment_length < 16)
-	     	            	minimum_segment_length = 16;
+	     	            if(minimum_segment_length < 8)
+	     	            	minimum_segment_length = 8;
      	                
      	                System.out.println("Minimum segment length is " + minimum_segment_length);
 	     	            
@@ -1485,6 +1485,26 @@ public class DeltaWriter2
 		            	 else
 		            	 {
 		            		 out.writeInt(max_bytelength[i]);
+		            		 // Zipping the segments lengths works better than compressing them.
+		            		 // The reason why the bitwise compression works better than zipping
+		            		 // on small numbers of elements probably relates to the difference in
+		            		 // the overhead.  That means that the main advantages over huffman
+		            		 // coding are when the data allows for recursion or with small numbers
+		            		 // of elements, when the overhead comes into play. Probably why compressing the
+		            		 // maps works better than zipping them is the values are only 0 thru 3 or 0 thru 7.  
+		            		 // Need to reexplore if the zipping overhead can be reduced.
+		            		 
+		            		 // When the segments lengths are in bytes and segment lengths are grouped
+		            		 // together and zipped, and then sent as a block instead of with each
+		            		 // segments the compression rate is improved.  When the lengths have to be 
+		            		 // represented as shorts or int the difference is not very significant, 
+		            		 // at least when the numbers of segments are small.
+		            		 
+		            		 // It still seems like the finer the segmentation, the more compression
+		            		 // there should be, especially if the segment lengths are not included.
+		            		 // Probably need to look into the merge process again, and maximize the
+		            		 // the number of opposing string types.  Uneven segment lengths might help
+		            		 // in that regard. 
 		            		 if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 		            		 {
 								    System.out.println("Maximum segment length requires an unsigned byte.");
@@ -1511,8 +1531,24 @@ public class DeltaWriter2
 								    else
 								    	compressed_segments = StringMapper.compressZeroStrings(segment_length);
 								    
+								    Deflater deflater = new Deflater();
+					                deflater.setInput(compressed_segments);
+					                byte [] zipped_string = new byte[2 * compressed_segments.length];
+					                deflater.finish();
+					                int zipped_compressed_length = deflater.deflate(zipped_string);
+					                deflater.end(); 
+								    
+								    deflater = new Deflater();
+					                deflater.setInput(segment_length);
+					                deflater.finish();
+					                int zipped_length = deflater.deflate(zipped_string);
+					                deflater.end(); 
+								    
+								    
 								    System.out.println("The length of the segment lengths in unsigned bytes is " + number_of_segments);
 								    System.out.println("The length of the compressed segment lengths is " + compressed_segments.length);
+								    System.out.println("The length of the zipped segment lengths is " + zipped_length);
+								    System.out.println("The length of the zipped compressed segment lengths is " + zipped_compressed_length);
 		            		 }
 							 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 							 {
@@ -1524,8 +1560,6 @@ public class DeltaWriter2
 							 }
 		            		 System.out.println();
 		            		 
-		            		 
-		            		 /*
 		            		 int max_length = 0;
 		            		 int min_length = Integer.MAX_VALUE;
 		            		 for(int k = 0; k < number_of_segments; k++)
@@ -1545,7 +1579,7 @@ public class DeltaWriter2
 								else
 									System.out.println("Maximum segment length delta requires an int.");
 		            		 System.out.println();
-		            		 */
+		            		
 		            		 
 		    				 for(int k = 0; k < number_of_segments; k++)
 		    				 {
