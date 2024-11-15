@@ -5,7 +5,10 @@ import java.math.*;
 
 public class SegmentMapper 
 {
-	// This function returns a segment list with regular lengths.
+	// This function returns a segment list with regular lengths that might be uneven.
+	// Unfinished.  Not clear that this gets us anything.If we're using uneven lengths
+	// we should probably always start off with a minimum length 1 for zero strings
+	// and 2 for one strings, and not use regular lengths.
 	public static ArrayList getSegmentedData(byte[] string, int bitlength) 
 	{
 		ArrayList list = new ArrayList();
@@ -99,8 +102,8 @@ public class SegmentMapper
 			// The information for a segment will always be collected from at least
 			// two bytes in the string, although there might be intermediate bytes.
 			
-			// Leading mask used to collect bit values from leading byte in string.
-			// It's also used to separate intermediate bytes.
+			// Masks that might or might not be helpful.
+			// Might be able to everything with shifting.
 		    byte [] leading_mask  = new byte[7];
 			leading_mask[0] = -2;
 			leading_mask[1] = -4;
@@ -110,7 +113,7 @@ public class SegmentMapper
 			leading_mask[5] = -64;
 			leading_mask[6] = -128;
 			
-			// Trailing mask used to collect collect bit values from intermediate bytes and trailing byte in the string.
+			
 			byte [] trailing_mask  = new byte[7];
 			trailing_mask[0] = 1;
 			trailing_mask[1] = 3;
@@ -136,6 +139,8 @@ public class SegmentMapper
 			    // the string_bit_offset will be getting incremented and we
 			    // want to use the initial value.
 			    int trailing_bit_offset = string_bit_offset + segment_bitlength;
+			    
+			    
 			    int string_byte_offset = string_bit_offset / 8;
 			    int modulus            = string_bit_offset % 8;
 			    if(modulus == 0)
@@ -160,9 +165,9 @@ public class SegmentMapper
 			    	
 			    	// We don't increment the byte offset, which means the following
 			    	// leading byte will have to be divided and the first segment right shifted,
-			    	// and the second segment left shifted. We don't have to any shifting in
+			    	// and the second segment left shifted. We don't have to do any shifting in
 			    	// this case.  We don't really have to do any masking either since the 
-			    	// extra bits should be ignored, but we'll set the extra bits to zero.
+			    	// extra bits should be overwritten, but we'll set the extra bits to zero.
 			    	// It might help debugging the bit stream, or even the compression rate
 			    	// if the segments are small enough relative to the number of extra bits.
 			    	
@@ -183,24 +188,23 @@ public class SegmentMapper
 			    		segment[j] = extra_bits;
 			    		double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
 			    	    byte iterations   = 0;
-					    if (zero_ratio < .5)
+					    if (zero_ratio <= .5)
 						    iterations = 16;
 					    segment[j] |= iterations;
-						
 					}
 					else
 						System.out.println("Wrong index " + j + " for segment byte length " + segment_bytelength);
 				    segment_list.add(segment);
 			    }
-			    else  //Bit length is uneven.
+			    else  //Non zero modulus for bit offset.
 			    {
 			    	int k             = 6 - (modulus - 1);
 			    	byte mask         = leading_mask[k];
 			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
-			    	//segment[j]        = masked_value;	
 			    }
 		    }
 		    
+		    // Odd case.
 		    i = number_of_segments - 1; 
 		
 		    byte [] segment = new byte[last_segment_bytelength];   
@@ -232,9 +236,6 @@ public class SegmentMapper
 			            segment_list.set(i, compressed_segment);
 			    }
 		    }	
-			
-			
-			
 		}
 		list.add(segment_list);
 		list.add(last_segment_bitlength);
@@ -343,6 +344,96 @@ public class SegmentMapper
 		return list;
 	}
     
+	
+	public static ArrayList getMergedData(byte[] string)
+	{
+		ArrayList list = new ArrayList();
+		
+		int string_bitlength  = StringMapper.getBitlength(string);
+		
+		int bit_offset = 0;
+		
+		byte [] mask      = new byte[8];
+		byte current_mask = 1;
+		for(int i = 0; i < 8; i++)
+		{
+			mask[i]        = current_mask;
+			current_mask <<= 1;
+		}
+		
+		ArrayList init_list = new ArrayList();
+		
+		while(bit_offset < string_bitlength)
+		{
+			int i = bit_offset % 8;
+			int j = bit_offset / 8;
+			int k = 1;
+			
+			if((string[j] & mask[i]) == 0)
+			{
+			    // Segment type is 0.
+			    bit_offset++;
+			    i = bit_offset % 8;
+			    j = bit_offset / 8;
+			    if((string[j] & mask[i]) == 0)
+				{
+			    	bit_offset++;
+			    	k++;
+				}
+			    else
+			    {
+			    	ArrayList segment = new ArrayList();
+			    	int type          = 0;
+			    	int length        = k;
+			    	segment.add(type, length);
+			    	init_list.add(segment);
+			    }
+			}
+			else
+			{
+				// Segment type is 1.
+				bit_offset++;
+			    i = bit_offset % 8;
+			    j = bit_offset / 8;
+			    if((string[j] & mask[i]) == 1)
+				{
+			    	// Keep going until we get to a 0 bit.
+			    	bit_offset++;
+			    	k++;
+				}
+			    else
+			    {
+			    	// Unlike 0 strings, we include the determining bit.
+			    	bit_offset++;
+			    	ArrayList segment = new ArrayList();
+			    	int type          = 1;
+			    	int length        = k + 1;
+			    	segment.add(type, length);
+			    	init_list.add(segment);
+			    }
+			}
+		}
+		
+		
+		ArrayList type   = new ArrayList();
+		ArrayList length = new ArrayList();
+		
+		int i             = 0;
+		while(i < init_list.size())
+		{
+		    ArrayList segment        = (ArrayList)	init_list.get(i++);
+		    int       segment_type    = (int)segment.get(0);
+		    int       segment_length = (int)segment.get(1);
+		    type.add(segment_type);
+		    length.add(segment_length);
+		}
+		
+		
+		
+		return list;
+	}
+	
+	
 	
 
 	public static ArrayList getMergedSegmentedData(byte[] string, int minimum_bitlength) 
@@ -600,6 +691,8 @@ public class SegmentMapper
 		return list;
 	}
 
+	
+	// This version of the function does a lot of error checking.
 	public static ArrayList getMergedSegmentedData2(byte[] string, int minimum_bitlength) 
 	{
 		ArrayList list = new ArrayList();
@@ -1121,38 +1214,15 @@ public class SegmentMapper
 			} 
 			else 
 			{
-				int compressed_bit_length = 0;
-				if (string_type == 0)
-				{
-					compressed_bit_length = StringMapper.compressZeroStrings(segment, current_bit_length, compressed_segment);
-					/*
-					int bitlength2        = StringMapper.compressZeroStrings(segment, current_bit_length, compressed_segment);
-					
-					if(compressed_bit_length != bitlength2)
-						System.out.println("Length from compresszero1 " + bitlength2 + " is not equal to length from compresszero2 " + compressed_bit_length);
-					*/
-				}  
+				byte [] compressed_string = new byte[1];
+				if(string_type == 0)
+					compressed_string = StringMapper.compressZeroStrings(segment);
 				else
-				{
-					compressed_bit_length = StringMapper.compressOneStrings(segment, current_bit_length, compressed_segment);
-					/*
-					int bitlength2        = StringMapper.compressOneStrings(segment, current_bit_length, compressed_segment);
-					if(compressed_bit_length != bitlength2)
-						System.out.println("Length from compressone1 " + bitlength2 + " is not equal to length from compressone2 " + compressed_bit_length);
-					*/
+					compressed_string = StringMapper.compressOneStrings(segment);
 					
-				}
-				int compressed_byte_length = compressed_bit_length / 8;
-				if (compressed_bit_length % 8 != 0)
-					compressed_byte_length++;
 				
-				// Add the byte for iterations not included in the bit length.
-				compressed_byte_length++;
-
-				byte[] clipped_string = new byte[compressed_byte_length];
-				for (int j = 0; j < compressed_byte_length; j++)
-					clipped_string[j] = compressed_segment[j];
-				compressed_data.add(clipped_string);
+				compressed_data.add(compressed_string);
+				int compressed_bit_length = StringMapper.getBitlength(compressed_string);
 				compressed_length.add(compressed_bit_length);
 			}
 		}
@@ -1276,28 +1346,13 @@ public class SegmentMapper
 						byte[] merged_segment = new byte[byte_length];
 						for (int j = 0; j < byte_length; j++)
 							merged_segment[j] = string[j + byte_offset];
-						byte[] compressed_merged_segment = new byte[2 * byte_length];
+						byte[] compressed_merged_segment = new byte[1];
+						if(current_string_type == 0)
+							compressed_merged_segment = StringMapper.compressZeroStrings(merged_segment);
+						else
+							compressed_merged_segment = StringMapper.compressOneStrings(merged_segment);
 						
-						int merged_compression_length = 0;
-						try 
-						{
-							if(current_string_type == 0)
-								merged_compression_length = StringMapper.compressZeroStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
-							else
-								merged_compression_length = StringMapper.compressOneStrings(merged_segment, merged_uncompressed_length, compressed_merged_segment);
-						} 
-						catch (Exception e) 
-						{
-							System.out.println(e.toString());
-							System.out.println("Exception compressing segments in getMergedSegmentedData.");
-							System.out.println("Current index is " + i);
-							System.out.println("The byte length is " + byte_length);
-							System.out.println("The input buffer length is " + merged_segment.length);
-							System.out.println("The output buffer length is " + compressed_merged_segment.length);
-							System.out.println("The string type is " + current_string_type);
-							System.out.println("The bit length being compressed is " + merged_uncompressed_length);
-							System.out.println();
-						}
+						int merged_compression_length = StringMapper.getBitlength(merged_segment);
 						
                         // Do a check to see if the segments compress better when merged.
 						// We also account for the overhead--either a byte,
@@ -1454,18 +1509,7 @@ public class SegmentMapper
 				overhead = 40;
 		}
 		
-		/*
-		System.out.println("The number of segments in initial list is " + initial_number_of_segments);
-		System.out.println("Number of iterations merging segments was " + iterations);
-		System.out.println("Number of merged segments was " + previous_compressed_data.size());
-		System.out.println("Minimum segment byte length was " + (segment_bit_length / 8));
-		System.out.println("Maximum segment byte length was " + max_segment_byte_length);
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-		System.out.println("Number of one segments is " + number_of_one_segments);
-		System.out.println("Number of compressed segments is " + number_of_compressed_segments);
-		System.out.println("Number of uncompressed segments is " + number_of_uncompressed_segments);
-		System.out.println();
-		*/
+		
 		
 		ArrayList segment_data = new ArrayList();
 		segment_data.add(previous_compressed_length);
@@ -1473,4 +1517,5 @@ public class SegmentMapper
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
 	}
+
 }
