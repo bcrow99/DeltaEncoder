@@ -385,7 +385,8 @@ public class SegmentMapper
 			    	ArrayList segment = new ArrayList();
 			    	int type          = 0;
 			    	int length        = k;
-			    	segment.add(type, length);
+			    	segment.add(type);
+			    	segment.add(length);
 			    	init_list.add(segment);
 			    }
 			}
@@ -408,28 +409,76 @@ public class SegmentMapper
 			    	ArrayList segment = new ArrayList();
 			    	int type          = 1;
 			    	int length        = k + 1;
-			    	segment.add(type, length);
+			    	segment.add(type);
+			    	segment.add(length);
 			    	init_list.add(segment);
 			    }
 			}
 		}
 		
+		ArrayList aggregated_list = new ArrayList();
+		ArrayList current_segment = new ArrayList();
+		ArrayList init_segment    = (ArrayList)init_list.get(0);
 		
-		ArrayList type   = new ArrayList();
-		ArrayList length = new ArrayList();
+		int current_type   = (int)init_segment.get(0);
+		int current_length = (int)init_segment.get(1);
+		current_segment.add(current_type);
+		current_segment.add(current_length);
 		
-		int i             = 0;
-		while(i < init_list.size())
+		int previous_type  = current_type;
+		for(int i = 1; i < init_list.size() - 1; i++)
 		{
-		    ArrayList segment        = (ArrayList)	init_list.get(i++);
-		    int       segment_type    = (int)segment.get(0);
-		    int       segment_length = (int)segment.get(1);
-		    type.add(segment_type);
-		    length.add(segment_length);
+			init_segment   = (ArrayList)init_list.get(i);
+			current_type   = (int)init_segment.get(0);
+			current_length = (int)init_segment.get(1);
+			
+			if(current_type == previous_type)
+			    current_segment.add(current_length);
+			else
+			{
+				aggregated_list.add(current_segment);
+				current_segment = new ArrayList();
+				current_segment.add(current_type);
+				current_segment.add(current_length);
+				
+				previous_type = current_type;
+			}
 		}
 		
+		int i          = init_list.size() - 1;
+		init_segment   = (ArrayList)init_list.get(i);
+		current_type   = (int)init_segment.get(0);
+		current_length = (int)init_segment.get(1);
 		
+		if(current_type == previous_type)
+		{
+		    current_segment.add(current_length);
+		    aggregated_list.add(current_segment);
+		}
+		else
+		{
+			aggregated_list.add(current_segment);
+			current_segment = new ArrayList();
+			current_segment.add(current_type);
+			current_segment.add(current_length);
+			aggregated_list.add(current_segment);
+		}
 		
+		int number_of_zero_segments = 0;
+		int number_of_one_segments  = 0;
+		
+		for(i = 0; i < aggregated_list.size(); i++)
+		{
+			ArrayList segment = (ArrayList)aggregated_list.get(i);
+			current_type      = (int)segment.get(0);
+			if(current_type == 0)
+				number_of_zero_segments++;
+			else
+				number_of_one_segments++;
+		}
+		
+		System.out.println("Number of zero segments is " + number_of_zero_segments);
+		System.out.println("Number of one segments is "  + number_of_one_segments);
 		return list;
 	}
 	
