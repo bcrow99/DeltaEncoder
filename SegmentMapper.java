@@ -346,80 +346,121 @@ public class SegmentMapper
 	public static ArrayList getMergedData(byte[] string)
 	{
 		ArrayList list = new ArrayList();
-		
-		int string_bitlength  = StringMapper.getBitlength(string);
-		
-		int bit_offset = 0;
-		
-		byte [] mask      = new byte[8];
-		byte current_mask = 1;
-		for(int i = 0; i < 8; i++)
-		{
-			mask[i]        = current_mask;
-			current_mask <<= 1;
-		}
+		int       string_bitlength  = StringMapper.getBitlength(string);
+		byte []   mask = new byte[8];
+		mask[0] = 1;
+		for(int i = 1; i < 8; i++)
+			mask[i]        = (byte)(mask[i - 1] << 1);
 		
 		ArrayList init_list = new ArrayList();
 		
+		int current_type   = -1;
+		int current_length = 0;
+		int bit_offset     = 0;
 		while(bit_offset < string_bitlength)
 		{
-			int i = bit_offset % 8;
-			int j = bit_offset / 8;
-			int k = 1;
+			int i = bit_offset / 8;
+			int j = bit_offset % 8;
 			
-			if((string[j] & mask[i]) == 0)
+			if((string[i] & mask[j]) == 0)
 			{
-			    // Segment type is 0.
-			    bit_offset++;
-			    i = bit_offset % 8;
-			    j = bit_offset / 8;
-			    if((string[j] & mask[i]) == 0)
+				if(current_type == 0)
 				{
-			    	bit_offset++;
-			    	k++;
+					current_length++;
+					bit_offset++;   
+					
+					if(bit_offset == string_bitlength)
+					{
+						ArrayList segment = new ArrayList();
+						segment.add(current_type);
+						segment.add(current_length);
+						init_list.add(segment);	
+					}
 				}
-			    else
-			    {
-			    	ArrayList segment = new ArrayList();
-			    	int type          = 0;
-			    	int length        = k;
-			    	segment.add(type);
-			    	segment.add(length);
-			    	init_list.add(segment);
-			    }
+				else if(current_type == 1)
+				{
+				    current_length++;
+				   
+				    ArrayList segment = new ArrayList();
+					segment.add(current_type);
+					segment.add(current_length);
+					init_list.add(segment);
+				    
+				    bit_offset++;
+				    current_type   = -1;
+				    current_length = 0;
+				}
+				else
+				{
+					current_type   = 0;
+					current_length = 1;
+					bit_offset++;
+					if(bit_offset == string_bitlength)
+					{
+						ArrayList last_segment = new ArrayList();
+						last_segment.add(current_type);
+						last_segment.add(current_length);
+						init_list.add(last_segment);	
+					}
+				}
 			}
-			else
+			else if((string[i] & mask[j]) != 0)
 			{
-				// Segment type is 1.
-				bit_offset++;
-			    i = bit_offset % 8;
-			    j = bit_offset / 8;
-			    if((string[j] & mask[i]) == 1)
+				if(current_type == 0)
 				{
-			    	// Keep going until we get to a 0 bit.
-			    	bit_offset++;
-			    	k++;
+					ArrayList segment = new ArrayList();
+					segment.add(current_type);
+					segment.add(current_length);
+					init_list.add(segment);
+				    
+					
+					current_type   = 1;
+					current_length = 1;
+					bit_offset++;   
+					if(bit_offset == string_bitlength)
+					{
+						ArrayList last_segment = new ArrayList();
+						last_segment.add(current_type);
+						last_segment.add(current_length);
+						init_list.add(last_segment);	
+					}
+					
 				}
-			    else
-			    {
-			    	// Unlike 0 strings, we include the determining bit.
-			    	bit_offset++;
-			    	ArrayList segment = new ArrayList();
-			    	int type          = 1;
-			    	int length        = k + 1;
-			    	segment.add(type);
-			    	segment.add(length);
-			    	init_list.add(segment);
-			    }
+				else if(current_type == 1)
+				{
+				    current_length++;
+				    bit_offset++;
+				    if(bit_offset == string_bitlength)
+				    {
+				    	ArrayList last_segment = new ArrayList();
+						last_segment.add(current_type);
+						last_segment.add(current_length);
+						init_list.add(last_segment);	
+				    }
+				}
+				else
+				{
+					current_type = 1;
+					current_length++;
+					bit_offset++;
+					if(bit_offset == string_bitlength)
+					{
+						ArrayList last_segment = new ArrayList();
+						last_segment.add(current_type);
+						last_segment.add(current_length);
+						init_list.add(last_segment);	
+					}
+				}	
+				
 			}
-		}
+		}	
 		
 		ArrayList aggregated_list = new ArrayList();
 		ArrayList current_segment = new ArrayList();
 		ArrayList init_segment    = (ArrayList)init_list.get(0);
 		
-		int current_type   = (int)init_segment.get(0);
-		int current_length = (int)init_segment.get(1);
+		current_type   = (int)init_segment.get(0);
+		current_length = (int)init_segment.get(1);
 		current_segment.add(current_type);
 		current_segment.add(current_length);
 		
@@ -521,6 +562,74 @@ public class SegmentMapper
 		return aggregated_list;
 	}
 	
+	public static byte [] getUnmergedString(byte[] string)
+	{
+		byte [] unclipped_string = new byte[2 * string.length];
+		int     string_bitlength = StringMapper.getBitlength(string);
+		
+		byte [] or_mask = new byte[8];
+		byte [] and_mask = new byte[8];
+		or_mask[0]  = 1;
+		and_mask[0] = (byte)~or_mask[0];
+		for(int i = 1; i < 8; i++)
+		{
+			or_mask[i]  = (byte)(or_mask[i - 1] << 1);
+			and_mask[i] = (byte)~or_mask[i];
+		}
+		
+		int bitlength = 0;
+		for(int i = 0; i < string_bitlength; i++)
+		{
+			int j = i / 8;
+			int k = i % 8;
+			
+			// Might want to categorize masks differently.
+			int bit = 0;
+			if((string[j] & or_mask[k]) != 0)
+				bit = 1;
+			
+			j = bitlength / 8;
+			k = bitlength % 8;
+			
+			if(bit != 0)
+			{
+			    unclipped_string[j] &= and_mask[k];	
+			    bitlength++;
+			}
+			else
+			{
+				unclipped_string[j] |= or_mask[k];
+				bitlength++;
+				j = bitlength / 8;
+				k = bitlength % 8;
+				unclipped_string[j] &= and_mask[k];	
+			    bitlength++;
+			}
+		}
+		
+		int unmerged_length = bitlength / 8;
+		if(bitlength % 8 != 0)
+			unmerged_length++;
+		unmerged_length++;
+	
+		byte [] unmerged_string = new byte[unmerged_length];
+		for(int i = 0; i < unmerged_string.length - 1; i++)
+		{
+			unmerged_string[i] = unclipped_string[i];
+		}
+		
+		byte modulus = (byte)(bitlength % 8);
+        
+        byte extra_bits = 0;
+    
+        if(modulus != 0)
+    	   extra_bits = (byte)(8 - modulus);
+    
+        extra_bits <<= 5;
+        unmerged_string[unmerged_string.length - 1] = extra_bits;
+		
+	    return unmerged_string;
+	}
 	
 	public static byte [] getMergedString(byte[] string)
 	{
@@ -617,7 +726,6 @@ public class SegmentMapper
 				current_segment = new ArrayList();
 				current_segment.add(current_type);
 				current_segment.add(current_length);
-				
 				previous_type = current_type;
 			}
 		}
@@ -687,7 +795,7 @@ public class SegmentMapper
 		int average_one_length  = total_one_length / number_of_one_segments;
 		
 		// Good place to check input.
-		/*
+		
 		System.out.println();
 		System.out.println("Number of zero segments is " + number_of_zero_segments);
 		System.out.println("Average length is " + average_zero_length);
@@ -698,7 +806,7 @@ public class SegmentMapper
 		System.out.println("Maximum individual length is " + max_one_length);
 		System.out.println("Maximum cat length is " + max_one_cat_length);
 		System.out.println();
-		*/
+	
 		
 		
 		// Assuming the input has been reduce to 0 and 10 strings, the
@@ -708,13 +816,12 @@ public class SegmentMapper
 		byte [] or_mask = new byte[8];
 		byte [] and_mask = new byte[8];
 		
-		int mask_value = 1;
-		
-		for(i = 0; i < 8; i++)
+		or_mask[0]  = 1;
+		and_mask[0] = (byte)~or_mask[0];
+		for(i = 1; i < 8; i++)
 		{
-			or_mask[i]  = (byte)mask_value;
+			or_mask[i]  = (byte)(or_mask[i - 1] * 2);
 			and_mask[i] = (byte)~or_mask[i];
-			mask_value *= 2;
 		}
 		
 		
@@ -752,15 +859,22 @@ public class SegmentMapper
 		if(bitlength % 8 != 0)
 			merged_length++;
 		merged_length++;
-		
-		
-		
-		
-		
-		
-		
+	
 		byte [] merged_string = new byte[merged_length];
+		for(i = 0; i < merged_string.length - 1; i++)
+		{
+			merged_string[i] = unclipped_string[i];
+		}
 		
+		byte modulus = (byte)(current_length % 8);
+        
+        byte extra_bits = 0;
+    
+       if(modulus != 0)
+    	   extra_bits = (byte)(8 - modulus);
+    
+       extra_bits <<= 5;
+       merged_string[i] = extra_bits;
 		
 		return merged_string;
 	}

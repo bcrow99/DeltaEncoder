@@ -730,11 +730,16 @@ public class DeltaWriter2
 	     	             if(channel_iterations[i] == 0)
 	     	             { 
 	     	            	System.out.println("Merging uncompressed data.");
-	     	            	//ArrayList foo_list = SegmentMapper.getMergedData(compression_string);
-	     	            	byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            	ArrayList foo_list = SegmentMapper.getMergedData(compression_string);
+	     	            	//byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            	//byte [] unmerged_foo = SegmentMapper.getUnmergedString(merged_foo);
 	     	            	
-	     	            	System.out.println("Packed strings had length " + compression_string.length);
-	     	            	System.out.println("Merged packed strings had length " + merged_foo.length);
+	     	            	//System.out.println("Packed strings had length " + compression_string.length);
+	     	            	//System.out.println("Merged packed strings had length " + merged_foo.length);
+	     	            	//System.out.println("Unmerged packed strings had length " + unmerged_foo.length);
+	     	            	//double compression_rate = merged_foo.length;
+	     	            	//compression_rate       /= xdim * ydim;
+	     	            	//System.out.println("Compression rate for merged strings is " + String.format("%.4f", compression_rate));
 	     	             }
 	     	             else
 	     	             {
@@ -743,21 +748,30 @@ public class DeltaWriter2
 	     	            		System.out.println("Merging compressed zero strings.");
 	     	            	    byte [] foo = StringMapper.decompressZeroStrings(compression_string);
 	     	            	    //ArrayList foo_list = SegmentMapper.getMergedData(foo);
-	     	            	   byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            	    ArrayList merged_data = SegmentMapper.getMergedData(compression_string);
+	     	            	    //byte [] unmerged_foo = SegmentMapper.getUnmergedString(merged_foo);
 	     	            	   
-	     	            	   System.out.println("Compressed packed strings had length " + compression_string.length);
-		     	               System.out.println("Merged compressed packed strings had length " + merged_foo.length);
-	     	            	   
+	     	            	    System.out.println("Compressed packed strings had length " + compression_string.length);
+		     	                //System.out.println("Merged compressed packed strings had length " + merged_foo.length);
+		     	                //System.out.println("Unmerged packed strings had length " + unmerged_foo.length);
+		     	                //double compression_rate = merged_foo.length;
+		     	                //compression_rate       /= xdim * ydim;
+		     	                //System.out.println("Compression rate for merged strings is " + String.format("%.4f", compression_rate));
 	     	            	}
 	     	            	else
 	     	            	{
-	     	            		System.out.println("Merging compressed one strings.");
+	     	            	    System.out.println("Merging compressed one strings.");
 	     	            		byte [] foo = StringMapper.decompressOneStrings(compression_string);
 	     	            	    //ArrayList foo_list = SegmentMapper.getMergedData(foo);
-	     	            		byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
-	     	            		
-	     	            		System.out.println("Compressed packed strings had length " + compression_string.length);
-			     	            System.out.println("Merged compressed packed strings had length " + merged_foo.length);
+	     	            		//byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            		//byte [] unmerged_foo = SegmentMapper.getUnmergedString(merged_foo);
+	     	            		ArrayList merged_data = SegmentMapper.getMergedData(compression_string);
+	     	            		//System.out.println("Compressed packed strings had length " + compression_string.length);
+			     	            //System.out.println("Merged compressed packed strings had length " + merged_foo.length);
+			     	            //System.out.println("Unmerged packed strings had length " + unmerged_foo.length);
+			     	            //double compression_rate = merged_foo.length;
+		     	                //compression_rate       /= xdim * ydim;
+		     	                //System.out.println("Compression rate for merged strings is " + String.format("%.4f", compression_rate));
 	     	            	}
 	     	             }
 	     	             
