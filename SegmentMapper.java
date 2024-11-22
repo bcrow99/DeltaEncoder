@@ -730,10 +730,22 @@ public class SegmentMapper
 		    int       type    = (int)segment.get(0);
 		    
 		    if(type == 0)
+		    {
 		        unclipped_string[j] |= or_mask[k];
+		        bitlength++;
+		    }
 		    else
+		    {
 		    	unclipped_string[j] &= and_mask[k];
-		    bitlength++;
+		    	for(int m = 1; m < segment.size(); m++)
+		    	{
+		    		bitlength++;
+		    		j = bitlength / 8;
+		    		k = bitlength % 8;
+		    		unclipped_string[j] &= and_mask[k];
+		    	}
+		    	bitlength++;
+		    }
 		}
 		
 		int merged_length = bitlength / 8;
