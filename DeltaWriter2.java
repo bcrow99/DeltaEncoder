@@ -23,7 +23,7 @@ public class DeltaWriter2
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
 	// This value is inversely related to the lengths of the segment.
-	int segment_length = 0;
+	int segment_length = 14;
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
@@ -721,18 +721,52 @@ public class DeltaWriter2
 	     	            if(minimum_segment_length < 8)
 	     	            	minimum_segment_length = 8;
      	                
-     	                System.out.println("Minimum segment length is " + minimum_segment_length);
+     	                //System.out.println("Minimum segment length is " + minimum_segment_length);
 	     	            
-	     	            System.out.println("Original number of segments is " + original_number_of_segments);	     	            
+	     	             //System.out.println("Original number of segments is " + original_number_of_segments);	     	            
 	     	            
 	     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
+	     	             
+	     	             if(channel_iterations[i] == 0)
+	     	             { 
+	     	            	System.out.println("Merging uncompressed data.");
+	     	            	//ArrayList foo_list = SegmentMapper.getMergedData(compression_string);
+	     	            	byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            	
+	     	            	System.out.println("Packed strings had length " + compression_string.length);
+	     	            	System.out.println("Merged packed strings had length " + merged_foo.length);
+	     	             }
+	     	             else
+	     	             {
+	     	            	if(channel_string_type[i] == 0) 
+	     	            	{
+	     	            		System.out.println("Merging compressed zero strings.");
+	     	            	    byte [] foo = StringMapper.decompressZeroStrings(compression_string);
+	     	            	    //ArrayList foo_list = SegmentMapper.getMergedData(foo);
+	     	            	   byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            	   
+	     	            	   System.out.println("Compressed packed strings had length " + compression_string.length);
+		     	               System.out.println("Merged compressed packed strings had length " + merged_foo.length);
+	     	            	   
+	     	            	}
+	     	            	else
+	     	            	{
+	     	            		System.out.println("Merging compressed one strings.");
+	     	            		byte [] foo = StringMapper.decompressOneStrings(compression_string);
+	     	            	    //ArrayList foo_list = SegmentMapper.getMergedData(foo);
+	     	            		byte [] merged_foo = SegmentMapper.getMergedString(compression_string);
+	     	            		
+	     	            		System.out.println("Compressed packed strings had length " + compression_string.length);
+			     	            System.out.println("Merged compressed packed strings had length " + merged_foo.length);
+	     	            	}
+	     	             }
 	     	             
 	     	             // A list of compressed strings.
 	     	             ArrayList  segments  = (ArrayList)segment_data_list.get(0);
 	     	             max_bytelength[i]    = (int)segment_data_list.get(1);
 	     	             
-	     	             System.out.println("Number of segments from merge function is " + segments.size());
-	     	             System.out.println();
+	     	             //System.out.println("Number of segments from merge function is " + segments.size());
+	     	             //System.out.println();
 	     	            
 	     	             // The single merged segment should be identical to the original string.
 	     	             // For now, we'll add the original string.
@@ -1543,7 +1577,6 @@ public class DeltaWriter2
 					                deflater.finish();
 					                int zipped_length = deflater.deflate(zipped_string);
 					                deflater.end(); 
-								    
 								    
 								    System.out.println("The length of the segment lengths in unsigned bytes is " + number_of_segments);
 								    System.out.println("The length of the compressed segment lengths is " + compressed_segments.length);
