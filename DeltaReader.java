@@ -281,24 +281,8 @@ public class DeltaReader
 				
 				if(delta_type != 7)
 				{
-					/*
-				    int string_length = in.readInt();
-			        int zipped_length = in.readInt();
-			        byte [] zipped_string    = new byte[zipped_length];
-		            in.read(zipped_string, 0, zipped_length);
-		            byte[] string     = new byte[string_length];
-		            Inflater inflater = new Inflater();
-		            inflater.setInput(zipped_string, 0, zipped_length);
-		            int unzipped_length = inflater.inflate(string);
-		            if(unzipped_length != string_length)
-		        	    System.out.println("Unzipped string not expected length.");
-		            string_list.add(string);
-		            */
 					int number_of_segments = in.readInt();
-					
 					System.out.println("Number of segments is " + number_of_segments);
-					
-					
 					if(number_of_segments == 1)
 					{
 						int     string_length = in.readInt();
@@ -325,77 +309,29 @@ public class DeltaReader
 					else
 					{
 						ArrayList compressed_string_list = new ArrayList();
-						
-						int max_bytelength = in.readInt();
-						
-
-						int data_type = 0;
-						
-						if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
-							data_type = 0;
-						else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
-							data_type = 1;
-						else
-							data_type = 2;
- 
-						if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
-						    System.out.println("Segment header can be an unsigned byte.");
-						else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
-						    System.out.println("Segment header can be an unsigned short.");
-						else
-							System.out.println("Segment header must be an int.");
+						int max_bytelength               = in.readInt();
 						
 					    for(int k = 0; k < number_of_segments; k++)	
 					    {
 					    	int string_length = 0;
-					    	int zipped_length = 0;
-					    	
-					    	if(data_type == 0)
+					    	if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
 					    	{
-					    		string_length = in.readByte();
-						    	zipped_length = in.readByte(); 	
-						    	
-						    	if(string_length < 0)
-						    		string_length += Byte.MAX_VALUE * 2 + 2;
-						    	if(zipped_length < 0)
-						    		zipped_length += Byte.MAX_VALUE * 2 + 2;
-						    	
-						    	
+					    	    string_length = in.readByte();
+					    	    if(string_length < 0)
+					    	    	string_length += Byte.MAX_VALUE * 2 + 2;
 					    	}
-					    	else if(data_type == 1)
+					    	else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
 					    	{
 					    		string_length = in.readShort();
-						    	zipped_length = in.readShort(); 
-						    	
-						    	if(string_length < 0)
-						    		string_length += Short.MAX_VALUE * 2 + 2;
-						    	if(zipped_length < 0)
-						    		zipped_length += Short.MAX_VALUE * 2 + 2;
+					    		if(string_length < 0)
+					    	    	string_length += Short.MAX_VALUE * 2 + 2;
 					    	}
 					    	else
-					    	{
 					    		string_length = in.readInt();
-						    	zipped_length = in.readInt();   	
-					    	}
-					    	
 					    	byte [] current_string = new byte[string_length];
-					    	
-					    	if(zipped_length == 0)
-					        	in.read(current_string, 0, string_length);   
-					        else
-					        {
-					        	byte [] zipped_string    = new byte[zipped_length];
-					            in.read(zipped_string, 0, zipped_length);
-					            Inflater inflater = new Inflater();
-					            inflater.setInput(zipped_string, 0, zipped_length);
-					            int unzipped_length = inflater.inflate(current_string);
-					            if(unzipped_length != string_length)
-					        	    System.out.println("Unzipped string not expected length.");    	
-					        }
-					    	
+					    	in.read(current_string, 0, string_length);
 					        compressed_string_list.add(current_string);    	
 					    }
-					    
 					    
 					    ArrayList decompressed_string_list = new ArrayList();
 					    for(int k = 0; k < compressed_string_list.size(); k++)					    
