@@ -5,251 +5,9 @@ import java.math.*;
 
 public class SegmentMapper 
 {
-	// This function returns a segment list with regular lengths that might be uneven.
-	// Unfinished.  Not clear that this gets us anything.If we're using uneven lengths
-	// we should probably always start off with a minimum length 1 for zero strings
-	// and 2 for one strings, and not use regular lengths.
 	public static ArrayList getSegmentedData(byte[] string, int bitlength) 
 	{
 		ArrayList list = new ArrayList();
-		
-		int string_type       = StringMapper.getType(string);
-		int string_iterations = StringMapper.getIterations(string);
-		int string_bitlength  = StringMapper.getBitlength(string);
-	
-		int number_of_segments = string_bitlength / bitlength;
-		int segment_bitlength  = bitlength;
-		int segment_bytelength = bitlength / 8;
-		// Add byte for string information.
-		segment_bytelength++;
-		
-		int remainder                = string_bitlength % bitlength;
-		int last_segment_bitlength   = bitlength + remainder;
-		int last_segment_bytelength  = last_segment_bitlength / 8;
-		
-		// The last segment is the only one that might need an extra byte for odd bits.
-		if (remainder % 8 != 0)
-			last_segment_bytelength++;
-		// Add byte for string information.
-		last_segment_bytelength++;
-		
-		// Get information that goes in last byte of last segment.
-		byte extra_bits = 0;
-		if(remainder != 0)
-		{
-			extra_bits = (byte)(8 - remainder);
-		    extra_bits <<= 5;
-		}
-		
-		// Get a list of uncompressed segments of equal length, except possibly the last segment.
-		// Set iterations to 16 or 0, depending on the type.  Extra bits will be 0, except for possibly
-		// the last segment.
-		ArrayList segment_list = new ArrayList();
-	
-        
-		if(bitlength % 8 == 0)
-		{
-		    int i;
-		
-		    for(i = 0; i < number_of_segments - 1; i++)
-		    {
-			    byte [] segment = new byte[segment_bytelength];
-	    	    for(int j = 0; j < segment.length - 1; j++)
-				    segment[j] = string[i * (segment_bytelength - 1) + j];
-	    	
-	    	    double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
-	    	    byte iterations   = 0;
-			    if (zero_ratio < .5)
-				    iterations = 16;
-			    segment[segment.length - 1] = iterations;
-			    segment_list.add(segment);	
-		    }
-		
-		    i = number_of_segments - 1; 
-		
-		    byte [] segment = new byte[last_segment_bytelength];   
-    	    for(int j = 0; j < segment.length - 1; j++)
-			    segment[j] = string[i * (segment_bytelength - 1) + j];
- 
-    	    double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
-    	    byte iterations   = 0;
-		    if (zero_ratio < .5)
-			    iterations = 16;
-		    segment[segment.length - 1] = iterations;
-		    segment_list.add(segment);
-		
-		
-		    for(i = 0; i < number_of_segments; i++)
-		    {
-			    segment = (byte [])segment_list.get(i);
-			    int type = StringMapper.getType(segment);
-			    if(type == 0)
-			    {
-				    byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
-				    if(compressed_segment.length < segment.length)
-					    segment_list.set(i, compressed_segment);	
-			    }
-			    else
-			    {
-				    byte [] compressed_segment = StringMapper.compressOneStrings(segment);
-			        if(compressed_segment.length < segment.length)
-			            segment_list.set(i, compressed_segment);
-			    }
-		    }
-		}
-		else
-		{
-			// The information for a segment will always be collected from at least
-			// two bytes in the string, although there might be intermediate bytes.
-			
-			// Masks that might or might not be helpful.
-			// Might be able to do everything with shifting.
-		    byte [] leading_mask  = new byte[7];
-			leading_mask[0] = -2;
-			leading_mask[1] = -4;
-			leading_mask[2] = -8;
-			leading_mask[3] = -16;
-			leading_mask[4] = -32;
-			leading_mask[5] = -64;
-			leading_mask[6] = -128;
-			
-			
-			byte [] trailing_mask  = new byte[7];
-			trailing_mask[0] = 1;
-			trailing_mask[1] = 3;
-			trailing_mask[2] = 7;
-			trailing_mask[3] = 15;
-			trailing_mask[4] = 31;
-			trailing_mask[5] = 63;
-			trailing_mask[6] = 127;
-	        
-			
-			int i;
-			
-			// Subtract the first and last string bytes and the information byte
-			// to get the number of intermediate bytes, which might be 0.
-			int intermediate_bytes = segment_bytelength - 3; 
-		   
-			int string_bit_offset  = 0;
-		    for(i = 0; i < number_of_segments - 1; i++)
-		    {
-			    byte [] segment = new byte[segment_bytelength];
-			    
-			    // Calculate this at the beginning and use it later, because
-			    // the string_bit_offset will be getting incremented and we
-			    // want to use the initial value.
-			    int trailing_bit_offset = string_bit_offset + segment_bitlength;
-			    
-			    
-			    int string_byte_offset = string_bit_offset / 8;
-			    int modulus            = string_bit_offset % 8;
-			    if(modulus == 0)
-			    {
-			    	segment[0] = string[string_byte_offset];
-			    	string_bit_offset += 8;
-			    	string_byte_offset++;
-			    	int j;
-			    	for(j = 0; j < intermediate_bytes; j++)
-			    	{
-			    		segment[j] = string[string_byte_offset];
-				    	string_bit_offset += 8;
-				    	string_byte_offset++;	
-			    	}
-			    	
-			    	modulus = trailing_bit_offset % 8;
-			    	string_bit_offset += 8 - modulus;
-			    	// The modulus has to be non-zero but we'll do an error check.
-			    	if(modulus == 0)
-			    	    System.out.println("Trailing modulus is zero when leading byte was even.");
-			    	
-			    	
-			    	// We don't increment the byte offset, which means the following
-			    	// leading byte will have to be divided and the first segment right shifted,
-			    	// and the second segment left shifted. We don't have to do any shifting in
-			    	// this case.  We don't really have to do any masking either since the 
-			    	// extra bits should be overwritten, but we'll set the extra bits to zero.
-			    	// It might help debugging the bit stream, or even the compression rate
-			    	// if the segments are small enough relative to the number of extra bits.
-			    	
-			    	int k             = 6 - (modulus - 1);
-			    	byte mask         = trailing_mask[k];
-			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
-			    	segment[j]        = masked_value;
-			    	
-			    	j++;
-			    	if(j == segment_bytelength - 1)
-					{
-			    		extra_bits = 0;
-						if(modulus != 0)
-						{
-							extra_bits = (byte)(8 - modulus);
-						    extra_bits <<= 5;
-						}
-			    		segment[j] = extra_bits;
-			    		double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
-			    	    byte iterations   = 0;
-					    if (zero_ratio <= .5)
-						    iterations = 16;
-					    segment[j] |= iterations;
-					}
-					else
-						System.out.println("Wrong index " + j + " for segment byte length " + segment_bytelength);
-				    segment_list.add(segment);
-			    }
-			    else  //Non zero modulus for bit offset.
-			    {
-			    	int k             = 6 - (modulus - 1);
-			    	byte mask         = leading_mask[k];
-			    	byte masked_value = (byte)(string[string_byte_offset] & mask);
-			    }
-		    }
-		    
-		    // Odd case.
-		    i = number_of_segments - 1; 
-		
-		    byte [] segment = new byte[last_segment_bytelength];   
-    	    for(int j = 0; j < segment.length - 1; j++)
-			    segment[j] = string[i * (segment_bytelength - 1) + j];
- 
-    	    double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
-    	    byte iterations   = 0;
-		    if (zero_ratio < .5)
-			    iterations = 16;
-		    segment[segment.length - 1] = iterations;
-		    segment_list.add(segment);
-		
-		
-		    for(i = 0; i < number_of_segments; i++)
-		    {
-			    segment = (byte [])segment_list.get(i);
-			    int type = StringMapper.getType(segment);
-			    if(type == 0)
-			    {
-				    byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
-				    if(compressed_segment.length < segment.length)
-					    segment_list.set(i, compressed_segment);	
-			    }
-			    else
-			    {
-				    byte [] compressed_segment = StringMapper.compressOneStrings(segment);
-			        if(compressed_segment.length < segment.length)
-			            segment_list.set(i, compressed_segment);
-			    }
-		    }	
-		}
-		list.add(segment_list);
-		list.add(last_segment_bitlength);
-		return list;
-	}
-
-	
-	public static ArrayList getSegmentedData2(byte[] string, int bitlength) 
-	{
-		ArrayList list = new ArrayList();
-		
-		// The minimum segment bit length is a multiple of 8 to keep things simple.
-		// Open question if this constraint significantly affects rate of compression.
-		// The only segment that might have an odd length is the last one.
 		if(bitlength % 8 != 0)
 		{
 			// Return empty list.
@@ -319,6 +77,9 @@ public class SegmentMapper
 		segment[segment.length - 1] = iterations;
 		segment_list.add(segment);
 		
+		// Try compressing the segments.
+		// The compression string is the same as the original string
+		// if it didn't compress.
 		for(i = 0; i < number_of_segments; i++)
 		{
 			segment = (byte [])segment_list.get(i);
@@ -343,592 +104,16 @@ public class SegmentMapper
 		return list;
 	}
     
-	public static ArrayList getMergedData(byte[] string)
-	{
-		ArrayList list = new ArrayList();
-		int       string_bitlength  = StringMapper.getBitlength(string);
-		byte []   mask = new byte[8];
-		mask[0] = 1;
-		for(int i = 1; i < 8; i++)
-			mask[i]        = (byte)(mask[i - 1] << 1);
-		
-		ArrayList init_list = new ArrayList();
-		
-		int current_type   = -1;
-		int current_length = 0;
-		int bit_offset     = 0;
-		while(bit_offset < string_bitlength)
-		{
-			int i = bit_offset / 8;
-			int j = bit_offset % 8;
-			
-			if((string[i] & mask[j]) == 0)
-			{
-				if(current_type == 0)
-				{
-					current_length++;
-					bit_offset++;   
-					
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList segment = new ArrayList();
-						segment.add(current_type);
-						segment.add(current_length);
-						init_list.add(segment);	
-					}
-				}
-				else if(current_type == 1)
-				{
-				    current_length++;
-				   
-				    ArrayList segment = new ArrayList();
-					segment.add(current_type);
-					segment.add(current_length);
-					init_list.add(segment);
-				    
-				    bit_offset++;
-				    current_type   = -1;
-				    current_length = 0;
-				}
-				else
-				{
-					current_type   = 0;
-					current_length = 1;
-					bit_offset++;
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-				}
-			}
-			else if((string[i] & mask[j]) != 0)
-			{
-				if(current_type == 0)
-				{
-					ArrayList segment = new ArrayList();
-					segment.add(current_type);
-					segment.add(current_length);
-					init_list.add(segment);
-				    
-					
-					current_type   = 1;
-					current_length = 1;
-					bit_offset++;   
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-					
-				}
-				else if(current_type == 1)
-				{
-				    current_length++;
-				    bit_offset++;
-				    if(bit_offset == string_bitlength)
-				    {
-				    	ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-				    }
-				}
-				else
-				{
-					current_type = 1;
-					current_length++;
-					bit_offset++;
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-				}	
-				
-			}
-		}	
-		
-		ArrayList aggregated_list = new ArrayList();
-		ArrayList current_segment = new ArrayList();
-		ArrayList init_segment    = (ArrayList)init_list.get(0);
-		
-		current_type   = (int)init_segment.get(0);
-		current_length = (int)init_segment.get(1);
-		current_segment.add(current_type);
-		current_segment.add(current_length);
-		
-		int previous_type  = current_type;
-		for(int i = 1; i < init_list.size() - 1; i++)
-		{
-			init_segment   = (ArrayList)init_list.get(i);
-			current_type   = (int)init_segment.get(0);
-			current_length = (int)init_segment.get(1);
-			
-			if(current_type == previous_type)
-			    current_segment.add(current_length);
-			else
-			{
-				aggregated_list.add(current_segment);
-				current_segment = new ArrayList();
-				current_segment.add(current_type);
-				current_segment.add(current_length);
-				
-				previous_type = current_type;
-			}
-		}
-		
-		int i          = init_list.size() - 1;
-		init_segment   = (ArrayList)init_list.get(i);
-		current_type   = (int)init_segment.get(0);
-		current_length = (int)init_segment.get(1);
-		
-		if(current_type == previous_type)
-		{
-		    current_segment.add(current_length);
-		    aggregated_list.add(current_segment);
-		}
-		else
-		{
-			aggregated_list.add(current_segment);
-			current_segment = new ArrayList();
-			current_segment.add(current_type);
-			current_segment.add(current_length);
-			aggregated_list.add(current_segment);
-		}
-		
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		
-		int total_zero_length = 0;
-		int max_zero_length   = 0;
-		int total_one_length  = 0;
-		int max_one_length    = 0;
-		int max_one_cat_length = 0;
-		for(i = 0; i < aggregated_list.size(); i++)
-		{
-			ArrayList segment = (ArrayList)aggregated_list.get(i);
-			current_type      = (int)segment.get(0);
-			if(current_type == 0)
-			{
-				number_of_zero_segments++;
-				current_length = (int)segment.get(1);
-				total_zero_length += current_length;
-				if(current_length > max_zero_length)
-					max_zero_length = current_length;
-			}
-			else
-			{
-				number_of_one_segments++;
-				current_length         = (int)segment.get(1);
-				total_one_length      += current_length;
-				int current_cat_length = current_length;
-				
-				// There can be multiple one strings.
-				for(int j = 1; j < segment.size(); j++)
-				{
-					current_length = (int)segment.get(j);
-					total_one_length += current_length;
-					if(current_length > max_one_length)
-						max_one_length = current_length;  
-					current_cat_length += current_length;
-				}
-				
-				if(current_cat_length > max_one_cat_length)
-					max_one_cat_length = current_cat_length;	
-			}
-		}
-		
-		int average_zero_length = total_zero_length / number_of_zero_segments;
-		int average_one_length = total_one_length / number_of_one_segments;
-		
-		System.out.println();
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-		System.out.println("Average length is " + average_zero_length);
-		System.out.println("Maximum length is " + max_zero_length);
-		System.out.println();
-		System.out.println("Number of one segments is "  + number_of_one_segments);
-		System.out.println("Average length of concatenated string is " + average_one_length);
-		System.out.println("Maximum individual length is " + max_one_length);
-		System.out.println("Maximum cat length is " + max_one_cat_length);
-		System.out.println();
-		
-		return aggregated_list;
-	}
-	
-	// This only works if the strings were reduced to 0 and 10 before merging.
-	public static byte [] getUnmergedString(byte[] string)
-	{
-		byte [] unclipped_string = new byte[2 * string.length];
-		int     string_bitlength = StringMapper.getBitlength(string);
-		
-		byte [] positive_mask = new byte[8];
-		byte [] negative_mask = new byte[8];
-		positive_mask[0]  = 1;
-		negative_mask[0] = (byte)~positive_mask[0];
-		for(int i = 1; i < 8; i++)
-		{
-			positive_mask[i]  = (byte)(positive_mask[i - 1] << 1);
-			negative_mask[i] = (byte)~positive_mask[i];
-		}
-		
-		int bitlength = 0;
-		for(int i = 0; i < string_bitlength; i++)
-		{
-			int j = i / 8;
-			int k = i % 8;
-			
-			// Might want to categorize masks differently.
-			int bit = 0;
-			if((string[j] & positive_mask[k]) != 0)
-				bit = 1;
-			
-			j = bitlength / 8;
-			k = bitlength % 8;
-			
-			if(bit != 0)
-			{
-			    unclipped_string[j] &= negative_mask[k];	
-			    bitlength++;
-			}
-			else
-			{
-				unclipped_string[j] |= positive_mask[k];
-				bitlength++;
-				j = bitlength / 8;
-				k = bitlength % 8;
-				unclipped_string[j] &= negative_mask[k];	
-			    bitlength++;
-			}
-		}
-		
-		int unmerged_length = bitlength / 8;
-		if(bitlength % 8 != 0)
-			unmerged_length++;
-		unmerged_length++;
-	
-		byte [] unmerged_string = new byte[unmerged_length];
-		for(int i = 0; i < unmerged_string.length - 1; i++)
-		{
-			unmerged_string[i] = unclipped_string[i];
-		}
-		
-		byte modulus = (byte)(bitlength % 8);
-        
-        byte extra_bits = 0;
-    
-        if(modulus != 0)
-    	   extra_bits = (byte)(8 - modulus);
-    
-        extra_bits <<= 5;
-        unmerged_string[unmerged_string.length - 1] = extra_bits;
-		
-	    return unmerged_string;
-	}
-	
-	public static byte [] getMergedString(byte[] string)
-	{
-		ArrayList list = new ArrayList();
-		
-		int string_bitlength  = StringMapper.getBitlength(string);
-		
-
-		byte []   mask = new byte[8];
-		mask[0] = 1;
-		for(int i = 1; i < 8; i++)
-			mask[i]        = (byte)(mask[i - 1] << 1);
-		
-		ArrayList init_list = new ArrayList();
-		
-		int current_type   = -1;
-		int current_length = 0;
-		int bit_offset     = 0;
-		while(bit_offset < string_bitlength)
-		{
-			int i = bit_offset / 8;
-			int j = bit_offset % 8;
-			
-			if((string[i] & mask[j]) == 0)
-			{
-				if(current_type == 0)
-				{
-					current_length++;
-					bit_offset++;   
-					
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList segment = new ArrayList();
-						segment.add(current_type);
-						segment.add(current_length);
-						init_list.add(segment);	
-					}
-				}
-				else if(current_type == 1)
-				{
-				    current_length++;
-				   
-				    ArrayList segment = new ArrayList();
-					segment.add(current_type);
-					segment.add(current_length);
-					init_list.add(segment);
-				    
-				    bit_offset++;
-				    current_type   = -1;
-				    current_length = 0;
-				}
-				else
-				{
-					current_type   = 0;
-					current_length = 1;
-					bit_offset++;
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-				}
-			}
-			else if((string[i] & mask[j]) != 0)
-			{
-				if(current_type == 0)
-				{
-					ArrayList segment = new ArrayList();
-					segment.add(current_type);
-					segment.add(current_length);
-					init_list.add(segment);
-				    
-					
-					current_type   = 1;
-					current_length = 1;
-					bit_offset++;   
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-					
-				}
-				else if(current_type == 1)
-				{
-				    current_length++;
-				    bit_offset++;
-				    if(bit_offset == string_bitlength)
-				    {
-				    	ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-				    }
-				}
-				else
-				{
-					current_type = 1;
-					current_length++;
-					bit_offset++;
-					if(bit_offset == string_bitlength)
-					{
-						ArrayList last_segment = new ArrayList();
-						last_segment.add(current_type);
-						last_segment.add(current_length);
-						init_list.add(last_segment);	
-					}
-				}	
-				
-			}
-		}	
-		
-		ArrayList aggregated_list = new ArrayList();
-		ArrayList current_segment = new ArrayList();
-		ArrayList init_segment    = (ArrayList)init_list.get(0);
-		
-		current_type   = (int)init_segment.get(0);
-		current_length = (int)init_segment.get(1);
-		current_segment.add(current_type);
-		current_segment.add(current_length);
-		
-		int previous_type  = current_type;
-		for(int i = 1; i < init_list.size() - 1; i++)
-		{
-			init_segment   = (ArrayList)init_list.get(i);
-			current_type   = (int)init_segment.get(0);
-			current_length = (int)init_segment.get(1);
-			
-			if(current_type == previous_type)
-			    current_segment.add(current_length);
-			else
-			{
-				aggregated_list.add(current_segment);
-				current_segment = new ArrayList();
-				current_segment.add(current_type);
-				current_segment.add(current_length);
-				previous_type = current_type;
-			}
-		}
-		
-		int i          = init_list.size() - 1;
-		init_segment   = (ArrayList)init_list.get(i);
-		current_type   = (int)init_segment.get(0);
-		current_length = (int)init_segment.get(1);
-		
-		if(current_type == previous_type)
-		{
-		    current_segment.add(current_length);
-		    aggregated_list.add(current_segment);
-		}
-		else
-		{
-			aggregated_list.add(current_segment);
-			current_segment = new ArrayList();
-			current_segment.add(current_type);
-			current_segment.add(current_length);
-			aggregated_list.add(current_segment);
-		}
-		
-		int number_of_zero_segments = 0;
-		int number_of_one_segments  = 0;
-		
-		int total_zero_length = 0;
-		int max_zero_length   = 0;
-		int total_one_length  = 0;
-		int max_one_length    = 0;
-		int max_one_cat_length = 0;
-		for(i = 0; i < aggregated_list.size(); i++)
-		{
-			ArrayList segment = (ArrayList)aggregated_list.get(i);
-			current_type      = (int)segment.get(0);
-			if(current_type == 0)
-			{
-				number_of_zero_segments++;
-				current_length = (int)segment.get(1);
-				total_zero_length += current_length;
-				if(current_length > max_zero_length)
-					max_zero_length = current_length;
-			}
-			else
-			{
-				number_of_one_segments++;
-				current_length         = (int)segment.get(1);
-				total_one_length      += current_length;
-				int current_cat_length = current_length;
-				
-				// There can be multiple one strings.
-				for(int j = 1; j < segment.size(); j++)
-				{
-					current_length = (int)segment.get(j);
-					total_one_length += current_length;
-					if(current_length > max_one_length)
-						max_one_length = current_length;  
-					current_cat_length += current_length;
-				}
-				
-				if(current_cat_length > max_one_cat_length)
-					max_one_cat_length = current_cat_length;	
-			}
-		}
-		
-		int average_zero_length = total_zero_length / number_of_zero_segments;
-		int average_one_length  = total_one_length / number_of_one_segments;
-		
-		// Good place to check input.
-		
-		System.out.println();
-		System.out.println("Number of zero segments is " + number_of_zero_segments);
-		System.out.println("Average length is " + average_zero_length);
-		System.out.println("Maximum length is " + max_zero_length);
-		System.out.println();
-		System.out.println("Number of one segments is "  + number_of_one_segments);
-		System.out.println("Average length of concatenated string is " + average_one_length);
-		System.out.println("Maximum individual length is " + max_one_length);
-		System.out.println("Maximum cat length is " + max_one_cat_length);
-		System.out.println();
-	
-		// Assuming the input has been reduce to 0 and 10 strings, the
-		// merged_string should be no larger than the original string.
-		byte [] unclipped_string = new byte [string.length];
-		
-		byte [] positive_mask = new byte[8];
-		byte [] negative_mask = new byte[8];
-		
-		positive_mask[0]  = 1;
-		negative_mask[0] = (byte)~positive_mask[0];
-		for(i = 1; i < 8; i++)
-		{
-			positive_mask[i]  = (byte)(positive_mask[i - 1] * 2);
-			negative_mask[i] = (byte)~positive_mask[i];
-		}
-		
-		
-		int bitlength  = 0;
-		for(i = 0; i < aggregated_list.size(); i++)
-		{
-			// Byte offset for destination string.
-		    int j = bitlength / 8;
-		    // Index for mask.
-		    int k = bitlength % 8;
-		    
-		    ArrayList segment = (ArrayList)aggregated_list.get(i);	
-		    int       type    = (int)segment.get(0);
-		    
-		    if(type == 0)
-		    {
-		        unclipped_string[j] |= positive_mask[k];
-		        bitlength++;
-		    }
-		    else
-		    {
-		    	unclipped_string[j] &= negative_mask[k];
-		    	for(int m = 1; m < segment.size(); m++)
-		    	{
-		    		bitlength++;
-		    		j = bitlength / 8;
-		    		k = bitlength % 8;
-		    		unclipped_string[j] &= negative_mask[k];
-		    	}
-		    	bitlength++;
-		    }
-		}
-		
-		int merged_length = bitlength / 8;
-		if(bitlength % 8 != 0)
-			merged_length++;
-		merged_length++;
-	
-		byte [] merged_string = new byte[merged_length];
-		for(i = 0; i < merged_string.length - 1; i++)
-		{
-			merged_string[i] = unclipped_string[i];
-		}
-		
-		byte modulus = (byte)(current_length % 8);
-        
-        byte extra_bits = 0;
-    
-       if(modulus != 0)
-    	   extra_bits = (byte)(8 - modulus);
-    
-       extra_bits <<= 5;
-       merged_string[i] = extra_bits;
-		
-		return merged_string;
-	}
-	
 	public static ArrayList getMergedSegmentedData(byte[] string, int minimum_bitlength) 
 	{
 		ArrayList list = new ArrayList();
 		
 		// For the merging to work without any bit masking and shifting, 
 		// the minimum segment bit length has to be a multiple of 8.
-		// Open question if this constraint significantly affects rate of compression.
+		// The optimal compression rate would probably be achieved by starting
+		// with a 1 length for zero strings and a 2 length for one strings.
+	    // Open question how much this affects the rate of compression.
+		// The only segment that might have an odd length is the last one.
 		if(minimum_bitlength % 8 != 0)
 		{
 			// Return an empty list.
@@ -1176,7 +361,6 @@ public class SegmentMapper
 		
 		return list;
 	}
-
 	
 	// This version of the function does a lot of error checking.
 	public static ArrayList getMergedSegmentedData2(byte[] string, int minimum_bitlength) 
@@ -1569,18 +753,12 @@ public class SegmentMapper
 	        }
 	    }
 		
-		//System.out.println("Scanned final segment list.");
-	    //System.out.println("Segmented bitlength is " + segmented_bitlength);
-	    
-		/*
 		int bytelength = segmented_bitlength / 8;
-		// Add byte for odd bits.
 		if(segmented_bitlength % 8 != 0)
 			bytelength++;
-		// Add byte for string information.
 		bytelength++;
 		
-		byte [] reconstructed_string = new byte[bytelength];
+		reconstructed_string = new byte[bytelength];
 		
 		if(reconstructed_string.length != string.length)
 		{
@@ -1588,7 +766,7 @@ public class SegmentMapper
 		}
 		else
 		{
-			int offset = 0;
+			offset = 0;
 			for(int i = 0; i < decompressed_segments.size(); i++)
 			{
 			    byte [] current_segment = (byte [])decompressed_segments.get(i);
@@ -1606,7 +784,7 @@ public class SegmentMapper
 			}
 			reconstructed_string[string.length - 1] |= string_iterations;
 			
-			boolean same = true;
+			same = true;
 			for(int i = 0; i < string.length; i++)
 			{
 				if(string[i] != reconstructed_string[i])
@@ -1616,22 +794,19 @@ public class SegmentMapper
 					break;
 				}
 			}
-			
 			if(same)
 				System.out.println("Original string and reconstructed string are the same.");
 			else
 				System.out.println("Original string and reconstructed string are not the same.");
 				
 		}
-		*/
-		
 		
 		list.add(segment_list);
 		list.add(max_segment_bytelength);
-		
 		return list;
 	}
 
+	/*
 	public static ArrayList getMergedSegmentedData(byte[] string, int string_bit_length, int segment_bit_length) 
 	{
 		int number_of_segments  = string_bit_length / segment_bit_length;
@@ -2003,5 +1178,5 @@ public class SegmentMapper
 		segment_data.add(max_segment_byte_length);
 		return segment_data;
 	}
-
+*/
 }
