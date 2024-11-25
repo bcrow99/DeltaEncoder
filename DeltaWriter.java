@@ -1559,7 +1559,7 @@ public class DeltaWriter
 			    					total_compressed_length += current_segment.length;
 			    					
 			    					byte [] zipped_segment = new byte[2 * current_segment.length];
-			    					Deflater deflater = new Deflater();
+			    					Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 						            deflater.setInput(current_segment);
 						            deflater.finish();
 						            int zipped_length = deflater.deflate(zipped_segment);
@@ -1584,7 +1584,7 @@ public class DeltaWriter
 			    					 total_compressed_length += current_segment.length;
 			    					 
 			    					 byte [] zipped_segment = new byte[2 * current_segment.length];
-				    				 Deflater deflater = new Deflater();
+				    				 Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 							         deflater.setInput(current_segment);
 							         deflater.finish();
 							         int zipped_length = deflater.deflate(zipped_segment);
