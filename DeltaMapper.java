@@ -537,7 +537,6 @@ public class DeltaMapper
     // The problem is choosing the smallest delta requires keeping a state
     // that seems to amount to more than the compressed paeth deltas minus the 
     // compressed ideal deltas.
-    // This function also returns the delta sum and prediction accuracy rate.
     public static ArrayList getPaethDeltasFromValues(int src[], int xdim, int ydim)
     {
     	int[] dst          = new int[xdim * ydim];
@@ -546,7 +545,6 @@ public class DeltaMapper
         int delta          = 0;
         int sum            = 0;
         int k              = 0;
-        int number_of_misses = 0;
       
         for(int i = 0; i < ydim; i++)
         {
@@ -609,8 +607,6 @@ public class DeltaMapper
             	    	else
             	    	    delta = diagonal_delta;
             	    	
-            	    	if(delta > horizontal_delta || delta > vertical_delta || delta > diagonal_delta)
-            	    		number_of_misses++;
             	    	dst[k++] = delta;
             	    	
             	    	
@@ -622,7 +618,6 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
-        result.add(number_of_misses);
         return result;    
     }
 

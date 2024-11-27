@@ -793,7 +793,6 @@ public class DeltaWriter2
 					ArrayList result2 = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
                     int [] ideal_delta = (int [])result2.get(1);
                     
-                    // The first value in the array is a code, not a delta.
 					int number_correct = 1;
 					int number_better = 0;
 					for(int k = 1; k < actual_delta.length; k++)
