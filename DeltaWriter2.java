@@ -24,11 +24,11 @@ public class DeltaWriter2
 	int pixel_shift    = 3;
 	
 	// This value is inversely related to the lengths of the segments.
-	int segment_length = 14;
+	int segment_length = 0;
 	
 	int correction     = 0;
 	int min_set_id     = 0;
-	int delta_type     = 2;
+	int delta_type     = 4;
 	
 	
 	int    [] set_sum, channel_sum;
@@ -565,13 +565,6 @@ public class DeltaWriter2
 		    	// Gets the ideal delta (4) sum.
 		    	//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
 		    	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
-		    	
 		    }
 		  
 			// Find the optimal set.  
@@ -764,7 +757,6 @@ public class DeltaWriter2
                     ArrayList result2 = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
                     int [] ideal_delta = (int [])result2.get(1);
                     
-					
 					// The first value in the array is a code, not a delta.
 					int number_correct = 1;
 					for(int k = 1; k < actual_delta.length; k++)
@@ -775,7 +767,8 @@ public class DeltaWriter2
 					    }
 					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
 					    {
-					    	System.out.println("Actual delta is less than ideal delta.");
+					    	//System.out.println("Actual delta is less than ideal delta.");
+					    	number_correct++;
 					    }
 					}
 					
@@ -812,7 +805,8 @@ public class DeltaWriter2
 					double accuracy_rate = number_correct;
 					accuracy_rate /= actual_delta.length;
 					System.out.println("Accuracy rate of mixed deltas is " + String.format("%.3f", accuracy_rate));
-					System.out.println("The number of mixed deltas that were less than any actual deltas is " + number_better);
+					if(number_better != 0)
+					    System.out.println("The number of mixed deltas that were less than any actual deltas is " + number_better);
                     
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
@@ -901,8 +895,8 @@ public class DeltaWriter2
 	            		minimum_segment_length -= remainder;
 	     	          
 	     	            // Check this.
-	     	            if(minimum_segment_length < 96)
-	     	            	minimum_segment_length = 96;
+	     	            if(minimum_segment_length < 8)
+	     	            	minimum_segment_length = 8;
      	                
 	     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
 	     	             
@@ -1920,8 +1914,8 @@ public class DeltaWriter2
 		            		 int remainder = minimum_segment_length % 8;
 		            		 minimum_segment_length -= remainder;
 		     	          
-		     	             if(minimum_segment_length < 96)
-		     	            	 minimum_segment_length = 96;
+		     	             if(minimum_segment_length < 8)
+		     	            	 minimum_segment_length = 8;
 		     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(seed_string, minimum_segment_length);
 		     	             ArrayList segments    = (ArrayList)segment_data_list.get(0);
 		     	             number_of_segments          = segments.size();
@@ -1970,8 +1964,8 @@ public class DeltaWriter2
 			            	 minimum_segment_length = bitlength / original_number_of_segments;
 			            	 remainder = minimum_segment_length % 8;
 			            	 minimum_segment_length -= remainder;  
-			     	         if(minimum_segment_length < 96)
-			     	             minimum_segment_length = 96;
+			     	         if(minimum_segment_length < 8)
+			     	             minimum_segment_length = 8;
 		     	             
 		     	             segment_data_list       = SegmentMapper.getMergedSegmentedData(dilated_string, minimum_segment_length);
 		     	             segments                = (ArrayList)segment_data_list.get(0);
