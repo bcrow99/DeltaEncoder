@@ -28,7 +28,7 @@ public class DeltaWriter2
 	
 	int correction     = 0;
 	int min_set_id     = 0;
-	int delta_type     = 2;
+	int delta_type     = 5;
 	
 	
 	int    [] set_sum, channel_sum;
@@ -611,233 +611,59 @@ public class DeltaWriter2
 				
 				ArrayList result = new ArrayList();
 				
-				//ArrayList delta_list = DeltaMapper.getDeltaListFromValues2(quantized_channel, new_xdim, new_ydim);
 				ArrayList delta_list = DeltaMapper.getDeltaListFromValues(quantized_channel, new_xdim, new_ydim);
+				
+				/*
 				int ideal_sum = DeltaMapper.getIdealDeltaSum(delta_list);
 		        int worst_sum = DeltaMapper.getWorstlDeltaSum(delta_list);
-		        
-		        //System.out.println("Ideal delta sum is " + ideal_sum);
-		        //System.out.println("Worst delta sum is " + worst_sum);
+		        System.out.println("Ideal delta sum is " + ideal_sum);
+		        System.out.println("Worst delta sum is " + worst_sum);
+		        */
+				
 				if(delta_type == 0)
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					System.out.println("Sum of horizontal deltas is " + sum);
-					
-                    int [] actual_delta = (int [])result.get(1);
-                     
-                     
-                    ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-                     
-					// The first value in the array is a code, not a delta.
-					int number_correct = 1;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	System.out.println("Actual delta is less than ideal delta.");
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of horizontal deltas is " + String.format("%.3f", accuracy_rate));
 					
 				}
 				else if(delta_type == 1)
 				{
-					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					System.out.println("Sum of vertical deltas is " + sum);
-					
-                    int [] actual_delta = (int [])result.get(1);
-					
-                    ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-					// The first value in the array is a code, not a delta.
-					int number_correct = 1;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	System.out.println("Actual delta is less than ideal delta.");
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of vertical deltas is " + String.format("%.3f", accuracy_rate));
-					
+					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);	
 				}
 				else if(delta_type == 2)
 				{
-					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					//System.out.println("Sum of averaged horizontal and vertical deltas is " + sum);
-					//System.out.println("Sum of averaged horizontal and forward diagonal deltas is " + sum);
-                    int [] actual_delta = (int [])result.get(1);
-					
-                    ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-                    
-					// The first value in the array is a code, not a delta.
-					int number_correct = 1;
+					result = DeltaMapper.getAverageDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
+					int [] actual_delta = (int [])result.get(1);
 					int number_better = 0;
-					for(int k = 1; k < actual_delta.length; k++)
+					for(int k = 1; k < new_xdim * new_ydim; k++)
 					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	//System.out.println("Actual delta is less than ideal delta.");
-					    	number_correct++;
-					    	number_better++;
-					    }
+						int [][] table = (int [][])delta_list.get(k);
+						
+						int least_delta   = table[0][0];
+						int current_delta = actual_delta[k];
+						
+						if(Math.abs(current_delta) < Math.abs(least_delta))
+							number_better++;
 					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					//System.out.println("Accuracy rate of average hv deltas is " + String.format("%.3f", accuracy_rate));
-					//System.out.println("Accuracy rate of average vertical and diagonal deltas is " + String.format("%.3f", accuracy_rate));
 					System.out.println("The number of averaged deltas that were less than any actual deltas is " + number_better);
 				}
 				else if(delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int sum = (int)result.get(0);
-					System.out.println("Sum of paeth deltas is " + sum);
-					
-					int [] actual_delta = (int [])result.get(1);
-					
-					ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-					
-					
-					// The first value in the array is a code, not a delta.
-					int number_correct = 1;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	System.out.println("Actual delta is less than ideal delta.");
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of paeth deltas is " + String.format("%.3f", accuracy_rate));
-					
 				}
 				else if(delta_type == 4)
 				{
-					result = DeltaMapper.getGradientDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					System.out.println("Sum of gradient deltas is " + sum);
-					
-                    int [] actual_delta = (int [])result.get(1);
-                    
-                    ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-                    
-					// The first value in the array is a code, not a delta.
-					int number_correct = 1;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	//System.out.println("Actual delta is less than ideal delta.");
-					    	number_correct++;
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of gradient deltas is " + String.format("%.3f", accuracy_rate));
+					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				}
 				else if(delta_type == 5)
 				{
-					result = DeltaMapper.getMixedDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					System.out.println("Sum of mixed deltas is " + sum);
-					int [] actual_delta = (int [])result.get(1);
-					
-					ArrayList result2 = DeltaMapper.getIdealDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-                    int [] ideal_delta = (int [])result2.get(1);
-                    
-					int number_correct = 1;
-					int number_better = 0;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	//System.out.println("Actual delta is less than ideal delta.");
-					    	number_correct++;
-					    	number_better++;
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of mixed deltas is " + String.format("%.3f", accuracy_rate));
-					if(number_better != 0)
-					    System.out.println("The number of mixed deltas that were less than any actual deltas is " + number_better);
-                    
+					result = DeltaMapper.getMixedDeltasFromValues3(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
 				else if(delta_type == 6)
 				{
 					result = DeltaMapper.getIdealDeltasFromValues8(quantized_channel, new_xdim, new_ydim);
-					int sum = (int)result.get(0);
-					System.out.println("Sum of ideal deltas (4) is " + sum);
-					int [] ideal_delta =  DeltaMapper.getIdealDeltasFromList(delta_list);
-					int [] actual_delta = (int [])result.get(1);
-					int number_correct = 1;
-					int number_better = 0;
-					for(int k = 1; k < actual_delta.length; k++)
-					{
-					    if(Math.abs(actual_delta[k]) == Math.abs(ideal_delta[k]))
-					    {
-					    	number_correct++;
-					    }
-					    else if(Math.abs(actual_delta[k]) < Math.abs(ideal_delta[k]))
-					    {
-					    	//System.out.println("Actual delta is less than ideal delta.");
-					    	number_correct++;
-					    	number_better++;
-					    }
-					}
-					
-					double accuracy_rate = number_correct;
-					accuracy_rate /= actual_delta.length;
-					System.out.println("Accuracy rate of ideal deltas (4) compared to ideal deltas (8) is " + String.format("%.3f", accuracy_rate));
-					if(number_better != 0)
-					    System.out.println("The number of ideal deltas that were less than any actual deltas is " + number_better);
-                    
-					
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
@@ -1095,7 +921,7 @@ public class DeltaWriter2
 		        }
 		        else if(delta_type == 2)
 		        {
-		            channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+		            channel = DeltaMapper.getValuesFromAverageDeltas4(delta, new_xdim , new_ydim, channel_init[j]);   	
 		        }
 		        else if(delta_type == 3)
 		        {
@@ -1103,13 +929,12 @@ public class DeltaWriter2
 		        }
 		        else if(delta_type == 4)
 		        {
-		    	    channel = DeltaMapper.getValuesFromGradientDeltas2(delta, new_xdim , new_ydim, channel_init[j]);   	
+		    	    channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
 		        }
 		        else if(delta_type == 5)
 		        {
 		    	    byte [] map = (byte[])map_list.get(i);
-		            //channel = DeltaMapper.getValuesFromMixedAverageDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);
+		    	    channel = DeltaMapper.getValuesFromMixedDeltas3(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 6)
 		        {
@@ -1356,8 +1181,8 @@ public class DeltaWriter2
 						*/
 						System.out.println("The delta map iterations was " + iterations);
 						
-						//out.writeInt(compressed_map.length);
-			            //out.write(compressed_map, 0, compressed_map.length);
+						out.writeInt(compressed_map.length);
+			            out.write(compressed_map, 0, compressed_map.length);
 
 			            out.writeByte(map_min);
 			            out.writeInt(map.length);
