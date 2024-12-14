@@ -107,19 +107,25 @@ public class DeltaReader2
 			    table_list.add(table);
 			    
 			    System.out.println("Added table");
-				if(delta_type == 5 || delta_type == 6)
+				
+			    if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
 					short  map_table_length = in.readShort();
+					System.out.println("Map table length is " + map_table_length);
 					int [] map_table        = new int[map_table_length];	
 					for(int k = 0; k < map_table_length; k++)
 						map_table[k] = in.readShort();
+					System.out.println("Read map table.");
 					int byte_length = in.readInt();
+					
+					System.out.println("Map length is " + byte_length);
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length); 
+				    
 				    byte increment  = in.readByte();
 				    int dimension = in.readInt();
 				    byte [] map = new byte[dimension];
-				    
+				    System.out.println("Read map.");
 				    byte iterations = StringMapper.getIterations(map_string);
 				    int  size = 0;
 				    
@@ -455,7 +461,7 @@ public class DeltaReader2
 		{
 			int [] channel_id = DeltaMapper.getChannels(set_id);
 			
-			if(delta_type < 7)
+			if(delta_type < 8)
 			{
 			    byte [] string    = (byte [])string_list.get(i);
 			    int [] table      = (int [])table_list.get(i);
@@ -523,12 +529,17 @@ public class DeltaReader2
     		    else if(delta_type == 5)
     		    {
     			    byte [] map = (byte [])map_list.get(i);
-			        current_channel = DeltaMapper.getValuesFromMixedDeltas3(delta, current_xdim , current_ydim, init[i], map);
+			        current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim , current_ydim, init[i], map);
     		    }
     		    else if(delta_type == 6)
     		    {
     			    byte [] map = (byte [])map_list.get(i);
-			        current_channel = DeltaMapper.getValuesFromIdealDeltas4(delta, current_xdim , current_ydim, init[i], map);
+			        current_channel = DeltaMapper.getValuesFromMixedDeltas3(delta, current_xdim , current_ydim, init[i], map);
+    		    }
+    		    else if(delta_type == 7)
+    		    {
+    			    byte [] map = (byte [])map_list.get(i);
+			        current_channel = DeltaMapper.getValuesFromIdealDeltas2(delta, current_xdim , current_ydim, init[i], map);
     		    }
     		    
     		    if(channel_id[i] > 2)

@@ -28,7 +28,7 @@ public class DeltaWriter2
 	
 	int correction     = 0;
 	int min_set_id     = 0;
-	int delta_type     = 5;
+	int delta_type     = 7;
 	
 	
 	int    [] set_sum, channel_sum;
@@ -53,9 +53,6 @@ public class DeltaWriter2
 	double file_compression_rate;
 
 	ArrayList channel_list, table_list, string_list, map_list, segment_list;
-
-	// Dedicated list for delta type 7.
-	//ArrayList delta_min_list, seed_length_list;
 	
 	boolean initialized = false;
 	
@@ -414,8 +411,9 @@ public class DeltaWriter2
 				delta_button[2] = new JRadioButtonMenuItem("Average");
 				delta_button[3] = new JRadioButtonMenuItem("Paeth");
 				delta_button[4] = new JRadioButtonMenuItem("Gradient");
-				delta_button[5] = new JRadioButtonMenuItem("Scanline");
-				delta_button[6] = new JRadioButtonMenuItem("Map");
+				delta_button[5] = new JRadioButtonMenuItem("Scanline 1");
+				delta_button[6] = new JRadioButtonMenuItem("Scanline 2");
+				delta_button[7] = new JRadioButtonMenuItem("Map");
 				
 				delta_button[delta_type].setSelected(true);
 				
@@ -442,7 +440,7 @@ public class DeltaWriter2
 				    
 				}
 				
-				for(int i = 0; i < 7; i++)
+				for(int i = 0; i < 8; i++)
 				{
 					delta_button[i].addActionListener(new ButtonHandler(i));
 					delta_menu.add(delta_button[i]);
@@ -545,7 +543,10 @@ public class DeltaWriter2
 		    			quantized_channel[j] -= min;
 		    	
 		    	// Save the initial value.
-		    	if(delta_type != 7)
+		    	channel_init[i] = quantized_channel[0];
+		    	
+		    	/*
+		    	if(delta_type != 8)
 		    	    channel_init[i] = quantized_channel[0];
 		    	else
 		    	{
@@ -554,12 +555,11 @@ public class DeltaWriter2
 		    		int j = y * new_xdim + x;
 		    		channel_init[i] = quantized_channel[j];	
 		    	}
+		    	*/
 		    	
 		    	// Replace the original data with the modified data.
 		    	quantized_channel_list.set(i, quantized_channel);
 		    	
-		    	// Might want to change this to use ideal deltas.
-		    	// Gets the ideal delta (4) sum.
 		    	//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
 		    	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
 		    }
@@ -631,7 +631,7 @@ public class DeltaWriter2
 				}
 				else if(delta_type == 2)
 				{
-					result = DeltaMapper.getAverageDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					int [] actual_delta = (int [])result.get(1);
 					int number_better = 0;
 					for(int k = 1; k < new_xdim * new_ydim; k++)
@@ -657,13 +657,19 @@ public class DeltaWriter2
 				}
 				else if(delta_type == 5)
 				{
-					result = DeltaMapper.getMixedDeltasFromValues3(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
 				else if(delta_type == 6)
 				{
-					result = DeltaMapper.getIdealDeltasFromValues8(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getMixedDeltasFromValues3(quantized_channel, new_xdim, new_ydim);
+				    byte [] map = (byte [])result.get(2);
+				    map_list.add(map);
+				}
+				else if(delta_type == 7)
+				{
+					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
@@ -732,7 +738,7 @@ public class DeltaWriter2
 			for(int i = 0; i < 3; i++)
 		    {
 		        int j  = channel_id[i];
-		     // Get original data to compare with result from decompression.
+		        // Get original data to compare with result from decompression.
 		        byte [] original_string = (byte [])string_list.get(i);
 		        int original_type       = StringMapper.getType(original_string);
 		        int original_iterations = StringMapper.getIterations(original_string);
@@ -921,7 +927,7 @@ public class DeltaWriter2
 		        }
 		        else if(delta_type == 2)
 		        {
-		            channel = DeltaMapper.getValuesFromAverageDeltas4(delta, new_xdim , new_ydim, channel_init[j]);   	
+		            channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
 		        }
 		        else if(delta_type == 3)
 		        {
@@ -934,12 +940,17 @@ public class DeltaWriter2
 		        else if(delta_type == 5)
 		        {
 		    	    byte [] map = (byte[])map_list.get(i);
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas3(delta, new_xdim , new_ydim, channel_init[j], map);
+		    	    channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 6)
 		        {
 		    	    byte [] map = (byte[])map_list.get(i);
-		            channel = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+		    	    channel = DeltaMapper.getValuesFromMixedDeltas3(delta, new_xdim , new_ydim, channel_init[j], map);
+		        }
+		        else if(delta_type == 7)
+		        {
+		    	    byte [] map = (byte[])map_list.get(i);
+		            channel = DeltaMapper.getValuesFromIdealDeltas3(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 		        }
 		    
 			    if(j > 2)
@@ -1148,7 +1159,7 @@ public class DeltaWriter2
 	                        out.writeShort(table[k]);
                     }
 		        	
-		            if(delta_type == 5  || delta_type == 6)
+		            if(delta_type == 5  || delta_type == 6 || delta_type == 7)
 		            {
 		            	byte [] map = (byte [])map_list.get(i);
 		            	
