@@ -438,65 +438,52 @@ public class StringMapper
     
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
-    	for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
         int size             = dst.length;
         int number_of_values = table.length;
-        int number_unpacked  = 0;
         int maximum_length   = number_of_values - 1;
-   
-        int [] index = new int[number_of_values];
-        
+        int length           = 1;
+        int src_byte         = 0;
+        int dst_byte         = 0;
+        int number_unpacked  = 0;
+        int mask             = 1;
+        int bit              = 0;
+       
         int [] inverse_table = new int[number_of_values];
         for(int i = 0; i < number_of_values; i++)
         {
             int j            = table[i];
             inverse_table[j] = i;
-            index[i]         = 0;
         }
-        
-        int length   = 1;
-        int src_byte = 0;
-        int dst_byte = 0;
-        
-        
-        byte mask = 0x01;
-        byte bit  = 0;
         
         try
         {
-        while(dst_byte < size)
-        {
-            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
-            if(non_zero != 0 && length < maximum_length)
-                length++;
-            else if(non_zero == 0)
+        	while(dst_byte < size)
             {
-                int k = length - 1;
-                dst[dst_byte++] = inverse_table[k]; 
-               
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
+                int non_zero = src[src_byte] & (mask << bit);
+                if(non_zero != 0 && length < maximum_length)
+                    length++;
+                else if(non_zero == 0)
+                {
+                    int k           = length - 1;
+                    dst[dst_byte++] = inverse_table[k]; 
+                    length          = 1;
+                    number_unpacked++;
+                    
+                }
+                else if(length == maximum_length)
+                {
+                	int k = length;
+                	dst[dst_byte++] = inverse_table[k];
+                    number_unpacked++;
+                    length = 1;
+                }
+                bit++;
+                if(bit == 8)
+                {
+                    bit = 0;
+                    src_byte++;
+                }
             }
-            else if(length == maximum_length)
-            {
-            	int k = length;
-            	dst[dst_byte++] = inverse_table[k];
-            	
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
-            }
-            bit++;
-            if(bit == 8)
-            {
-                bit = 0;
-                src_byte++;
-            }
-        }
         }
         catch(Exception e)
         {
@@ -505,68 +492,55 @@ public class StringMapper
         }
         return(number_unpacked);
     }
-    
+
     public static int unpackStrings2(byte src[], int table[], byte dst[])
     {
-    	for(int i = 0; i < dst.length; i++)
-        	dst[i] = 0;
         int size             = dst.length;
         int number_of_values = table.length;
-        int number_unpacked  = 0;
         int maximum_length   = number_of_values - 1;
-   
-        int [] index = new int[number_of_values];
-        
-        int [] inverse_table = new int[number_of_values];
+        int length           = 1;
+        int src_byte         = 0;
+        int dst_byte         = 0;
+        int number_unpacked  = 0;
+        int mask             = 1;
+        int bit              = 0;
+       
+        byte [] inverse_table = new byte[number_of_values];
         for(int i = 0; i < number_of_values; i++)
         {
             int j            = table[i];
-            inverse_table[j] = i;
-            index[i]         = 0;
+            inverse_table[j] = (byte)i;
         }
-        
-        int length   = 1;
-        int src_byte = 0;
-        int dst_byte = 0;
-        
-        
-        byte mask = 0x01;
-        byte bit  = 0;
         
         try
         {
-        while(dst_byte < size)
-        {
-            byte non_zero = (byte)(src[src_byte] & (byte)(mask << bit));
-            if(non_zero != 0 && length < maximum_length)
-                length++;
-            else if(non_zero == 0)
+        	while(dst_byte < size)
             {
-                int k = length - 1;
-                dst[dst_byte++] = (byte)inverse_table[k]; 
-               
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
+                int non_zero = src[src_byte] & (mask << bit);
+                if(non_zero != 0 && length < maximum_length)
+                    length++;
+                else if(non_zero == 0)
+                {
+                    int k           = length - 1;
+                    dst[dst_byte++] = inverse_table[k]; 
+                    length          = 1;
+                    number_unpacked++;
+                    
+                }
+                else if(length == maximum_length)
+                {
+                	int k = length;
+                	dst[dst_byte++] = inverse_table[k];
+                    number_unpacked++;
+                    length = 1;
+                }
+                bit++;
+                if(bit == 8)
+                {
+                    bit = 0;
+                    src_byte++;
+                }
             }
-            else if(length == maximum_length)
-            {
-            	int k = length;
-            	dst[dst_byte++] = (byte)inverse_table[k];
-            	
-                index[k]++;
-                
-                number_unpacked++;
-                length = 1;
-            }
-            bit++;
-            if(bit == 8)
-            {
-                bit = 0;
-                src_byte++;
-            }
-        }
         }
         catch(Exception e)
         {
@@ -2016,10 +1990,7 @@ public class StringMapper
         
         return string_list;
     }
-    
-    
-    
-    
+   
     
     public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
     {
