@@ -73,8 +73,8 @@ public class SimpleReader
 		    
 		    for(int i = 0; i < 3; i++)
 		    {
-		    	int j = channel_id[i];
-		    	min[i] = in.readInt();
+		    	int j   = channel_id[i];
+		    	min[i]  = in.readInt();
 		    	init[i] = in.readInt();
 		    	
 	    	    delta_min[i]          = in.readInt();
@@ -119,6 +119,7 @@ public class SimpleReader
 			            Inflater inflater = new Inflater();
 			            inflater.setInput(zipped_string, 0, zipped_length);
 			            int unzipped_length = inflater.inflate(string);
+			           
 			            if(unzipped_length != string_length)
 			        	    System.out.println("Unzipped string not expected length.");    	
 			        }
@@ -130,6 +131,7 @@ public class SimpleReader
 				{
 					ArrayList compressed_string_list = new ArrayList();
 					int max_bytelength               = in.readInt();
+					//System.out.println("Number of segments is " + number_of_segments);
 					
 				    for(int k = 0; k < number_of_segments; k++)	
 				    {
@@ -153,8 +155,67 @@ public class SimpleReader
 				        compressed_string_list.add(current_string);    	
 				    }
 				    
+				    /*
+				    int number_of_processors = Runtime.getRuntime().availableProcessors();
+				    //System.out.println("There are " + number_of_processors + " processors available.");
+				    
+				    
+				    int segment_length = number_of_segments / number_of_processors;
+				    
+				    int last_segment_length = segment_length + number_of_segments % number_of_processors;
+				    
+				    Thread [] segment_thread = new Thread[number_of_processors];
+				    
+				    ArrayList [] compressed_segments = new ArrayList[number_of_processors];
+				    ArrayList [] decompressed_segments = new ArrayList[number_of_processors];
+				    
+				    int n = 0;
+				    for(int k = 0; k < number_of_processors - 1; k++)
+				    {
+				    	compressed_segments[k] = new ArrayList();
+				    	decompressed_segments[k] = new ArrayList();
+				        for(int m = 0; m < segment_length; m++)
+				        {
+				        	byte [] current_segment = (byte [])compressed_string_list.get(n++);
+				        	compressed_segments[k].add(current_segment);
+				        }
+				        segment_thread[k] = new Thread(new SegmentDecompressor(compressed_segments[k], decompressed_segments[k]));
+				        segment_thread[k].start();
+				    }
+				    int m = number_of_processors - 1;
+				    compressed_segments[m] = new ArrayList();
+			    	decompressed_segments[m] = new ArrayList();
+				    for(int k = 0; k < last_segment_length; k++)
+				    {
+				    	byte [] current_segment = (byte [])compressed_string_list.get(n++);
+			        	compressed_segments[m].add(current_segment); 
+				    }
+				    segment_thread[m] = new Thread(new SegmentDecompressor(compressed_segments[m], decompressed_segments[m]));
+			        segment_thread[m].start();
+				    
+				    for(int k = 0; k < number_of_processors; k++)
+				    	segment_thread[k].join();
+				    
+				    
 				    ArrayList decompressed_string_list = new ArrayList();
-				    for(int k = 0; k < compressed_string_list.size(); k++)					    
+				    
+				    
+				    for(int k = 0; k < number_of_processors; k++)
+				    {
+				    	int size = decompressed_segments[k].size();
+				    	for(m = 0; m < size; m++)
+				    	{
+				    		byte [] current_segment = (byte[])decompressed_segments[k].get(m);
+				    		decompressed_string_list.add(current_segment);
+				    	}
+				    }
+				    
+				    int size = decompressed_string_list.size();
+				    */
+				    
+				    ArrayList decompressed_string_list = new ArrayList();
+				    int size                           = compressed_string_list.size();
+				    for(int k = 0; k < size; k++)					    
 				    {
 				    	byte [] current_string = (byte[])compressed_string_list.get(k);
 				    	int     string_type    = StringMapper.getType(current_string);
@@ -177,9 +238,10 @@ public class SimpleReader
 				    	}
 				    }
 				    
+				    
 				    // Create buffer to put concatenated strings.
 				    int string_length = 0;
-				    for(int k = 0; k < decompressed_string_list.size(); k++)
+				    for(int k = 0; k < size; k++)
 				    {
 				        byte [] current_string = (byte [])decompressed_string_list.get(k);
 				        string_length += current_string.length - 1;
@@ -192,7 +254,7 @@ public class SimpleReader
 				    
 				    int offset = 0;
 				    int total_bitlength = 0;
-				    for(int k = 0; k < decompressed_string_list.size(); k++)
+				    for(int k = 0; k < size; k++)
 					{
 						byte [] segment = (byte [])decompressed_string_list.get(k);
 						for(int m = 0; m < segment.length - 1; m++)
@@ -218,8 +280,7 @@ public class SimpleReader
 		    long time = stop - start;
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
 		    
-		    int cores = Runtime.getRuntime().availableProcessors();
-		    System.out.println("There are " + cores + " processors available.");
+		    
 		    start = System.nanoTime();
 		    
 		    Thread [] decompression_thread = new Thread[3];
@@ -292,6 +353,18 @@ public class SimpleReader
 				green = channel_array[0];
 				blue  = DeltaMapper.getSum(green, channel_array[1]);
 				red   = DeltaMapper.getSum(green, channel_array[2]);
+
+				/*
+				green = channel_array[0];
+				Thread [] sum_thread = new Thread[2];
+				sum_thread[0] = new Thread(new Adder(green, channel_array[1], blue));
+				sum_thread[1] = new Thread(new Adder(green, channel_array[2], red));
+				sum_thread[0].start();
+				sum_thread[1].start();
+				sum_thread[0].join();
+				sum_thread[1].join();
+				*/
+			  
 			}
 			else if(set_id == 8)
 			{
@@ -360,29 +433,6 @@ public class SimpleReader
         }
     } 
 	
-	// This doesn't seem to work.
-	/*
-	class Adder implements Runnable
-	{
-		int [] pixel1;
-		int [] pixel2;
-		int [] pixel3;
-		
-		public Adder(int[] pixel1, int [] pixel2, int [] pixel3)
-		{
-			this.pixel1 = pixel1;
-			this.pixel2 = pixel2;
-			this.pixel2 = pixel3;
-		}
-		
-		public void run()
-		{
-			pixel3 = DeltaMapper.getSum(pixel1, pixel2);
-		}
-	}
-	*/
-	
-	
 	class Shifter implements Runnable
 	{
 		int pixel_shift;
@@ -401,30 +451,62 @@ public class SimpleReader
 		}
 	}
 	
-	class Shifter2 implements Runnable
+	class Adder implements Runnable
 	{
-		int pixel_shift;
-		int place_shift;
+		int [] pixel1, pixel2, pixel3;
 		
-		int [] pixel;
-		
-		public Shifter2(int[] pixel, int pixel_shift, int place_shift)
+		public Adder(int[] pixel1, int [] pixel2, int [] pixel3)
 		{
-			this.pixel = pixel;
-			this.pixel_shift = pixel_shift;
-			this.place_shift = place_shift;
+			this.pixel1 = pixel1;
+			this.pixel2 = pixel2;
+			this.pixel3 = pixel3;
 		}
 		
 		public void run()
 		{
-			int shift = pixel_shift + place_shift;
-		    for(int i = 0; i < pixel.length; i++)
+			int length = pixel1.length;
+		    for(int i = 0; i < length; i++)
+		        pixel3[i] = pixel1[i] + pixel2[i];
+		}
+	}
+	
+	class SegmentDecompressor implements Runnable
+	{
+		ArrayList compressed_segments, decompressed_segments;
+		
+		public SegmentDecompressor(ArrayList compressed_segments, ArrayList decompressed_segments)
+		{
+			this.compressed_segments   = compressed_segments;
+			this.decompressed_segments = decompressed_segments;
+		}
+		
+		public void run()
+		{
+		    int size = compressed_segments.size();
+		    for(int i = 0; i < size; i++)
 		    {
-		        pixel[i] <<= shift;
+		    	byte [] current_segment = (byte [])compressed_segments.get(i);
+		    	int iterations = StringMapper.getIterations(current_segment);
+		    	if(iterations == 0 || iterations == 16)
+		    	    decompressed_segments.add(current_segment);
+		    	else
+		    	{
+		    		if(iterations < 16)
+			    	{
+			    	    byte [] decompressed_segment = StringMapper.decompressZeroStrings(current_segment);
+			    	    decompressed_segments.add(decompressed_segment);
+			    	}
+			    	else
+			    	{
+			    	    byte [] decompressed_segment = StringMapper.decompressOneStrings(current_segment);
+			    	    decompressed_segments.add(decompressed_segment);
+			    	}		
+		    	}
 		    }
 		}
 	}
 	
+	// This is the only threaded method that improves the speed of the computation.
 	class Decompressor implements Runnable 
 	{ 
 		int i;
