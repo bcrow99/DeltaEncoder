@@ -12,9 +12,6 @@ import javax.swing.event.ChangeListener;
 
 public class SimpleReader
 {
-	BufferedImage image;
-	ImageCanvas   image_canvas;
-	
 	int xdim        = 0;
 	int ydim        = 0;
 	int _xdim       = 0;
@@ -218,14 +215,13 @@ public class SimpleReader
 				    for(int k = 0; k < size; k++)					    
 				    {
 				    	byte [] current_string = (byte[])compressed_string_list.get(k);
-				    	int     string_type    = StringMapper.getType(current_string);
 				    	int     iterations     = StringMapper.getIterations(current_string);
 				    	
 				    	if(iterations == 0 || iterations == 16)
 				    		decompressed_string_list.add(current_string);	
 				    	else
 				    	{
-				    		if(string_type == 0)
+				    		if(iterations < 16)
 					    	{
 					    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
 					    	    decompressed_string_list.add(decompressed_string);
@@ -246,6 +242,7 @@ public class SimpleReader
 				        byte [] current_string = (byte [])decompressed_string_list.get(k);
 				        string_length += current_string.length - 1;
 				    }
+				    
 				    // Add byte for odd bits.
 				    string_length++; 
 				    byte [] string = new byte[string_length];
@@ -384,20 +381,22 @@ public class SimpleReader
 			System.out.println("It took " + (time / 1000000) + " ms to assemble files.");
 			
 			start = System.nanoTime();
-			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			int blue_shift  = 16 + pixel_shift;
-			int green_shift = 8 + pixel_shift;
+			
+			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+			int blue_shift  = pixel_shift + 16;
+			int green_shift = pixel_shift + 8;
 			int red_shift   = pixel_shift;
 			
+			int k = 0;
 			for(int i = 0; i < ydim; i++)
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-					int k     = i * xdim + j;
-					int pixel = (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift);
-				    image.setRGB(j, i, pixel);
+				    image.setRGB(j, i, (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift));
+				    k++;
 				}
 			}
+			
 			stop = System.nanoTime();
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to load image.");
@@ -412,7 +411,14 @@ public class SimpleReader
 			};
 			frame.addWindowListener(window_handler);
 				    
-			ImageCanvas image_canvas = new ImageCanvas();
+			Canvas image_canvas = new Canvas()
+			{
+				public synchronized void paint(Graphics g)
+		        {
+		            g.drawImage(image, 0, 0, this);
+		        }	
+			};
+			
 			image_canvas.setSize(xdim, ydim);
 			frame.getContentPane().add(image_canvas, BorderLayout.CENTER);		
 			frame.pack();
@@ -424,14 +430,6 @@ public class SimpleReader
 			System.out.println(e.toString());
 		}
 	}
-	    
-	class ImageCanvas extends Canvas
-    {
-        public synchronized void paint(Graphics g)
-        {
-            g.drawImage(image, 0, 0, this);
-        }
-    } 
 	
 	class Shifter implements Runnable
 	{
