@@ -24,7 +24,7 @@ public class SimpleWriter
 	int pixel_shift    = 3;
 	
 	// This value is inversely related to the lengths of the segments.
-	int segment_length = 0;
+	int segment_length = 14;
 	
 	int correction     = 0;
 	int min_set_id     = 0;
@@ -576,14 +576,14 @@ public class SimpleWriter
      	            // The minimum that seems to produce the maximum compression is around 96,
             		// but we won't threshold the segment length so we can see what happens
             		// as the length decreases.
+            		// We do need to check if it went to 0.
      	            if(minimum_segment_length < 8)
-     	            	minimum_segment_length = 8;
- 	                
+     	            	minimum_segment_length = 8;  
      	           ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
    	               ArrayList  segments         = (ArrayList)segment_data_list.get(0);
    	               max_bytelength[i]           = (int)segment_data_list.get(1);
    	             
-   	               if(segments.size()  == 1)
+   	               if(segments.size() == 1)
    	               {
    	            	    // The single merged segment should be identical to the original string.
    	            	    ArrayList segment = new ArrayList();
@@ -639,6 +639,11 @@ public class SimpleWriter
 		        else
 		        {
 		            ArrayList decompressed_segments = new ArrayList();
+		            
+		            int max_zero_iterations = 0;
+		            int max_one_iterations  = 0;
+		            int max_zero_index      = 0;
+		            int max_one_index       = 0;
 		            for(int k = 0; k < number_of_segments; k++)
 		            {
 		            	byte [] current_string = (byte [])segments.get(k);
@@ -652,15 +657,45 @@ public class SimpleWriter
 				        	{
 				        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
 				        	    decompressed_segments.add(decompressed_string);
+				        	    if(current_iterations > max_zero_iterations)
+				        	    {
+				        	    	max_zero_iterations = current_iterations;
+				        	    	max_zero_index      = k;
+				        	    }
 				        	}
 				        	else
 				        	{    
 				        		byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
 				        		decompressed_segments.add(decompressed_string);
+				        		current_iterations -= 16;
+				        		if(current_iterations > max_one_iterations)
+				        		{
+				        	    	max_one_iterations = current_iterations;
+				        	    	max_one_index      = k;
+				        		}
 				        	}		
 				        }
 		            }
 		            
+		            System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index);
+		            System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
+		            
+		            if(max_zero_iterations > 0)
+		            {
+		                byte [] decompressed_zero_segment = (byte []) decompressed_segments.get(max_zero_index);
+		                byte [] compressed_zero_segment   = (byte []) segments.get(max_zero_index);
+		                System.out.println("Length of decompressed zero segment is " + decompressed_zero_segment.length);
+		                System.out.println("Length of compressed zero segment is "   + compressed_zero_segment.length);
+		            }
+		            if(max_one_iterations > 0)
+		            {
+		                byte [] decompressed_one_segment = (byte []) decompressed_segments.get(max_one_index);
+		                byte [] compressed_one_segment   = (byte []) segments.get(max_one_index);
+		                System.out.println("Length of decompressed one segment is " + decompressed_one_segment.length);
+		                System.out.println("Length of compressed one segment is "   + compressed_one_segment.length);
+		            }
+		            
+		            System.out.println();
 		            // Error checking.
 		            
 		            // Create buffer to put concatenated strings.
