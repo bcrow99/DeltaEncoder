@@ -677,28 +677,6 @@ public class SimpleWriter
 				        }
 		            }
 		            
-		            /*
-		            for(int k = 0; k < 256; k++)
-		            {
-		            	byte value = (byte)k;
-		            	System.out.print(k + ": ");
-		            	byte mask = 1;
-		            	
-		            	
-		            	for(int m = 0; m < 8; m++)
-		            	{
-		            		if((mask & value) == 0)
-		            			System.out.print("0 ");
-		            		else
-		            			System.out.print("1 ");
-		            		mask <<= 1;
-		            	}
-		            	System.out.println();
-		            }
-		            System.out.println();
-		            */
-		            
-		          
 		            System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index);
 		            System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
 		            System.out.println();
@@ -721,7 +699,8 @@ public class SimpleWriter
 		                System.out.println("Bit values:");
 		                for(int k = 0; k < decompressed_zero_segment.length; k++)
 		                {
-		                    for(int m = 0; m < 8; m++)
+		                	int n = 7;
+		                    for(int m = 7; m >= 0; m--)
 		                    {
 		                        if((mask[m] & decompressed_zero_segment[k]) == 0)
 		                        	System.out.print("0 ");
@@ -749,7 +728,7 @@ public class SimpleWriter
 		                System.out.println("Bit values:");
 		                for(int k = 0; k < compressed_zero_segment.length; k++)
 		                {
-		                    for(int m = 0; m < 8; m++)
+		                    for(int m = 7; m >= 0; m--)
 		                    {
 		                        if((mask[m] & compressed_zero_segment[k]) == 0)
 		                        	System.out.print("0 ");
@@ -779,7 +758,7 @@ public class SimpleWriter
 		                System.out.println("Bit values:");
 		                for(int k = 0; k < decompressed_one_segment.length; k++)
 		                {
-		                    for(int m = 0; m < 8; m++)
+		                    for(int m = 7; m >= 0; m--)
 		                    {
 		                        if((mask[m] & decompressed_one_segment[k]) == 0)
 		                        	System.out.print("0 ");
@@ -805,7 +784,7 @@ public class SimpleWriter
 		                System.out.println("Bit values:");
 		                for(int k = 0; k < compressed_one_segment.length; k++)
 		                {
-		                    for(int m = 0; m < 8; m++)
+		                    for(int m = 7; m >= 0; m--)
 		                    {
 		                        if((mask[m] & compressed_one_segment[k]) == 0)
 		                        	System.out.print("0 ");
