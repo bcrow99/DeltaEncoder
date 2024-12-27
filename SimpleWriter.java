@@ -677,23 +677,147 @@ public class SimpleWriter
 				        }
 		            }
 		            
+		            /*
+		            for(int k = 0; k < 256; k++)
+		            {
+		            	byte value = (byte)k;
+		            	System.out.print(k + ": ");
+		            	byte mask = 1;
+		            	
+		            	
+		            	for(int m = 0; m < 8; m++)
+		            	{
+		            		if((mask & value) == 0)
+		            			System.out.print("0 ");
+		            		else
+		            			System.out.print("1 ");
+		            		mask <<= 1;
+		            	}
+		            	System.out.println();
+		            }
+		            System.out.println();
+		            */
+		            
+		          
 		            System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index);
 		            System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
+		            System.out.println();
 		            
+		            byte [] mask = SegmentMapper.getPositiveMask();
 		            if(max_zero_iterations > 0)
 		            {
 		                byte [] decompressed_zero_segment = (byte []) decompressed_segments.get(max_zero_index);
-		                byte [] compressed_zero_segment   = (byte []) segments.get(max_zero_index);
+		                
 		                System.out.println("Length of decompressed zero segment is " + decompressed_zero_segment.length);
+		                System.out.println("Byte values:");
+		                for(int k = 0; k < decompressed_zero_segment.length; k++)
+		                {
+		                    int value = decompressed_zero_segment[k];
+		                    if(value < 0)
+		                    	value += 2 * Byte.MAX_VALUE + 2;
+		                    System.out.print(value + " ");    
+		                }
+		                System.out.println();
+		                System.out.println("Bit values:");
+		                for(int k = 0; k < decompressed_zero_segment.length; k++)
+		                {
+		                    for(int m = 0; m < 8; m++)
+		                    {
+		                        if((mask[m] & decompressed_zero_segment[k]) == 0)
+		                        	System.out.print("0 ");
+		                        else
+		                        	System.out.print("1 ");	
+		                    }
+		                    System.out.print("  ");  
+		                }
+		                System.out.println();
+		                System.out.println();
+		                
+		              
+		                byte [] compressed_zero_segment   = (byte []) segments.get(max_zero_index);
 		                System.out.println("Length of compressed zero segment is "   + compressed_zero_segment.length);
+		               
+		                System.out.println("Byte values:");
+		                for(int k = 0; k < compressed_zero_segment.length; k++)
+		                {
+		                    int value = compressed_zero_segment[k];
+		                    if(value < 0)
+		                    	value += 2 * Byte.MAX_VALUE + 2;
+		                    System.out.print(value + " ");    
+		                }
+		                System.out.println();
+		                System.out.println("Bit values:");
+		                for(int k = 0; k < compressed_zero_segment.length; k++)
+		                {
+		                    for(int m = 0; m < 8; m++)
+		                    {
+		                        if((mask[m] & compressed_zero_segment[k]) == 0)
+		                        	System.out.print("0 ");
+		                        else
+		                        	System.out.print("1 ");	
+		                    }
+		                    System.out.print("  ");
+		                }
+		                System.out.println();
+		                System.out.println();
 		            }
 		            if(max_one_iterations > 0)
 		            {
 		                byte [] decompressed_one_segment = (byte []) decompressed_segments.get(max_one_index);
 		                byte [] compressed_one_segment   = (byte []) segments.get(max_one_index);
 		                System.out.println("Length of decompressed one segment is " + decompressed_one_segment.length);
+		               
+		                System.out.println("Byte values:");
+		                for(int k = 0; k < decompressed_one_segment.length; k++)
+		                {
+		                    int value = decompressed_one_segment[k];
+		                    if(value < 0)
+		                    	value += 2 * Byte.MAX_VALUE + 2;
+		                    System.out.print(value + " ");    
+		                }
+		                System.out.println();
+		                System.out.println("Bit values:");
+		                for(int k = 0; k < decompressed_one_segment.length; k++)
+		                {
+		                    for(int m = 0; m < 8; m++)
+		                    {
+		                        if((mask[m] & decompressed_one_segment[k]) == 0)
+		                        	System.out.print("0 ");
+		                        else
+		                        	System.out.print("1 ");	
+		                    }
+		                    System.out.print("  ");
+		                   
+		                }
+		                System.out.println();
+		                System.out.println();
+		                
 		                System.out.println("Length of compressed one segment is "   + compressed_one_segment.length);
+		                System.out.println("Byte values:");
+		                for(int k = 0; k < compressed_one_segment.length; k++)
+		                {
+		                    int value = compressed_one_segment[k];
+		                    if(value < 0)
+		                    	value += 2 * Byte.MAX_VALUE + 2;
+		                    System.out.print(value + " ");    
+		                }
+		                System.out.println();
+		                System.out.println("Bit values:");
+		                for(int k = 0; k < compressed_one_segment.length; k++)
+		                {
+		                    for(int m = 0; m < 8; m++)
+		                    {
+		                        if((mask[m] & compressed_one_segment[k]) == 0)
+		                        	System.out.print("0 ");
+		                        else
+		                        	System.out.print("1 ");
+		                    }
+		                    System.out.print("  ");
+		                }
+		                System.out.println();
+		                System.out.println();
 		            }
+		           
 		            
 		            System.out.println();
 		            // Error checking.
@@ -1041,10 +1165,12 @@ public class SimpleWriter
 					            total_zipped_length += zipped_length;
 		    				}  
 							
+							/*
 							System.out.println("Maximum segment length requires an unsigned byte.");
 							System.out.println("Total compressed length was " + total_compressed_length);
 							System.out.println("Total zipped length was " + total_zipped_length);
 							System.out.println();
+							*/
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						 {
@@ -1066,10 +1192,12 @@ public class SimpleWriter
 						         total_zipped_length += zipped_length;
 		    				 }  
 							 
+							 /*
 							 System.out.println("Maximum segment length requires an unsigned short.");
 							 System.out.println("Total compressed length was " + total_compressed_length);
 							 System.out.println("Total zipped length was " + total_zipped_length);
 							 System.out.println(); 
+							 */
 							 
 						 }
 						 else
@@ -1080,8 +1208,6 @@ public class SimpleWriter
 		    					out.writeInt(current_segment.length); 
 		    					out.write(current_segment, 0, current_segment.length);
 		    				}	
-							System.out.println("Maximum segment length requires an int.");
-							System.out.println(); 
 						 }
 	            	 }  
 		        }
