@@ -12,13 +12,8 @@ import javax.swing.event.ChangeListener;
 
 public class DeltaReader
 {
-	BufferedImage image;
-	ImageCanvas   image_canvas;
-	
 	int xdim        = 0;
 	int ydim        = 0;
-	int _xdim       = 0;
-	int _ydim       = 0;
 	int pixel_shift = 0;
 	int pixel_quant = 0;
 	int set_id      = 0;
@@ -113,24 +108,20 @@ public class DeltaReader
 			    if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
 					short  map_table_length = in.readShort();
-					//System.out.println("Map table length is " + map_table_length);
 					int [] map_table        = new int[map_table_length];	
 					for(int k = 0; k < map_table_length; k++)
 						map_table[k] = in.readShort();
-					//System.out.println("Read map table.");
 					int byte_length = in.readInt();
 					
-					//System.out.println("Map length is " + byte_length);
 					byte [] map_string    = new byte[byte_length];
 				    in.read(map_string, 0, byte_length); 
 				    
 				    byte increment  = in.readByte();
 				    int dimension = in.readInt();
 				    byte [] map = new byte[dimension];
-				    //System.out.println("Read map.");
 				    byte iterations = StringMapper.getIterations(map_string);
-				    int  size = 0;
-				    
+
+				    int size = 0;
 				    if(iterations == 0)
 				        size = StringMapper.unpackStrings2(map_string, map_table, map);
 				    else if(iterations < 16)
@@ -150,13 +141,11 @@ public class DeltaReader
 				    map_list.add(map);
 				}
 				int number_of_segments = in.readInt();
-				//System.out.println("Number of segments is " + number_of_segments);
 				if(number_of_segments == 1)
 				{
 					int     string_length = in.readInt();
 					byte [] string        = new byte[string_length];
 			        int     zipped_length = in.readInt();
-			        
 			        
 			        if(zipped_length == 0)
 			        	in.read(string, 0, string_length);   
@@ -172,34 +161,48 @@ public class DeltaReader
 			        }
 			        
 			        string_list.add(string);
-			        //System.out.println("Added unsegmented string to string list for channel " + i);
 				}
 				else
 				{
 					ArrayList compressed_string_list = new ArrayList();
 					int max_bytelength               = in.readInt();
 					
-				    for(int k = 0; k < number_of_segments; k++)	
-				    {
-				    	int string_length = 0;
-				    	if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
-				    	{
-				    	    string_length = in.readByte();
-				    	    if(string_length < 0)
-				    	    	string_length += Byte.MAX_VALUE * 2 + 2;
-				    	}
-				    	else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
-				    	{
-				    		string_length = in.readShort();
-				    		if(string_length < 0)
-				    	    	string_length += Short.MAX_VALUE * 2 + 2;
-				    	}
-				    	else
-				    		string_length = in.readInt();
-				    	byte [] current_string = new byte[string_length];
-				    	in.read(current_string, 0, string_length);
-				        compressed_string_list.add(current_string);    	
-				    }
+					if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
+			    	{
+						byte [] segment_length = new byte[number_of_segments];
+						byte [] segment_info   = new byte[number_of_segments];
+						in.read(segment_length, 0, number_of_segments);
+						in.read(segment_info, 0, number_of_segments);
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int current_length = segment_length[k];
+							if(current_length < 0)
+								current_length += Byte.MAX_VALUE * 2 + 2;
+							byte [] current_segment = new byte[current_length + 1];
+							in.read(current_segment, 0, current_length);
+							current_segment[current_length] = segment_info[k];
+							compressed_string_list.add(current_segment);
+						}
+			    	}
+					else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
+					{
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int current_length = in.readShort();
+				    		if(current_length < 0)
+				    	    	current_length += Short.MAX_VALUE * 2 + 2;	
+				    		byte [] current_segment = new byte[current_length];
+					    	in.read(current_segment, 0, current_length);
+					        compressed_string_list.add(current_segment);
+						}
+					}
+					else
+					{
+						int current_length = in.readInt();	
+						byte [] current_segment = new byte[current_length];
+				    	in.read(current_segment, 0, current_length);
+				        compressed_string_list.add(current_segment);
+					}
 				    
 				    ArrayList decompressed_string_list = new ArrayList();
 				    for(int k = 0; k < compressed_string_list.size(); k++)					    
@@ -259,10 +262,7 @@ public class DeltaReader
 					}
 					string[string.length - 1] |= channel_iterations[i];
 				    string_list.add(string);
-				    //System.out.println("Concatenated segments for channel " + i);
 				}
-				//System.out.println("Finished channel " + i);
-				//System.out.println();
 		    }
 		    
 		    long stop = System.nanoTime();
@@ -360,20 +360,20 @@ public class DeltaReader
 		    
 		  
 			start = System.nanoTime();
-			image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
+			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 			
 			
-			int blue_shift  = 16 + pixel_shift;
-			int green_shift = 8 + pixel_shift;
+			int blue_shift  = pixel_shift + 16;
+			int green_shift = pixel_shift + 8;
 			int red_shift   = pixel_shift;
 			
+			int k = 0;
 			for(int i = 0; i < ydim; i++)
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-					int k     = i * xdim + j;
-					int pixel = (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift);
-				    image.setRGB(j, i, pixel);
+				    image.setRGB(j, i, (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift));
+				    k++;
 				}
 			}
 			
@@ -391,7 +391,14 @@ public class DeltaReader
 			};
 			frame.addWindowListener(window_handler);
 				    
-			ImageCanvas image_canvas = new ImageCanvas();
+			Canvas image_canvas = new Canvas()
+			{
+				public synchronized void paint(Graphics g)
+		        {
+		            g.drawImage(image, 0, 0, this);
+		        }	
+			};
+			
 			image_canvas.setSize(xdim, ydim);
 			frame.getContentPane().add(image_canvas, BorderLayout.CENTER);		
 			frame.pack();
@@ -403,14 +410,6 @@ public class DeltaReader
 			System.out.println(e.toString());
 		}
 	}
-	    
-	class ImageCanvas extends Canvas
-    {
-        public synchronized void paint(Graphics g)
-        {
-            g.drawImage(image, 0, 0, this);
-        }
-    } 
 	
 	class Shifter implements Runnable
 	{
@@ -447,7 +446,7 @@ public class DeltaReader
 			    byte [] string    = (byte [])string_list.get(i);
 			    int [] table      = (int [])table_list.get(i);
 			    int iterations    = StringMapper.getIterations(string);
-			    int type          = StringMapper.getType(string);
+			    //int type          = StringMapper.getType(string);
 			    int bitlength     = StringMapper.getBitlength(string);
 			    
 			    if(channel_iterations[i] != iterations)
@@ -461,7 +460,9 @@ public class DeltaReader
 			    	string = StringMapper.decompressOneStrings(string);
 			
 	    	    int number_unpacked = 0;
-	    	    int delta[] = new int[1];
+	    	    int [] delta;
+	    	    int current_xdim = 0;
+	    	    int current_ydim = 0;
 	    	    if(pixel_quant == 0)
 	    	    {
 	    		    delta = new int[xdim * ydim];
@@ -469,32 +470,24 @@ public class DeltaReader
 	    		
 			        for(int j = 1; j < delta.length; j++)
 			           delta[j] += delta_min[i];
+			        
+			        current_xdim = xdim;
+			        current_ydim = ydim;
 	    	    }
 	    	    else
 	    	    {
 	    		    double factor = pixel_quant;
 		            factor       /= 10;
-		            _xdim = xdim - (int)(factor * (xdim / 2 - 2));
-		            _ydim = ydim - (int)(factor * (ydim / 2 - 2));
-		            delta = new int[_xdim * _ydim];
+		            int intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
+		            int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
+		            delta = new int[intermediate_xdim * intermediate_ydim];
 		            number_unpacked = StringMapper.unpackStrings2(string, table, delta);
 			        for(int j = 1; j < delta.length; j++)
 			           delta[j] += delta_min[i];	
+			        
+			        current_xdim = intermediate_xdim;
+			        current_ydim = intermediate_ydim; 
 	    	    }
-	    	
-	    	    int current_xdim = 0;
-    		    int current_ydim = 0;
-    		
-    		    if(pixel_quant == 0)
-    		    {
-    		        current_xdim = xdim;
-    		        current_ydim = ydim;
-    		    }
-    		    else
-    		    {
-    		        current_xdim = _xdim;
-    		        current_ydim = _ydim;
-    		    }
 	    	
     		    int[] current_channel = new int[1];
     		    if(delta_type == 0)
@@ -531,7 +524,7 @@ public class DeltaReader
                 	channel_array[i] = current_channel;
                 else
                 {
-                	int [] resized_channel = ResizeMapper.resize(current_channel, _xdim, xdim, ydim);
+                	int [] resized_channel = ResizeMapper.resize(current_channel, current_xdim, xdim, ydim);
     		        channel_array[i] = resized_channel;		
                 }
     		}

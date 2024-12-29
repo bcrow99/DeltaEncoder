@@ -19,22 +19,16 @@ public class DeltaWriter
 	String        filename;
 	int []        pixel;
 	
-	// Initial parameters for compression.
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
-	
-	// This value is inversely related to the lengths of the segments.
-	int segment_length = 0;
-	
+	int segment_length = 14;
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
 	
-	
 	int    [] set_sum, channel_sum;
 	String [] set_string;
 	String [] channel_string;
-	
 	
 	int [] channel_init;
 	int [] channel_min;
@@ -91,12 +85,7 @@ public class DeltaWriter
 			
 			int pixel_length = xdim * ydim * 8;
 		    
-		    // Set in constructor and accessed 
-			// by apply handler.
 		    channel_list = new ArrayList();
-		   
-		    // Set by apply handler and accessed
-		    // by save handler.
 		    table_list  = new ArrayList();
 		    string_list = new ArrayList();
 		    map_list    = new ArrayList();
@@ -113,7 +102,6 @@ public class DeltaWriter
 		    channel_string[4] = new String("red-green");
 		    channel_string[5] = new String("red-blue");
 		    
-		    // The delta sum for each set of channels that can produce an image.
 		    set_sum       = new int[10];
 		    set_string    = new String[10]; 
 		    set_string[0] = new String("blue, green, and red.");
@@ -663,37 +651,19 @@ public class DeltaWriter
 		        }
 		        else
 		        {
-		        	int bitlength  = StringMapper.getBitlength(compression_string);
+		        	int bitlength                   = StringMapper.getBitlength(compression_string);
 		        	int original_number_of_segments = (int)Math.pow(2,  segment_length);
-		        	
-            		int minimum_segment_length = bitlength / original_number_of_segments;
-            		int remainder = minimum_segment_length % 8;
-            		minimum_segment_length -= remainder;
-     	          
-     	            // The minimum that seems to produce the maximum compression is around 96,
-            		// but we won't threshold the segment length so we can see what happens
-            		// as the length decreases.
+            		int minimum_segment_length      = bitlength / original_number_of_segments;
+            		int remainder                   = minimum_segment_length % 8;
+            		minimum_segment_length         -= remainder;
+     	            // The minimum that seems to produce the maximum compression is around 96.
      	            if(minimum_segment_length < 96)
      	            	minimum_segment_length = 96;
  	                
-     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, minimum_segment_length);
-     	             
-     	             // A list of compressed strings.
-     	             ArrayList  segments  = (ArrayList)segment_data_list.get(0);
-     	             max_bytelength[i]    = (int)segment_data_list.get(1);
-     	             
-     	             //System.out.println("Number of segments from merge function is " + segments.size());
-     	             //System.out.println();
-     	            
-     	             // The single merged segment should be identical to the original string.
-     	             if(segments.size()  == 1)
-     	             {
-     	            	 ArrayList segment = new ArrayList();
-     	            	 segment.add(compression_string);
-     	            	 segment_list.add(segment);
-     	             }
-     	             else
-     	                 segment_list.add(segments);
+     	            ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
+     	            ArrayList  segments         = (ArrayList)segment_data_list.get(0);
+     	            max_bytelength[i]           = (int)segment_data_list.get(1);
+     	            segment_list.add(segments);
 		        }
 			}
 			
@@ -702,11 +672,7 @@ public class DeltaWriter
 			for(int i = 0; i < 3; i++)
 		    {
 		        int j  = channel_id[i];
-		        // Get original data to compare with result from decompression.
-		        byte [] original_string = (byte [])string_list.get(i);
-		        int original_type       = StringMapper.getType(original_string);
-		        int original_iterations = StringMapper.getIterations(original_string);
-		        int original_bitlength  = StringMapper.getBitlength(original_string);
+		       
 		        
 		        int  [] table  = (int [])table_list.get(i);
 		        int  [] delta  = new int[new_xdim * new_ydim]; 
@@ -717,21 +683,12 @@ public class DeltaWriter
 		        if(number_of_segments == 1)
 		        {
 		        	byte [] current_string = (byte [])segments.get(0);
-		        	//System.out.println("Length of original string was " + original_string.length);
-		            //System.out.println("Length of string from segment list is " + current_string.length);
-		            
 		            int current_type       = StringMapper.getType(current_string);
 			        int current_iterations = StringMapper.getIterations(current_string);
 			        int current_bitlength  = StringMapper.getBitlength(current_string);
 		        	
-			        //System.out.println("Original type is " + original_type + ", iterations is " + original_iterations + ", bitlength is " + original_bitlength);
-			        //System.out.println("Current type is " + current_type + ", iterations is " + current_iterations + ", bitlength is " + current_bitlength);
-			        //System.out.println();
-		        	
 			        if(current_iterations == 0 || current_iterations == 16)
 			        {
-			        	//System.out.println("Uncompressed.");
-			        	//int number_unpacked = StringMapper.unpackStrings2(original_string, table, delta);
 			        	int number_unpacked = StringMapper.unpackStrings2(current_string, table, delta);
 					    if(number_unpacked != new_xdim * new_ydim)
 					        System.out.println("Number of values unpacked does not agree with image dimensions.");	
@@ -740,8 +697,6 @@ public class DeltaWriter
 			        {
 			        	if(current_type == 0)
 			        	{
-			        		//System.out.println("Decompressing zero strings.");
-			        	    //byte [] decompressed_string = StringMapper.decompressZeroStrings(original_string);
 			        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
 			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						    if(number_unpacked != new_xdim * new_ydim)
@@ -749,8 +704,6 @@ public class DeltaWriter
 			        	}
 			        	else
 			        	{    
-			        		//System.out.println("Decompressing one strings.");
-			        		//byte [] decompressed_string = StringMapper.decompressOneStrings(original_string);
 			        		byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
 			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						    if(number_unpacked != new_xdim * new_ydim)
@@ -823,32 +776,6 @@ public class DeltaWriter
 			        int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
 			        int reconstructed_bitlength  = StringMapper.getBitlength(reconstructed_string);
 		        
-			        if(original_type != reconstructed_type)
-			        	System.out.println("Original type is " + original_type + ", reconstructed type is " + reconstructed_type);    	
-			        if(original_iterations != reconstructed_iterations)
-			        	System.out.println("Original iterations is " + original_iterations + ", reconstructed iterations is " + reconstructed_iterations); 
-			        if(original_bitlength != reconstructed_bitlength)
-			        	System.out.println("Original bitlength is " + original_bitlength + ", reconstructed bitlength is " + reconstructed_bitlength); 
-			        if(original_string.length != reconstructed_string.length)
-			        	System.out.println("Lengths of original string and reconstructed string are different.");
-			        
-			        try
-			        {
-			            for(int k = 0; k < original_string.length; k++)
-			            {
-			        	    if(original_string[k] != reconstructed_string[k])
-			        	    {
-			        		    System.out.println("Strings differ at index " + k);
-			        		    break;
-			        	    }
-			            }
-			        }
-			        catch(Exception e)
-			        {
-			        	System.out.println("Exception checking original string against reconstructed string.");
-			        	System.out.println(e.toString());
-			        }
-			        
 			        if(reconstructed_iterations == 0 || reconstructed_iterations == 16)
 			        {
 			        	int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
@@ -860,15 +787,14 @@ public class DeltaWriter
 			        	if(reconstructed_type == 0)
 			        	{
 			        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(reconstructed_string);
-			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+			        	    int number_unpacked         = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						    if(number_unpacked != new_xdim * new_ydim)
 						        System.out.println("Number of values unpacked does not agree with image dimensions.");
 			        	}
 			        	else
 			        	{  
-			        		byte [] decompressed_string = StringMapper.decompressOneStrings(original_string);
-			        		//byte [] decompressed_string = StringMapper.decompressOneStrings(reconstructed_string);
-			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+			        		byte [] decompressed_string = StringMapper.decompressOneStrings(reconstructed_string);
+			        	    int number_unpacked         = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						    if(number_unpacked != new_xdim * new_ydim)
 						        System.out.println("Number of values unpacked does not agree with image dimensions.");
 			        	}		
@@ -1044,22 +970,14 @@ public class DeltaWriter
 		    		red[i] += addend;	
 		    	}
 		    }
-	
+	 
+		    int k = 0;
 		    for(int i = 0; i < ydim; i++)
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-					int k = i * xdim + j;
-					
-					int pixel = 0;
-					
-					pixel |= blue[k] << 16;
-				
-				    pixel |= green[k] << 8;
-					
-					pixel |= red[k];
-					
-				    image.setRGB(j, i, pixel);
+				    image.setRGB(j, i, (blue[k] << 16) + (green[k] << 8) + red[k]);
+				    k++;
 				}
 			}
 			image_canvas.repaint();
@@ -1125,19 +1043,7 @@ public class DeltaWriter
 		        	
 		            if(delta_type == 5  || delta_type == 6 || delta_type == 7)
 		            {
-		            	byte [] map = (byte [])map_list.get(i);
-		            	
-		            	byte [] zipped_bytes = new byte[map.length * 2];
-		            	
-		            	// Plain byte values.
-		            	Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-		                deflater.setInput(map);
-		                deflater.finish();
-		                int zipped_length = deflater.deflate(zipped_bytes);
-		                deflater.end(); 
-			            
-		            	System.out.println("The zipped length of the plain bytes was " + zipped_length);
-		            	
+		            	byte [] map               = (byte [])map_list.get(i);
 		            	ArrayList map_string_list = StringMapper.getStringList2(map);
 						int map_min               = (int)map_string_list.get(0);
 						int map_bit_length        = (int)map_string_list.get(1);
@@ -1147,184 +1053,62 @@ public class DeltaWriter
 						out.writeShort(string_table.length);
 						for(int k = 0; k < string_table.length; k++)
 			                out.writeShort(string_table[k]);
-						
-						int iterations = StringMapper.getIterations(compressed_map);
-						int type       = StringMapper.getType(compressed_map);
-						/*
-						if(iterations > 15)
-							iterations -= 16;
-						*/
-						System.out.println("The delta map iterations was " + iterations);
-						
 						out.writeInt(compressed_map.length);
 			            out.write(compressed_map, 0, compressed_map.length);
-
 			            out.writeByte(map_min);
 			            out.writeInt(map.length);
-			            
-			            byte [] zipped_map = new byte[2 * compressed_map.length];
-						
-			            // Changing deflater parameters has next to no effect, which
-			            // means almost all the compression is due to huffman coding.
-			            //Deflater deflater = new Deflater();
-			            //Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-			            deflater = new Deflater(Deflater.BEST_COMPRESSION);
-		                deflater.setInput(compressed_map);
-		                deflater.finish();
-		                zipped_length = deflater.deflate(zipped_map);
-		                deflater.end(); 
-			            
-			            System.out.println("Map length was " + compressed_map.length);
-			            if(iterations == 0 || iterations == 16)
-			            {
-			            	if(type == 0)
-			                    System.out.println("Zipped uncompressed map (0) length was " + zipped_length);
-			            	else
-			            		System.out.println("Zipped uncompressed map (1) length was " + zipped_length);
-			            }
-			            else
-			            {
-			            	System.out.println("Zipped compressed map length was " + zipped_length);
-			                // We would expect the type to be 1 if optimal delta locations are random
-			            	// and the number of different minimum delta locations roughly equal
-			            	// but we skew the distribution by awarding ties to preferred
-			            	// locations so the type might be 0.
-			            	if(type == 1)
-			            	{
-			            	    byte [] decompressed_map = StringMapper.decompressOneStrings(compressed_map);
-			            	    zipped_map = new byte[2 * decompressed_map.length];
-			            	    //deflater = new Deflater();
-					            //deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-					            deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				                deflater.setInput(decompressed_map);
-				                deflater.finish();
-				                zipped_length = deflater.deflate(zipped_map);
-				                deflater.end(); 
-				                System.out.println("Zipped decompressed map (1) length was " + zipped_length);
-			            	}
-			            	else
-			            	{
-			            		byte [] decompressed_map = StringMapper.decompressZeroStrings(compressed_map);
-			            	    zipped_map = new byte[2 * decompressed_map.length];
-			            	    //deflater = new Deflater();
-					            //deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-					            deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				                deflater.setInput(decompressed_map);
-				                deflater.finish();
-				                zipped_length = deflater.deflate(zipped_map);
-				                deflater.end(); 
-				                System.out.println("Zipped decompressed map (0) length was " + zipped_length);   	
-			            	}
-			            }
-			            System.out.println();
 		            }
 		            
 		            ArrayList segments = (ArrayList)segment_list.get(i);
-	            	 int number_of_segments = segments.size();
-	            	 out.writeInt(number_of_segments);
+	            	int number_of_segments = segments.size();
+	            	out.writeInt(number_of_segments);
 	            	 
-	            	 if(number_of_segments == 1)
-	            	 {
-	            		 byte [] string = (byte [])string_list.get(i);
-	            		 out.writeInt(string.length);
+	            	if(number_of_segments == 1)
+	            	{
+	            	    byte [] string = (byte [])string_list.get(i);
+	            		out.writeInt(string.length);
 	            		 
 	            		 
-	            		 Deflater deflater = new Deflater();
-		                 deflater.setInput(string);
-		                 byte [] zipped_string = new byte[2 * string.length];
-		                 deflater.finish();
-		                 int zipped_length = deflater.deflate(zipped_string);
-		                 deflater.end(); 
+	            		Deflater deflater = new Deflater();
+		                deflater.setInput(string);
+		                byte [] zipped_string = new byte[2 * string.length];
+		                deflater.finish();
+		                int zipped_length = deflater.deflate(zipped_string);
+		                deflater.end(); 
 		                
-		                 if(zipped_length < string.length)
-		                 {
-		                     out.writeInt(zipped_length);
-		            	     out.write(zipped_string, 0, zipped_length); 
-		                 }
-		                 else
-		                 {
-		                	 out.writeInt(0);
-		                	 out.write(string, 0, string.length);
-		                 }
+		                if(zipped_length < string.length)
+		                {
+		                    out.writeInt(zipped_length);
+		            	    out.write(zipped_string, 0, zipped_length); 
+		                }
+		                else
+		                {
+		                	out.writeInt(0);
+		                	out.write(string, 0, string.length);
+		                }
 	            	 }
 	            	 else
 	            	 {
-	            		 out.writeInt(max_bytelength[i]);
-	            		 // Zipping the segments lengths works better than compressing them.
-	            		 // The reason why the bitwise compression works better than zipping
-	            		 // on small numbers of elements probably relates to the difference in
-	            		 // the overhead.  That means that the main advantages over huffman
-	            		 // coding are when the data allows for recursion or with small numbers
-	            		 // of elements, when the overhead comes into play. Probably why compressing the
-	            		 // maps works better than zipping them is the values are only 0 thru 3 or 0 thru 7.  
-	            		 // Need to reexplore if the zipping overhead can be reduced.
-	            		 
-	            		 // When the segments lengths are in bytes and segment lengths are grouped
-	            		 // together and zipped, and then sent as a block instead of with each
-	            		 // segments the compression rate is improved.  When the lengths have to be 
-	            		 // represented as shorts or int the difference is not very significant, 
-	            		 // at least when the numbers of segments are small.
-	            		 
-	            		 // It still seems like the finer the segmentation, the more compression
-	            		 // there should be, especially if the segment lengths are not included.
-	            		 // Probably need to look into the merge process again, and maximize the
-	            		 // the number of opposing string types.  Uneven segment lengths might help
-	            		 // in that regard. 
-	            		
-	            		 if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
-	            		 {
-	            			// Grouping the segments lengths.
-	            			// For now we won't bother modifying the writer/reader
-	            			// protocol.
-	            			
-	            			/*
-							byte [] segment_length = new byte[number_of_segments];  
+	            		out.writeInt(max_bytelength[i]);
+	            		if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
+	            		{
+		            	    byte [] segment_length = new byte[number_of_segments];  
+		            		byte [] segment_info   = new byte[number_of_segments]; 
 							for(int k = 0; k < number_of_segments; k++)
 							{
 							    byte[] current_segment = (byte [])segments.get(k);
-							    segment_length[k]      = (byte)current_segment.length;
-							}  
-							byte [] zipped_segment_lengths = new byte[number_of_segments * 2];
-							Deflater deflater = new Deflater();
-				            deflater.setInput(segment_length);
-				            deflater.finish();
-				            int zipped_length = deflater.deflate(zipped_segment_lengths);
-				            deflater.end(); 
-				            System.out.println("Maximum segment length requires an unsigned byte.");
-							System.out.println("The length of the segment lengths in bytes is " + number_of_segments);
-							System.out.println("The length of the zipped segment lengths is "   + zipped_length);
-							System.out.println(); 
-							out.writeShort(zipped_length);
-							out.write(zipped_segment_lengths, 0, zipped_length);
+								segment_length[k]      = (byte)(current_segment.length - 1);
+								segment_info[k]        = current_segment[current_segment.length - 1];
+							} 
+							
+							out.write(segment_length, 0, number_of_segments);
+							out.write(segment_info, 0, number_of_segments);
 							for(int k = 0; k < number_of_segments; k++)
 			    			{
-			    			    byte[] current_string = (byte [])segments.get(k); 
-			    				out.write(current_string, 0, current_string.length);
+			    				byte[] current_segment = (byte [])segments.get(k);  
+			    			    out.write(current_segment, 0, current_segment.length - 1);
 			    			}
-			    			*/
 
-		            		int total_compressed_length = 0;
-		            		int total_zipped_length     = 0;
-							for(int k = 0; k < number_of_segments; k++)
-		    				{
-		    					byte[] current_segment = (byte [])segments.get(k); 
-		    					out.writeByte(current_segment.length); 
-		    					out.write(current_segment, 0, current_segment.length);
-		    					total_compressed_length += current_segment.length;
-		    					
-		    					byte [] zipped_segment = new byte[2 * current_segment.length];
-		    					Deflater deflater = new Deflater();
-					            deflater.setInput(current_segment);
-					            deflater.finish();
-					            int zipped_length = deflater.deflate(zipped_segment);
-					            deflater.end();
-					            total_zipped_length += zipped_length;
-		    				}  
-							
-							System.out.println("Maximum segment length requires an unsigned byte.");
-							System.out.println("Total compressed length was " + total_compressed_length);
-							System.out.println("Total zipped length was " + total_zipped_length);
-							System.out.println();
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						 {
@@ -1336,21 +1120,7 @@ public class DeltaWriter
 		    					 out.writeShort(current_segment.length); 
 		    					 out.write(current_segment, 0, current_segment.length);
 		    					 total_compressed_length += current_segment.length;
-		    					 
-		    					 byte [] zipped_segment = new byte[2 * current_segment.length];
-			    				 Deflater deflater = new Deflater();
-						         deflater.setInput(current_segment);
-						         deflater.finish();
-						         int zipped_length = deflater.deflate(zipped_segment);
-						         deflater.end();
-						         total_zipped_length += zipped_length;
 		    				 }  
-							 
-							 System.out.println("Maximum segment length requires an unsigned short.");
-							 System.out.println("Total compressed length was " + total_compressed_length);
-							 System.out.println("Total zipped length was " + total_zipped_length);
-							 System.out.println(); 
-							 
 						 }
 						 else
 						 {
@@ -1360,8 +1130,6 @@ public class DeltaWriter
 		    					out.writeInt(current_segment.length); 
 		    					out.write(current_segment, 0, current_segment.length);
 		    				}	
-							System.out.println("Maximum segment length requires an int.");
-							System.out.println(); 
 						 }
 	            	 }
 		        }
