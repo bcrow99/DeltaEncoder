@@ -1305,22 +1305,80 @@ public class SimpleWriter
 	            		
 	            		 if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 	            		 {
-	            			// This offers an example of when zipping 
+	            			// This data offers an example of when zipping 
 	            			// (which we are using as a proxy for pure huffman coding)
 	            			// seems to do better than unary string compression.
 	            			// Double check.
 	            			byte [] segment_length = new byte[number_of_segments];  
 	            			byte [] segment_info   = new byte[number_of_segments]; 
+	            			
+	            			
+	            			System.out.println("Number of segments is " + number_of_segments);
+	            			
+	            			int total_bitlength = 0;
 							for(int k = 0; k < number_of_segments; k++)
 							{
 						        byte[] current_segment = (byte [])segments.get(k);
-								segment_length[k]      = (byte)current_segment.length;
+						        total_bitlength += StringMapper.getBitlength(current_segment);
+								segment_length[k]      = (byte)(current_segment.length - 1);
 								segment_info[k]        = current_segment[current_segment.length - 1];
-							}  
-							out.write(segment_length, 0, number_of_segments);
-							out.write(segment_info, 0, number_of_segments);
+							} 
 							
 							/*
+							int total_bytelength = total_bitlength / 8;
+							if(total_bitlength % 8 != 0)
+								total_bytelength++;
+							byte [] _segments = new byte[total_bytelength];
+							int bit_offset = 0;
+							int byte_offset = 0;
+							
+							byte [] mask = SegmentMapper.getTrailingMask();
+							for(int k = 0; k < number_of_segments; k++)
+							{
+						        byte[] current_segment = (byte [])segments.get(k);
+						        if(bit_offset % 8 == 0)
+						        {
+						        	for(int m = 0; m < current_segment.length - 1; m++)
+						        		_segments[m + byte_offset] = current_segment[m];
+						        	bit_offset += StringMapper.getBitlength(current_segment);
+						        	byte_offset = bit_offset / 8;			
+						        }
+						        else
+						        {
+						            int modulus = bit_offset % 8;
+						            int shift   = 8 - modulus;
+						            
+						            for(int m = 0; m < current_segment.length - 1; m++)
+						            {
+						        		byte leading_byte = (byte)(current_segment[m] << shift);
+						        		byte trailing_byte = (byte)(current_segment[m] >> modulus);
+						        		trailing_byte &= mask[shift - 1];
+						        		
+						            	
+						            	_segments[m + byte_offset] |= leading_byte;
+						            	_segments[m + byte_offset + 1] = trailing_byte;
+						            }
+						            
+						            
+						        	bit_offset += StringMapper.getBitlength(current_segment);
+						        	byte_offset = bit_offset / 8;			
+						        }
+							} 
+							System.out.println("Finished joining segments.");
+							System.out.println();
+							//out.write(_segments, 0, total_bytelength);
+							*/
+	            			
+							out.write(segment_length, 0, number_of_segments);
+							out.write(segment_info, 0, number_of_segments);
+							for(int k = 0; k < number_of_segments; k++)
+			    			{
+			    				byte[] current_segment = (byte [])segments.get(k);  
+			    			    out.write(current_segment, 0, current_segment.length - 1);
+			    			}
+							
+							
+						    /*
 							byte [] zipped_lengths = new byte[number_of_segments * 2];
 							
 							Deflater deflater = new Deflater();
@@ -1336,13 +1394,15 @@ public class SimpleWriter
 				            deflater.finish();
 				            zipped_length = deflater.deflate(zipped_info);
 				            out.write(zipped_info, 0, zipped_length);
-				            */
+				            
 							
-							for(int k = 0; k < number_of_segments; k++)
-			    			{
-			    				byte[] current_segment = (byte [])segments.get(k);  
-			    			    out.write(current_segment, 0, current_segment.length - 1);
-			    			}
+				            byte [] zipped_data    = new byte[total_bytelength * 2];
+				            deflater = new Deflater();
+				            deflater.setInput(_segments);
+				            deflater.finish();
+				            zipped_length = deflater.deflate(zipped_data);
+				            out.write(zipped_data, 0, zipped_length);
+				            */
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						 {
@@ -1352,14 +1412,6 @@ public class SimpleWriter
 		    					 out.writeShort(current_segment.length); 
 		    					 out.write(current_segment, 0, current_segment.length);
 		    				 }  
-							 
-							 /*
-							 System.out.println("Maximum segment length requires an unsigned short.");
-							 System.out.println("Total compressed length was " + total_compressed_length);
-							 System.out.println("Total zipped length was " + total_zipped_length);
-							 System.out.println(); 
-							 */
-							 
 						 }
 						 else
 						 {
