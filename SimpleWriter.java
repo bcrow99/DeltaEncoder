@@ -678,13 +678,13 @@ public class SimpleWriter
 				        }
 		            }
 		            
-		            System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index);
+		            //System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index); 
+		            //System.out.println();
 		            
-		            System.out.println();
 		            
-		            byte [] mask = SegmentMapper.getPositiveMask();
 		            
 		            /*
+		            byte [] mask = SegmentMapper.getPositiveMask();
 		            if(max_zero_iterations > 0)
 		            {
 		                byte [] compressed_zero_segment   = (byte []) segments.get(max_zero_index);
@@ -853,9 +853,7 @@ public class SimpleWriter
 		                } 
 		            }
 		            
-		            */
-		            
-		            System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
+		            //System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
 		            
 		            if(max_one_iterations > 0)
 		            {
@@ -1011,8 +1009,8 @@ public class SimpleWriter
 			                current_max--;
 		                } 
 		            }
-		           
-		            System.out.println();
+		            */
+		            
 		            // Error checking.
 		            
 		            // Create buffer to put concatenated strings.
@@ -1307,41 +1305,43 @@ public class SimpleWriter
 	            		
 	            		 if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 	            		 {
-	            			// Grouping the segments lengths.
-	            			// For now we won't bother modifying the writer/reader
-	            			// protocol.
 	            			// This offers an example of when zipping 
 	            			// (which we are using as a proxy for pure huffman coding)
-	            			// does better than unary string compression.
-	            			
-	            			/*
-							byte [] segment_length = new byte[number_of_segments];  
+	            			// seems to do better than unary string compression.
+	            			// Double check.
+	            			byte [] segment_length = new byte[number_of_segments];  
+	            			byte [] segment_info   = new byte[number_of_segments]; 
 							for(int k = 0; k < number_of_segments; k++)
 							{
-							    byte[] current_segment = (byte [])segments.get(k);
-							    segment_length[k]      = (byte)current_segment.length;
+						        byte[] current_segment = (byte [])segments.get(k);
+								segment_length[k]      = (byte)current_segment.length;
+								segment_info[k]        = current_segment[current_segment.length - 1];
 							}  
-							byte [] zipped_segment_lengths = new byte[number_of_segments * 2];
+							out.write(segment_length, 0, number_of_segments);
+							
+							/*
+							byte [] zipped_lengths = new byte[number_of_segments * 2];
+							
 							Deflater deflater = new Deflater();
 				            deflater.setInput(segment_length);
 				            deflater.finish();
-				            int zipped_length = deflater.deflate(zipped_segment_lengths);
-				            deflater.end(); 
-				            System.out.println("Maximum segment length requires an unsigned byte.");
-							System.out.println("The length of the segment lengths in bytes is " + number_of_segments);
-							System.out.println("The length of the zipped segment lengths is "   + zipped_length);
-							System.out.println(); 
-							out.writeShort(zipped_length);
-							out.write(zipped_segment_lengths, 0, zipped_length);
-							*/
+				            int zipped_length = deflater.deflate(zipped_lengths);
+				            out.write(zipped_lengths, 0, zipped_length);
+				            
 							
-		            		
+				            byte [] zipped_info    = new byte[number_of_segments * 2];
+				            deflater = new Deflater();
+				            deflater.setInput(segment_info);
+				            deflater.finish();
+				            zipped_length = deflater.deflate(zipped_info);
+				            out.write(zipped_info, 0, zipped_length);
+				            */
+							
 							for(int k = 0; k < number_of_segments; k++)
-		    				{
-		    					byte[] current_segment = (byte [])segments.get(k); 
-		    					out.writeByte(current_segment.length); 
-		    					out.write(current_segment, 0, current_segment.length);
-		    				}  
+			    			{
+			    				byte[] current_segment = (byte [])segments.get(k);  
+			    			    out.write(current_segment, 0, current_segment.length);
+			    			}
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						 {

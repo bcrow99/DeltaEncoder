@@ -52,6 +52,7 @@ public class SimpleReader
 		try
 		{
 			long start = System.nanoTime();
+			
 			File file          = new File(filename);
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
 			xdim               = in.readShort();
@@ -130,27 +131,41 @@ public class SimpleReader
 					int max_bytelength               = in.readInt();
 					//System.out.println("Number of segments is " + number_of_segments);
 					
-				    for(int k = 0; k < number_of_segments; k++)	
-				    {
-				    	int string_length = 0;
-				    	if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
-				    	{
-				    	    string_length = in.readByte();
-				    	    if(string_length < 0)
-				    	    	string_length += Byte.MAX_VALUE * 2 + 2;
-				    	}
-				    	else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
-				    	{
-				    		string_length = in.readShort();
-				    		if(string_length < 0)
-				    	    	string_length += Short.MAX_VALUE * 2 + 2;
-				    	}
-				    	else
-				    		string_length = in.readInt();
-				    	byte [] current_string = new byte[string_length];
-				    	in.read(current_string, 0, string_length);
-				        compressed_string_list.add(current_string);    	
-				    }
+					if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
+			    	{
+						byte [] segment_length = new byte[number_of_segments];
+						in.read(segment_length, 0, number_of_segments);
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int current_length = segment_length[k];
+							if(current_length < 0)
+								current_length += Byte.MAX_VALUE * 2 + 2;
+							byte [] current_segment = new byte[current_length];
+							in.read(current_segment, 0, current_length);
+							compressed_string_list.add(current_segment);
+						}
+			    	}
+					else if(max_bytelength <= Short.MAX_VALUE * 2 + 1)
+					{
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int current_length = in.readShort();
+				    		if(current_length < 0)
+				    	    	current_length += Short.MAX_VALUE * 2 + 2;	
+				    		byte [] current_segment = new byte[current_length];
+					    	in.read(current_segment, 0, current_length);
+					        compressed_string_list.add(current_segment);
+						}
+					}
+					else
+					{
+						int current_length = in.readInt();	
+						byte [] current_segment = new byte[current_length];
+				    	in.read(current_segment, 0, current_length);
+				        compressed_string_list.add(current_segment);
+					}
+					
+					
 				    
 				    /*
 				    int number_of_processors = Runtime.getRuntime().availableProcessors();
