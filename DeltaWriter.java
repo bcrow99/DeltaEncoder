@@ -673,10 +673,10 @@ public class DeltaWriter
      	            // The minimum that seems to produce the maximum compression is around 96,
             		// but we won't threshold the segment length so we can see what happens
             		// as the length decreases.
-     	            if(minimum_segment_length < 8)
-     	            	minimum_segment_length = 8;
+     	            if(minimum_segment_length < 96)
+     	            	minimum_segment_length = 96;
  	                
-     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
+     	             ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, minimum_segment_length);
      	             
      	             // A list of compressed strings.
      	             ArrayList  segments  = (ArrayList)segment_data_list.get(0);
