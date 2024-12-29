@@ -134,14 +134,17 @@ public class SimpleReader
 					if(max_bytelength <= Byte.MAX_VALUE * 2 + 1)
 			    	{
 						byte [] segment_length = new byte[number_of_segments];
+						byte [] segment_info   = new byte[number_of_segments];
 						in.read(segment_length, 0, number_of_segments);
+						in.read(segment_info, 0, number_of_segments);
 						for(int k = 0; k < number_of_segments; k++)
 						{
-							int current_length = segment_length[k];
+							int current_length = segment_length[k] - 1;
 							if(current_length < 0)
 								current_length += Byte.MAX_VALUE * 2 + 2;
-							byte [] current_segment = new byte[current_length];
+							byte [] current_segment = new byte[current_length + 1];
 							in.read(current_segment, 0, current_length);
+							current_segment[current_length] = segment_info[k];
 							compressed_string_list.add(current_segment);
 						}
 			    	}

@@ -1318,6 +1318,7 @@ public class SimpleWriter
 								segment_info[k]        = current_segment[current_segment.length - 1];
 							}  
 							out.write(segment_length, 0, number_of_segments);
+							out.write(segment_info, 0, number_of_segments);
 							
 							/*
 							byte [] zipped_lengths = new byte[number_of_segments * 2];
@@ -1340,7 +1341,7 @@ public class SimpleWriter
 							for(int k = 0; k < number_of_segments; k++)
 			    			{
 			    				byte[] current_segment = (byte [])segments.get(k);  
-			    			    out.write(current_segment, 0, current_segment.length);
+			    			    out.write(current_segment, 0, current_segment.length - 1);
 			    			}
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
