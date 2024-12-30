@@ -194,6 +194,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;
     }
     
@@ -262,6 +263,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;
     }
 
@@ -325,6 +327,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;
     }
     
@@ -445,6 +448,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;    
     }
 
@@ -598,6 +602,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;    
     }
 
@@ -751,6 +756,7 @@ public class DeltaMapper
         ArrayList result = new ArrayList();
         result.add(sum);
         result.add(dst);
+        result.add(init_value);
         return result;    
     }
 
@@ -960,6 +966,7 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(map);
+        result.add(init_value);
         return result;
     }
    
@@ -1163,6 +1170,7 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(map);
+        result.add(init_value);
         return result;
     }
    
@@ -1597,7 +1605,8 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(line_map);
-        result.add(pixel_map);        
+        result.add(pixel_map);
+        result.add(init_value);
         return result;
     }
    
@@ -1716,11 +1725,14 @@ public class DeltaMapper
         return dst;
     }
     
+    // Check this.
     public static ArrayList getIdealDeltasFromValues2(int src[], int xdim, int ydim)
     {
         int[]  dst = new int[xdim * ydim];
         byte[] map = new byte[(xdim - 2) * (ydim - 1)];
      
+        int init_value = src[0];
+        
         // Get the map.
         int m = 0;
         for(int i = 1; i < ydim - 1; i++)
@@ -1789,6 +1801,7 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(map);
+        result.add(init_value);
         return result;
     }
     
@@ -1835,6 +1848,8 @@ public class DeltaMapper
          int[]  dst = new int[xdim * ydim];
          byte[] map = new byte[(xdim - 2) * (ydim - 1)];
       
+         int init_value = src[0];
+         
          // Get the map.
          int m = 0;
          for(int i = 1; i < ydim - 1; i++)
@@ -1909,6 +1924,7 @@ public class DeltaMapper
          result.add(sum);
          result.add(dst);
          result.add(map);
+         result.add(init_value);
          return result;
      }
      
@@ -1955,6 +1971,7 @@ public class DeltaMapper
          int[]  dst = new int[xdim * ydim];
          byte[] map = new byte[(xdim - 2) * (ydim - 1)];
       
+         int init_value = src[0];
          // Get the map.
          int m = 0;
          for(int i = 1; i < ydim - 1; i++)
@@ -2033,6 +2050,7 @@ public class DeltaMapper
          result.add(sum);
          result.add(dst);
          result.add(map);
+         result.add(init_value);
          return result;
      }
      
@@ -2082,6 +2100,7 @@ public class DeltaMapper
          int[]  dst = new int[xdim * ydim];
          byte[] map = new byte[(xdim - 2) * (ydim - 1)];
       
+         int init_value = src[0];
          // Get the map.
          int m = 0;
          for(int i = 1; i < ydim - 1; i++)
@@ -2354,6 +2373,7 @@ public class DeltaMapper
         int[]  dst = new int[xdim * ydim];
         byte[] map = new byte[(xdim - 2) * (ydim - 1)];
      
+        int init_value = src[0];
         // Get the map.
         int m = 0;
         for(int i = 1; i < ydim - 1; i++)
@@ -2448,6 +2468,7 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(map);
+        result.add(init_value);
         return result;
     }
     
@@ -2501,6 +2522,7 @@ public class DeltaMapper
         int[]  dst = new int[xdim * ydim];
         byte[] map = new byte[(xdim - 2) * (ydim - 1)];
      
+        int init_value = src[0];
         // Get the map.
         int m = 0;
         for(int i = 1; i < ydim - 1; i++)
@@ -2600,6 +2622,7 @@ public class DeltaMapper
         result.add(sum);
         result.add(dst);
         result.add(map);
+        result.add(init_value);
         return result;
     }
     
