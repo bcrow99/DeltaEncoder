@@ -576,7 +576,7 @@ public class SimpleWriter
      	            // The threshold that seems to produce maximum compression is around 96.
      	            if(minimum_segment_length < 96)
      	            	minimum_segment_length = 96;  
-     	           ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, minimum_segment_length);
+     	           ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
    	               ArrayList  segments         = (ArrayList)segment_data_list.get(0);
    	               max_bytelength[i]           = (int)segment_data_list.get(1);
    	             
@@ -680,17 +680,16 @@ public class SimpleWriter
 		            
 		            //System.out.println("Maximum number of zero iterations was " + max_zero_iterations + " on segment " + max_zero_index); 
 		            //System.out.println();
-		            
-		            
+		           
+		            byte [] mask = SegmentMapper.getPositiveMask();
 		            
 		            /*
-		            byte [] mask = SegmentMapper.getPositiveMask();
-		            if(max_zero_iterations > 0)
+		            if(max_zero_iterations > 0  && i == 0)
 		            {
 		                byte [] compressed_zero_segment   = (byte []) segments.get(max_zero_index);
 			                
-		                System.out.println("Length of compressed zero segment is "   + compressed_zero_segment.length);
-		                System.out.println("Iterations is " + max_zero_iterations);
+		                //System.out.println("Length of compressed zero segment is "   + compressed_zero_segment.length);
+		                System.out.println("Max iterations for a compressed zero segment is " + max_zero_iterations);
 		                System.out.println();
 			               
 		                System.out.println("Byte values:");
@@ -717,9 +716,11 @@ public class SimpleWriter
 		                System.out.println();
 		                System.out.println();       
 		            	
+		                byte [] decompressed_zero_segment = StringMapper.decompressZeroStrings2(compressed_zero_segment);
 		            	
-		            	byte [] decompressed_zero_segment = (byte []) decompressed_segments.get(max_zero_index);
+		            	//byte [] decompressed_zero_segment = (byte []) decompressed_segments.get(max_zero_index);
 		                
+		            
 		                System.out.println("Length of decompressed zero segment is " + decompressed_zero_segment.length);
 		                System.out.println();
 		                
@@ -851,11 +852,14 @@ public class SimpleWriter
 			                
 			                current_max--;
 		                } 
+		              
 		            }
-		            
+		            */
+		                
 		            //System.out.println("Maximum number of one iterations was " + max_one_iterations + " on segment " + max_one_index);
 		            
-		            if(max_one_iterations > 0)
+		           
+		            if(max_one_iterations > 0 && i == 0)
 		            {
 		                byte [] compressed_one_segment   = (byte []) segments.get(max_one_index);
 			                
@@ -888,8 +892,10 @@ public class SimpleWriter
 		                System.out.println();       
 		            	
 		            	
-		            	byte [] decompressed_one_segment = (byte []) decompressed_segments.get(max_one_index);
-		                
+		            	//byte [] decompressed_one_segment = (byte []) decompressed_segments.get(max_one_index);
+		            	byte [] decompressed_one_segment = StringMapper.decompressOneStrings2(compressed_one_segment);
+		            	
+		            	/*
 		                System.out.println("Length of decompressed one segment is " + decompressed_one_segment.length);
 		                System.out.println();
 		                
@@ -1008,8 +1014,8 @@ public class SimpleWriter
 			                
 			                current_max--;
 		                } 
+		                */
 		            }
-		            */
 		            
 		            // Error checking.
 		            

@@ -866,22 +866,11 @@ public class StringMapper
     	byte [] dst = new byte[1];
     	try
     	{
-    		int bit_length = StringMapper2.getBitlength(src);
+    		int bit_length = getBitlength(src);
             int amount = getCompressionAmount(src, bit_length, 0);
     	    if(amount > 0)
     	    {
-    	    	int byte_length   = bit_length / 8;
-    	    	if(bit_length % 8 != 0)
-    	    		byte_length++;
-    	    	dst = new byte[byte_length + 1];
-    		    System.arraycopy(src, 0, dst, 0, byte_length);
-    		    
-    		    byte extra_bits = (byte)(bit_length % 8);
-    		    if(extra_bits != 0)
-    		    	extra_bits = (byte)(8 - extra_bits);
-    		    extra_bits     <<= 5;
-    		    
-    		    dst[byte_length] = extra_bits;
+    	    	dst = src;
     	        return dst;
     	    }
             else
@@ -1088,6 +1077,342 @@ public class StringMapper
             extra_bits <<= 5;
             dst[last_byte] = extra_bits;
             
+            return dst;
+        } 
+    }
+    
+    public static byte[] decompressZeroStrings2(byte[] src)
+    {
+        int last_byte   = src.length - 1;
+        int iterations  = src[last_byte] & (byte)31;
+        byte extra_bits = (byte)(src[last_byte] >> 5);
+        extra_bits     &= 7;
+        int bit_length  = (src.length - 1) * 8 - extra_bits; 
+     
+        // If it's not a zero type string, we'll still process it.
+        // This might actually compress a one type string.
+        if(iterations > 16)
+        {
+        	System.out.println("Not zero type string.");
+        	iterations -= 16;
+        }
+        
+        
+        byte [] mask = SegmentMapper.getPositiveMask();
+        // If it was not compressed, we copy src to dst.
+        if(iterations == 0)
+        {
+        	byte [] dst = new byte[src.length];
+        	System.arraycopy(src,  0,  dst, 0, src.length);
+        	
+        	
+	        System.out.println("Iteration " + iterations);
+	        for(int k = 0; k < dst.length - 1; k++)
+	        {
+	        	byte code_word = (byte)dst[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.println();
+	        }
+	        System.out.println();
+        	
+        	return dst;
+        }
+        
+        if(iterations == 1)
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	byte_length *= 2;
+        	byte[] buffer = new byte[byte_length];
+            int uncompressed_length = decompressZeroBits(src, bit_length, buffer);
+            byte_length = uncompressed_length / 8;
+            if(uncompressed_length % 8 != 0)
+            	byte_length++;
+            byte [] dst = new byte[byte_length + 1];
+            System.arraycopy(buffer,  0,  dst, 0, byte_length);
+            last_byte = dst.length - 1;
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[last_byte] = extra_bits;
+            
+            
+            System.out.println("Iteration " + iterations);
+	        for(int k = 0; k < dst.length - 2; k++)
+	        {
+	        	byte code_word = (byte)dst[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.print(" ");
+	        }
+	        int remainder = uncompressed_length % 8;
+	        if(remainder == 0)
+	        	for(int k = 0; k < 8; k++)
+	        	    System.out.print("0 ");   
+	        else
+	            for(int k = 0; k < remainder; k++)
+	        	    System.out.print("0 ");
+	        
+	        
+	        
+	        
+	        System.out.println();
+	        System.out.println();
+            
+     
+            return dst;
+        }
+        else if(iterations % 2 == 0)
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	double factor = Math.pow(2, iterations);
+        	byte_length  *= factor;
+        	
+        	byte[] buffer1 = new byte[byte_length];
+        	byte[] buffer2 = new byte[byte_length];
+        	
+            int uncompressed_length = decompressZeroBits(src, bit_length, buffer1);
+            iterations--;
+            while(iterations > 0)
+            {
+                int previous_length = uncompressed_length;
+                if(iterations % 2 == 1)
+                {
+                    uncompressed_length = decompressZeroBits(buffer1, previous_length, buffer2);
+                    
+                    int uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	byte code_word = (byte)buffer2[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        int remainder = uncompressed_length % 8;
+        	        if(remainder == 0)
+        	        	for(int k = 0; k < 8; k++)
+        	        	    System.out.print("0 ");   
+        	        else
+        	            for(int k = 0; k < remainder; k++)
+        	        	    System.out.print("0 ");
+        	        
+        	        System.out.println();
+        	        System.out.println();
+                    
+                }
+                else
+                {
+                    uncompressed_length = decompressZeroBits(buffer2, previous_length, buffer1);
+                    int uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	byte code_word = (byte)buffer1[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        int remainder = uncompressed_length % 8;
+        	        if(remainder == 0)
+        	        	for(int k = 0; k < 8; k++)
+        	        	    System.out.print("0 ");   
+        	        else
+        	            for(int k = 0; k < remainder; k++)
+        	        	    System.out.print("0 ");
+        	        
+        	        System.out.println();
+        	        System.out.println();
+                    
+                    
+                }
+                iterations--;
+            }
+            byte_length = uncompressed_length / 8;
+        	if(uncompressed_length % 8 != 0)
+        		byte_length++;
+        	
+        	byte [] dst = new byte[byte_length + 1];
+        	System.arraycopy(buffer2,  0,  dst, 0, byte_length);
+            last_byte = dst.length - 1;
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[last_byte] = extra_bits;
+	        
+	        
+	        System.out.println();
+	        System.out.println();
+            
+            
+            
+            
+            
+            
+            return dst;
+        }
+        else
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	double factor = Math.pow(2, iterations);
+        	byte_length  *= factor;
+        	
+        	byte[] buffer1 = new byte[byte_length];
+        	byte[] buffer2 = new byte[byte_length];
+        	
+            int uncompressed_length = decompressZeroBits(src, bit_length, buffer1);
+            
+            int uncompressed_bytelength = uncompressed_length / 8;
+            if(uncompressed_length % 8 != 0)
+            	uncompressed_bytelength++;
+            System.out.println("Iteration " + iterations);
+	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+	        {
+	        	byte code_word = (byte)buffer1[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.print(" ");
+	        }
+	        int remainder = uncompressed_length % 8;
+	        if(remainder == 0)
+	        	for(int k = 0; k < 8; k++)
+	        	    System.out.print("0 ");   
+	        else
+	            for(int k = 0; k < remainder; k++)
+	        	    System.out.print("0 ");
+	       
+	        System.out.println();
+	        System.out.println();
+            
+            
+            iterations--;
+            while(iterations > 0)
+            {
+                int previous_length = uncompressed_length;
+                if(iterations % 2 == 0)
+                {
+                    uncompressed_length = decompressZeroBits(buffer1, previous_length, buffer2);
+                    
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	byte code_word = (byte)buffer2[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        remainder = uncompressed_length % 8;
+        	        if(remainder == 0)
+        	        	for(int k = 0; k < 8; k++)
+        	        	    System.out.print("0 ");   
+        	        else
+        	            for(int k = 0; k < remainder; k++)
+        	        	    System.out.print("0 ");
+        	        
+        	        System.out.println();
+        	        System.out.println();
+                    
+                }
+                else
+                {
+                    uncompressed_length = decompressZeroBits(buffer2, previous_length, buffer1);
+                    
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	byte code_word = (byte)buffer1[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        remainder = uncompressed_length % 8;
+        	        if(remainder == 0)
+        	        	for(int k = 0; k < 8; k++)
+        	        	    System.out.print("0 ");   
+        	        else
+        	            for(int k = 0; k < remainder; k++)
+        	        	    System.out.print("0 ");
+        	      
+        	        System.out.println(); 
+        	        System.out.println();
+                }
+                iterations--;
+            }
+            
+            byte_length = uncompressed_length / 8;
+        	if(uncompressed_length % 8 != 0)
+        		byte_length++;
+        	
+        	byte [] dst = new byte[byte_length + 1];
+        
+        	System.arraycopy(buffer1,  0,  dst, 0, byte_length);
+            last_byte = dst.length - 1;
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[last_byte] = extra_bits;
+          
             return dst;
         } 
     }
@@ -1485,7 +1810,7 @@ public class StringMapper
     	{
     		int bit_length = StringMapper2.getBitlength(src);
             int amount = getCompressionAmount(src, bit_length, 1);
-    	    if(amount > 0)
+    	    if(amount >= 0)
     	    {
     		    // 0 iteration
     	    	int byte_length   = bit_length / 8;
@@ -1501,8 +1826,7 @@ public class StringMapper
     		    	extra_bits = (byte)(8 - extra_bits);
     		    extra_bits     <<= 5;
     		    
-    		    // Need to set iterations to 16 to allow getting the type.
-    		    // Might possibly break the segmentation in the adaptive writer/reader.
+    		    
     		    dst[byte_length]  = 16;
                 
     		    dst[byte_length] |= extra_bits;
@@ -1585,6 +1909,9 @@ public class StringMapper
     	}
     }
     
+    // This function expects to find the number of iterations in the final
+    // byte, as well as the number of odd bits determined by the bit length
+    // subtracted from the byte length.
     public static int decompressOneStrings(byte src[], int length, byte dst[])
     {
         // Getting the number of iterations appended to
@@ -1783,7 +2110,391 @@ public class StringMapper
             return dst;
         } 
     }
-   
+  
+    
+    
+    public static byte[] decompressOneStrings2(byte[] src)
+    {
+        int last_byte   = src.length - 1;
+        int iterations  = src[last_byte] & (byte)31;
+        byte extra_bits = (byte)(src[last_byte] >> 5);
+        extra_bits     &= 7;
+        int bit_length  = (src.length - 1) * 8 - extra_bits; 
+     
+        // If it's not a one type string, we'll still process it.
+        // This might actually compress a zero type string.
+        if(iterations < 16)
+        {
+        	System.out.println("Not one type string.");	
+        }
+        else
+        	iterations -= 16;
+        
+        // If it was not compressed, we copy src to dst.
+        if(iterations == 0)
+        {
+        	byte [] dst = new byte[src.length];
+        	System.arraycopy(src,  0,  dst, 0, src.length);
+        	
+        	return dst;
+        }
+        
+        if(iterations == 1)
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	byte_length *= 2;
+        	byte[] buffer = new byte[byte_length];
+            int uncompressed_length = decompressOneBits(src, bit_length, buffer);
+            byte_length = uncompressed_length / 8;
+            if(uncompressed_length % 8 != 0)
+            	byte_length++;
+            byte [] dst = new byte[byte_length + 1];
+            System.arraycopy(buffer,  0,  dst, 0, byte_length);
+            
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[byte_length] = extra_bits;
+     
+            byte [] mask = SegmentMapper.getPositiveMask();
+            System.out.println("Iteration " + iterations);
+	        for(int k = 0; k < dst.length - 2; k++)
+	        {
+	        	byte code_word = (byte)dst[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.print(" ");
+	        }
+	        
+	        byte code_word = (byte)dst[dst.length - 2];
+	        int remainder  = uncompressed_length % 8;
+	        int            stop = 8;
+	        if(remainder != 0)
+	        	stop = remainder;
+	        for(int k = 0; k < stop; k++)
+        	{
+        		if((code_word & mask[k]) == 0)
+        			System.out.print("0 ");
+        		else
+        			System.out.print("1 ");     
+        	}
+	      
+	        System.out.println();
+	        System.out.println();
+            
+           
+            return dst;
+        }
+        else if(iterations % 2 == 0)
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	double factor = Math.pow(2, iterations);
+        	byte_length  *= factor;
+        	
+        	byte[] buffer1 = new byte[byte_length * 2];
+        	byte[] buffer2 = new byte[byte_length * 2];
+        	byte [] mask   = SegmentMapper.getPositiveMask();
+            
+        	int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
+            
+            int uncompressed_bytelength = uncompressed_length / 8;
+            if(uncompressed_length % 8 != 0)
+            	uncompressed_bytelength++;
+            System.out.println("Iteration " + iterations);
+            for(int k = 0; k < uncompressed_bytelength - 1; k++)
+	        {
+	        	byte code_word = (byte)buffer1[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.print(" ");
+	        }
+            int remainder  = uncompressed_length % 8;
+	        int            stop = 8;
+	        if(remainder != 0)
+	        	stop = remainder;
+	        byte code_word = buffer1[uncompressed_bytelength - 1];
+	        for(int k = 0; k < stop; k++)
+        	{
+        		if((code_word & mask[k]) == 0)
+        			System.out.print("0 ");
+        		else
+        			System.out.print("1 ");     
+        	}
+	        
+	        System.out.println();
+	        System.out.println();
+            
+            iterations--;
+            while(iterations > 0)
+            {
+                int previous_length = uncompressed_length;
+                if(iterations % 2 == 1)
+                {
+                    uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2);
+                    
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	code_word = (byte)buffer2[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        code_word = (byte)buffer2[uncompressed_bytelength - 1];
+        	        remainder = uncompressed_length % 8;
+        	        stop      = 8;
+        	        if(remainder != 0)
+        	        	stop = remainder;
+        	        for(int k = 0; k < stop; k++)
+                	{
+                		if((code_word & mask[k]) == 0)
+                			System.out.print("0 ");
+                		else
+                			System.out.print("1 ");     
+                	}
+        	      
+        	        System.out.println();
+        	        System.out.println();
+                    
+                    
+                }
+                else
+                {
+                    uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
+                    
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	code_word = (byte)buffer1[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        code_word = (byte)buffer1[uncompressed_bytelength - 1];
+        	        remainder = uncompressed_length % 8;
+        	        stop      = 8;
+        	        if(remainder != 0)
+        	        	stop = remainder;
+        	        for(int k = 0; k < stop; k++)
+                	{
+                		if((code_word & mask[k]) == 0)
+                			System.out.print("0 ");
+                		else
+                			System.out.print("1 ");     
+                	}
+        	      
+        	        System.out.println();
+        	        System.out.println();
+                }
+                iterations--;
+            }
+            byte_length = uncompressed_length / 8;
+        	if(uncompressed_length % 8 != 0)
+        		byte_length++;
+        	
+        	byte [] dst = new byte[byte_length + 1];
+        	System.arraycopy(buffer2,  0,  dst, 0, byte_length);
+        
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[byte_length] = extra_bits;
+            return dst;
+        }
+        else
+        {
+        	int byte_length = bit_length / 8;
+        	if(bit_length % 8 != 0)
+        		byte_length++;
+        	double factor = Math.pow(2, iterations);
+        	byte_length  *= factor;
+        	
+        	byte[] buffer1 = new byte[byte_length * 2];
+        	byte[] buffer2 = new byte[byte_length * 2];
+        	byte [] mask   = SegmentMapper.getPositiveMask();
+            
+        	
+        	int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
+            int uncompressed_bytelength = uncompressed_length / 8;
+            if(uncompressed_length % 8 != 0)
+            	uncompressed_bytelength++;
+            System.out.println("Iteration " + iterations);
+            for(int k = 0; k < uncompressed_bytelength - 1; k++)
+	        {
+	        	byte code_word = (byte)buffer1[k];
+	        	for(int m = 0; m < 8; m++)
+	        	{
+	        		if((code_word & mask[m]) == 0)
+	        			System.out.print("0 ");
+	        		else
+	        			System.out.print("1 ");
+	        	}
+	        	System.out.print(" ");
+	        }
+            int remainder  = uncompressed_length % 8;
+	        int            stop = 8;
+	        if(remainder != 0)
+	        	stop = remainder;
+	        byte code_word = buffer1[uncompressed_bytelength - 1];
+	        for(int k = 0; k < stop; k++)
+        	{
+        		if((code_word & mask[k]) == 0)
+        			System.out.print("0 ");
+        		else
+        			System.out.print("1 ");     
+        	}
+	        
+	        System.out.println();
+	        System.out.println();
+            
+            iterations--;
+            while(iterations > 0)
+            {
+                int previous_length = uncompressed_length;
+                if(iterations % 2 == 0)
+                {
+                    uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2);
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                    
+                    
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	code_word = (byte)buffer2[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        code_word = (byte)buffer2[uncompressed_bytelength - 1];
+        	        remainder = uncompressed_length % 8;
+        	        stop      = 8;
+        	        if(remainder != 0)
+        	        	stop = remainder;
+        	        for(int k = 0; k < stop; k++)
+                	{
+                		if((code_word & mask[k]) == 0)
+                			System.out.print("0 ");
+                		else
+                			System.out.print("1 ");     
+                	}
+        	      
+        	        System.out.println();
+        	        System.out.println();
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                }
+                else
+                {
+                    uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
+                    uncompressed_bytelength = uncompressed_length / 8;
+                    if(uncompressed_length % 8 != 0)
+                    	uncompressed_bytelength++;
+                
+                    System.out.println("Iteration " + iterations);
+        	        for(int k = 0; k < uncompressed_bytelength - 1; k++)
+        	        {
+        	        	code_word = (byte)buffer1[k];
+        	        	for(int m = 0; m < 8; m++)
+        	        	{
+        	        		if((code_word & mask[m]) == 0)
+        	        			System.out.print("0 ");
+        	        		else
+        	        			System.out.print("1 ");
+        	        	}
+        	        	System.out.print(" ");
+        	        }
+        	        
+        	        code_word = (byte)buffer1[uncompressed_bytelength - 1];
+        	        remainder = uncompressed_length % 8;
+        	        stop      = 8;
+        	        if(remainder != 0)
+        	        	stop = remainder;
+        	        for(int k = 0; k < stop; k++)
+                	{
+                		if((code_word & mask[k]) == 0)
+                			System.out.print("0 ");
+                		else
+                			System.out.print("1 ");     
+                	}
+        	      
+        	        System.out.println();
+        	        System.out.println();
+                    
+                    
+                    
+                }
+                iterations--;
+            }
+            byte_length = uncompressed_length / 8;
+        	if(uncompressed_length % 8 != 0)
+        		byte_length++;
+        	
+        	byte [] dst = new byte[byte_length + 1];
+        	
+        	System.arraycopy(buffer1,  0,  dst, 0, byte_length);
+           
+            extra_bits = (byte)(uncompressed_length % 8);
+            if(extra_bits != 0)
+            	extra_bits = (byte)(8 - extra_bits);
+            extra_bits <<= 5;
+            dst[byte_length] = extra_bits;
+            return dst;
+        } 
+    }
+  
+    
+    
     // Functions that get information about a string
     // from the trailing byte.
     public static int getBitlength(byte [] string)
@@ -2090,6 +2801,7 @@ public class StringMapper
         	}		
         }
     	int total = positive - negative;
+    	
     	// Account for the extra bits, although
     	// it doesn't show up in the bit length.
     	if(bit_length % 8 != 0)
