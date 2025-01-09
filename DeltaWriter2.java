@@ -876,7 +876,7 @@ public class DeltaWriter2
 						System.out.println("Unary packed compressed delta bit length is " + delta_bitlength); 
 						System.out.println();
 						
-						/*
+						
 						ArrayList delta_string_histogram_list = StringMapper.getHistogram(delta_string);
 		            	int delta_string_min                  = (int)delta_string_histogram_list.get(0);
                         int [] delta_string_histogram         = (int[])delta_string_histogram_list.get(1);
@@ -899,14 +899,14 @@ public class DeltaWriter2
 					          
 					    System.out.println("Number of code words for delta string is " + huffman_code.length);
 					    System.out.println();
-					    //mask = SegmentMapper.getPositiveMask();
+					    int [] mask2 = SegmentMapper.getPositiveMask2();
 					        
 					    for(int k = 0; k <huffman_code.length; k++)
 					    {
-					        byte code_word = (byte)huffman_code[k];
+					        int code_word = (byte)huffman_code[k];
 					        for(int m = 0; m < huffman_length[k]; m++)
 					        {
-					        	if((code_word & mask[m]) == 0)
+					        	if((code_word & mask2[m]) == 0)
 					        		System.out.print("0 ");
 					        	else
 					        		System.out.print("1 ");
@@ -917,7 +917,7 @@ public class DeltaWriter2
 					        
 					    int huffman_string_length = CodeMapper.getCost(huffman_length, frequency);
 					    System.out.println("Length of encoded delta string is " + huffman_string_length);
-						*/
+						
 		            }
 		        }
 		        else if(delta_type == 3)

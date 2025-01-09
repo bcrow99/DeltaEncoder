@@ -304,6 +304,15 @@ public class SegmentMapper
 		return mask;
 	}
 	
+	public static int [] getPositiveMask2()
+	{
+		int [] mask = new int[32];
+		mask[0] = 1;
+		for(int i = 1; i < 32; i++)
+			mask[i] = mask[i - 1] << 1;
+		return mask;
+	}
+	
 	public static byte [] getNegativeMask()
 	{
 		byte [] mask = new byte[8];
