@@ -836,14 +836,15 @@ public class DeltaWriter2
 	                    // Unary length does not require actual frequencies, just the number.
 					    // Why it has less overhead than huffman code.
 					    int [] unary_length = CodeMapper.getUnaryLength(frequency.length);
-					          
+					    
+					    /*
 					    System.out.println("Number of code words for pixels is " + huffman_code.length);
 					    System.out.println();
-					    byte [] mask = SegmentMapper.getPositiveMask();
+					    int [] mask = SegmentMapper.getPositiveMask2();
 					        
 					    for(int k = 0; k <huffman_code.length; k++)
 					    {
-					        byte code_word = (byte)huffman_code[k];
+					        int code_word = (int)huffman_code[k];
 					        for(int m = 0; m < huffman_length[k]; m++)
 					        {
 					        	if((code_word & mask[m]) == 0)
@@ -854,6 +855,7 @@ public class DeltaWriter2
 					        System.out.println();
 					    }
 					    System.out.println();
+					    */
 					        
 					    int huffman_compressed_length = CodeMapper.getCost(huffman_length, frequency);
 					    int unary_compressed_length   = CodeMapper.getCost(unary_length, frequency);
@@ -869,20 +871,20 @@ public class DeltaWriter2
 						byte [] pixel_compression_string  = (byte [])pixel_string_list.get(3);
 						System.out.println("Unary packed compressed pixel bit length is " + pixel_bitlength); 
 						
-						
 						ArrayList list = (ArrayList)segment_list.get(i);
 						byte [] delta_string = (byte [])list.get(0);
 						int delta_bitlength = StringMapper.getBitlength(delta_string);
+						int number_of_iterations = StringMapper.getIterations(delta_string);
 						System.out.println("Unary packed compressed delta bit length is " + delta_bitlength); 
+						System.out.println("Number of iterations is " + number_of_iterations);
 						System.out.println();
-						
 						
 						ArrayList delta_string_histogram_list = StringMapper.getHistogram(delta_string);
 		            	int delta_string_min                  = (int)delta_string_histogram_list.get(0);
                         int [] delta_string_histogram         = (int[])delta_string_histogram_list.get(1);
-					    value_range                = (int)delta_string_histogram_list.get(2);
+					    value_range                           = (int)delta_string_histogram_list.get(2);
 						int [] delta_string_table             = StringMapper.getRankTable(delta_string_histogram);
-						n                          = delta_string_histogram.length;
+						n                                     = delta_string_histogram.length;
 						
 						frequency_list = new ArrayList();
 					    for(int k = 0; k < n; k++)
@@ -893,17 +895,17 @@ public class DeltaWriter2
 					    	frequency[k] = (int)frequency_list.get(k);
 					    huffman_length   = CodeMapper.getHuffmanLength(frequency);
 					    huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
-	                    // Unary length does not require actual frequencies, just the number.
-					    // Why it has less overhead than huffman code.
+	                    // Unary length code does not require actual frequencies, just the number of different values,
+					    // which is why it has less overhead than huffman codes.
 					    unary_length = CodeMapper.getUnaryLength(frequency.length);
-					          
+					    
+					    /*
 					    System.out.println("Number of code words for delta string is " + huffman_code.length);
 					    System.out.println();
 					    int [] mask2 = SegmentMapper.getPositiveMask2();
-					        
 					    for(int k = 0; k <huffman_code.length; k++)
 					    {
-					        int code_word = (byte)huffman_code[k];
+					        int code_word = (int)huffman_code[k];
 					        for(int m = 0; m < huffman_length[k]; m++)
 					        {
 					        	if((code_word & mask2[m]) == 0)
@@ -914,10 +916,64 @@ public class DeltaWriter2
 					        System.out.println();
 					    }
 					    System.out.println();
-					        
+					    */
+					    
+					    
+					    
+					    
 					    int huffman_string_length = CodeMapper.getCost(huffman_length, frequency);
-					    System.out.println("Length of encoded delta string is " + huffman_string_length);
+					    System.out.println("Byte length of huffman encoded delta string is " + (huffman_string_length / 8));
+					    
+					    byte [] zipped_string = new byte[2 * delta_string.length];
 						
+			
+			            Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+			            
+		                deflater.setInput(delta_string);
+		                deflater.finish();
+		                int zipped_length = deflater.deflate(zipped_string);
+		                deflater.end(); 
+					    
+		                System.out.println("Byte length of zipped delta string is " + zipped_length);
+					    
+					    
+					    ArrayList delta_histogram_list = StringMapper.getHistogram(delta);
+					    int delta_min                  = (int)delta_histogram_list.get(0);
+					    int [] delta_histogram         = (int[])delta_histogram_list.get(1);
+					    value_range                    = (int)delta_histogram_list.get(2);
+					    n                              = delta_histogram.length;
+					    frequency_list = new ArrayList();
+					    for(int k = 0; k < n; k++)
+					        frequency_list.add(delta_histogram[k]);
+					    Collections.sort(frequency_list, Comparator.reverseOrder());
+					    frequency = new int[n];
+					    for(int k = 0; k < n; k++)
+					    	frequency[k] = (int)frequency_list.get(k);
+					    huffman_length   = CodeMapper.getHuffmanLength(frequency);
+					    huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
+					    huffman_string_length = CodeMapper.getCost(huffman_length, frequency);
+					    System.out.println("Byte length of huffman encoded deltas is " + (huffman_string_length / 8));
+					    if(value_range < 256)
+					    {
+					    	n = delta.length;
+					    	byte [] delta_bytes  = new byte[n];
+					    	byte [] zipped_bytes = new byte[2 * n];
+					    	
+					    	// Leave the code at the beginning alone.
+					    	delta_bytes[0] = (byte) delta[0];
+					    	for(int k = 1; k < delta.length; k++)
+					    		delta_bytes[k] = (byte)(delta[k] - delta_min);
+					    	
+					    	deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+				            
+			                deflater.setInput(delta_bytes);
+			                deflater.finish();
+			                zipped_length = deflater.deflate(zipped_bytes);
+			                deflater.end(); 
+			                
+			                System.out.println("Byte length of zipped deltas is " + zipped_length);
+					    	
+					    }
 		            }
 		        }
 		        else if(delta_type == 3)
@@ -954,11 +1010,11 @@ public class DeltaWriter2
 			        
 			        
 			        System.out.println("Number of code words is " + huffman_code.length);
-			        byte [] mask = SegmentMapper.getPositiveMask();
+			        int [] mask = SegmentMapper.getPositiveMask2();
 			        
 			        for(int k = 0; k <huffman_code.length; k++)
 			        {
-			        	byte code_word = (byte)huffman_code[k];
+			        	int code_word = (int)huffman_code[k];
 			        	for(int m = 0; m < huffman_length[k]; m++)
 			        	{
 			        		if((code_word & mask[m]) == 0)
@@ -1529,11 +1585,13 @@ public class DeltaWriter2
 		                
 		                if(zipped_length < string.length)
 		                {
+		                	System.out.println("Zipped channel " + i);
 		                    out.writeInt(zipped_length);
 		            	    out.write(zipped_string, 0, zipped_length); 
 		                }
 		                else
 		                {
+		                	System.out.println("Did not zip channel " + i);
 		                	out.writeInt(0);
 		                	out.write(string, 0, string.length);
 		                }
