@@ -5,6 +5,54 @@ import java.math.*;
 
 public class CodeMapper
 {
+	public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
+    {
+    	int n = code.length;
+    
+    	int current_bit = 0;
+    	for(int i = 0; i < src.length; i++)
+    	{
+    	    int j = src[i];
+    	    int k = table[j];
+    	    
+    	    int code_word   = code[k];
+    	    int code_length = length[k];
+    	    
+    	    
+    	    int offset = current_bit % 8;  
+    	    code_word <<= offset; 
+    	    int or_length = code_length + offset;
+    	    int number_of_bytes = or_length / 8;
+    	    if(or_length % 8 != 0)
+    	        number_of_bytes++;
+    	   
+    	    int current_byte = current_bit / 8;
+    	   
+    	    
+    	    
+    	    if(number_of_bytes == 1)
+    	    {
+    	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
+    	    	
+    	    }
+    	    else
+    	    {
+    	    	for(int m = 0; m < number_of_bytes - 1; m++)
+        	    {
+        	        dst[current_byte] |= (byte)(code_word & 0x00ff);
+        	        current_byte++;
+        	        code_word >>= 8;
+        	    }	
+    	    	dst[current_byte] = (byte)(code_word & 0x00ff);
+    	    }
+    	    
+    	    current_bit += code_length;
+    	}
+    	
+    	int bit_length = current_bit;
+    	return bit_length;
+    }
+  
     public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
     	int n = code.length;
@@ -116,6 +164,169 @@ public class CodeMapper
     	
     	int bit_length = current_bit;
     	return bit_length;
+    }
+  
+    public static int unpackCode(byte src[], int table[], int [] code, int [] code_length, int string_length, int dst[])
+    {
+    	boolean debug = false;
+    	
+    	int number_of_different_values = table.length;
+        int [] inverse_table = new int[number_of_different_values];
+        for(int i = 0; i < number_of_different_values; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = i;
+        }
+        
+        int number_of_codes = code.length;
+        int max_length      = code_length[code.length - 1];
+        int max_bytes       = max_length / 8;
+        if(max_length % 8 != 0)
+        	max_bytes++;
+        
+        
+        if(debug)
+        {
+            // Segment of the string bytes we want to debug.
+            int start = 0;
+            int stop  = 10;	
+        
+            System.out.println("Prefix free code:");
+            for(int i = 0; i < code.length; i++)
+            {
+                for(int j = 0; j < code_length[i]; j++)
+                {
+                    int mask = 1;
+                    mask <<= j;
+                    if((code[i] & mask) == 0)
+                        System.out.print(0);
+                    else
+                	    System.out.print(1);
+                }
+                System.out.println();
+            }
+            System.out.println();
+        
+            System.out.println("Look-up table:");
+            for(int i = 0; i < table.length; i++)
+        	    System.out.println(i + " -> " + table[i]);;
+            System.out.println();
+        
+            System.out.println("Bytes from delta string:");
+        
+            for(int i = start; i < stop; i++)
+            {
+        	    System.out.print(i + "  ");
+                for(int j = 0; j < 8; j++)
+                {
+        	        byte src_mask = 1;	
+        	        src_mask <<= j;
+        	        int src_bit = src_mask & src[i];
+        	        if(src_bit == 0)
+        		        System.out.print("0");
+        	        else
+        		        System.out.print("1");
+                }
+                System.out.println();
+            }
+            System.out.println();
+        }
+        
+        int current_bit     = 0;
+        int offset          = 0;
+        int current_byte    = 0;
+    	int number_unpacked = 0;
+    	int dst_byte        = 0;
+    	
+    	boolean matched = true;
+    	
+        for(int i = 0; i < dst.length; i++)
+        {
+        	int src_word       = 0;
+    	
+            for(int j = 0; j < max_bytes; j++)
+            {
+            	int index = current_byte + j;
+            	
+            	if(index < src.length)
+            	{
+          	        int src_byte = (int)src[index];
+          	        if(src_byte < 0)
+          		        src_byte += 256;
+          	        if(j == 0)
+          	            src_byte >>= offset;
+          	        else
+          	            src_byte <<= j * 8 - offset;
+          	        src_word |= src_byte;
+            	}
+            }
+
+            if(offset != 0)
+            {
+            	int index    = current_byte + max_bytes;
+            	if(index < src.length)
+            	{
+          	        int src_byte = (int)src[index];
+          	        if(src_byte < 0)
+          		        src_byte += 256;
+          	    
+          	        src_byte <<= max_bytes * 8 - offset;
+          	   
+          	        src_word |= src_byte;
+            	}
+            }
+      	
+            for(int j = 0; j < code.length; j++)
+            {
+          	    int code_word = code[j];
+          	    int mask = -1;
+          	    mask <<= code_length[j];
+          	    mask = ~mask;
+          	    
+          	    int masked_src_word = src_word & mask;
+          	    int masked_code_word = code_word & mask;
+          	    
+          	    if(masked_src_word == masked_code_word)
+          	    {
+          	    	dst[dst_byte++] = inverse_table[j];
+	                number_unpacked++;
+          		    current_bit += code_length[j];
+          		    current_byte = current_bit / 8;
+          		    offset       = current_bit % 8;
+          		    break;
+          	    }
+          	    else if(j == code.length - 1)
+          	    {
+          	    	/*
+          	    	System.out.println("No match for prefix-free code at byte " + current_byte);
+          	    	if(debug)
+          	    	{
+          		        int code_mask = 1;
+          		        System.out.println("Source word:");
+          		        for(int k = 0; k < code_length[j]; k++)
+          		        {
+          		        	int src_result = (code_mask << k) & src_word;
+          		        	if(src_result == 0)
+          		        		System.out.print(0);
+          		        	else
+          		        		System.out.print(1);
+          		        }
+          		        System.out.println();
+          	    	}
+          	    	*/
+          	    }
+            }
+        }  
+        
+        
+        if(debug)
+        {
+            System.out.println("The length of the original bit string was " + string_length);
+            System.out.println("Bits unpacked was " + current_bit);
+            System.out.println();
+        }
+       
+    	return number_unpacked;
     }
     
     public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
@@ -521,7 +732,45 @@ public class CodeMapper
     }
      
     
-    public static long[] getCanonicalCode(int [] length)
+    public static int[] getCanonicalCode(int [] length)
+    {
+    	int n = length.length;
+    	
+        int [] code         = new int[n];
+        int [] shifted_code = new int[n];
+        int max_length = length[n - 1];
+        
+        code[0] = 0;
+        shifted_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+        	int shift = max_length - length[i];
+        	shifted_code[i] = code[i] >> shift;
+        }
+        
+        int [] reversed_code = new int[n];
+        reversed_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	int code_word = shifted_code[i];
+        	int  code_length = length[i];
+        	int code_mask = 1;
+        	
+        	for(int j = 0; j < code_length; j++)
+        	{
+        		int result = code_word & (code_mask << j);
+        		if(result != 0)
+        		{
+        			int shift = (code_length - 1) - j;
+        			reversed_code[i] |= code_mask << shift;
+        		}
+        	}
+        }
+        return reversed_code;
+    }
+ 
+    public static long[] getCanonicalCode2(int [] length)
     {
     	int n = length.length;
     	
