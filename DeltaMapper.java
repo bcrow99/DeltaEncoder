@@ -876,7 +876,7 @@ public class DeltaMapper
         
         int sum  = 0;
         int k    = 0;
-        dst[k++] = 5;
+        dst[k++] = 0;
         int delta = src[k] - init_value;
         int value = src[k];
         dst[k++]  = delta;
@@ -1056,19 +1056,6 @@ public class DeltaMapper
         	for(int j = 1; j < xdim - 1; j++)
         	{
         		int k = i * xdim + j;
-        		
-        		/*
-    	    	sum[0] += Math.abs(src[k] - src[k - 1]);
-    	    	sum[1] += Math.abs(src[k] - src[k - xdim - 1]);
-    	    	sum[2] += Math.abs(src[k] - src[k - xdim]);
-    	    	sum[3] += Math.abs(src[k] - src[k - xdim + 1]);
-    	    	sum[4] += Math.abs(src[k] - (src[k - 1] + src[k - xdim - 1])/2);
-    	    	sum[5] += Math.abs(src[k] - (src[k - 1] + src[k - xdim])/2);
-    	    	sum[6] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1])/2);
-    	    	sum[7] += Math.abs(src[k] - (src[k - xdim - 1] + src[k - xdim])/2);
-    	    	sum[8] += Math.abs(src[k] - (src[k - xdim - 1] + src[k - xdim + 1])/2);
-    	    	sum[9] += Math.abs(src[k] - (src[k - xdim] + src[k - xdim + 1])/2);
-    	    	*/
         		sum[0] += Math.abs(src[k] - src[k - 1]);
         		sum[1] += Math.abs(src[k] - src[k - xdim]);
         		sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim])/2);
@@ -1101,7 +1088,7 @@ public class DeltaMapper
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
-            			dst[j] = 5;
+            			dst[j] = 0;
             		else
             		{
             		    int delta    = src[j] - value;
@@ -1122,28 +1109,6 @@ public class DeltaMapper
         		
         		for(int j = 1; j < xdim - 1; j++)
     			{
-        			/*
-        			if(m == 0)
-    				    delta = src[k] - src[k - 1];
-        			else if(m == 1)
-        				delta = src[k] - src[k - xdim - 1];
-        			else if(m == 2)
-        				delta = src[k] - src[k - xdim];
-        			else if(m == 3)
-        				delta = src[k] - src[k - xdim + 1];
-        			else if(m == 4)
-        				delta = src[k] - (src[k - 1] + src[k - xdim - 1]) / 2;
-        			else if(m == 5)
-        				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-        			else if(m == 6)
-        				delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
-        			else if(m == 7)
-        				delta = src[k] - (src[k - xdim - 1] + src[k - xdim]) / 2;
-        			else if(m == 8)
-        				delta = src[k] - (src[k - xdim - 1] + src[k - xdim + 1]) / 2;
-        			else if(m == 9)
-        				delta = src[k] - (src[k - xdim] + src[k - xdim + 1]) / 2;
-        			*/
         			if(m == 0)
     				    delta = src[k] - src[k - 1];
         			else if(m == 1)
@@ -1259,18 +1224,6 @@ public class DeltaMapper
         	{
         		int k = i * xdim + j;
         		
-        		/*
-    	    	sum[0] += Math.abs(src[k] - src[k - 1]);
-    	    	sum[1] += Math.abs(src[k] - src[k - xdim - 1]);
-    	    	sum[2] += Math.abs(src[k] - src[k - xdim]);
-    	    	sum[3] += Math.abs(src[k] - src[k - xdim + 1]);
-    	    	sum[4] += Math.abs(src[k] - (src[k - 1] + src[k - xdim - 1])/2);
-    	    	sum[5] += Math.abs(src[k] - (src[k - 1] + src[k - xdim])/2);
-    	    	sum[6] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1])/2);
-    	    	sum[7] += Math.abs(src[k] - (src[k - xdim - 1] + src[k - xdim])/2);
-    	    	sum[8] += Math.abs(src[k] - (src[k - xdim - 1] + src[k - xdim + 1])/2);
-    	    	sum[9] += Math.abs(src[k] - (src[k - xdim] + src[k - xdim + 1])/2);
-    	    	*/
         		sum[0] += Math.abs(src[k] - src[k - 1]);
         		sum[1] += Math.abs(src[k] - src[k - xdim]);
         		sum[2] += Math.abs(src[k] - src[k - xdim - 1]);
@@ -1299,19 +1252,6 @@ public class DeltaMapper
        	    }
         	
         	Collections.sort(key_list);
-        	
-        	/*
-        	System.out.println("Sorted key list for line " + i);
-        	for(int q = 0; q < key_list.size(); q++)
-        	{
-        		current_key = (double)key_list.get(q);
-        		int current_type = delta_table.get(current_key);
-        		System.out.println("Key " + current_key + " has type " + current_type);
-        	}
-        	System.out.println();
-        	*/
-        	
-        	
         	
         	
         	double first_key    = (double)key_list.get(0);
@@ -1494,7 +1434,7 @@ public class DeltaMapper
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
-            			dst[j] = 5;
+            			dst[j] = 0;
             		else
             		{
             		    int delta    = src[j] - value;
@@ -1759,7 +1699,7 @@ public class DeltaMapper
                 for(int j = 0; j < xdim; j++)
                 {
             	    if(j == 0)
-            			dst[k++]       = 6;
+            			dst[k++] = 0;
             		else
             		{
             		    int delta = src[k] - src[k - 1];
