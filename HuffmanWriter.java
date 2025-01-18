@@ -292,50 +292,7 @@ public class HuffmanWriter
 				shift_panel.add(shift_value, BorderLayout.EAST);
 				shift_dialog.add(shift_panel);
 				settings_menu.add(shift_item);
-				
-				JMenuItem segment_item   = new JMenuItem("Segmentation");
-				JDialog   segment_dialog = new JDialog(frame, "Segmentation");
-				ActionListener segment_handler = new ActionListener()
-				{
-					public void actionPerformed(ActionEvent e)
-					{
-						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
 
-						segment_dialog.setLocation(x, y - 150);
-						segment_dialog.pack();
-						segment_dialog.setVisible(true);
-					}
-				};
-				segment_item.addActionListener(segment_handler);
-				
-				JPanel segment_panel = new JPanel(new BorderLayout());
-				JSlider segment_slider = new JSlider();
-				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(12);
-				segment_slider.setValue(segment_length);
-				JTextField segment_value = new JTextField(3);
-				segment_value.setText(" " + segment_length + " ");
-				ChangeListener segment_slider_handler = new ChangeListener()
-				{
-					public void stateChanged(ChangeEvent e)
-					{
-						JSlider slider = (JSlider) e.getSource();
-						segment_length = slider.getValue();
-						if(slider.getValueIsAdjusting() == false)
-						{
-							apply_item.doClick();
-							segment_value.setText(" " + segment_length + " ");
-						}
-					}
-				};
-				segment_slider.addChangeListener(segment_slider_handler);
-				segment_panel.add(segment_slider, BorderLayout.CENTER);
-				segment_panel.add(segment_value, BorderLayout.EAST);
-				segment_dialog.add(segment_panel);
-				settings_menu.add(segment_item);
-				
 				// The correction value is a convenience to help see what
 				// quantizing does to the original image. Instead of
 				// simply switching back and forth between the original
@@ -1163,6 +1120,8 @@ public class HuffmanWriter
             		out.writeInt(max_code_length);
             		
             		int n = code.length;
+            		
+            		out.writeInt(n);
             		
             		if(max_code_length > 32)
             		{
