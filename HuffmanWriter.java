@@ -58,8 +58,8 @@ public class HuffmanWriter
 			System.exit(0);
 		}
 		
-		//String prefix       = new String("");
-		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix       = new String("");
+		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		HuffmanWriter writer = new HuffmanWriter(prefix + filename);
@@ -595,7 +595,7 @@ public class HuffmanWriter
 			    int [] frequency = new int[n];
 			    for(int k = 0; k < n; k++)
 			    	frequency[k] = (int)frequency_list.get(k);
-			    int [] huffman_length   = CodeMapper.getHuffmanLength(frequency);
+			    byte [] huffman_length   = CodeMapper.getHuffmanLength2(frequency);
 			    int [] huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
 			    int [] rank_table       = StringMapper.getRankTable(histogram);
 			    
@@ -607,15 +607,31 @@ public class HuffmanWriter
 			    int byte_length = estimated_bit_length / 8;
 			    if(estimated_bit_length % 8 != 0)
 			    	byte_length++;
+			    byte_length++;
 			    byte [] packed_delta = new byte[byte_length];
-			    
 			    
 			    // Get rid of the negative numbers.
 			    for(int k = 0; k < delta.length; k++)
 			    	delta[k] -= delta_min;
 			    int bit_length               =  CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length, packed_delta);
 			    channel_length[j]            = bit_length;
-			    channel_compressed_length[j] = bit_length;
+			    //channel_compressed_length[j] = bit_length;
+			    
+			    double zero_ratio = StringMapper.getZeroRatio(packed_delta, bit_length);
+			    
+			    System.out.println("Byte length of packed deltas is " + byte_length);
+			    if(zero_ratio <= .5)
+			    {
+			    	packed_delta[byte_length - 1] = 16;
+			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta);
+			    	System.out.println("Byte length of packed deltas after compressing one strings is " + compressed_packed_delta.length);
+			    }
+			    else
+			    {
+			    	packed_delta[byte_length - 1] = 16;
+			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta);
+			    	System.out.println("Byte length of packed deltas after compressing zero strings is " + compressed_packed_delta.length);
+			    }
 			    
 			   
 			    channel_string_type[i] = 0;
@@ -624,12 +640,9 @@ public class HuffmanWriter
 				int [] unpacked_delta = new int[delta.length];
 				int number_unpacked  =  CodeMapper.unpackCode(packed_delta, rank_table, huffman_code, huffman_length, channel_length[j], unpacked_delta);
 				
-				System.out.println("Estimated bit length of huffman encoded deltas is " + estimated_bit_length);
-				System.out.println("Actual bit length of huffman encoded deltas is " + bit_length);
-				System.out.println("The number of deltas is " + delta.length);
-				System.out.println("The number of deltas unpacked is " + number_unpacked);
 				
 				
+				/*
 				boolean different = false;
 				int     index     = 0;
 				
@@ -643,10 +656,17 @@ public class HuffmanWriter
 					}
 				}
 				
+				
+				System.out.println("Estimated bit length of huffman encoded deltas is " + estimated_bit_length);
+				System.out.println("Actual bit length of huffman encoded deltas is " + bit_length);
+				System.out.println("The number of deltas is " + delta.length);
+				System.out.println("The number of deltas unpacked is " + number_unpacked);
 				if(different)
 					System.out.println("Original values are different from decoded values at index " + index);
 				else
 					System.out.println("Original values are the same as decoded values.");
+				*/
+				
 				
 				// Restore the negative numbers.
 				for(int k = 0; k < delta.length; k++)
@@ -663,7 +683,7 @@ public class HuffmanWriter
 		       
 		        int  [] table        = (int [])table_list.get(i);
 		        int [] code          = (int [])code_list.get(i);
-		        int [] code_length   = (int [])code_length_list.get(i);
+		        byte [] code_length  = (byte [])code_length_list.get(i);
 		        byte [] packed_delta = (byte [])string_list.get(i);
 		     
 		        int  [] delta        = new int[new_xdim * new_ydim]; 
@@ -1062,11 +1082,7 @@ public class HuffmanWriter
 			        
 	        	    out.writeInt(channel_length[j]);
 	        	
-	        	    // If the string didn't compress, 
-	        	    // this is the same as the uncompressed length.
-	        	    out.writeInt(channel_compressed_length[j]);
-	        	
-	        	    out.writeByte(channel_iterations[i]);
+	        	    //out.writeByte(channel_iterations[i]);
 	        	
 	        	    int [] table = (int[])table_list.get(i);
 	                out.writeShort(table.length);
@@ -1102,64 +1118,15 @@ public class HuffmanWriter
 			            out.writeInt(map.length);
 		            }
 		            
-		            
-		            /*
-		            ArrayList segments = (ArrayList)segment_list.get(i);
-	            	int number_of_segments = segments.size();
-	            	out.writeInt(number_of_segments);
-	            	*/
 		            byte [] string = (byte [])string_list.get(i);
-		            int  [] code   = (int [])code_list.get(i);
-		            int  [] code_length = (int [])code_length_list.get(i);
+		            byte  [] code_length = (byte [])code_length_list.get(i);
             		
-		            
 		            out.writeInt(string.length);
             		out.write(string, 0, string.length);
             		
-            		int max_code_length = code_length[code_length.length - 1];
-            		out.writeInt(max_code_length);
-            		
-            		int n = code.length;
-            		
+                    int n = code_length.length;
             		out.writeInt(n);
-            		
-            		if(max_code_length > 32)
-            		{
-            		    System.out.println("Code too long to fit in int.");	
-            		    out.flush();
-            		    out.close(); 
-            		    System.exit(0);
-            		}
-            		else if(max_code_length <= 8)
-            		{
-            		    for(int k = 0; k < n; k++)
-            		    {
-            		        byte current_code = (byte)code[k];
-            		        byte current_length = (byte)code_length[k];
-            		        out.writeByte(current_code);
-            		        out.writeByte(current_length);
-            		    }
-            		}
-            		else if(max_code_length <= 16)
-            		{
-            		    for(int k = 0; k < n; k++)
-            		    {
-            		        short current_code = (short)code[k];
-            		        byte current_length = (byte)code_length[k];
-            		        out.writeShort(current_code);
-            		        out.writeByte(current_length);
-            		    }
-            		}
-            		else
-            		{
-            		    for(int k = 0; k < n; k++)
-            		    {
-            		        int current_code = (int)code[k];
-            		        byte current_length = (byte)code_length[k];
-            		        out.writeInt(current_code);
-            		        out.writeByte(current_length);
-            		    }
-            		}
+            		out.write(code_length, 0, n);
 		        }
 		      
 		        out.flush();

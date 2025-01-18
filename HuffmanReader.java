@@ -72,20 +72,11 @@ public class HuffmanReader
 		    long start = System.nanoTime();
 		    for(int i = 0; i < 3; i++)
 		    {
-		    	//System.out.println("Getting channel " + i);
-		    	
-		    	int j = channel_id[i];
-		    	min[i] = in.readInt();
-		    	init[i] = in.readInt();
-		    	
-		    	//System.out.println("Init value is " + init[i]);
-		    	//System.out.println("Getting channel parameters.");
+		    	int j        = channel_id[i];
+		    	min[i]       = in.readInt();
+		    	init[i]      = in.readInt();
 	    	    delta_min[i] = in.readInt();
-	    	    length[i] = in.readInt();
-	    	    compressed_length[i] = in.readInt();
-	    	    channel_iterations[i] = in.readByte();
-	    	    
-	    	    //System.out.println("Got channel parameters.");
+	    	    length[i]    = in.readInt();
 			    int table_length = in.readShort();
 			    int [] table = new int[table_length];
 			    int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
@@ -148,50 +139,10 @@ public class HuffmanReader
 				in.read(string, 0, string_length);
 				string_list.add(string);
 				
-				
-				int max_codelength    = in.readInt();
-				int n                 = in.readInt();
-				
-				int [] code = new int[n];
-				int [] code_length = new int[n];
-			    
-				if(max_codelength <= 8)
-				{
-				    for(int k = 0; k < n; k++)
-				    {
-				    	byte current_code = in.readByte();
-				    	code[k]           = current_code;
-				    	if(code[k] < 0)
-				    		code[k] +=  Byte.MAX_VALUE * 2 + 2;
-				    	
-				    	byte current_length = in.readByte();
-				    	code_length[k]     = current_length;
-				    }
-				}
-				else if(max_codelength <= 16)
-				{
-					for(int k = 0; k < n; k++)
-				    {
-				    	short current_code = in.readShort();
-				    	code[k]            = current_code;
-				    	if(code[k] < 0)
-				    		code[k] +=  Short.MAX_VALUE * 2 + 2;
-				    	
-				    	byte current_length = in.readByte();
-				    	code_length[k]     = current_length;
-				    }	
-				}
-				else
-				{
-					for(int k = 0; k < n; k++)
-				    {
-				    	int current_code = in.readInt();
-				    	code[k]          = current_code;
-				    	
-				    	byte current_length = in.readByte();
-				    	code_length[k]      = current_length;
-				    }		
-				}
+				int     n           = in.readInt();
+				byte [] code_length = new byte[n];
+				in.read(code_length, 0, n);
+				int [] code = CodeMapper.getCanonicalCode(code_length);
 				
 				code_list.add(code);
 				code_length_list.add(code_length);
@@ -343,24 +294,6 @@ public class HuffmanReader
 		}
 	}
 	
-	class Shifter implements Runnable
-	{
-		int pixel_shift;
-		int [] pixel;
-		
-		public Shifter(int[] pixel, int pixel_shift)
-		{
-			this.pixel = pixel;
-			this.pixel_shift = pixel_shift;
-		}
-		
-		public void run()
-		{
-		    for(int i = 0; i < pixel.length; i++)
-		        pixel[i] <<= pixel_shift;
-		}
-	}
-	
 	class Decompressor implements Runnable 
 	{ 
 		int i;
@@ -375,29 +308,11 @@ public class HuffmanReader
 			
 			if(delta_type < 8)
 			{
-			    byte [] string     = (byte [])string_list.get(i);
-			    int [] table       = (int [])table_list.get(i);
-			    int [] code        = (int [])code_list.get(i);
-			    int [] code_length = (int [])code_length_list.get(i);
-			  
-			    /*
-			    int iterations    = StringMapper.getIterations(string);
-			    int bitlength     = StringMapper.getBitlength(string);
-			    
-			    if(channel_iterations[i] != iterations)
-			        System.out.println("Iterations appended to string does not agree with channel " + i + " information.");
-			    if(compressed_length[i] != bitlength)
-			    	System.out.println("Bit length appended to string does not agree with channel " + i + " information.");
-			    
-			    if(iterations < 16 && iterations != 0)
-			    	string = StringMapper.decompressZeroStrings(string);
-			    else if(iterations > 16)
-			    	string = StringMapper.decompressOneStrings(string);
-			    */
-			    
-			    
-			    
-	    	    int number_unpacked = 0;
+			    byte [] string      = (byte [])string_list.get(i);
+			    int  [] table       = (int [])table_list.get(i);
+			    int  [] code        = (int [])code_list.get(i);
+			    byte [] code_length = (byte [])code_length_list.get(i);
+			 
 	    	    int [] delta;
 	    	    int current_xdim = 0;
 	    	    int current_ydim = 0;
@@ -405,7 +320,7 @@ public class HuffmanReader
 	    	    {
 	    		    delta = new int[xdim * ydim];
 	    		    
-	    		    number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
+	    		    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
 	    		    
 			        for(int j = 0; j < delta.length; j++)
 			           delta[j] += delta_min[i];
@@ -421,7 +336,7 @@ public class HuffmanReader
 		            int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
 		            delta = new int[intermediate_xdim * intermediate_ydim];
 		            
-		            number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
+		            int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
 			        for(int j = 0; j < delta.length; j++)
 			           delta[j] += delta_min[i];	
 			        
@@ -429,8 +344,6 @@ public class HuffmanReader
 			        current_ydim = intermediate_ydim; 
 	    	    }
 	    	   
-			    
-			    
     		    int[] current_channel = new int[1];
     		    if(delta_type == 0)
     			    current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim , current_ydim, init[i]);
