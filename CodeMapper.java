@@ -5,36 +5,26 @@ import java.math.*;
 
 public class CodeMapper
 {
-	public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
+	public static int packCode(int src[], int table[], int [] code, byte [] length, byte dst[])
     {
     	int n = code.length;
     
     	int current_bit = 0;
     	for(int i = 0; i < src.length; i++)
     	{
-    	    int j = src[i];
-    	    int k = table[j];
-    	    
+    	    int j           = src[i];
+    	    int k           = table[j];
     	    int code_word   = code[k];
     	    int code_length = length[k];
-    	    
-    	    
     	    int offset = current_bit % 8;  
     	    code_word <<= offset; 
     	    int or_length = code_length + offset;
     	    int number_of_bytes = or_length / 8;
     	    if(or_length % 8 != 0)
     	        number_of_bytes++;
-    	   
     	    int current_byte = current_bit / 8;
-    	   
-    	    
-    	    
     	    if(number_of_bytes == 1)
-    	    {
     	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
-    	    	
-    	    }
     	    else
     	    {
     	    	for(int m = 0; m < number_of_bytes - 1; m++)
@@ -45,7 +35,42 @@ public class CodeMapper
         	    }	
     	    	dst[current_byte] = (byte)(code_word & 0x00ff);
     	    }
-    	    
+    	    current_bit += code_length;
+    	}
+    	
+    	int bit_length = current_bit;
+    	return bit_length;
+    }
+  
+	public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
+    {
+    	int current_bit = 0;
+    	for(int i = 0; i < src.length; i++)
+    	{
+    	    int j           = src[i];
+    	    int k           = table[j];
+    	    int code_word   = code[k];
+    	    int code_length = length[k];
+    	    int offset = current_bit % 8;  
+    	    code_word <<= offset; 
+    	    int or_length = code_length + offset;
+    	    int number_of_bytes = or_length / 8;
+    	    if(or_length % 8 != 0)
+    	        number_of_bytes++;
+    	    int current_byte = current_bit / 8;
+    	   
+    	    if(number_of_bytes == 1)
+    	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
+    	    else
+    	    {
+    	    	for(int m = 0; m < number_of_bytes - 1; m++)
+        	    {
+        	        dst[current_byte] |= (byte)(code_word & 0x00ff);
+        	        current_byte++;
+        	        code_word >>= 8;
+        	    }	
+    	    	dst[current_byte] = (byte)(code_word & 0x00ff);
+    	    }
     	    current_bit += code_length;
     	}
     	
@@ -55,34 +80,22 @@ public class CodeMapper
   
     public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
-    	int n = code.length;
-    
     	int current_bit = 0;
     	for(int i = 0; i < src.length; i++)
     	{
-    	    int j = src[i];
-    	    int k = table[j];
-    	    
+    	    int j            = src[i];
+    	    int k            = table[j];
     	    long code_word   = code[k];
     	    int  code_length = length[k];
-    	    
-    	    
     	    int offset = current_bit % 8;  
     	    code_word <<= offset; 
     	    int or_length = code_length + offset;
     	    int number_of_bytes = or_length / 8;
     	    if(or_length % 8 != 0)
     	        number_of_bytes++;
-    	   
     	    int current_byte = current_bit / 8;
-    	   
-    	    
-    	    
     	    if(number_of_bytes == 1)
-    	    {
     	    	dst[current_byte] |= (byte)(code_word & 0x00ff);
-    	    	
-    	    }
     	    else
     	    {
     	    	for(int m = 0; m < number_of_bytes - 1; m++)
@@ -93,7 +106,6 @@ public class CodeMapper
         	    }	
     	    	dst[current_byte] = (byte)(code_word & 0x00ff);
     	    }
-    	    
     	    current_bit += code_length;
     	}
     	
@@ -164,6 +176,92 @@ public class CodeMapper
     	
     	int bit_length = current_bit;
     	return bit_length;
+    }
+  
+    public static int unpackCode(byte [] src, int [] table, int [] code, byte [] code_length, int string_length, int [] dst)
+    {
+
+        int [] inverse_table = new int[table.length];
+        for(int i = 0; i < table.length; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = i;
+        }
+        
+        int max_length      = code_length[code.length - 1];
+        int max_bytes       = max_length / 8;
+        if(max_length % 8 != 0)
+        	max_bytes++;
+         
+        int current_bit     = 0;
+        int offset          = 0;
+        int current_byte    = 0;
+    	int number_unpacked = 0;
+    	int dst_byte        = 0;
+    	
+        for(int i = 0; i < dst.length; i++)
+        {
+        	int src_word       = 0;
+    	
+            for(int j = 0; j < max_bytes; j++)
+            {
+            	int index = current_byte + j;
+            	
+            	if(index < src.length)
+            	{
+          	        int src_byte = (int)src[index];
+          	        if(src_byte < 0)
+          		        src_byte += 256;
+          	        if(j == 0)
+          	            src_byte >>= offset;
+          	        else
+          	            src_byte <<= j * 8 - offset;
+          	        src_word |= src_byte;
+            	}
+            }
+
+            if(offset != 0)
+            {
+            	int index    = current_byte + max_bytes;
+            	if(index < src.length)
+            	{
+          	        int src_byte = (int)src[index];
+          	        if(src_byte < 0)
+          		        src_byte += 256;
+          	    
+          	        src_byte <<= max_bytes * 8 - offset;
+          	   
+          	        src_word |= src_byte;
+            	}
+            }
+      	
+            for(int j = 0; j < code.length; j++)
+            {
+          	    int code_word = code[j];
+          	    int mask = -1;
+          	    mask <<= code_length[j];
+          	    mask = ~mask;
+          	    
+          	    int masked_src_word = src_word & mask;
+          	    int masked_code_word = code_word & mask;
+          	    
+          	    if(masked_src_word == masked_code_word)
+          	    {
+          	    	dst[dst_byte++] = inverse_table[j];
+	                number_unpacked++;
+          		    current_bit += code_length[j];
+          		    current_byte = current_bit / 8;
+          		    offset       = current_bit % 8;
+          		    break;
+          	    }
+          	    else if(j == code.length - 1)
+          	    {
+          	    	System.out.println("No match for prefix-free code at byte " + current_byte);
+          	    }
+            }
+        }  
+        
+    	return number_unpacked;
     }
   
     public static int unpackCode(byte src[], int table[], int [] code, int [] code_length, int string_length, int dst[])
@@ -451,23 +549,7 @@ public class CodeMapper
           	    }
           	    else if(j == code.length - 1)
           	    {
-          	    	/*
           	    	System.out.println("No match for prefix-free code at byte " + current_byte);
-          	    	if(debug)
-          	    	{
-          		        long code_mask = 1;
-          		        System.out.println("Source word:");
-          		        for(int k = 0; k < code_length[j]; k++)
-          		        {
-          		        	long src_result = (code_mask << k) & src_word;
-          		        	if(src_result == 0)
-          		        		System.out.print(0);
-          		        	else
-          		        		System.out.print(1);
-          		        }
-          		        System.out.println();
-          	    	}
-          	    	*/
           	    }
             }
         }  
@@ -641,6 +723,103 @@ public class CodeMapper
     	return length;
     }
     
+    public static byte [] getHuffmanLength2(int [] frequency)
+    {
+    	// The in-place processing is one of the
+    	// trickiest parts of this code, but we
+    	// don't want to modify the input so we'll 
+    	// make a copy and work from that.
+    	int n = frequency.length;
+    	
+    	int [] w = new int[n];
+    	for(int i = 0; i < n; i++)
+    		w[i] = frequency[i];
+    	
+    	int leaf = n - 1;
+    	int root = n - 1;
+    	int next;
+    	
+    	// Create tree.
+    	for(next = n - 1; next > 0; next--)
+    	{
+    		// Find first child.
+    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
+    	    {
+    	        // Use internal node and reassign w[next].
+    	    	w[next] = w[root];
+    	    	w[root] = next;
+    	    	root--;
+    	    }
+    	    else
+    	    {
+    	    	// Use leaf node and reassign w[next].
+    	    	w[next] = w[leaf];
+    	    	leaf--;
+    	    }
+    	    
+    	    // Find second child.
+    	    if(leaf < 0 || (root > next && w[root] < w[leaf]))
+    	    {
+    	        // Use internal node and add to w[next].
+    	    	w[next] += w[root];
+    	    	w[root] = next;
+    	    	root--;
+    	    }
+    	    else
+    	    {
+    	    	// Use leaf node and add to w[next].
+    	    	w[next] += w[leaf];
+    	    	leaf--;
+    	    }
+    	}
+    	
+    	// Traverse tree from root down, converting parent pointers into
+    	// internal node depths.
+    	w[1] = 0;
+    	for(next = 2; next < n; next++)
+    		w[next] = w[w[next]] + 1;
+    	
+    	// Final pass to produce code lengths.
+    	int avail = 1;
+    	int used  = 0;
+    	int depth = 0;
+    	
+    	root = 1;
+    	next = 0;
+    	
+    	while(avail > 0)
+    	{
+    		// Count internal nodes at each depth.
+    		while(root < n && w[root] == depth)
+    		{
+    			used++;
+    			root++;
+    		}
+    		
+    		// Assign as leaves any nodes that are not internal.
+    		while(avail > used)
+    		{
+    			w[next] = depth;
+    			next++;
+    			avail--;
+    		}
+    		
+    		// Reset variables.
+    		avail = 2 * used;
+    		used  = 0;
+    		depth++;
+    	}
+    	
+    	//return w;
+    	 
+    	byte [] code_length = new byte[n];
+    	for(int i = 0; i < n; i++)
+    		code_length[i] = (byte)w[i];
+    	
+    	return code_length;
+    }
+     
+    
     public static int[] getHuffmanLength(int [] frequency)
     {
     	// The in-place processing is one of the
@@ -731,6 +910,44 @@ public class CodeMapper
     	 return w;
     }
      
+    public static int[] getCanonicalCode(byte [] length)
+    {
+    	int n = length.length;
+    	
+        int [] code         = new int[n];
+        int [] shifted_code = new int[n];
+        int max_length = length[n - 1];
+        
+        code[0] = 0;
+        shifted_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+        	int shift = max_length - length[i];
+        	shifted_code[i] = code[i] >> shift;
+        }
+        
+        int [] reversed_code = new int[n];
+        reversed_code[0] = 0;
+        for(int i = 1; i < n; i++)
+        {
+        	int code_word = shifted_code[i];
+        	int  code_length = length[i];
+        	int code_mask = 1;
+        	
+        	for(int j = 0; j < code_length; j++)
+        	{
+        		int result = code_word & (code_mask << j);
+        		if(result != 0)
+        		{
+        			int shift = (code_length - 1) - j;
+        			reversed_code[i] |= code_mask << shift;
+        		}
+        	}
+        }
+        return reversed_code;
+    }
+    
     
     public static int[] getCanonicalCode(int [] length)
     {
@@ -928,150 +1145,15 @@ public class CodeMapper
     	return cost;
     }
     
-    /*
-    public static double getZeroRatio(byte [] string, int bit_length)
+    public static int getCost(byte [] length, int [] frequency)
     {
-    	int byte_length = bit_length / 8;
-    	int zero_sum    = 0;
-        int one_sum     = 0;
-        byte mask       = 1;
-        
-        int n           = byte_length;
-        
-        for(int i = 0; i < n; i++)
-        {
-        	for(int j = 0; j < 8; j++)
-        	{
-        	    int k = string[i] & mask << j;	
-        	    if(k == 0)
-        	    	zero_sum++;
-        	    else
-        	    	one_sum++;
-        	}
-        }
-       
-    	int remainder = bit_length % 8;
-    	if(remainder != 0)
-    	{
-    		for(int i = 0; i < remainder; i++)
-    		{
-    			int j = string[byte_length] & mask << i;
-    			if(j == 0)
-    				zero_sum++;
-    			else
-    				one_sum++;
-    		}
-    	}
+    	int n    = length.length;
+    	int cost = 0;
     	
-    	double ratio = zero_sum;
-    	ratio       /= zero_sum + one_sum;
-    	return ratio;
+    	for(int i = 0; i < n; i++)
+    	{
+    	    cost += length[i] * frequency[i];
+    	}
+    	return cost;
     }
-    
-    
-    public static int getCompressionAmount(byte [] string, int bit_length, int transform_type)
-    {
-    	int  positive = 0;
-        int  negative = 0;     
-        byte mask     = 1;
-      
-        int byte_length = bit_length / 8;
-        int n           = byte_length;
-        if(transform_type == 0)
-        {
-        	int previous = 1;
-            for(int i = 0; i < n; i++)
-            {
-            	for(int j = 0; j < 8; j++)
-            	{
-            	    int k = string[i] & mask << j;	
-            	    
-            	    if(k != 0 && previous != 0)
-            	    	positive++;
-            	    else if(k != 0 && previous == 0)
-            	        previous = 1;
-            	    else if(k == 0 && previous != 0)
-            	    	previous = 0;
-            	    else if(k == 0 && previous == 0)
-            	    {
-            	        negative++;
-            	        previous = 1;
-            	    }
-            	}
-            }
-           
-            
-        	int remainder = bit_length % 8;
-        	if(remainder != 0)
-        	{
-        		for(int i = 0; i < remainder; i++)
-        		{
-        			int j = string[byte_length] & mask << i;
-        			
-        			if(j != 0 && previous != 0)
-            	    	positive++;
-            	    else if(j != 0 && previous == 0)
-            	        previous = 1;
-            	    else if(j == 0 && previous != 0)
-            	    	previous = 0;
-            	    else if(j == 0 && previous == 0)
-            	    {
-            	        negative++;
-            	        previous = 1;
-            	    }
-        		}
-        	}	
-        }
-        else
-        {
-        	int previous = 0;
-            for(int i = 0; i < n; i++)
-            {
-            	for(int j = 0; j < 8; j++)
-            	{
-            	    int k = string[i] & mask << j;	
-            	    
-            	    if(k == 0 && previous == 0)
-            	    	positive++;
-            	    else if(k == 0 && previous == 1)
-            	        previous = 0;
-            	    else if(k != 0 && previous == 0)
-            	    	previous = 1;
-            	    else if(k != 0 && previous != 0)
-            	    {
-            	        negative++;
-            	        previous = 0;
-            	    }
-            	}
-            }
-           
-        	int remainder = bit_length % 8;
-        	if(remainder != 0)
-        	{
-        		for(int i = 0; i < remainder; i++)
-        		{
-        			int j = string[byte_length] & mask << i;
-        			
-        			if(j == 0 && previous == 0)
-            	    	positive++;
-            	    else if(j == 0 && previous == 1)
-            	        previous = 0;
-            	    else if(j != 0 && previous == 0)
-            	    	previous = 1;
-            	    else if(j != 0 && previous != 0)
-            	    {
-            	        negative++;
-            	        previous = 0;
-            	    }
-        		}
-        	}		
-        }
-    	int total = positive - negative;
-    	// Account for the extra bits, although
-    	// it doesn't show up in the bit length.
-    	if(bit_length % 8 != 0)
-    	    total += 8 - bit_length % 8;	
-    	return total;
-    }
-    */
 }
