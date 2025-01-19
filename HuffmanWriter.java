@@ -58,8 +58,8 @@ public class HuffmanWriter
 			System.exit(0);
 		}
 		
-		String prefix       = new String("");
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix       = new String("");
+		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		HuffmanWriter writer = new HuffmanWriter(prefix + filename);
@@ -578,7 +578,7 @@ public class HuffmanWriter
 				    map_list.add(map);
 				}
 				
-				System.out.println();
+				//System.out.println();
 		
 				int [] delta             = (int [])result.get(1);
 				ArrayList histogram_list = StringMapper.getHistogram(delta);
@@ -1074,25 +1074,19 @@ public class HuffmanWriter
 		        {
 		        	int j = channel_id[i];
 		        	
-		        	// Only used for difference channels.
 		        	out.writeInt(channel_min[j]);
-		        	
 		        	out.writeInt(channel_init[j]);
 		        	out.writeInt(channel_delta_min[j]);
-			        
 	        	    out.writeInt(channel_length[j]);
-	        	
-	        	    //out.writeByte(channel_iterations[i]);
-	        	
 	        	    int [] table = (int[])table_list.get(i);
 	                out.writeShort(table.length);
 	         
-	                int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
-				   
-	                if(table.length <= max_byte_value)
+	                if(table.length <= Byte.MAX_VALUE * 2 + 1)
                     {
-	                    for(int k = 0; k < table.length; k++)
-	                        out.writeByte(table[k]);
+	                	byte [] buffer = new byte[table.length];
+	                	for(int k = 0; k < buffer.length; k++)
+	                		buffer[k] = (byte)table[k];
+	                	out.write(buffer, 0, buffer.length);
                      }
 	                else 
 	                {

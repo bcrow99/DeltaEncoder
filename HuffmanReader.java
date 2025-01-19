@@ -79,15 +79,17 @@ public class HuffmanReader
 	    	    length[i]    = in.readInt();
 			    int table_length = in.readShort();
 			    int [] table = new int[table_length];
-			    int max_byte_value  = Byte.MAX_VALUE * 2 + 1;
-			    if(table.length <= max_byte_value)
+			    
+			    if(table.length <= Byte.MAX_VALUE * 2 + 1)
 			    {
-			        for(int k = 0; k < table_length; k++)
-			        {
-			    	    table[k] = in.readByte();
-			    	    if(table[k] < 0)
-            			    table[k] = max_byte_value + 1 + table[k];
-			        }
+			    	byte [] buffer = new byte[table.length];
+			    	in.read(buffer, 0, table.length);
+			    	for(int k = 0; k < buffer.length; k++)
+			    	{
+			    		table[k] = buffer[k];
+			    		if(table[k] < 0)
+            			    table[k] += Byte.MAX_VALUE * 2 + 2;
+			    	}
 			    }
 			    else
 			    {
@@ -96,8 +98,6 @@ public class HuffmanReader
 			    }
 			    table_list.add(table);
 			    
-			    //System.out.println("Added table");
-				
 			    if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
 					short  map_table_length = in.readShort();
@@ -115,7 +115,7 @@ public class HuffmanReader
 				    byte iterations = StringMapper.getIterations(map_string);
 
 				    int size = 0;
-				    if(iterations == 0)
+				    if(iterations == 0 || iterations == 16)
 				        size = StringMapper.unpackStrings2(map_string, map_table, map);
 				    else if(iterations < 16)
 				    {
@@ -242,10 +242,10 @@ public class HuffmanReader
 			System.out.println("It took " + (time / 1000000) + " ms to assemble rgb files.");
 		    
 		  
-			start = System.nanoTime();
+			
 			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 			
-			
+			start = System.nanoTime();
 			int blue_shift  = pixel_shift + 16;
 			int green_shift = pixel_shift + 8;
 			int red_shift   = pixel_shift;
@@ -297,6 +297,7 @@ public class HuffmanReader
 	class Decompressor implements Runnable 
 	{ 
 		int i;
+		
 		public Decompressor(int i)
 		{
 		    this.i = i;	
