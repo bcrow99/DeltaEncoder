@@ -21,7 +21,7 @@ public class DeltaWriter
 	
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
-	int segment_length = 14;
+	int segment_length = 0;
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
@@ -34,7 +34,6 @@ public class DeltaWriter
 	int [] channel_min;
 	int [] channel_delta_min;
 	
-	
 	int  [] channel_length;
 	int  [] channel_compressed_length;
 	int  [] channel_string_type;
@@ -43,7 +42,7 @@ public class DeltaWriter
 	
 	int [] max_bytelength;
 	
-	long file_length;
+	long   file_length;
 	double file_compression_rate;
 
 	ArrayList channel_list, table_list, string_list, map_list, segment_list;
@@ -74,23 +73,16 @@ public class DeltaWriter
 			file_length            = file.length();
 			BufferedImage original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
-			ColorModel color_model = original_image.getColorModel();
-			int number_of_channels = color_model.getNumColorComponents();
-			int number_of_bits = color_model.getPixelSize();
 			xdim = original_image.getWidth();
 			ydim = original_image.getHeight();
 		
 			System.out.println("Xdim = " + xdim + ", ydim = " + ydim);
 			System.out.println();
-			
-			int pixel_length = xdim * ydim * 8;
 		    
 		    channel_list = new ArrayList();
-		    table_list  = new ArrayList();
-		    string_list = new ArrayList();
-		    map_list    = new ArrayList();
-		    
-		   
+		    table_list   = new ArrayList();
+		    string_list  = new ArrayList();
+		    map_list     = new ArrayList();
 		    segment_list = new ArrayList();
 		    
 		 
@@ -319,7 +311,7 @@ public class DeltaWriter
 				JPanel segment_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
-				segment_slider.setMaximum(14);
+				segment_slider.setMaximum(12);
 				segment_slider.setValue(segment_length);
 				JTextField segment_value = new JTextField(3);
 				segment_value.setText(" " + segment_length + " ");
@@ -536,8 +528,8 @@ public class DeltaWriter
 		    	// Replace the original data with the modified data.
 		    	quantized_channel_list.set(i, quantized_channel);
 		    	
-		    	//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
-		    	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
+		    	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
+		    	//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
 		    }
 		  
 			// Find the optimal set.  
@@ -576,7 +568,6 @@ public class DeltaWriter
 			table_list.clear();
 			string_list.clear();
 			segment_list.clear();
-			
 			map_list.clear();
 			
 			for(int i = 0; i < 3; i++)
@@ -662,8 +653,11 @@ public class DeltaWriter
  	                
      	            ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
      	            ArrayList  segments         = (ArrayList)segment_data_list.get(0);
+     	            int number_of_segments      = segments.size();     	            
      	            max_bytelength[i]           = (int)segment_data_list.get(1);
      	            segment_list.add(segments);
+     	            
+     	            System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
 		        }
 			}
 			
@@ -679,7 +673,7 @@ public class DeltaWriter
 		       
 		        ArrayList segments     = (ArrayList)segment_list.get(i);
 		        int number_of_segments = segments.size();
-		        //System.out.println("The number of segments is " + number_of_segments);
+		        
 		        if(number_of_segments == 1)
 		        {
 		        	byte [] current_string = (byte [])segments.get(0);
@@ -817,7 +811,7 @@ public class DeltaWriter
 		        }
 		        else if(delta_type == 2)
 		        {
-		            channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+		            channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim , new_ydim, channel_init[j]);   
 		        }
 		        else if(delta_type == 3)
 		        {
@@ -830,17 +824,17 @@ public class DeltaWriter
 		        else if(delta_type == 5)
 		        {
 		    	    byte [] map = (byte[])map_list.get(i);
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
+		    	    channel     = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 6)
 		        {
-		    	    byte [] map = (byte[])map_list.get(i);
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);
+		        	byte [] map = (byte[])map_list.get(i);
+		    	    channel     = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 7)
 		        {
 		    	    byte [] map = (byte[])map_list.get(i);
-		            channel = DeltaMapper.getValuesFromIdealDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);	   	
+			        channel     = DeltaMapper.getValuesFromIdealDeltas4(delta, new_xdim , new_ydim, channel_init[j], map);	   	
 		        }
 		    
 			    if(j > 2)
@@ -1011,7 +1005,7 @@ public class DeltaWriter
 		        {
 		        	int j = channel_id[i];
 		        	
-		        	// Only use this for difference channels.
+		        	// Only used for difference channels.
 		        	out.writeInt(channel_min[j]);
 		        	
 		        	out.writeInt(channel_init[j]);
@@ -1067,7 +1061,8 @@ public class DeltaWriter
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
 	            		out.writeInt(string.length);
-	            		 
+	            		
+	            		int current_iterations = StringMapper.getIterations(string);
 	            		 
 	            		Deflater deflater = new Deflater();
 		                deflater.setInput(string);
@@ -1076,16 +1071,20 @@ public class DeltaWriter
 		                int zipped_length = deflater.deflate(zipped_string);
 		                deflater.end(); 
 		                
+		                System.out.println("The unary string compressed " + current_iterations + " time(s).");
 		                if(zipped_length < string.length)
 		                {
+		                	System.out.println("Zipped channel " + i);
 		                    out.writeInt(zipped_length);
 		            	    out.write(zipped_string, 0, zipped_length); 
 		                }
 		                else
 		                {
+		                	System.out.println("Did not zip channel " + i);
 		                	out.writeInt(0);
 		                	out.write(string, 0, string.length);
 		                }
+		                System.out.println();
 	            	 }
 	            	 else
 	            	 {
