@@ -578,8 +578,8 @@ public class HuffmanWriter
 				    map_list.add(map);
 				}
 				
-				//System.out.println();
-		
+				
+				
 				int [] delta             = (int [])result.get(1);
 				ArrayList histogram_list = StringMapper.getHistogram(delta);
 				int delta_min            = (int)histogram_list.get(0);
@@ -607,32 +607,36 @@ public class HuffmanWriter
 			    int byte_length = estimated_bit_length / 8;
 			    if(estimated_bit_length % 8 != 0)
 			    	byte_length++;
-			    byte_length++;
+			    byte_length += 2;
 			    byte [] packed_delta = new byte[byte_length];
 			    
+			    
+			    //delta[0] = value_range / 2;
+			    delta[0] = 0;
+			    
 			    // Get rid of the negative numbers.
-			    for(int k = 0; k < delta.length; k++)
+			    for(int k = 1; k < delta.length; k++)
 			    	delta[k] -= delta_min;
 			    int bit_length               =  CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length, packed_delta);
 			    channel_length[j]            = bit_length;
-			    //channel_compressed_length[j] = bit_length;
-			    
-			    double zero_ratio = StringMapper.getZeroRatio(packed_delta, bit_length);
-			    
+			   
 			    System.out.println("Byte length of packed deltas is " + byte_length);
+			    
+			    /*
+			    double zero_ratio = StringMapper.getZeroRatio(packed_delta, bit_length);
 			    if(zero_ratio <= .5)
 			    {
 			    	packed_delta[byte_length - 1] = 16;
-			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta);
+			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta, bit_length);
 			    	System.out.println("Byte length of packed deltas after compressing one strings is " + compressed_packed_delta.length);
 			    }
 			    else
 			    {
 			    	packed_delta[byte_length - 1] = 16;
-			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta);
+			    	byte [] compressed_packed_delta = StringMapper.compressOneStrings(packed_delta, bit_length);
 			    	System.out.println("Byte length of packed deltas after compressing zero strings is " + compressed_packed_delta.length);
 			    }
-			    
+			    */
 			   
 			    channel_string_type[i] = 0;
 		        channel_iterations[i]  = 0;
@@ -668,8 +672,9 @@ public class HuffmanWriter
 				*/
 				
 				
-				// Restore the negative numbers.
-				for(int k = 0; k < delta.length; k++)
+				// Restore the negative numbers and reset the initial value.
+				delta[0] = 0;
+				for(int k = 1; k < delta.length; k++)
 			    	delta[k] += delta_min;
 				string_list.add(packed_delta);
 				segment_list.add(packed_delta);
@@ -1087,7 +1092,7 @@ public class HuffmanWriter
 	                	for(int k = 0; k < buffer.length; k++)
 	                		buffer[k] = (byte)table[k];
 	                	out.write(buffer, 0, buffer.length);
-                     }
+                    }
 	                else 
 	                {
 	                    for(int k = 0; k < table.length; k++)
@@ -1102,6 +1107,13 @@ public class HuffmanWriter
 						int map_bit_length        = (int)map_string_list.get(1);
 						int [] string_table       = (int [])map_string_list.get(2);
 						byte [] compressed_map    = (byte [])map_string_list.get(3);
+						
+						int current_iterations = StringMapper.getIterations(compressed_map);
+						if(current_iterations == 0 || current_iterations == 16)
+							System.out.println("Map did not compress.");
+						else
+							System.out.println("Map compressed.");
+								
 		            	
 						out.writeShort(string_table.length);
 						for(int k = 0; k < string_table.length; k++)
@@ -1112,15 +1124,69 @@ public class HuffmanWriter
 			            out.writeInt(map.length);
 		            }
 		            
-		            byte [] string = (byte [])string_list.get(i);
-		            byte  [] code_length = (byte [])code_length_list.get(i);
-            		
-		            out.writeInt(string.length);
-            		out.write(string, 0, string.length);
-            		
+		            
+            		/*
                     int n = code_length.length;
             		out.writeInt(n);
             		out.write(code_length, 0, n);
+            		*/
+		            
+            		byte  [] code_length = (byte [])code_length_list.get(i);
+            		int n = code_length.length;
+            		System.out.println("Number of codes is " + n);
+            		byte [] length_delta = new byte[n - 1];
+            		
+            		byte init_value = code_length[0];
+            		length_delta[0] = (byte)(code_length[1] - code_length[0]);
+            		byte max_delta  = length_delta[0];
+            		
+            		out.writeByte(init_value);
+            		out.writeByte(max_delta);
+            		for(int k = 1; k < n - 1; k++)
+            		{
+            		    byte current_delta = (byte)(code_length[k + 1] - code_length[k]);	
+            		    if(current_delta > max_delta)
+            		    	max_delta = current_delta;
+            		    length_delta[k] = current_delta;
+            		    System.out.println("" + current_delta);
+            		}
+            		
+            		if(max_delta == 1)
+            		{
+            		    int byte_length = (n - 1) / 8;
+            		    if((n - 1) % 8 != 0)
+            		    	byte_length++;
+            		    byte [] packed_length = new byte[byte_length];
+            		    out.write(packed_length, 0, byte_length);
+            		}
+            		else if(max_delta == 2)
+            		{
+            			int byte_length = (n - 1) / 4;
+            		    if((n - 1) % 4 != 0)
+            		    	byte_length++;
+            		    byte [] packed_length = new byte[byte_length];	
+            		    out.write(packed_length, 0, byte_length);
+            		}
+            		else if(max_delta <= 8)
+            		{
+            			int byte_length = (n - 1) / 4;
+            		    if((n - 1) % 4 != 0)
+            		    	byte_length++;
+            		    byte [] packed_length = new byte[byte_length];
+            		    out.write(packed_length, 0, byte_length);
+            		}
+            		else
+            		{
+            		    out.write(length_delta, 0, n - 1);    	
+            		}
+            		System.out.println("Code delta max is " + max_delta);
+            		System.out.println();
+            		
+            		
+            		
+            		byte [] string = (byte [])string_list.get(i);
+ 		            out.writeInt(string.length);
+             		out.write(string, 0, string.length);
 		        }
 		      
 		        out.flush();
