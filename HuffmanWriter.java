@@ -693,7 +693,7 @@ public class HuffmanWriter
 		     
 		        int  [] delta        = new int[new_xdim * new_ydim]; 
 		        int number_unpacked  =  CodeMapper.unpackCode(packed_delta, table, code, code_length, channel_length[j], delta);
-		        for(int k = 0; k < delta.length; k++)
+		        for(int k = 1; k < delta.length; k++)
 		        {
 		        	delta[k] += channel_delta_min[j];
 		        }
@@ -1138,52 +1138,105 @@ public class HuffmanWriter
             		
             		byte init_value = code_length[0];
             		length_delta[0] = (byte)(code_length[1] - code_length[0]);
-            		byte max_delta  = length_delta[0];
             		
+            		
+            		out.writeByte(n);
             		out.writeByte(init_value);
-            		out.writeByte(max_delta);
+            		
+            		int max_delta = 0;
             		for(int k = 1; k < n - 1; k++)
             		{
             		    byte current_delta = (byte)(code_length[k + 1] - code_length[k]);	
             		    if(current_delta > max_delta)
             		    	max_delta = current_delta;
             		    length_delta[k] = current_delta;
-            		    System.out.println("" + current_delta);
             		}
-            		
+            		out.writeByte(max_delta);
             		if(max_delta == 1)
             		{
             		    int byte_length = (n - 1) / 8;
             		    if((n - 1) % 8 != 0)
             		    	byte_length++;
             		    byte [] packed_length = new byte[byte_length];
+            		    
+            		    byte [] mask = SegmentMapper.getPositiveMask();
+            		    
+            		    int m = 0;
+            		    outer: for(int k = 0; k < byte_length; k++)
+            		    {
+            		    	for(n = 0; n < 8; n++)
+            		    	{
+            		    		if(m == length_delta.length)
+            		    	    	break outer;
+            		    		if(length_delta[m] == 1)
+            		    		    packed_length[k] |= mask[n];   
+            		    		m++;
+            		    	}
+            		    }
+            		    //out.writeByte(byte_length);
             		    out.write(packed_length, 0, byte_length);
             		}
-            		else if(max_delta == 2)
+            		else if(max_delta <= 3)
             		{
             			int byte_length = (n - 1) / 4;
             		    if((n - 1) % 4 != 0)
             		    	byte_length++;
             		    byte [] packed_length = new byte[byte_length];	
+            		    
+            		    int m = 0;
+            		    outer: for(int k = 0; k < byte_length; k++)
+            		    {
+            		    	for(n = 0; n < 8; n += 2)
+            		    	{
+            		    		if(m == length_delta.length)
+            		    	    	break outer;
+            		    	  
+            		    		byte value = length_delta[m];
+            		    		System.out.println("Value is " + value);
+            		    		if(value > 0)
+            		    		{
+            		    		    value <<= n;
+            		    		    packed_length[k] |= value;
+            		    		}
+            		    		m++;
+            		    	}
+            		    }
+            		    //out.writeByte(byte_length);
             		    out.write(packed_length, 0, byte_length);
             		}
             		else if(max_delta <= 8)
             		{
-            			int byte_length = (n - 1) / 4;
-            		    if((n - 1) % 4 != 0)
+            			int byte_length = (n - 1) / 2;
+            		    if((n - 1) % 2 != 0)
             		    	byte_length++;
             		    byte [] packed_length = new byte[byte_length];
+            		    
+            		    int m = 0;
+            		    outer: for(int k = 0; k < byte_length; k++)
+            		    {
+            		    	for(n = 0; n < 8; n += 4)
+            		    	{
+            		    		if(m == length_delta.length)
+            		    	    	break outer;
+            		    	  
+            		    		byte value = length_delta[m];
+            		    		if(value > 0)
+            		    		{
+            		    		    value <<= n;
+            		    		    packed_length[k] |= value;
+            		    		}
+            		    		m++;
+            		    	}
+            		    }
             		    out.write(packed_length, 0, byte_length);
             		}
             		else
             		{
-            		    out.write(length_delta, 0, n - 1);    	
+            		    out.write(length_delta, 1, n - 1);    	
             		}
             		System.out.println("Code delta max is " + max_delta);
             		System.out.println();
-            		
-            		
-            		
+
             		byte [] string = (byte [])string_list.get(i);
  		            out.writeInt(string.length);
              		out.write(string, 0, string.length);

@@ -134,18 +134,121 @@ public class HuffmanReader
 				    map_list.add(map);
 				}
 				
-			    int     string_length = in.readInt();
-				byte [] string        = new byte[string_length];
-				in.read(string, 0, string_length);
-				string_list.add(string);
-				
+			    /*
 				int     n           = in.readInt();
 				byte [] code_length = new byte[n];
 				in.read(code_length, 0, n);
 				int [] code = CodeMapper.getCanonicalCode(code_length);
-				
 				code_list.add(code);
 				code_length_list.add(code_length);
+				*/
+				
+			    int n           = in.readByte();
+			    byte init_value = in.readByte();
+			    byte max_delta  = in.readByte();
+			    
+			    System.out.println("Max delta is " + max_delta);
+			    
+			    byte [] code_length = new byte[n];
+			    code_length[0]      = init_value;
+			    
+				if(max_delta > 8)
+				{
+				    in.read(code_length, 0, n - 1);
+				}
+				else if(max_delta == 1)
+				{
+					int byte_length = (n - 1) / 8;
+        		    if((n - 1) % 8 != 0)
+        		    	byte_length++;
+        		    byte [] packed_length = new byte[byte_length];
+        		    in.read(packed_length, 0, byte_length);
+        		    
+        		    byte [] mask = SegmentMapper.getPositiveMask();
+        		    
+        		    int m = 1;
+        		    outer: for(int k = 0; k < byte_length; k++)
+        		    {
+        		    	for(n = 0; n < 8; n++)
+        		    	{
+        		    		if(m == code_length.length)
+        		    	    	break outer;
+        		    		if((packed_length[k] & mask[n]) != 0)
+        		    			code_length[m] = 1;   
+        		    		m++;
+        		    	}
+        		    }
+				}
+				else if(max_delta == 2)
+				{
+					System.out.println("Got here.");
+					int byte_length = (n - 1) / 4;
+        		    if((n - 1) % 4 != 0)
+        		    	byte_length++;
+        		    byte [] packed_length = new byte[byte_length];	
+        		    in.read(packed_length, 0, byte_length);	
+        		    
+        		   
+        		    byte [] mask = new byte[4];
+        		    mask[0] = 3;
+        		    for(int k = 1; k < 4; k++)
+        		    {
+        		        mask[k] = (byte) (mask[k - 1] << 2);	
+        		    }
+        		    
+        		    int m = 1;
+        		    outer: for(int k = 0; k < byte_length; k++)
+        		    {
+        		    	for(n = 0; n < 8; n += 2)
+        		    	{
+        		    		if(m == code_length.length)
+        		    	    	break outer;
+        		    	  
+        		    		byte value     = (byte)(packed_length[k] & mask[n / 2]);
+        		    		value        >>= n;
+        		    	    value         &= 3;
+        		    	    code_length[m] = (byte) (code_length[m - 1] + value);
+        		    		m++;
+        		    	}
+        		    }
+				}
+				else
+				{
+					int byte_length = (n - 1) / 2;
+        		    if((n - 1) % 2 != 0)
+        		    	byte_length++;
+        		    byte [] packed_length = new byte[byte_length];	
+        		    in.read(packed_length, 0, byte_length);	
+        		    
+        		    byte [] mask = new byte[2];
+        		    mask[0] = 15;
+        		    mask[1] = (byte)(mask[0] << 4);
+        		   
+        		    int m = 1;
+        		    outer: for(int k = 0; k < byte_length; k++)
+        		    {
+        		    	for(n = 0; n < 8; n += 4)
+        		    	{
+        		    		if(m == code_length.length)
+        		    	    	break outer;
+        		    	  
+        		    		byte value     = (byte)(packed_length[k] & mask[n / 4]);
+        		    		value        >>= n;
+        		    	    value         &= 15;
+        		    	    code_length[m] = value;
+        		    		m++;
+        		    	}
+        		    }	
+				}
+				
+				int [] code = CodeMapper.getCanonicalCode(code_length);
+				code_list.add(code);
+				code_length_list.add(code_length);
+			    
+			    int     string_length = in.readInt();
+				byte [] string        = new byte[string_length];
+				in.read(string, 0, string_length);
+				string_list.add(string);
 		    }
 		    
 		    long stop = System.nanoTime();
@@ -323,7 +426,8 @@ public class HuffmanReader
 	    		    
 	    		    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
 	    		    
-			        for(int j = 0; j < delta.length; j++)
+	    		    delta[0] = 0;
+			        for(int j = 1; j < delta.length; j++)
 			           delta[j] += delta_min[i];
 			        
 			        current_xdim = xdim;
@@ -338,7 +442,8 @@ public class HuffmanReader
 		            delta = new int[intermediate_xdim * intermediate_ydim];
 		            
 		            int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
-			        for(int j = 0; j < delta.length; j++)
+		            delta[0] = 0;
+			        for(int j = 1; j < delta.length; j++)
 			           delta[j] += delta_min[i];	
 			        
 			        current_xdim = intermediate_xdim;
