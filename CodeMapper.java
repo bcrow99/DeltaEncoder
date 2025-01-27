@@ -8,9 +8,7 @@ public class CodeMapper
 	public static int packCode(byte src[], int table[], int [] code, byte [] length, byte dst[])
     {
 		int k = 0;
-    	int n = code.length;
     	int current_bit = 0;
-    	
     	
     	for(int i = 0; i < src.length; i++)
     	{
@@ -221,15 +219,18 @@ public class CodeMapper
     	int bit_length = current_bit;
     	return bit_length;
     }
-  
+    
     public static int unpackCode(byte [] src, int [] table, int [] code, byte [] code_length, int string_length, byte [] dst)
     {
+
         int [] inverse_table = new int[table.length];
         for(int i = 0; i < table.length; i++)
         {
             int j            = table[i];
             inverse_table[j] = i;
         }
+        
+        int [] buffer = new int[dst.length];
         
         int max_length      = code_length[code.length - 1];
         int max_bytes       = max_length / 8;
@@ -290,7 +291,7 @@ public class CodeMapper
           	    
           	    if(masked_src_word == masked_code_word)
           	    {
-          	    	dst[dst_byte++] = (byte)inverse_table[j];
+          	    	buffer[dst_byte++] = inverse_table[j];
 	                number_unpacked++;
           		    current_bit += code_length[j];
           		    current_byte = current_bit / 8;
@@ -302,9 +303,12 @@ public class CodeMapper
             }
         }  
         
+        for(int i = 0; i < dst.length; i++)
+        	dst[i] = (byte)(buffer[i] - 128);
     	return number_unpacked;
     }
-  
+    
+    
     
     
     public static int unpackCode(byte [] src, int [] table, int [] code, byte [] code_length, int string_length, int [] dst)
@@ -390,6 +394,9 @@ public class CodeMapper
         
     	return number_unpacked;
     }
+    
+    
+    
   
     public static int unpackCode(byte src[], int table[], int [] code, int [] code_length, int string_length, int dst[])
     {
@@ -757,7 +764,6 @@ public class CodeMapper
 	    	code[i] = value;
 	    	addend = addend.multiply(BigInteger.TWO);
 	    }
-	    
         return code;
     }
     
@@ -1084,7 +1090,6 @@ public class CodeMapper
         shifted_code[0] = BigInteger.ZERO;
         for(int i = 1; i < n; i++)
         {
-        	//code[i]   = (int)(code[i - 1] + Math.pow(2, max_length - length[i - 1]));
         	code[i] = code[i - 1];
         	int j = (int)(Math.pow(2, max_length - length[i - 1]));
         	BigInteger addend = BigInteger.valueOf(j);
@@ -1150,11 +1155,6 @@ public class CodeMapper
     	return result;
     }
     
-    // Somewhere we are passing histograms with holes in
-    // them.  Tricky problem that also hampers deflate.
-    // We'll filter the zero values--room to improve
-    // efficiency although it shouldn't effect final
-    // result, unlike deflate.
     public static double getShannonLimit(int [] frequency)
     {
     	int n   = frequency.length;
@@ -1178,8 +1178,6 @@ public class CodeMapper
         return limit;
     }
 
-    // We'll refer to integer values as frequencies,
-    // and fractions (or probabilities) as weights.
     public static int getCost(int [] length, int [] frequency)
     {
     	int n    = length.length;
@@ -1202,5 +1200,328 @@ public class CodeMapper
     	    cost += length[i] * frequency[i];
     	}
     	return cost;
+    }
+    
+    public static ArrayList packLengthTable(byte [] length)
+    {
+        ArrayList result = new ArrayList();
+        int n = length.length;
+        result.add(n);
+       
+        byte init_value = length[0];
+        result.add(init_value);
+        
+        
+        byte [] length_delta = new byte[n - 1];
+        byte max_delta  = 0;
+        for(int i = 0; i < n - 1; i++)
+        {
+        	length_delta[i] = (byte)(length[i + 1] - length[i]);
+        	if(length_delta[i] > max_delta)
+        		max_delta = length_delta[i];
+        }
+        result.add(max_delta);
+        
+        if(max_delta == 1)
+		{
+		    int byte_length = (n - 1) / 8;
+		    if((n - 1) % 8 != 0)
+		    	byte_length++;
+		    
+		    byte [] packed_length = new byte[byte_length];
+		    byte [] mask = SegmentMapper.getPositiveMask();
+		    
+		    int m = 0;
+		    outer: for(int k = 0; k < byte_length; k++)
+		    {
+		    	for(n = 0; n < 8; n++)
+		    	{
+		    		if(m == length_delta.length)
+		    	    	break outer;
+		    		if(length_delta[m] == 1)
+		    		    packed_length[k] |= mask[n];   
+		    		m++;
+		    	}
+		    }
+		    result.add(packed_length);
+		}
+		else if(max_delta <= 3)
+		{
+			int byte_length = (n - 1) / 4;
+		    if((n - 1) % 4 != 0)
+		    	byte_length++;
+		    byte [] packed_length = new byte[byte_length];	
+		    
+		    int m = 0;
+		    outer: for(int k = 0; k < byte_length; k++)
+		    {
+		    	for(n = 0; n < 8; n += 2)
+		    	{
+		    		if(m == length_delta.length)
+		    	    	break outer;
+		    	  
+		    		byte value = length_delta[m];
+     	    		if(value > 0)
+		    		{
+		    		    value <<= n;
+		    		    packed_length[k] |= value;
+		    		}
+		    		m++;
+		    	}
+		    }
+		    result.add(packed_length);
+		}
+		else if(max_delta <= 8)
+		{
+			int byte_length = (n - 1) / 2;
+		    if((n - 1) % 2 != 0)
+		    	byte_length++;
+		    byte [] packed_length = new byte[byte_length];
+		    
+		    int m = 0;
+		    outer: for(int k = 0; k < byte_length; k++)
+		    {
+		    	for(n = 0; n < 8; n += 4)
+		    	{
+		    		if(m == length_delta.length)
+		    	    	break outer;
+		    	  
+		    		byte value = length_delta[m];
+		    		if(value > 0)
+		    		{
+		    		    value <<= n;
+		    		    packed_length[k] |= value;
+		    		}
+		    		m++;
+		    	}
+		    }
+		    result.add(packed_length);
+		}
+		else
+			result.add(length_delta);
+        
+        return result;
+    }
+    
+    public static byte [] unpackLengthTable(ArrayList length_list)
+    {
+        int  n          = (int)length_list.get(0);	
+        byte init_value = (byte)length_list.get(1);
+        byte max_delta  = (byte)length_list.get(2);
+        
+        byte [] packed_delta = (byte [])length_list.get(3);
+        
+        byte [] length = new byte[n];
+        
+        if(max_delta > 8)
+        {
+            if(packed_delta.length != n - 1)
+                System.out.println("Packed deltas are not the right length.");
+            else
+            {
+            	length[0] = init_value;
+            	for(int i = 1; i < n; i++)
+            		length[i] = (byte)(length[i - 1] + packed_delta[i - 1]);
+            }
+        }
+        else if(max_delta == 1)
+        {
+        	int byte_length = (n - 1) / 8;
+		    if((n - 1) % 8 != 0)
+		    	byte_length++;	
+		    if(packed_delta.length != byte_length)
+		    	System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		    	byte [] mask = SegmentMapper.getPositiveMask();
+    		    
+		    	length[0] = init_value;
+    		    int k     = 1;
+    		    outer: for(int i = 0; i < byte_length; i++)
+    		    {
+    		    	for(int j = 0; j < 8; j++)
+    		    	{
+    		    		if(k == n)
+    		    	    	break outer;
+    		    		if((packed_delta[i] & mask[j]) != 0)
+    		    			length[k] = (byte) (length[k - 1] + 1);
+    		    		else
+    		    			length[k] = length[k - 1];	
+    		    		k++;
+    		    	}
+    		    }
+		    }
+        }
+        else if(max_delta == 2)
+        {
+        	int byte_length = (n - 1) / 4;
+		    if((n - 1) % 4 != 0)
+		    	byte_length++;
+		    if(packed_delta.length != byte_length)
+	    	    System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		    	byte [] mask = new byte[4];
+			    mask[0]      = 3;
+			    for(int i = 1; i < 4; i++)
+			        mask[i] = (byte) (mask[i - 1] << 2);	
+			    
+			    int k = 1;
+			    outer: for(int i = 0; i < byte_length; i++)
+			    {
+			    	for(int j = 0; j < 8; j += 2)
+			    	{
+			    		if(k == n)
+			    	    	break outer;
+			    	  
+			    		byte value     = (byte)(packed_delta[i] & mask[j / 2]);
+			    		value        >>= j;
+			    	    value         &= 3;
+			    	    length[k] = (byte) (length[k - 1] + value);
+			    		k++;
+			    	}
+			    }	
+		    } 
+        }
+        else
+        {
+        	int byte_length = (n - 1) / 2;
+		    if((n - 1) % 2 != 0)
+		    	byte_length++;
+		    if(packed_delta.length != byte_length)
+	    	    System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		        byte [] mask = new byte[2];
+		        mask[0]      = 15;
+		        mask[1]      = (byte)(mask[0] << 4);
+		        
+		        length[0] = init_value;
+		        int k     = 1;
+		        outer: for(int i = 0; i < byte_length; i++)
+		        {
+		    	    for(int j = 0; j < 8; j += 4)
+		    	    {
+		    		    if(k == n)
+		    	    	    break outer;
+		    	  
+		    		    byte value     = (byte)(packed_delta[i] & mask[j / 4]);
+		    		    value        >>= j;
+		    	        value         &= 15;
+		    	        length[k]      = (byte)(length[k - 1] + value);
+		    		    k++;
+		    	    }
+		        }
+		    }
+        }
+        return length;
+    }
+    
+    public static byte [] unpackLengthTable(int n, byte init_value, byte max_delta, byte [] packed_delta)
+    {
+        byte [] length = new byte[n];
+        
+        if(max_delta > 8)
+        {
+            if(packed_delta.length != n - 1)
+                System.out.println("Packed deltas are not the right length.");
+            else
+            {
+            	length[0] = init_value;
+            	for(int i = 1; i < n; i++)
+            		length[i] = (byte)(length[i - 1] + packed_delta[i - 1]);
+            }
+        }
+        else if(max_delta == 1)
+        {
+        	int byte_length = (n - 1) / 8;
+		    if((n - 1) % 8 != 0)
+		    	byte_length++;	
+		    if(packed_delta.length != byte_length)
+		    	System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		    	byte [] mask = SegmentMapper.getPositiveMask();
+    		    
+		    	length[0] = init_value;
+    		    int k     = 1;
+    		    outer: for(int i = 0; i < byte_length; i++)
+    		    {
+    		    	for(int j = 0; j < 8; j++)
+    		    	{
+    		    		if(k == n)
+    		    	    	break outer;
+    		    		if((packed_delta[i] & mask[j]) != 0)
+    		    			length[k] = (byte) (length[k - 1] + 1);
+    		    		else
+    		    			length[k] = length[k - 1];	
+    		    		k++;
+    		    	}
+    		    }
+		    }
+        }
+        else if(max_delta == 2)
+        {
+        	int byte_length = (n - 1) / 4;
+		    if((n - 1) % 4 != 0)
+		    	byte_length++;
+		    if(packed_delta.length != byte_length)
+	    	    System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		    	byte [] mask = new byte[4];
+			    mask[0]      = 3;
+			    for(int i = 1; i < 4; i++)
+			        mask[i] = (byte) (mask[i - 1] << 2);	
+			    
+			    int k = 1;
+			    outer: for(int i = 0; i < byte_length; i++)
+			    {
+			    	for(int j = 0; j < 8; j += 2)
+			    	{
+			    		if(k == n)
+			    	    	break outer;
+			    	  
+			    		byte value     = (byte)(packed_delta[i] & mask[j / 2]);
+			    		value        >>= j;
+			    	    value         &= 3;
+			    	    length[k] = (byte) (length[k - 1] + value);
+			    		k++;
+			    	}
+			    }	
+		    } 
+        }
+        else
+        {
+        	int byte_length = (n - 1) / 2;
+		    if((n - 1) % 2 != 0)
+		    	byte_length++;
+		    if(packed_delta.length != byte_length)
+	    	    System.out.println("Packed deltas are not the right length.");
+		    else
+		    {
+		        byte [] mask = new byte[2];
+		        mask[0]      = 15;
+		        mask[1]      = (byte)(mask[0] << 4);
+		        
+		        length[0] = init_value;
+		        int k     = 1;
+		        outer: for(int i = 0; i < byte_length; i++)
+		        {
+		    	    for(int j = 0; j < 8; j += 4)
+		    	    {
+		    		    if(k == n)
+		    	    	    break outer;
+		    	  
+		    		    byte value     = (byte)(packed_delta[i] & mask[j / 4]);
+		    		    value        >>= j;
+		    	        value         &= 15;
+		    	        length[k]      = (byte)(length[k - 1] + value);
+		    		    k++;
+		    	    }
+		        }
+		    }
+        }
+        return length;
     }
 }
