@@ -1420,6 +1420,7 @@ public class CodeMapper
     public static byte [] unpackLengthTable(int n, byte init_value, byte max_delta, byte [] packed_delta)
     {
         byte [] length = new byte[n];
+        length[0] = init_value;
         
         if(max_delta > 8)
         {
@@ -1427,7 +1428,6 @@ public class CodeMapper
                 System.out.println("Packed deltas are not the right length.");
             else
             {
-            	length[0] = init_value;
             	for(int i = 1; i < n; i++)
             		length[i] = (byte)(length[i - 1] + packed_delta[i - 1]);
             }
@@ -1442,8 +1442,6 @@ public class CodeMapper
 		    else
 		    {
 		    	byte [] mask = SegmentMapper.getPositiveMask();
-    		    
-		    	length[0] = init_value;
     		    int k     = 1;
     		    outer: for(int i = 0; i < byte_length; i++)
     		    {
@@ -1523,5 +1521,99 @@ public class CodeMapper
 		    }
         }
         return length;
+    }
+    
+    public static ArrayList getHuffmanList(byte [] string)
+    {
+        ArrayList list = new ArrayList();
+        
+        ArrayList histogram_list   = StringMapper.getHistogram(string);
+		int       string_min       = (int)histogram_list.get(0);
+        int []    string_histogram = (int[])histogram_list.get(1);
+	    int       value_range      = (int)histogram_list.get(2);
+	    
+	    // This is the number of different values in the string;
+	    int n = string_histogram.length;
+	    
+	    // We produce a rank table from the histogram to use when encoding.
+	    int [] rank_table      = StringMapper.getRankTable(string_histogram);
+		
+	    // We produce a frequency table to produce huffman lengths.
+	    ArrayList frequency_list = new ArrayList();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(string_histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	frequency[k] = (int)frequency_list.get(k);
+	    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+	    
+	    // We produce a huffman code from the lengths.
+	    int [] huffman_code    = CodeMapper.getCanonicalCode(huffman_length);
+	    
+	    // We produce the estimated bit length of the output.
+	    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
+        
+	    list.add(estimated_bit_length);
+        list.add(rank_table);
+        list.add(huffman_code);
+        list.add(huffman_length);
+        
+        return list;
+    }
+    
+    
+    public static ArrayList getHuffmanList2(byte [] string)
+    {
+        ArrayList list = new ArrayList();
+        
+        ArrayList histogram_list   = StringMapper.getHistogram(string);
+		int       string_min       = (int)histogram_list.get(0);
+        int []    string_histogram = (int[])histogram_list.get(1);
+	    int       value_range      = (int)histogram_list.get(2);
+	    
+	    // This is the number of different values in the string;
+	    int n = string_histogram.length;
+	    
+	    // We produce a rank table from the histogram to use when encoding.
+	    int [] rank_table      = StringMapper.getRankTable(string_histogram);
+		
+	    // We produce a frequency table to produce huffman lengths.
+	    ArrayList frequency_list = new ArrayList();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(string_histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	frequency[k] = (int)frequency_list.get(k);
+	    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+	    
+	    // We produce a huffman code from the lengths.
+	    int [] huffman_code    = CodeMapper.getCanonicalCode(huffman_length);
+	    
+	    // We produce the estimated bit length of the output.
+	    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
+	    
+	    int byte_length = estimated_bit_length / 8;
+	    if(estimated_bit_length % 8 != 0)
+	    	byte_length++;
+	    //byte_length += 2;
+	    byte [] packed_string = new byte[byte_length];
+	    
+	    int huffman_bit_length  =  packCode(string, rank_table, huffman_code, huffman_length, packed_string);
+	    
+	    System.out.println("Estimated bit length was " + estimated_bit_length);
+	    System.out.println("Actual bit length was " + huffman_bit_length);
+	    
+	    ArrayList length_list   = CodeMapper.packLengthTable(huffman_length);
+        
+	    list.add(huffman_bit_length);
+        list.add(rank_table);
+        list.add(huffman_code);
+        list.add(huffman_length);
+        list.add(length_list);
+        list.add(packed_string);
+        
+        return list;
     }
 }
