@@ -1100,9 +1100,9 @@ public class DeltaWriter2
 		                	out.write(string, 0, string.length);
 		                }
 		                System.out.println("Unary length is " + unary_length);
-		                System.out.println("Unary huffman length is " + huffman_length);
+		                System.out.println("Unary huffman length is " + huffman_bit_length);
 		                System.out.println("Unary zipped length is " + (zipped_length * 8));
-		                System.out.println("Shannon limit is " + String.format("%.4f", shannon_limit));
+		                System.out.println("Shannon limit is " + String.format("%.1f", shannon_limit));
 		                System.out.println();
 	            	 }
 	            	 else
