@@ -1057,6 +1057,10 @@ public class DeltaWriter2
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
+	            	    
+	            	    
+	            	    
+	            	    
 	            	    int unary_bit_length = StringMapper.getBitlength(string);
 	            	   
 	            	    int unary_length = unary_bit_length + 8 + 256 * 8;
@@ -1065,6 +1069,7 @@ public class DeltaWriter2
 	            	    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
 	            	    
 	            	    int huffman_bit_length = (int) huffman_list.get(0);
+	            	    double shannon_limit = (double)huffman_list.get(1);
 	            	    
 	            	    int huffman_length     = huffman_bit_length + 256 * 8 + 256 / 8;
 	            	    
@@ -1097,6 +1102,7 @@ public class DeltaWriter2
 		                System.out.println("Unary length is " + unary_length);
 		                System.out.println("Unary huffman length is " + huffman_length);
 		                System.out.println("Unary zipped length is " + (zipped_length * 8));
+		                System.out.println("Shannon limit is " + String.format("%.4f", shannon_limit));
 		                System.out.println();
 	            	 }
 	            	 else
