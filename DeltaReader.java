@@ -411,24 +411,6 @@ public class DeltaReader
 		}
 	}
 	
-	class Shifter implements Runnable
-	{
-		int pixel_shift;
-		int [] pixel;
-		
-		public Shifter(int[] pixel, int pixel_shift)
-		{
-			this.pixel = pixel;
-			this.pixel_shift = pixel_shift;
-		}
-		
-		public void run()
-		{
-		    for(int i = 0; i < pixel.length; i++)
-		        pixel[i] <<= pixel_shift;
-		}
-	}
-	
 	class Decompressor implements Runnable 
 	{ 
 		int i;
@@ -446,7 +428,6 @@ public class DeltaReader
 			    byte [] string    = (byte [])string_list.get(i);
 			    int [] table      = (int [])table_list.get(i);
 			    int iterations    = StringMapper.getIterations(string);
-			    //int type          = StringMapper.getType(string);
 			    int bitlength     = StringMapper.getBitlength(string);
 			    
 			    if(channel_iterations[i] != iterations)

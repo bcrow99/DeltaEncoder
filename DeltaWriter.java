@@ -616,8 +616,6 @@ public class DeltaWriter
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
-				
-				System.out.println();
 		
 				int [] delta  = (int [])result.get(1);
 				
@@ -795,7 +793,6 @@ public class DeltaWriter
 			        }
 		        }
 		        
-                System.out.println();
 		        for(int k = 1; k < delta.length; k++)
 		    	    delta[k] += channel_delta_min[j];
 		    
@@ -1060,7 +1057,18 @@ public class DeltaWriter
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
-	            		out.writeInt(string.length);
+	            	    int unary_bit_length = StringMapper.getBitlength(string);
+	            	   
+	            	    int unary_length = unary_bit_length + 8 + 256 * 8;
+	            		
+	            	    
+	            	    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
+	            	    
+	            	    int huffman_bit_length = (int) huffman_list.get(0);
+	            	    
+	            	    int huffman_length     = huffman_bit_length + 256 * 8 + 256 / 8;
+	            	    
+	            	    out.writeInt(string.length);
 	            		
 	            		int current_iterations = StringMapper.getIterations(string);
 	            		 
@@ -1071,6 +1079,8 @@ public class DeltaWriter
 		                int zipped_length = deflater.deflate(zipped_string);
 		                deflater.end(); 
 		                
+		                if(current_iterations > 15)
+		                	current_iterations -= 16;
 		                System.out.println("The unary string compressed " + current_iterations + " time(s).");
 		                if(zipped_length < string.length)
 		                {
@@ -1084,6 +1094,9 @@ public class DeltaWriter
 		                	out.writeInt(0);
 		                	out.write(string, 0, string.length);
 		                }
+		                System.out.println("Unary length is " + unary_length);
+		                System.out.println("Unary huffman length is " + huffman_length);
+		                System.out.println("Unary zipped length is " + (zipped_length * 8));
 		                System.out.println();
 	            	 }
 	            	 else

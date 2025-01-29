@@ -616,8 +616,6 @@ public class DeltaWriter2
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
-				
-				System.out.println();
 		
 				int [] delta  = (int [])result.get(1);
 				
@@ -795,7 +793,6 @@ public class DeltaWriter2
 			        }
 		        }
 		        
-                System.out.println();
 		        for(int k = 1; k < delta.length; k++)
 		    	    delta[k] += channel_delta_min[j];
 		    
@@ -1026,11 +1023,9 @@ public class DeltaWriter2
 				   
 	                if(table.length <= max_byte_value)
                     {
-	                	byte [] buffer = new byte[table.length];
-	                	for(int k = 0; k < buffer.length; k++)
-	                		buffer[k] = (byte)table[k];
-	                	out.write(buffer, 0, buffer.length);
-                    }
+	                    for(int k = 0; k < table.length; k++)
+	                        out.writeByte(table[k]);
+                     }
 	                else 
 	                {
 	                    for(int k = 0; k < table.length; k++)
@@ -1061,169 +1056,29 @@ public class DeltaWriter2
 	            	 
 	            	if(number_of_segments == 1)
 	            	{
-	            	    byte []   string           = (byte [])string_list.get(i);
-	            	    
+	            	    byte [] string = (byte [])string_list.get(i);
+	            	    int unary_bit_length = StringMapper.getBitlength(string);
 	            	   
-	            	    ArrayList histogram_list   = StringMapper.getHistogram(string);
-	    				int       string_min       = (int)histogram_list.get(0);
-	                    int []    string_histogram = (int[])histogram_list.get(1);
-	    			    int value_range            = (int)histogram_list.get(2);
+	            	    int unary_length = unary_bit_length + 8 + 256 * 8;
 	            		
-	    			    int n = string_histogram.length;
-	    				ArrayList frequency_list = new ArrayList();
-	    			    for(int k = 0; k < n; k++)
-	    			        frequency_list.add(string_histogram[k]);
-	    			    Collections.sort(frequency_list, Comparator.reverseOrder());
-	    			    int [] frequency = new int[n];
-	    			    for(int k = 0; k < n; k++)
-	    			    	frequency[k] = (int)frequency_list.get(k);
-	    			    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
-	    			    int [] huffman_code    = CodeMapper.getCanonicalCode(huffman_length);
-	    			    int [] rank_table      = StringMapper.getRankTable(string_histogram);
-	    			    
-	    			    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
-	    			    int byte_length = estimated_bit_length / 8;
-	    			    if(estimated_bit_length % 8 != 0)
-	    			    	byte_length++;
-	    			    byte_length += 2;
-	    			    byte [] packed_string = new byte[byte_length];
-	    			    
-	    			    int huffman_bit_length  =  CodeMapper.packCode(string, rank_table, huffman_code, huffman_length, packed_string);
-	    			    
-	    			    int string_bitlength    = StringMapper.getBitlength(string);
-	    			    
-	    			    out.writeInt(string.length);
-	    			    
-	    			    if((huffman_bit_length / 8 + huffman_length.length) > (string_bitlength / 8))
-                        {
-                        	System.out.println("Did not huffman encode channel " + i);
-		                	out.writeInt(0);
-		                	out.write(string, 0, string.length);
-                        }
-                        else
-                        {
-                        	//byte  [] code_length = (byte [])code_length_list.get(i);
-                        	
-                    		n = huffman_code.length;
-                    		System.out.println("Number of codes is " + n);
-                    		byte [] length_delta = new byte[n - 1];
-                    		
-                    		byte init_value = huffman_length[0];
-                    		length_delta[0] = (byte)(huffman_length[1] - huffman_length[0]);
-                    		
-                    		
-                    		out.writeByte(n);
-                    		out.writeByte(init_value);
-                    		
-                    		int max_delta = 0;
-                    		for(int k = 1; k < n - 1; k++)
-                    		{
-                    		    byte current_delta = (byte)(huffman_length[k + 1] - huffman_length[k]);	
-                    		    if(current_delta > max_delta)
-                    		    	max_delta = current_delta;
-                    		    length_delta[k] = current_delta;
-                    		}
-                    		out.writeByte(max_delta);
-                    		System.out.println("Max delta is " + max_delta);
-                    		System.out.println();
-                    		if(max_delta == 1)
-                    		{
-                    			
-                    		    byte_length = (n - 1) / 8;
-                    		    
-                    		    if((n - 1) % 8 != 0)
-                    		    	byte_length++;
-                    		    
-                    		    byte [] packed_length = new byte[byte_length];
-                    		    byte [] mask = SegmentMapper.getPositiveMask();
-                    		    
-                    		    int m = 0;
-                    		    outer: for(int k = 0; k < byte_length; k++)
-                    		    {
-                    		    	for(n = 0; n < 8; n++)
-                    		    	{
-                    		    		if(m == length_delta.length)
-                    		    	    	break outer;
-                    		    		if(length_delta[m] == 1)
-                    		    		    packed_length[k] |= mask[n];   
-                    		    		m++;
-                    		    	}
-                    		    }
-                    		    out.write(packed_length, 0, byte_length);
-                    		}
-                    		else if(max_delta <= 3)
-                    		{
-                    			byte_length = (n - 1) / 4;
-                    		    if((n - 1) % 4 != 0)
-                    		    	byte_length++;
-                    		    byte [] packed_length = new byte[byte_length];	
-                    		    
-                    		    int m = 0;
-                    		    outer: for(int k = 0; k < byte_length; k++)
-                    		    {
-                    		    	for(n = 0; n < 8; n += 2)
-                    		    	{
-                    		    		if(m == length_delta.length)
-                    		    	    	break outer;
-                    		    	  
-                    		    		byte value = length_delta[m];
-                         	    		if(value > 0)
-                    		    		{
-                    		    		    value <<= n;
-                    		    		    packed_length[k] |= value;
-                    		    		}
-                    		    		m++;
-                    		    	}
-                    		    }
-                    		    
-                    		    out.write(packed_length, 0, byte_length);
-                    		}
-                    		else if(max_delta <= 8)
-                    		{
-                    			byte_length = (n - 1) / 2;
-                    		    if((n - 1) % 2 != 0)
-                    		    	byte_length++;
-                    		    byte [] packed_length = new byte[byte_length];
-                    		    
-                    		    int m = 0;
-                    		    outer: for(int k = 0; k < byte_length; k++)
-                    		    {
-                    		    	for(n = 0; n < 8; n += 4)
-                    		    	{
-                    		    		if(m == length_delta.length)
-                    		    	    	break outer;
-                    		    	  
-                    		    		byte value = length_delta[m];
-                    		    		if(value > 0)
-                    		    		{
-                    		    		    value <<= n;
-                    		    		    packed_length[k] |= value;
-                    		    		}
-                    		    		m++;
-                    		    	}
-                    		    }
-                    		    out.write(packed_length, 0, byte_length);	
-                    		}
-                    		out.write(packed_string, 0, packed_string.length);
-                        }
-	    			    /*
-	    			    out.writeInt(packed_string.length);
-	    			    out.write(packed_string, 0, packed_string.length);
-	    			    
-	    			    out.writeInt(huffman_length.length);
-	    			    out.write(huffman_length, 0, huffman_length.length);
-	    			    */
 	            	    
+	            	    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
 	            	    
-	            	    /*
-	            		out.writeInt(string.length);
+	            	    int huffman_bit_length = (int) huffman_list.get(0);
+	            	    
+	            	    int huffman_length     = huffman_bit_length + 256 * 8 + 256 / 8;
+	            	    
+	            	    out.writeInt(string.length);
+	            		
+	            		int current_iterations = StringMapper.getIterations(string);
+	            		 
 	            		Deflater deflater = new Deflater();
 		                deflater.setInput(string);
 		                byte [] zipped_string = new byte[2 * string.length];
 		                deflater.finish();
 		                int zipped_length = deflater.deflate(zipped_string);
 		                deflater.end(); 
-		                int current_iterations = StringMapper.getIterations(string);
+		                
 		                if(current_iterations > 15)
 		                	current_iterations -= 16;
 		                System.out.println("The unary string compressed " + current_iterations + " time(s).");
@@ -1239,11 +1094,10 @@ public class DeltaWriter2
 		                	out.writeInt(0);
 		                	out.write(string, 0, string.length);
 		                }
-		                System.out.println("String bitlength was " + string_bitlength);
-	    			    System.out.println("Packed bitlength was " + huffman_bit_length);
-	    			    System.out.println("Zipped bitlength was " + (zipped_length * 8));
-	    			    System.out.println();
-	    			    */
+		                System.out.println("Unary length is " + unary_length);
+		                System.out.println("Unary huffman length is " + huffman_length);
+		                System.out.println("Unary zipped length is " + (zipped_length * 8));
+		                System.out.println();
 	            	 }
 	            	 else
 	            	 {
@@ -1266,6 +1120,7 @@ public class DeltaWriter2
 			    				byte[] current_segment = (byte [])segments.get(k);  
 			    			    out.write(current_segment, 0, current_segment.length - 1);
 			    			}
+
 	            		 }
 						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						 {
