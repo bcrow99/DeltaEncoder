@@ -2,6 +2,7 @@ import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
 import java.util.*;
 import java.util.zip.*;
 import java.lang.Math.*;
@@ -10,11 +11,17 @@ import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+
+
 public class DeltaWriter
 {
-	BufferedImage image;
+	BufferedImage original_image;
+	BufferedImage working_image;
+	BufferedImage display_image;
 	ImageCanvas   image_canvas;
-	int           xdim, ydim;
+	int           image_xdim, image_ydim;
+	int           canvas_xdim, canvas_ydim;
+	int           screen_xdim, screen_ydim;
 	JMenuItem     apply_item;
 	String        filename;
 	int []        pixel;
@@ -25,6 +32,8 @@ public class DeltaWriter
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
+	
+	double scale = 1.;
 	
 	int    [] set_sum, channel_sum;
 	String [] set_string;
@@ -70,13 +79,13 @@ public class DeltaWriter
 		try
 		{
 			File file = new File(filename);
-			file_length            = file.length();
-			BufferedImage original_image = ImageIO.read(file);
+			file_length    = file.length();
+			original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
-			xdim = original_image.getWidth();
-			ydim = original_image.getHeight();
+			image_xdim = original_image.getWidth();
+			image_ydim = original_image.getHeight();
 		
-			System.out.println("Xdim = " + xdim + ", ydim = " + ydim);
+			System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
 			System.out.println();
 		    
 		    channel_list = new ArrayList();
@@ -120,8 +129,8 @@ public class DeltaWriter
             
 			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
-				pixel = new int[xdim * ydim];
-				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, pixel, 0, xdim);
+				pixel = new int[image_xdim * image_ydim];
+				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
 		        try
 		        {
 		            pixel_grabber.grabPixels();
@@ -136,11 +145,11 @@ public class DeltaWriter
 		            System.exit(1);
 		        }
 		        
-		        int [] alpha = new int[xdim * ydim];
-		        int [] blue  = new int[xdim * ydim];
-		        int [] green = new int[xdim * ydim];
-		        int [] red   = new int[xdim * ydim];
-		        for(int i = 0; i < xdim * ydim; i++)
+		        int [] alpha = new int[image_xdim * image_ydim];
+		        int [] blue  = new int[image_xdim * image_ydim];
+		        int [] green = new int[image_xdim * image_ydim];
+		        int [] red   = new int[image_xdim * image_ydim];
+		        for(int i = 0; i < image_xdim * image_ydim; i++)
 				{
 			        alpha[i] = (pixel[i] >> 24) & 0xff;
 				    blue[i]  = (pixel[i] >> 16) & 0xff;
@@ -151,13 +160,12 @@ public class DeltaWriter
 		        channel_list.add(green);
 		        channel_list.add(red);
 		        
-			    image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+			    working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
 			    
-			    // This is not the usual order, careful.
-			    for(int i = 0; i < xdim; i++)
+			    for(int i = 0; i < image_xdim; i++)
 				{
-				    for(int j = 0; j < ydim; j++)
-				    	image.setRGB(i, j, pixel[j * xdim + i]);	
+				    for(int j = 0; j < image_ydim; j++)
+				    	working_image.setRGB(i, j, pixel[j * image_xdim + i]);	
 				} 
 			    
 			    JFrame frame = new JFrame("Delta Writer " + filename);
@@ -171,8 +179,56 @@ public class DeltaWriter
 			    };
 			    frame.addWindowListener(window_handler);
 			    
-				image_canvas = new ImageCanvas();
-				image_canvas.setSize(xdim, ydim);
+			    Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+				screen_xdim          = (int)screenSize.getWidth();
+				screen_ydim          = (int)screenSize.getHeight();
+				if(image_xdim <= (screen_xdim - 20) && image_ydim <= (screen_ydim - 60))
+				{
+					canvas_xdim = image_xdim;
+					canvas_ydim = image_ydim;
+					scale       = 1.;
+				}
+				else if(image_xdim <= (screen_xdim - 20))
+				{
+					canvas_ydim = screen_ydim - 60; 
+					scale       = canvas_ydim;
+					scale      /= image_ydim;
+					canvas_xdim = (int)(scale * image_xdim);
+				}
+				else if(image_ydim <= (screen_ydim - 60))
+	            {
+					canvas_xdim = screen_xdim - 20; 
+					scale       = canvas_ydim;
+					scale      /= image_ydim;
+	            }
+				else
+				{
+					double xscale = screen_xdim - 20;
+					xscale       /= image_xdim;
+					double yscale = screen_ydim - 60;
+					yscale       /= image_ydim;
+					    
+					if(xscale <= yscale)
+					    scale = xscale;
+					else
+					    scale = yscale;
+					    
+					canvas_xdim = (int)(scale * image_xdim);
+					canvas_ydim = (int)(scale * image_ydim);
+				}
+				
+				if(scale == 1.)
+					display_image = original_image;
+				else
+				{
+				    AffineTransform scaling_transform = new AffineTransform();
+				    scaling_transform.scale(scale, scale);
+				    AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
+				    display_image              = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
+				    display_image              = scale_op.filter(original_image, display_image);
+				}
+			    image_canvas = new ImageCanvas();
+				image_canvas.setSize(canvas_xdim, canvas_ydim);
 				frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
 				
 				JMenuBar menu_bar = new JMenuBar();
@@ -189,9 +245,19 @@ public class DeltaWriter
 				{
 					public void actionPerformed(ActionEvent event)
 					{
-						for(int i = 0; i < xdim; i++)
-					    	for(int j = 0; j < ydim; j++)
-					    		image.setRGB(i, j, pixel[j * xdim + i]); 
+						if(scale == 1.)
+							display_image = original_image;
+						else
+						{
+							System.out.println("Scaling image.");
+							AffineTransform scaling_transform = new AffineTransform();
+							scaling_transform.scale(scale, scale);
+							AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
+							BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
+							scaled_image               = scale_op.filter(original_image, scaled_image);
+							display_image              = scaled_image;
+						}
+							
 						System.out.println("Reloaded original image.");
 						image_canvas.repaint();
 					}	
@@ -448,7 +514,7 @@ public class DeltaWriter
     {
         public synchronized void paint(Graphics g)
         {
-            g.drawImage(image, 0, 0, this);
+            g.drawImage(display_image, 0, 0, this);
         }
     }
 	
@@ -464,7 +530,7 @@ public class DeltaWriter
 			for(int i = 0; i < 3; i++)
 			{
 				int [] channel         = (int [])channel_list.get(i);
-				int [] shifted_channel = new int [xdim * ydim];
+				int [] shifted_channel = new int [image_xdim * image_ydim];
 				for(int j = 0; j < channel.length; j++)
 					shifted_channel[j] = channel[j] >> pixel_shift;	
 				shifted_channel_list.add(shifted_channel);
@@ -472,14 +538,14 @@ public class DeltaWriter
 			
 			ArrayList quantized_channel_list = new ArrayList();
 	       
-			int new_xdim = xdim;
-		    int new_ydim = ydim;
+			int new_xdim = image_xdim;
+		    int new_ydim = image_ydim;
 		    if(pixel_quant != 0)
 		    {
 		    	double factor = pixel_quant;
 		        factor       /= 10;
-		        new_xdim = xdim - (int)(factor * (xdim / 2 - 2));
-		        new_ydim = ydim - (int)(factor * (ydim / 2 - 2));
+		        new_xdim = image_xdim - (int)(factor * (image_xdim / 2 - 2));
+		        new_ydim = image_ydim - (int)(factor * (image_ydim / 2 - 2));
 		    }
 		    
 		    for(int i = 0; i < 3; i++)
@@ -489,7 +555,7 @@ public class DeltaWriter
 		    		quantized_channel_list.add(shifted_channel);
 		    	else
 		    	{
-		    		int [] resized_channel = ResizeMapper.resize(shifted_channel, xdim, new_xdim, new_ydim);
+		    		int [] resized_channel = ResizeMapper.resize(shifted_channel, image_xdim, new_xdim, new_ydim);
 		    		quantized_channel_list.add(resized_channel);
 		    	}
 		    }
@@ -558,7 +624,7 @@ public class DeltaWriter
 			min_set_id = min_index;
 			
 			file_compression_rate  = file_length;
-			file_compression_rate /= xdim * ydim * 3;
+			file_compression_rate /= image_xdim * image_ydim * 3;
 			
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
 			System.out.println();
@@ -838,9 +904,9 @@ public class DeltaWriter
 				    for(int k = 0; k < channel.length; k++)
 					    channel[k] += channel_min[j];
 			
-			    if(new_xdim != xdim || new_ydim != ydim)
+			    if(new_xdim != image_xdim || new_ydim != image_ydim)
 			    {
-				    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, xdim, ydim);
+				    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);
 				    resized_channel_list.add(resized_channel);
 			    
 			    }
@@ -848,9 +914,9 @@ public class DeltaWriter
 				    resized_channel_list.add(channel);
 		    }
 			
-			int [] blue  = new int[xdim * ydim];
-			int [] green = new int[xdim * ydim];
-			int [] red   = new int[xdim * ydim];
+			int [] blue  = new int[image_xdim * image_ydim];
+			int [] green = new int[image_xdim * image_ydim];
+			int [] red   = new int[image_xdim * image_ydim];
 			
 			if(min_set_id == 0)
 			{
@@ -935,9 +1001,9 @@ public class DeltaWriter
 		    int [] original_red   = (int [])channel_list.get(2);
 		
 		    
-		    int [][] error = new int [3][xdim * ydim];
+		    int [][] error = new int [3][image_xdim * image_ydim];
 		    
-		    for(int i = 0; i < xdim * ydim; i++)
+		    for(int i = 0; i < image_xdim * image_ydim; i++)
 		    {
 		    	blue[i]  <<= pixel_shift;
 		    	green[i] <<= pixel_shift;
@@ -963,14 +1029,37 @@ public class DeltaWriter
 		    }
 	 
 		    int k = 0;
-		    for(int i = 0; i < ydim; i++)
+		    for(int i = 0; i < image_ydim; i++)
 			{
-				for(int j = 0; j < xdim; j++)
+				for(int j = 0; j < image_xdim; j++)
 				{
-				    image.setRGB(j, i, (blue[k] << 16) + (green[k] << 8) + red[k]);
+				    working_image.setRGB(j, i, (blue[k] << 16) + (green[k] << 8) + red[k]);
 				    k++;
 				}
 			}
+		    
+		    if(scale == 1.)
+				display_image = working_image;
+			else
+			{
+				System.out.println("Scaling image.");
+				AffineTransform scaling_transform = new AffineTransform();
+				scaling_transform.scale(scale, scale);
+				AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
+				BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
+				scaled_image               = scale_op.filter(original_image, scaled_image);
+				display_image              = scaled_image;
+			}
+				
+			System.out.println("Loaded quantized image.");
+		    
+		    
+		    
+		    
+		    
+		    
+		    
+		    
 			image_canvas.repaint();
 			initialized = true;
 		}
@@ -989,8 +1078,8 @@ public class DeltaWriter
 		        DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
 		        
 		        // Dimensions of full sized frame
-		        out.writeShort(xdim);
-		        out.writeShort(ydim);
+		        out.writeShort(image_xdim);
+		        out.writeShort(image_ydim);
 		        
 		        // Compression parameters
 		        out.writeByte(pixel_shift);
@@ -1057,6 +1146,10 @@ public class DeltaWriter
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
+	            	    
+	            	    
+	            	    
+	            	    
 	            	    int unary_bit_length = StringMapper.getBitlength(string);
 	            	   
 	            	    int unary_length = unary_bit_length + 8 + 256 * 8;
@@ -1065,6 +1158,7 @@ public class DeltaWriter
 	            	    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
 	            	    
 	            	    int huffman_bit_length = (int) huffman_list.get(0);
+	            	    double shannon_limit = (double)huffman_list.get(1);
 	            	    
 	            	    int huffman_length     = huffman_bit_length + 256 * 8 + 256 / 8;
 	            	    
@@ -1095,8 +1189,9 @@ public class DeltaWriter
 		                	out.write(string, 0, string.length);
 		                }
 		                System.out.println("Unary length is " + unary_length);
-		                System.out.println("Unary huffman length is " + huffman_length);
+		                System.out.println("Unary huffman length is " + huffman_bit_length);
 		                System.out.println("Unary zipped length is " + (zipped_length * 8));
+		                System.out.println("Shannon limit is " + String.format("%.1f", shannon_limit));
 		                System.out.println();
 	            	 }
 	            	 else
@@ -1152,7 +1247,7 @@ public class DeltaWriter
 		        File file = new File("foo");
 		        long file_length = file.length();
 		        double compression_rate = file_length;
-		        compression_rate /= xdim * ydim * 3;
+		        compression_rate /= image_xdim * image_ydim * 3;
 		        System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type is " + delta_type);
 		        System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
