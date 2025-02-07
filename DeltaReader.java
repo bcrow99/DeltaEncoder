@@ -286,12 +286,15 @@ public class DeltaReader
 		    
 		    System.out.println("It took " + (time / 1000000) + " ms to process data.");
 		    
-		    start = System.nanoTime();
+		    
 		    
 		    int [] blue  = new int[xdim * ydim];
 		    int [] green = new int[xdim * ydim];
 		    int [] red   = new int[xdim * ydim];
+		    int [] pixel = new int[xdim * ydim];
+		    BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 		    
+		    start = System.nanoTime();
 		    if(set_id == 0)
 			{
 		    	blue  = channel_array[0];
@@ -358,13 +361,10 @@ public class DeltaReader
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to assemble rgb files.");
 		    
-		  
 			start = System.nanoTime();
-			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 			
-			
-			int blue_shift  = pixel_shift + 16;
-			int green_shift = pixel_shift + 8;
+			int blue_shift  = pixel_shift + 16;		
+			int green_shift = pixel_shift + 8;	
 			int red_shift   = pixel_shift;
 			
 			int k = 0;
@@ -372,10 +372,12 @@ public class DeltaReader
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-				    image.setRGB(j, i, (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift));
+					pixel[k] = (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift);
+					//image.setRGB(j, i, pixel[k]);
 				    k++;
 				}
 			}
+			image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			
 			stop = System.nanoTime();
 			time = stop - start;
