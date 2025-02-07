@@ -4,7 +4,7 @@ import java.lang.Math.*;
 
 public class ResizeMapper
 {
-	// These functions accept arbitrary dimensions.
+	// These functions accept arbitrary dimensions, up or down.
 	public static int [] resizeX(int src[], int xdim, int new_xdim)
 	{
 		int ydim = src.length / xdim;
@@ -152,139 +152,10 @@ public class ResizeMapper
 		return dst;
 	}
 	
-	public static ArrayList getColumnList(int [] src, int xdim, int ydim, int interval)
-    {
-    	ArrayList column_list = new ArrayList();
-    	for(int j = interval - 1; j < (xdim - interval); j += interval)
-        {
-        	int [] column = new int[ydim];
-        	int k = 0;
-            for(int i = 0; i < ydim; i++)
-                column[k++] = src[i * xdim + j]	;
-            column_list.add(column);
-        }
-    	return column_list;
-    }
-	public static ArrayList getColumnListDifference(int [] src, int xdim, int ydim, int interval)
-    {
-    	ArrayList column_list = new ArrayList();
-    	for(int j = interval - 1; j < (xdim - interval); j += interval)
-        {
-        	int [] column = new int[ydim];
-            for(int i = 0; i < ydim; i++)
-            {
-            	int k      = i * xdim + j;
-                column[i]  = src[k];
-                column[i] -= (src[k] + src[k + 1]) / 2;
-            }
-            column_list.add(column);
-        }
-    	return column_list;
-    }
-   
-	public static ArrayList getRowList(int [] src, int xdim, int ydim, int interval)
-    {
-    	ArrayList row_list = new ArrayList();
-    	
-    	for(int i = interval - 1; i < (ydim - interval); i += interval)
-        {
-    		int [] row = new int[xdim];
-    		for(int j = 0; j < xdim; j++)
-    		{
-    			int k = i * xdim + j;
-        	    row[j]  = src[k]; 
-    		}
-            row_list.add(row);
-        }
-    	return row_list;
-    }
-   
-	public static ArrayList getRowListDifference(int [] src, int xdim, int ydim, int interval)
-    {
-    	ArrayList row_list = new ArrayList();
-    	
-    	for(int i = interval - 1; i < (ydim - interval); i += interval)
-        {
-    		int [] row = new int[xdim];
-    		for(int j = 0; j < xdim; j++)
-    		{
-    			int k   = i * xdim + j;
-        	    row[j]  = src[k]; 
-        	    row[j] -= (src[k] + src[k + xdim]) / 2;
-        	    
-    		}
-            row_list.add(row);
-        }
-    	return row_list;
-    }
-	
-	public static ArrayList resizeDown(int src[], int xdim, int new_xdim, int new_ydim)
-	{
-		
-		ArrayList resize_list = new ArrayList();
-		
-		
-	    int ydim                = src.length / xdim;
-	    
-	    int delta               = xdim - new_xdim;
-	    int number_of_segments  = delta + 1;
-	    int interval            = xdim / number_of_segments;
-	    ArrayList column_list = ResizeMapper.getColumnListDifference(src, xdim, ydim, interval);
-		int [] tmp = resizeX(src, xdim, new_xdim);
-		
-		delta               = ydim - new_ydim;
-	    number_of_segments  = delta + 1;
-	    interval            = ydim / number_of_segments;
-	    ArrayList row_list = ResizeMapper.getRowListDifference(tmp, new_xdim, ydim, interval);
-		int [] dst = resizeY(tmp, new_xdim, new_ydim);
-		
-		resize_list.add(dst);
-		resize_list.add(column_list);
-		resize_list.add(row_list);
-		
-		return resize_list;
-	}
-	
-	public static int [] resizeUp(ArrayList src_list, int xdim, int new_xdim, int new_ydim)
-	{
-		int [] src = (int [])src_list.get(0);
-		int ydim   = src.length / xdim;
-		int [] tmp = resizeY(src, xdim, new_ydim);
-		int delta              = new_ydim - ydim;
-		int number_of_segments = delta + 1;
-		int interval           = new_ydim / number_of_segments;
-		ArrayList row_list    = (ArrayList)src_list.get(2);
-		int k = 0;
-		for(int i = interval - 1; i < (new_ydim - interval); i += interval)
-        {
-    		int [] row = (int [])row_list.get(k);
-    		k++;
-    	
-    		for(int j = 0; j < xdim; j++)
-        	    tmp[i * xdim + j] += row[j];  
-        }
-		
-		int [] dst = resizeX(tmp, xdim, new_xdim);
-		delta                 = new_xdim - xdim;
-		number_of_segments    = delta + 1;
-		interval              = new_xdim / number_of_segments;
-		ArrayList column_list = (ArrayList)src_list.get(1);
-		k = 0;
-		for(int j = interval - 1; j < (new_xdim - interval); j += interval)
-        {
-        	int [] column = (int [])column_list.get(k);
-        	k++;
-        	
-            for(int i = 0; i < ydim; i++)
-                dst[i * new_xdim + j] += column[i]; 
-        }
-		return dst;
-	}
-	
 	public static int [] resize(int src[], int xdim, int new_xdim, int new_ydim)
 	{
-		// Inverting the order helps reduce noise when we resize down and up, 
-		// but not completely.  There is (fairly rare) speckling that must be related
+		// Reversing the order helps reduce noise when we resize down and up, 
+		// but not completely.  There is (fairly rare) speckling that might be related
 		// to taking average values from averaged values.
 		if(new_xdim < xdim)
 		{
