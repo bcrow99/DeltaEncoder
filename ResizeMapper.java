@@ -11,8 +11,10 @@ public class ResizeMapper
 		int [] dst = new int[new_xdim * ydim];
 		
 		if(new_xdim == xdim)
+		{
 		    for(int i = 0; i < xdim * ydim; i++)	
 		    	dst[i] = src[i];
+		}
 		else if(new_xdim < xdim)
 		{
 		    int delta               = xdim - new_xdim;
@@ -54,7 +56,9 @@ public class ResizeMapper
 		    	{
 		    	    for(int k = start; k < stop; k++)
 		    	        dst[m++] = src[k];
-		    	    dst[m++] = (src[stop] + src[stop - 1]) / 2;
+		    	    dst[m] = (src[stop] + src[stop - 1]) / 2;
+		    	   
+		    	    m++;
 		    	    start   += segment_length;
 	    	        stop     = start + segment_length;
 		    	}
@@ -130,6 +134,7 @@ public class ResizeMapper
 		    	    }
 		    	    // We add a pixel at the end of each segment.
 		    	    dst[m] = (src[stop] + src[stop - xdim]) / 2;
+		    	 
 		    	    m     += xdim;
 		    	    start  = stop;
 		    	    stop   = start + segment_length * xdim; 
@@ -144,7 +149,6 @@ public class ResizeMapper
 	    	    }
 		    }
 		}
-		
 		return dst;
 	}
 	
@@ -279,8 +283,21 @@ public class ResizeMapper
 	
 	public static int [] resize(int src[], int xdim, int new_xdim, int new_ydim)
 	{
-		int [] tmp = resizeX(src, xdim, new_xdim);
-		int [] dst = resizeY(tmp, new_xdim, new_ydim);
-		return dst;
+		// Inverting the order helps reduce noise when we resize down and up, 
+		// but not completely.  There is (fairly rare) speckling that must be related
+		// to taking average values from averaged values.
+		if(new_xdim < xdim)
+		{
+		    int [] tmp = resizeX(src, xdim, new_xdim);
+		    int [] dst = resizeY(tmp, new_xdim, new_ydim);
+		    return dst;
+		}
+		else
+		{
+			int [] tmp = resizeY(src, xdim, new_ydim);
+			int [] dst = resizeX(tmp, xdim, new_xdim);
+			return dst;
+		}
+
 	}
 }
