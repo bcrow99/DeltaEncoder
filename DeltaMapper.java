@@ -13,9 +13,7 @@ public class DeltaMapper
 		if(src2.length == length)
 		{
 		    for(int i = 0; i < length; i++)
-		    {
 			    difference[i] = src1[i] - src2[i];
-		    }
 		}
 		return(difference);
 	}
@@ -28,12 +26,32 @@ public class DeltaMapper
 		if(src2.length == length) 
 		{
 		    for(int i = 0; i < length; i++)
-		    {
 			    sum[i] = src1[i] + src2[i];
-		    }
 		}
 		return(sum);
 	}
+	
+	public static int[] getPixel(int[] blue, int[] green, int[] red, int xdim, int pixel_shift)
+	{
+        int ydim = blue.length / xdim;
+        int [] pixel = new int[blue.length];
+       
+		int blue_shift  = pixel_shift + 16;		
+		int green_shift = pixel_shift + 8;	
+		int red_shift   = pixel_shift;
+		
+		int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim; j++)
+			{
+				pixel[k] = (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift);
+			    k++;
+			}
+		}
+		return pixel;
+	}
+	
 	
     public static int getIdealSum(int src[], int xdim, int ydim)
     {
@@ -332,8 +350,8 @@ public class DeltaMapper
     public static int[] getValuesFromAverageDeltas(int src[], int xdim, int ydim, int init_value)
     {
     	int k = 0;
-    	if(src[k] != 0)
-			System.out.println("Wrong code.");
+    	//if(src[k] != 0)
+		//	System.out.println("Wrong code " + src[k]);
     	
     	int[] dst = new int[xdim * ydim];
     	dst[k++]  = init_value;
@@ -3034,4 +3052,6 @@ public class DeltaMapper
     	}
     	return channel;
     }
+    
+    
 }
