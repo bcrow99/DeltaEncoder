@@ -270,7 +270,7 @@ public class DeltaReader
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
 		    
 		    int cores = Runtime.getRuntime().availableProcessors();
-		    System.out.println("There are " + cores + " processors available.");
+		    //System.out.println("There are " + cores + " processors available.");
 		    start = System.nanoTime();
 		    
 		    Thread [] decompression_thread = new Thread[3];
@@ -286,102 +286,80 @@ public class DeltaReader
 		    
 		    System.out.println("It took " + (time / 1000000) + " ms to process data.");
 		    
-		    
-		    
-		    int [] blue  = new int[xdim * ydim];
-		    int [] green = new int[xdim * ydim];
-		    int [] red   = new int[xdim * ydim];
-		    int [] pixel = new int[xdim * ydim];
 		    BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 		    
 		    start = System.nanoTime();
 		    if(set_id == 0)
 			{
-		    	blue  = channel_array[0];
-		    	green = channel_array[1];
-		    	red   = channel_array[2];
+		    	int [] pixel = DeltaMapper.getPixel(channel_array[0], channel_array[1], channel_array[2], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 		    }
 			else if(set_id == 1)
 			{ 
-				blue  = channel_array[0];
-				red   = channel_array[1];
-				green = DeltaMapper.getDifference(red, channel_array[2]);
+				int [] green = DeltaMapper.getDifference(channel_array[1], channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				
 		    }
 			else if(set_id == 2)
 			{ 
-				blue  = channel_array[0];
-				red   = channel_array[1];
-				green = DeltaMapper.getDifference(blue, channel_array[2]);
+				int [] green = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 			else if(set_id == 3)
 			{ 
-				blue  = channel_array[0];
-				green = DeltaMapper.getDifference(blue, channel_array[1]);
-				red   = DeltaMapper.getSum(channel_array[2], green);
+				int [] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+				int [] red   = DeltaMapper.getSum(channel_array[2], green);
+				int [] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 			else if(set_id == 4)
 			{ 
-				blue  = channel_array[0];
-				green = DeltaMapper.getDifference(blue, channel_array[1]);
-				red   = DeltaMapper.getSum(blue, channel_array[2]);
+				int [] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+				int [] red   = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 		    else if(set_id == 5)
 			{
-		    	green = channel_array[0];
-		    	red   = channel_array[1];
-		    	blue  = DeltaMapper.getSum(channel_array[2], green);
+		    	int [] blue  = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+		    	int [] pixel = DeltaMapper.getPixel(blue, channel_array[0], channel_array[1], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 			else if(set_id == 6)
 			{
-				red   = channel_array[0];
 				for(int i = 0; i < channel_array[2].length; i++)
 					channel_array[2][i] = -channel_array[2][i];
-				green = DeltaMapper.getSum(channel_array[2], red);
-				blue  = DeltaMapper.getSum(channel_array[1], green);
+				int [] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+				int [] blue  = DeltaMapper.getSum(channel_array[1], green);
+				int [] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 			else if(set_id == 7)
 			{
-				green = channel_array[0];
-				blue  = DeltaMapper.getSum(green, channel_array[1]);
-				red   = DeltaMapper.getSum(green, channel_array[2]);
+				int [] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+				int [] red  = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 			else if(set_id == 8)
 			{
-				green = channel_array[0];
-				red   = DeltaMapper.getSum(green, channel_array[1]);
-				blue  = DeltaMapper.getDifference(red, channel_array[2]);
+				int [] red   = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+				int [] blue  = DeltaMapper.getDifference(red, channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 		    }
 			else if(set_id == 9)
 			{
-				red   = channel_array[0];
-				green = DeltaMapper.getDifference(red, channel_array[1]); 
-				blue  = DeltaMapper.getDifference(red, channel_array[2]);
+				int [] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]); 
+				int [] blue  = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+				int [] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 			}
 		    stop = System.nanoTime();
 			time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to assemble rgb files.");
-		    
-			start = System.nanoTime();
-			
-			int blue_shift  = pixel_shift + 16;		
-			int green_shift = pixel_shift + 8;	
-			int red_shift   = pixel_shift;
-			
-			int k = 0;
-			for(int i = 0; i < ydim; i++)
-			{
-				for(int j = 0; j < xdim; j++)
-				{
-					pixel[k] = (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift);
-					//image.setRGB(j, i, pixel[k]);
-				    k++;
-				}
-			}
-			image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-			
-			stop = System.nanoTime();
-			time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to load rgb files.");
+			System.out.println("It took " + (time / 1000000) + " ms to assemble and load rgb files.");
 			
 			JFrame frame = new JFrame("Delta Reader");
 			WindowAdapter window_handler = new WindowAdapter()
