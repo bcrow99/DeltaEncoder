@@ -1977,6 +1977,23 @@ public class StringMapper
         } 
     }
     
+    public static byte [] decompressStrings(byte [] compressed_string)
+    {
+    	int type = getType(compressed_string);
+    	if(type == 0)
+    	{
+    		byte [] decompressed_string = decompressZeroStrings(compressed_string);
+    		return decompressed_string;
+    	}
+    	else if(type == 1)
+    	{
+    		byte [] decompressed_string = decompressOneStrings(compressed_string);
+    		return decompressed_string;	
+    	}
+    	else
+    		return compressed_string;
+    }
+    
     // Functions that get information about a string
     // from the trailing byte.
     public static int getBitlength(byte [] string)

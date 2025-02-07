@@ -208,23 +208,13 @@ public class DeltaReader
 				    for(int k = 0; k < compressed_string_list.size(); k++)					    
 				    {
 				    	byte [] current_string = (byte[])compressed_string_list.get(k);
-				    	int     string_type    = StringMapper.getType(current_string);
 				    	int     iterations     = StringMapper.getIterations(current_string);
-				    	
 				    	if(iterations == 0 || iterations == 16)
 				    		decompressed_string_list.add(current_string);	
 				    	else
 				    	{
-				    		if(string_type == 0)
-					    	{
-					    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
-					    	    decompressed_string_list.add(decompressed_string);
-					    	}
-					    	else
-					    	{
-					    	    byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
-					    	    decompressed_string_list.add(decompressed_string);
-					    	}	
+				    		byte [] decompressed_string = StringMapper.decompressStrings(current_string);
+				    	    decompressed_string_list.add(decompressed_string);
 				    	}
 				    }
 				    
@@ -270,7 +260,7 @@ public class DeltaReader
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
 		    
 		    int cores = Runtime.getRuntime().availableProcessors();
-		    //System.out.println("There are " + cores + " processors available.");
+		    System.out.println("There are " + cores + " processors available.");
 		    start = System.nanoTime();
 		    
 		    Thread [] decompression_thread = new Thread[3];

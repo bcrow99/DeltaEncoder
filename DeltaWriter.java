@@ -12,7 +12,6 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
 
-
 public class DeltaWriter
 {
 	BufferedImage original_image;
@@ -627,7 +626,6 @@ public class DeltaWriter
 			file_compression_rate /= image_xdim * image_ydim * 3;
 			
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
-			System.out.println();
 			
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 			
@@ -711,7 +709,7 @@ public class DeltaWriter
             		int minimum_segment_length      = bitlength / original_number_of_segments;
             		int remainder                   = minimum_segment_length % 8;
             		minimum_segment_length         -= remainder;
-     	            // The minimum that seems to produce the maximum compression is around 96.
+     	            // The minimum that usually produces the maximum compression is around 96.
      	            if(minimum_segment_length < 96)
      	            	minimum_segment_length = 96;
  	                
@@ -753,20 +751,10 @@ public class DeltaWriter
 			        }
 			        else
 			        {
-			        	if(current_type == 0)
-			        	{
-			        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
-			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						    if(number_unpacked != new_xdim * new_ydim)
-						        System.out.println("Number of values unpacked does not agree with image dimensions.");
-			        	}
-			        	else
-			        	{    
-			        		byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
-			        	    int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						    if(number_unpacked != new_xdim * new_ydim)
-						        System.out.println("Number of values unpacked does not agree with image dimensions.");
-			        	}	
+			        	byte [] decompressed_string = StringMapper.decompressStrings(current_string);
+			        	int     number_unpacked     = StringMapper.unpackStrings2(decompressed_string, table, delta);
+					    if(number_unpacked != new_xdim * new_ydim)
+					        System.out.println("Number of values unpacked does not agree with image dimensions.");
 			        }
 		        }
 		        else
@@ -776,21 +764,12 @@ public class DeltaWriter
 		            {
 		            	byte [] current_string = (byte [])segments.get(k);
 				        int current_iterations = StringMapper.getIterations(current_string);
-				       
 				        if(current_iterations == 0 || current_iterations == 16)
 				        	decompressed_segments.add(current_string);
 				        else
 				        {
-				        	if(current_iterations < 16)
-				        	{
-				        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(current_string);
-				        	    decompressed_segments.add(decompressed_string);
-				        	}
-				        	else
-				        	{    
-				        		byte [] decompressed_string = StringMapper.decompressOneStrings(current_string);
-				        		decompressed_segments.add(decompressed_string);
-				        	}		
+				        	byte [] decompressed_string = StringMapper.decompressStrings(current_string);
+				        	decompressed_segments.add(decompressed_string);
 				        }
 		            }
 		            
@@ -830,10 +809,8 @@ public class DeltaWriter
 					}
 					reconstructed_string[reconstructed_string.length - 1] |= channel_iterations[i];
 				    
-		            int reconstructed_type       = StringMapper.getType(reconstructed_string);
+
 			        int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
-			        int reconstructed_bitlength  = StringMapper.getBitlength(reconstructed_string);
-		        
 			        if(reconstructed_iterations == 0 || reconstructed_iterations == 16)
 			        {
 			        	int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
@@ -842,20 +819,10 @@ public class DeltaWriter
 			        }
 			        else
 			        {
-			        	if(reconstructed_type == 0)
-			        	{
-			        	    byte [] decompressed_string = StringMapper.decompressZeroStrings(reconstructed_string);
-			        	    int number_unpacked         = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						    if(number_unpacked != new_xdim * new_ydim)
-						        System.out.println("Number of values unpacked does not agree with image dimensions.");
-			        	}
-			        	else
-			        	{  
-			        		byte [] decompressed_string = StringMapper.decompressOneStrings(reconstructed_string);
-			        	    int number_unpacked         = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						    if(number_unpacked != new_xdim * new_ydim)
-						        System.out.println("Number of values unpacked does not agree with image dimensions.");
-			        	}		
+			        	byte [] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
+		        	    int number_unpacked         = StringMapper.unpackStrings2(decompressed_string, table, delta);
+					    if(number_unpacked != new_xdim * new_ydim)
+					        System.out.println("Number of values unpacked does not agree with image dimensions.");
 			        }
 		        }
 		        
@@ -1046,21 +1013,14 @@ public class DeltaWriter
 				AffineTransform scaling_transform = new AffineTransform();
 				scaling_transform.scale(scale, scale);
 				AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
-				BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
-				scaled_image               = scale_op.filter(original_image, scaled_image);
+				BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim, working_image.getType());
+				scaled_image               = scale_op.filter(working_image, scaled_image);
 				display_image              = scaled_image;
 			}
 				
 			System.out.println("Loaded quantized image.");
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-		    
-			image_canvas.repaint();
+		    System.out.println();			
+		    image_canvas.repaint();
 			initialized = true;
 		}
 	}
@@ -1146,8 +1106,6 @@ public class DeltaWriter
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
-	            	    
-	            	    
 	            	    
 	            	    
 	            	    int unary_bit_length = StringMapper.getBitlength(string);
