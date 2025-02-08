@@ -621,11 +621,11 @@ public class DeltaWriter
 			}
 				
 			min_set_id = min_index;
-			
 			file_compression_rate  = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
 			
-			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
+			//System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
+			System.out.println("Min set id is " + min_set_id);
 			
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 			
@@ -873,17 +873,17 @@ public class DeltaWriter
 			
 			    if(new_xdim != image_xdim || new_ydim != image_ydim)
 			    {
-				    int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);
-				    resized_channel_list.add(resized_channel);
+				    //int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);
+				    resized_channel_list.add(channel);
 			    
 			    }
 			    else
 				    resized_channel_list.add(channel);
 		    }
 			
-			int [] blue  = new int[image_xdim * image_ydim];
-			int [] green = new int[image_xdim * image_ydim];
-			int [] red   = new int[image_xdim * image_ydim];
+			int [] blue  = new int[new_xdim * new_ydim];
+			int [] green = new int[new_xdim * new_ydim];
+			int [] red   = new int[new_xdim * new_ydim];
 			
 			if(min_set_id == 0)
 			{
@@ -951,7 +951,7 @@ public class DeltaWriter
 				green = (int [])resized_channel_list.get(0);
 				int [] red_green = (int [])resized_channel_list.get(1);
 				red   = DeltaMapper.getSum(green, red_green);
-				int [] red_blue  = (int [])resized_channel_list.get(1);
+				int [] red_blue  = (int [])resized_channel_list.get(2);
 				blue  = DeltaMapper.getDifference(red, red_blue);
 		    }
 			else if(min_set_id == 9)
@@ -963,6 +963,16 @@ public class DeltaWriter
 				blue  = DeltaMapper.getDifference(red, red_blue);
 			}
 			
+			if(new_xdim != image_xdim || new_ydim != image_ydim)
+			{
+				int [] resized_blue = ResizeMapper.resize(blue, new_xdim, image_xdim, image_ydim);	
+				blue = resized_blue;
+				int [] resized_green = ResizeMapper.resize(green, new_xdim, image_xdim, image_ydim);	
+				green = resized_green;
+				int [] resized_red = ResizeMapper.resize(red, new_xdim, image_xdim, image_ydim);	
+				red = resized_red;
+			}
+				 
 			int [] original_blue  = (int [])channel_list.get(0);
 		    int [] original_green = (int [])channel_list.get(1);
 		    int [] original_red   = (int [])channel_list.get(2);
@@ -1106,6 +1116,8 @@ public class DeltaWriter
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
+	            	    
+	            	    
 	            	    
 	            	    
 	            	    int unary_bit_length = StringMapper.getBitlength(string);
