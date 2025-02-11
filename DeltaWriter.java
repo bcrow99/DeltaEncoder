@@ -27,7 +27,7 @@ public class DeltaWriter
 	
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
-	int segment_length = 0;
+	int segment_length = 12;
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
@@ -199,7 +199,6 @@ public class DeltaWriter
 					canvas_xdim = screen_xdim - 20; 
 					scale       = canvas_ydim;
 					scale      /= image_ydim;
-					canvas_ydim = (int)(scale * image_ydim);
 	            }
 				else
 				{
@@ -1167,161 +1166,76 @@ public class DeltaWriter
 	            	 }
 	            	 else
 	            	 {
-	            		out.writeInt(max_bytelength[i]);
+	            		int total_length = 0;
+	            		byte [] segment_info = new byte[number_of_segments];
+	            		for(int k = 0; k < number_of_segments; k++)
+						{
+					        byte[] current_segment = (byte [])segments.get(k);
+					        segment_info[k]        = current_segment[current_segment.length - 1];
+						}
+	            		out.write(segment_info, 0, number_of_segments);	
 	            		
+	            		out.writeInt(max_bytelength[i]);
 	            		if(max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 	            		{
-	                        System.out.println("Got here 1.");
 		            	    byte [] segment_length = new byte[number_of_segments];  
-		            		byte [] segment_info   = new byte[number_of_segments]; 
 							for(int k = 0; k < number_of_segments; k++)
 							{
-							    byte [] current_segment = (byte [])segments.get(k);
+							    byte[] current_segment = (byte [])segments.get(k);
 								segment_length[k]      = (byte)(current_segment.length - 1);
-								segment_info[k]        = current_segment[current_segment.length - 1];
+								if(segment_length[k] >= 0)
+									total_length += segment_length[k];
+								else
+									total_length += segment_length[k] + Byte.MAX_VALUE * 2 + 2; 
 							} 
-							
 							out.write(segment_length, 0, number_of_segments);
-							out.write(segment_info, 0, number_of_segments);
 							
-							
-							int total_length = 0;
+	            		}
+	            		else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
+						{ 
+	            			int [] segment_length = new int[number_of_segments];
 							for(int k = 0; k < number_of_segments; k++)
-								total_length += segment_length[k];
-							
-							byte [] concatenated_segments = new byte[total_length];
-							
-							 int offset = 0;
-							 for(int k = 0; k < number_of_segments; k++)
-							 {
-						         byte [] current_segment = (byte [])segments.get(k);
-								 for(int m = 0; m < current_segment.length - 1; m++)
-								     concatenated_segments[m + offset] = current_segment[m];
-							 }
-							 
-							 Deflater deflater = new Deflater();
-				             deflater.setInput(concatenated_segments);
-				             byte [] zipped_segments = new byte[2 * concatenated_segments.length];
-				             deflater.finish();
-				             int zipped_length = deflater.deflate(zipped_segments);
-				                deflater.end(); 
-				                
-				             if(zipped_length < concatenated_segments.length)
-				             {
-				                  System.out.println("Zipped channel " + i);
-				                  out.writeInt(zipped_length);
-				            	  out.write(zipped_segments, 0, zipped_length); 
-				             }
-				             else
-				             {
-				                  System.out.println("Did not zip channel " + i);
-				                  out.writeInt(concatenated_segments.length);
-				                  out.write(concatenated_segments, 0, concatenated_segments.length);
-				             }
-	            		 }
-						 else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
-						 {
-							 System.out.println("Got here 2.");
-							 short [] segment_length = new short[number_of_segments];  
-			            	 byte [] segment_info   = new byte[number_of_segments]; 
-							 for(int k = 0; k < number_of_segments; k++)
-							 {
-								    byte [] current_segment = (byte [])segments.get(k);
-									segment_length[k]      = (short)(current_segment.length - 1);
-									segment_info[k]        = current_segment[current_segment.length - 1];
-							 } 
-							
-							 for(int k = 0; k < segment_length.length; k++)
-							     out.writeShort(segment_length[k]);
-
-							 out.write(segment_info, 0, number_of_segments);
-								
-								
-							 int total_length = 0;
-							 for(int k = 0; k < number_of_segments; k++)
-								total_length += segment_length[k];
-								
-							 byte [] concatenated_segments = new byte[total_length];
-								
-							 int offset = 0;
-							 for(int k = 0; k < number_of_segments; k++)
-							 {
-								byte [] current_segment = (byte [])segments.get(k);
-								for(int m = 0; m < current_segment.length - 1; m++)
-									concatenated_segments[m + offset] = current_segment[m];
-							 }
-							 
-							 Deflater deflater = new Deflater();
-				             deflater.setInput(concatenated_segments);
-				             byte [] zipped_segments = new byte[2 * concatenated_segments.length];
-				             deflater.finish();
-				             int zipped_length = deflater.deflate(zipped_segments);
-				                deflater.end(); 
-				                
-				             if(zipped_length < concatenated_segments.length)
-				             {
-				                  System.out.println("Zipped channel " + i);
-				                  out.writeInt(zipped_length);
-				            	  out.write(zipped_segments, 0, zipped_length); 
-				             }
-				             else
-				             {
-				                  System.out.println("Did not zip channel " + i);
-				                  out.writeInt(concatenated_segments.length);
-				                  out.write(concatenated_segments, 0, concatenated_segments.length);
-				             }
-						 }
-						 else
-						 {
-							 int [] segment_length = new int[number_of_segments];  
-			            	 byte [] segment_info   = new byte[number_of_segments]; 
-							 for(int k = 0; k < number_of_segments; k++)
-							 {
-								    byte [] current_segment = (byte [])segments.get(k);
-									segment_length[k]      = (int)(current_segment.length - 1);
-									segment_info[k]        = current_segment[current_segment.length - 1];
-							 } 
-							
-							 for(int k = 0; k < segment_length.length; k++)
-							     out.writeInt(segment_length[k]);
-
-							 out.write(segment_info, 0, number_of_segments);
-								
-								
-							 int total_length = 0;
-							 for(int k = 0; k < number_of_segments; k++)
-								total_length += segment_length[k];
-								
-							 byte [] concatenated_segments = new byte[total_length];
-								
-							 int offset = 0;
-							 for(int k = 0; k < number_of_segments; k++)
-							 {
-								byte [] current_segment = (byte [])segments.get(k);
-								for(int m = 0; m < current_segment.length - 1; m++)
-									concatenated_segments[m + offset] = current_segment[m];
-							 }
-							 
-							 Deflater deflater = new Deflater();
-				             deflater.setInput(concatenated_segments);
-				             byte [] zipped_segments = new byte[2 * concatenated_segments.length];
-				             deflater.finish();
-				             int zipped_length = deflater.deflate(zipped_segments);
-				                deflater.end(); 
-				                
-				             if(zipped_length < concatenated_segments.length)
-				             {
-				                  System.out.println("Zipped channel " + i);
-				                  out.writeInt(zipped_length);
-				            	  out.write(zipped_segments, 0, zipped_length); 
-				             }
-				             else
-				             {
-				                  System.out.println("Did not zip channel " + i);
-				                  out.writeInt(concatenated_segments.length);
-				                  out.write(concatenated_segments, 0, concatenated_segments.length);
-				             }
-						 }
+							{
+							    byte[] current_segment = (byte [])segments.get(k);
+								segment_length[k]      = current_segment.length - 1;
+								total_length          += segment_length[k];
+								out.writeShort(segment_length[k]);
+							} 	
+						}
+	            		else
+	            		{
+	            			int [] segment_length = new int[number_of_segments]; 
+							for(int k = 0; k < number_of_segments; k++)
+							{
+							    byte[] current_segment = (byte [])segments.get(k);
+								segment_length[k]      = current_segment.length - 1;
+								total_length          += segment_length[k];
+								out.writeInt(segment_length[k]);
+							} 	 	
+	            		}
+	            		System.out.println("Total length of concatenated segments is " + total_length);
+	            		
+	            		
+	            		byte [] concatenated_segments = new byte[total_length];	
+						int     offset                = 0;
+						for(int k = 0; k < number_of_segments; k++)
+						{
+						    byte [] current_segment = (byte [])segments.get(k);
+							for(int m = 0; m < current_segment.length - 1; m++)
+								concatenated_segments[m + offset] = current_segment[m];
+							offset += current_segment.length - 1;
+						}
+	            		
+						
+	            		out.write(concatenated_segments, 0, total_length);
+	            		
+	            	    /*
+						for(int k = 0; k < number_of_segments; k++)
+			    		{
+			    			byte[] current_segment = (byte [])segments.get(k);  
+			    			out.write(current_segment, 0, current_segment.length - 1);
+			    		}
+			    		*/
 	            	 }
 		        }
 		        
