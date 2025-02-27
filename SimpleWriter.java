@@ -64,8 +64,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 		
-		String prefix       = new String("");
-		//String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix       = new String("");
+		String prefix       = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename     = new String(args[0]);
 		
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -893,7 +893,7 @@ public class SimpleWriter
 		            	
 		            	
 		            	//byte [] decompressed_one_segment = (byte []) decompressed_segments.get(max_one_index);
-		            	byte [] decompressed_one_segment = StringMapper.decompressOneStrings2(compressed_one_segment);
+		            	byte [] decompressed_one_segment = StringMapper.decompressOneStrings(compressed_one_segment);
 		            	
 		            	/*
 		                System.out.println("Length of decompressed one segment is " + decompressed_one_segment.length);
