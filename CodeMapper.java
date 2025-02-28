@@ -1546,6 +1546,9 @@ public class CodeMapper
 	    int [] frequency = new int[n];
 	    for(int k = 0; k < n; k++)
 	    	frequency[k] = (int)frequency_list.get(k);
+	    
+	    double shannon_limit = getShannonLimit(frequency);
+	    
 	    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
 	    
 	    // We produce a huffman code from the lengths.
@@ -1555,6 +1558,7 @@ public class CodeMapper
 	    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
         
 	    list.add(estimated_bit_length);
+	    list.add(shannon_limit);
         list.add(rank_table);
         list.add(huffman_code);
         list.add(huffman_length);
