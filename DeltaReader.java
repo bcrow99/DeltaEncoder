@@ -3,7 +3,8 @@ import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
 import java.util.*;
-import java.util.concurrent.Callable;
+//import java.util.concurrent.Callable;
+import java.util.concurrent.*;
 import java.util.zip.*;
 import javax.imageio.*;
 import javax.swing.*;
@@ -301,6 +302,7 @@ public class DeltaReader
 		    System.out.println("There are " + cores + " processors available.");
 		    start = System.nanoTime();
 		    
+		    /*
 		    Thread [] decompression_thread = new Thread[3];
 		    for(int i = 0; i < 3; i++)
 		    {
@@ -309,6 +311,18 @@ public class DeltaReader
 		    }
 		    for(int i = 0; i < 3; i++)
 		    	decompression_thread[i].join();
+		    */
+		    
+		    ExecutorService executorService = Executors.newFixedThreadPool(3);
+        
+            for (int i = 0; i < 3; i++) 
+            {
+                executorService.submit(new Decompressor(i));
+            }
+        
+            executorService.shutdown();
+            executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS); 
+		    
 		    stop = System.nanoTime();
 		    time = stop - start;
 		    

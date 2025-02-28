@@ -1116,10 +1116,7 @@ public class DeltaWriter
 	            	if(number_of_segments == 1)
 	            	{
 	            	    byte [] string = (byte [])string_list.get(i);
-	            	    
-	            	    
-	            	    
-	            	    
+	            	   
 	            	    int unary_bit_length = StringMapper.getBitlength(string);
 	            	   
 	            	    int unary_length = unary_bit_length + 8 + 256 * 8;
