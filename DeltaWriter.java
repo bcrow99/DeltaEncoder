@@ -1224,15 +1224,15 @@ public class DeltaWriter
 						}
 	            		
 						
-	            		out.write(concatenated_segments, 0, total_length);
+	            		//out.write(concatenated_segments, 0, total_length);
 	            		
-	            	    /*
+	            	
 						for(int k = 0; k < number_of_segments; k++)
 			    		{
 			    			byte[] current_segment = (byte [])segments.get(k);  
 			    			out.write(current_segment, 0, current_segment.length - 1);
 			    		}
-			    		*/
+			    	
 	            	 }
 		        }
 		        
