@@ -646,25 +646,15 @@ public class DeltaWriter
 				ArrayList result = new ArrayList();
 
 				if (delta_type == 0)
-				{
-					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} 
+					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim); 
 				else if (delta_type == 1)
-				{
-					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} 
+					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim); 
 				else if (delta_type == 2)
-				{
-					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} 
+					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim); 
 				else if (delta_type == 3)
-				{
-					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} 
+					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim); 
 				else if (delta_type == 4)
-				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} 
 				else if (delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
