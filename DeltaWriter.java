@@ -160,7 +160,7 @@ public class DeltaWriter
 
 				working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
 
-				for (int i = 0; i < image_xdim; i++)
+				for(int i = 0; i < image_xdim; i++)
 				{
 					for (int j = 0; j < image_ydim; j++)
 						working_image.setRGB(i, j, pixel[j * image_xdim + i]);
@@ -180,20 +180,20 @@ public class DeltaWriter
 				Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 				screen_xdim = (int) screenSize.getWidth();
 				screen_ydim = (int) screenSize.getHeight();
-				if (image_xdim <= (screen_xdim - 20) && image_ydim <= (screen_ydim - 60))
+				if(image_xdim <= (screen_xdim - 20) && image_ydim <= (screen_ydim - 60))
 				{
 					canvas_xdim = image_xdim;
 					canvas_ydim = image_ydim;
 					scale = 1.;
 				} 
-				else if (image_xdim <= (screen_xdim - 20))
+				else if(image_xdim <= (screen_xdim - 20))
 				{
 					canvas_ydim = screen_ydim - 60;
 					scale = canvas_ydim;
 					scale /= image_ydim;
 					canvas_xdim = (int) (scale * image_xdim);
 				} 
-				else if (image_ydim <= (screen_ydim - 60))
+				else if(image_ydim <= (screen_ydim - 60))
 				{
 					canvas_xdim = screen_xdim - 20;
 					scale = canvas_ydim;
@@ -221,8 +221,7 @@ public class DeltaWriter
 				{
 					AffineTransform scaling_transform = new AffineTransform();
 					scaling_transform.scale(scale, scale);
-					AffineTransformOp scale_op = new AffineTransformOp(scaling_transform,
-							AffineTransformOp.TYPE_BILINEAR);
+					AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
 					display_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
 					display_image = scale_op.filter(original_image, display_image);
 				}
@@ -251,10 +250,8 @@ public class DeltaWriter
 							System.out.println("Scaling image.");
 							AffineTransform scaling_transform = new AffineTransform();
 							scaling_transform.scale(scale, scale);
-							AffineTransformOp scale_op = new AffineTransformOp(scaling_transform,
-									AffineTransformOp.TYPE_BILINEAR);
-							BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim,
-									original_image.getType());
+							AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
+							BufferedImage scaled_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
 							scaled_image = scale_op.filter(original_image, scaled_image);
 							display_image = scaled_image;
 						}
@@ -651,29 +648,36 @@ public class DeltaWriter
 				if (delta_type == 0)
 				{
 					result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} else if (delta_type == 1)
+				} 
+				else if (delta_type == 1)
 				{
 					result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} else if (delta_type == 2)
+				} 
+				else if (delta_type == 2)
 				{
 					result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} else if (delta_type == 3)
+				} 
+				else if (delta_type == 3)
 				{
 					result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} else if (delta_type == 4)
+				} 
+				else if (delta_type == 4)
 				{
 					result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				} else if (delta_type == 5)
+				} 
+				else if (delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					byte[] map = (byte[]) result.get(2);
 					map_list.add(map);
-				} else if (delta_type == 6)
+				} 
+				else if (delta_type == 6)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
 					byte[] map = (byte[]) result.get(2);
 					map_list.add(map);
-				} else if (delta_type == 7)
+				} 
+				else if (delta_type == 7)
 				{
 					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
 					byte[] map = (byte[]) result.get(2);
@@ -700,7 +704,8 @@ public class DeltaWriter
 					ArrayList segments = new ArrayList();
 					segments.add(compression_string);
 					segment_list.add(segments);
-				} else
+				} 
+				else
 				{
 					int bitlength = StringMapper.getBitlength(compression_string);
 					int original_number_of_segments = (int) Math.pow(2, segment_length);
@@ -746,14 +751,16 @@ public class DeltaWriter
 						int number_unpacked = StringMapper.unpackStrings2(current_string, table, delta);
 						if (number_unpacked != new_xdim * new_ydim)
 							System.out.println("Number of values unpacked does not agree with image dimensions.");
-					} else
+					} 
+					else
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(current_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if (number_unpacked != new_xdim * new_ydim)
 							System.out.println("Number of values unpacked does not agree with image dimensions.");
 					}
-				} else
+				} 
+				else
 				{
 					ArrayList decompressed_segments = new ArrayList();
 					for (int k = 0; k < number_of_segments; k++)
@@ -811,7 +818,8 @@ public class DeltaWriter
 						int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
 						if (number_unpacked != new_xdim * new_ydim)
 							System.out.println("Number of values unpacked does not agree with image dimensions.");
-					} else
+					} 
+					else
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
@@ -828,27 +836,34 @@ public class DeltaWriter
 				if (delta_type == 0)
 				{
 					channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				} else if (delta_type == 1)
+				} 
+				else if (delta_type == 1)
 				{
 					channel = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				} else if (delta_type == 2)
+				} 
+				else if (delta_type == 2)
 				{
 					channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				} else if (delta_type == 3)
+				} 
+				else if (delta_type == 3)
 				{
 					channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				} else if (delta_type == 4)
+				} 
+				else if (delta_type == 4)
 				{
 					channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				} else if (delta_type == 5)
+				} 
+				else if (delta_type == 5)
 				{
 					byte[] map = (byte[]) map_list.get(i);
 					channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim, new_ydim, channel_init[j], map);
-				} else if (delta_type == 6)
+				} 
+				else if (delta_type == 6)
 				{
 					byte[] map = (byte[]) map_list.get(i);
 					channel = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], map);
-				} else if (delta_type == 7)
+				} 
+				else if (delta_type == 7)
 				{
 					byte[] map = (byte[]) map_list.get(i);
 					channel = DeltaMapper.getValuesFromIdealDeltas4(delta, new_xdim, new_ydim, channel_init[j], map);
