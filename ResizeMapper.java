@@ -1,4 +1,4 @@
-public class ResizeMapper
+.public class ResizeMapper
 {
 	// These functions accept arbitrary dimensions, up or down.
 	public static int [] resizeX(int src[], int xdim, int new_xdim)
@@ -150,7 +150,7 @@ public class ResizeMapper
 	
 	public static int [] resize(int src[], int xdim, int new_xdim, int new_ydim)
 	{
-		// Reversing the order helps reduce noise when we resize down and up. 
+		// Reversing the order possibly helps reduce noise when we resize down and up. 
 		if(new_xdim < xdim)
 		{
 		    int [] tmp = resizeX(src, xdim, new_xdim);
