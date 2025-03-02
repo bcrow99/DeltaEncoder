@@ -1,7 +1,3 @@
-import java.util.*;
-import java.util.zip.*;
-import java.lang.Math.*;
-
 public class ResizeMapper
 {
 	// These functions accept arbitrary dimensions, up or down.
@@ -32,7 +28,7 @@ public class ResizeMapper
 		    	    for(int k = start; k < stop; k++)
 		    	        dst[m++] = src[k];  
 		    	    start   += segment_length;
-	    	        stop     = start + segment_length - 1;
+	    	            stop     = start + segment_length - 1;
 		    	}
 		    	stop            = start + last_segment_length;
 		    	for(int k = start; k < stop; k++)
@@ -60,7 +56,7 @@ public class ResizeMapper
 		    	   
 		    	    m++;
 		    	    start   += segment_length;
-	    	        stop     = start + segment_length;
+	    	            stop     = start + segment_length;
 		    	}
 		    	// Write the values from the last segment without adding a pixel.
 		    	stop = start + last_segment_length;
@@ -81,7 +77,7 @@ public class ResizeMapper
 		    	dst[i] = src[i];	
 		else if(new_ydim < ydim)
 		{
-			int delta                 = ydim - new_ydim;
+		    int delta                 = ydim - new_ydim;
 		    int number_of_segments    = delta + 1;
 		    int segment_length        = ydim / number_of_segments;
 		    int last_segment_length   = segment_length + ydim % number_of_segments;
@@ -105,15 +101,15 @@ public class ResizeMapper
 		    	}
 		    	stop = start + last_segment_length * xdim;
 		    	for(int k = start; k < stop; k += xdim) 
-	    	    {
-	    	    	dst[m] = src[k];
-	    	    	m += xdim;
-	    	    }
+	    	        {
+	    	    	    dst[m] = src[k];
+	    	    	    m += xdim;
+	    	        }
 		    }
 		}
 		else if(new_ydim > ydim)
 		{
-			int delta                 = new_ydim - ydim;
+		    int delta                 = new_ydim - ydim;
 		    int number_of_segments    = delta + 1;
 		    int segment_length        = ydim / number_of_segments;
 		    int last_segment_length   = segment_length + ydim % number_of_segments;
@@ -143,10 +139,10 @@ public class ResizeMapper
 		    	// We write the last segment without adding a pixel.
 		    	stop = start + last_segment_length * xdim;
 		    	for(int k = start; k < stop; k += xdim) 
-	    	    {
-	    	    	dst[m] = src[k];
-	    	    	m += xdim;
-	    	    }
+	    	        {
+	    	    	    dst[m] = src[k];
+	    	    	    m += xdim;
+	    	        }
 		    }
 		}
 		return dst;
@@ -154,9 +150,7 @@ public class ResizeMapper
 	
 	public static int [] resize(int src[], int xdim, int new_xdim, int new_ydim)
 	{
-		// Reversing the order helps reduce noise when we resize down and up, 
-		// but not completely.  There is (fairly rare) speckling that might be related
-		// to taking average values from averaged values.
+		// Reversing the order helps reduce noise when we resize down and up. 
 		if(new_xdim < xdim)
 		{
 		    int [] tmp = resizeX(src, xdim, new_xdim);
@@ -165,10 +159,9 @@ public class ResizeMapper
 		}
 		else
 		{
-			int [] tmp = resizeY(src, xdim, new_ydim);
-			int [] dst = resizeX(tmp, xdim, new_xdim);
-			return dst;
+		    int [] tmp = resizeY(src, xdim, new_ydim);
+		    int [] dst = resizeX(tmp, xdim, new_xdim);
+		    return dst;
 		}
-
 	}
 }
