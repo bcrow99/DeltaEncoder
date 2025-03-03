@@ -1,97 +1,143 @@
-import java.util.*;
+import java.util.ArrayList;
 import java.util.zip.*;
+import java.util.*;
 import java.lang.Math.*;
 import java.math.*;
 
+/**
+* This is a class with methods to analyze bit strings.
+* 
+* @author Brian Crowley
+* @version 1.0
+*/
+
 public class StringMapper
 {
-	public static ArrayList getHistogram(int value[])
+	/**
+	* Creates a histogram from a byte array and returns
+	* a list including the histogram and some other key
+	* information.  The list is not parameterized so 
+	* that random types can be added.
+	*
+	* @param src the input byte array
+	* @return unparameterized list with histogram and additonal information.
+	*/
+	public static ArrayList getHistogram(byte src[])
 	{  
-	    int value_min = value[0];
-	    int value_max = value[0];
-	    for(int i = 0; i < value.length; i++)
+	    int min = src[0];
+	    int max = src[0];
+	    for(int i = 0; i < src.length; i++)
 	    {
-	    	if(value[i] > value_max)
-	    		value_max = value[i];
-	    	if(value[i] < value_min)
-	    		value_min = value[i];
+	    	if(src[i] > max)
+	    		max = src[i];
+	    	if(src[i] < min)
+	    		min = src[i];
 	    }
-	    int value_range = value_max - value_min + 1;
-	    int [] histogram = new int[value_range];
-	    for(int i = 0; i < value_range; i++)
+	    int range = max - min + 1;
+	    int [] histogram = new int[range];
+	    for(int i = 0; i < range; i++)
 	    	histogram[i] = 0;
-	    for(int i = 0; i < value.length; i++)
+	    for(int i = 0; i < src.length; i++)
 	    {
-	    	int j = value[i] - value_min;
-	    	histogram[j]++;
-	    }
-	    ArrayList histogram_list = new ArrayList();
-	    histogram_list.add(value_min);
-	    histogram_list.add(histogram);
-	    histogram_list.add(value_range);
-	    return histogram_list;
-	}
-	
-	public static ArrayList getHistogram(byte value[])
-	{  
-	    int value_min = value[0];
-	    int value_max = value[0];
-	    for(int i = 0; i < value.length; i++)
-	    {
-	    	if(value[i] > value_max)
-	    		value_max = value[i];
-	    	if(value[i] < value_min)
-	    		value_min = value[i];
-	    }
-	    int value_range = value_max - value_min + 1;
-	    int [] histogram = new int[value_range];
-	    for(int i = 0; i < value_range; i++)
-	    	histogram[i] = 0;
-	    for(int i = 0; i < value.length; i++)
-	    {
-	    	int j = value[i] - value_min;
+	    	int j = src[i] - min;
 	    	histogram[j]++;
 	    }
 	    
 	    ArrayList histogram_list = new ArrayList();
-	    histogram_list.add(value_min);
+	    histogram_list.add(min);
 	    histogram_list.add(histogram);
-	    histogram_list.add(value_range);
+	    histogram_list.add(range);
 	    return histogram_list;
 	}
 	
-	public static int[] getRankTable(int histogram[])
+	
+	
+	/**
+	* Creates a histogram from an int array and returns
+	* a list including the histogram and some other key
+	* information.  The list is not parameterized so 
+	* that random types can be added.
+	*
+	* @param src the input int array
+	* @return unparameterized list with histogram and additonal information.
+	*/
+	public static ArrayList getHistogram(int src[])
+	{  
+	    int min = src[0];
+	    int max = src[0];
+	    for(int i = 0; i < src.length; i++)
+	    {
+	    	if(src[i] > max)
+	    		max = src[i];
+	    	if(src[i] < min)
+	    		min = src[i];
+	    }
+	    int range = max - min + 1;
+	    int [] histogram = new int[range];
+	    for(int i = 0; i < range; i++)
+	    	histogram[i] = 0;
+	    for(int i = 0; i < src.length; i++)
+	    {
+	    	int j = src[i] - min;
+	    	histogram[j]++;
+	    }
+	    ArrayList histogram_list = new ArrayList();
+	    histogram_list.add(min);
+	    histogram_list.add(histogram);
+	    histogram_list.add(range);
+	    return histogram_list;
+	}
+	
+	
+	/**
+	* Creates a rank table of most popular to least
+	* popular from a histogram.
+	* 
+	* @param src the input histogram
+	* @return unparameterized list with histogram and additonal information.
+	*/
+	public static int[] getRankTable(int src[])
 	{
-		ArrayList key_list     = new ArrayList();
-	    Hashtable rank_table   = new Hashtable();
-	    for(int i = 0; i < histogram.length; i++)
+		ArrayList list     = new ArrayList();
+	    Hashtable table   = new Hashtable();
+	    for(int i = 0; i < src.length; i++)
 	    {
-	    	double key = histogram[i];
-	    	while(rank_table.containsKey(key))
-	    	{
+	    	double key = src[i];
+	    	while(table.containsKey(key))
 	    		key +=.001;
-	    	}
-	    	rank_table.put(key, i);
-	    	key_list.add(key);
+	    	table.put(key, i);
+	    	list.add(key);
 	    }
-	    Collections.sort(key_list);
+	    Collections.sort(list);
 	    
-	    int rank_lut[] = new int[histogram.length];
+	    int rank[] = new int[src.length];
 	    int k     = -1;
-	    for(int i = histogram.length - 1; i >= 0; i--)
+	    for(int i = src.length - 1; i >= 0; i--)
 	    {
-	    	double key = (double)key_list.get(i);
-	    	int    j   = (int)rank_table.get(key);
-	    	rank_lut[j]   = ++k;
+	    	double key = (double)list.get(i);
+	    	int    j   = (int)table.get(key);
+	    	rank[j]   = ++k;
 	    }	
-	    return rank_lut;
+	    return rank;
 	}
 	
-	 // These packing/unpacking functions represent int values
-    // as unary strings.
+	
+	
     // This set of functions makes no assumptions about the 
     // the maxiumum length of an individual string.
-    public static int packStrings(int src[], int table[], byte dst[])
+    
+	/**
+	* Uses a rank table of most popular to least popular
+	* to turn integer representations into unary strings,
+	* and then pack pack them into a byte array.  
+	* It assumes dst is large enough to contain the result,
+	* and returns the length of the bit string.
+	* 
+	* @param src the input integers
+	* @param table the rank table
+	* @return byte array containing the bit string
+	*/
+	public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
         for(int i = 0; i < dst.length; i++)
@@ -173,8 +219,17 @@ public class StringMapper
             number_of_bits -= 8 - start_bit;
         return(number_of_bits);
     }
-    
-    public static int unpackStrings(byte src[], int table[], int dst[])
+   
+	/**
+	* Uses a rank table of most popular to least popular
+	* to turn unary strings into integers.
+	* 
+	* @param src the input integers
+	* @param table the rank table
+	* @param dst the integer array containing the result
+	* @return int the length of the dst.array
+	*/
+	public static int unpackStrings(byte src[], int table[], int dst[])
     {
         for(int i = 0; i < dst.length; i++)
         	dst[i] = 0;
@@ -223,6 +278,135 @@ public class StringMapper
     // code to dispense with a stop bit in the longest string.
     // Not very significant until we are looking at binary and
     // low resolution images.
+	
+	/**
+	* Uses a rank table of most popular to least popular
+	* to turn byte representations into unary strings,
+	* and then pack pack them into a byte array.  
+	* It assumes dst is large enough to contain the result,
+	* and returns the length of the bit string.
+	* 
+	* @param src the input bytes
+	* @param table the rank table
+	* @return byte array containing the bit string
+	*/
+	public static int packStrings2(byte src[], int table[], byte dst[])
+    {
+    	int size             = src.length;
+    	int number_of_values = table.length;
+    	
+    	int maximum_length = number_of_values - 1;
+    	
+        int [] mask  = new int[8];
+        
+        mask[0] = 1;
+        mask[1] = 3;
+        mask[2] = 7;
+        mask[3] = 15;
+        mask[4] = 31;
+        mask[5] = 63;
+        mask[6] = 127;
+        mask[7] = 255;
+        
+    
+        int start_bit  = 0;
+        int stop_bit   = 0;
+        int p   = 0;
+        dst[p]  = 0;
+        
+        for(int i = 0; i < size; i++)
+        {
+            int j = src[i];
+            int k = table[j];
+           
+            if(k == 0)
+            {
+                start_bit++;
+                if(start_bit == 8)
+                {
+                    dst[++p] = 0;
+                    start_bit       = 0;
+                }
+            }
+            else
+            {
+                stop_bit = (start_bit + k + 1) % 8;
+                if(k == maximum_length)
+                {
+                	stop_bit--;
+                	if(stop_bit < 0)
+                		stop_bit = 7;
+                }
+                
+                if(k <= 7)
+                {
+                	dst[p] |= (byte) (mask[k - 1] << start_bit);
+                	
+                    if(stop_bit <= start_bit)
+                    {
+                        dst[++p] = 0;
+                        if(stop_bit != 0)
+                        {
+                            dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
+                        }
+                    }
+                }
+                else if(k > 7)
+                {
+                	dst[p] |= (byte)(mask[7] << start_bit);
+            		int m = (k - 8) / 8;
+                    for(int n = 0; n < m; n++)
+                        dst[++p] = (byte)(mask[7]);
+                    dst[++p] = 0;
+                    
+                    if(start_bit != 0)
+                        dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
+                    
+                    if(k % 8 != 0)
+                    {
+                        m = k % 8 - 1;
+                        
+                        dst[p] |= (byte)(mask[m] << start_bit);
+                        
+                        if(stop_bit <= start_bit)
+                        {
+                            dst[++p] = 0;
+                            if(stop_bit != 0)
+                            {
+                                dst[p] |= (byte)(mask[m] >> (8 - start_bit));
+                            }
+                        }
+                    }
+                    // If this is the maximum_length index and it's a multiple of 8,
+                    // then we already incremeted the index and then reset the stop bit.
+                    // Don't want to do it twice.   Very tricky bug.
+                    else if(stop_bit <= start_bit && k != maximum_length)
+                            dst[++p] = 0;
+                }
+                start_bit = stop_bit;
+            }
+        }
+        
+        if(start_bit != 0)
+            p++;
+        int number_of_bits = p * 8;
+        if(start_bit != 0)
+            number_of_bits -= 8 - start_bit;
+        return(number_of_bits);
+    }
+    
+	
+	/**
+	* Uses a rank table of most popular to least popular
+	* to turn integer representations into unary strings,
+	* and then pack pack them into a byte array.  
+	* It assumes dst is large enough to contain the result,
+	* and returns the length of the bit string.
+	* 
+	* @param src the input integers
+	* @param table the rank table
+	* @return byte array containing the bit string
+	*/
     public static int packStrings2(int src[], int table[], byte dst[])
     {
     	int size             = src.length;
@@ -328,111 +512,83 @@ public class StringMapper
         return(number_of_bits);
     }
     
-    public static int packStrings2(byte src[], int table[], byte dst[])
-    {
-    	int size             = src.length;
-    	int number_of_values = table.length;
-    	
-    	int maximum_length = number_of_values - 1;
-    	
-        int [] mask  = new int[8];
-        
-        mask[0] = 1;
-        mask[1] = 3;
-        mask[2] = 7;
-        mask[3] = 15;
-        mask[4] = 31;
-        mask[5] = 63;
-        mask[6] = 127;
-        mask[7] = 255;
-        
     
-        int start_bit  = 0;
-        int stop_bit   = 0;
-        int p   = 0;
-        dst[p]  = 0;
-        
-        for(int i = 0; i < size; i++)
-        {
-            int j = src[i];
-            int k = table[j];
+    /**
+   	* Uses a rank table of most popular to least popular
+   	* to turn unary strings into bytes.
+   	* 
+   	* @param src the input bytes
+   	* @param table the rank table
+   	* @param dst the byte array containing the result
+   	* @return int the length of the dst.array
+   	*/
+       public static int unpackStrings2(byte src[], int table[], byte dst[])
+       {
+           int size             = dst.length;
+           int number_of_values = table.length;
+           int maximum_length   = number_of_values - 1;
+           int length           = 1;
+           int src_byte         = 0;
+           int dst_byte         = 0;
+           int number_unpacked  = 0;
+           int mask             = 1;
+           int bit              = 0;
+          
+           byte [] inverse_table = new byte[number_of_values];
+           for(int i = 0; i < number_of_values; i++)
+           {
+               int j            = table[i];
+               inverse_table[j] = (byte)i;
+           }
            
-            if(k == 0)
-            {
-                start_bit++;
-                if(start_bit == 8)
-                {
-                    dst[++p] = 0;
-                    start_bit       = 0;
-                }
-            }
-            else
-            {
-                stop_bit = (start_bit + k + 1) % 8;
-                if(k == maximum_length)
-                {
-                	stop_bit--;
-                	if(stop_bit < 0)
-                		stop_bit = 7;
-                }
-                
-                if(k <= 7)
-                {
-                	dst[p] |= (byte) (mask[k - 1] << start_bit);
-                	
-                    if(stop_bit <= start_bit)
-                    {
-                        dst[++p] = 0;
-                        if(stop_bit != 0)
-                        {
-                            dst[p] |= (byte)(mask[k - 1] >> (8 - start_bit));
-                        }
-                    }
-                }
-                else if(k > 7)
-                {
-                	dst[p] |= (byte)(mask[7] << start_bit);
-            		int m = (k - 8) / 8;
-                    for(int n = 0; n < m; n++)
-                        dst[++p] = (byte)(mask[7]);
-                    dst[++p] = 0;
-                    
-                    if(start_bit != 0)
-                        dst[p] |= (byte)(mask[7] >> (8 - start_bit));	
-                    
-                    if(k % 8 != 0)
-                    {
-                        m = k % 8 - 1;
-                        
-                        dst[p] |= (byte)(mask[m] << start_bit);
-                        
-                        if(stop_bit <= start_bit)
-                        {
-                            dst[++p] = 0;
-                            if(stop_bit != 0)
-                            {
-                                dst[p] |= (byte)(mask[m] >> (8 - start_bit));
-                            }
-                        }
-                    }
-                    // If this is the maximum_length index and it's a multiple of 8,
-                    // then we already incremeted the index and then reset the stop bit.
-                    // Don't want to do it twice.   Very tricky bug.
-                    else if(stop_bit <= start_bit && k != maximum_length)
-                            dst[++p] = 0;
-                }
-                start_bit = stop_bit;
-            }
-        }
-        
-        if(start_bit != 0)
-            p++;
-        int number_of_bits = p * 8;
-        if(start_bit != 0)
-            number_of_bits -= 8 - start_bit;
-        return(number_of_bits);
-    }
+           try
+           {
+           	while(dst_byte < size)
+               {
+                   int non_zero = src[src_byte] & (mask << bit);
+                   if(non_zero != 0 && length < maximum_length)
+                       length++;
+                   else if(non_zero == 0)
+                   {
+                       int k           = length - 1;
+                       dst[dst_byte++] = inverse_table[k]; 
+                       length          = 1;
+                       number_unpacked++;
+                       
+                   }
+                   else if(length == maximum_length)
+                   {
+                   	int k = length;
+                   	dst[dst_byte++] = inverse_table[k];
+                       number_unpacked++;
+                       length = 1;
+                   }
+                   bit++;
+                   if(bit == 8)
+                   {
+                       bit = 0;
+                       src_byte++;
+                   }
+               }
+           }
+           catch(Exception e)
+           {
+           	System.out.println(e.toString());
+           	System.out.println("Exiting unpackStrings2 with an exception.");
+           }
+           return(number_unpacked);
+       }
     
+    
+    /**
+	* Uses a rank table of most popular to least popular
+	* to turn unary strings into integers.
+	* 
+	* @param src the input bytes
+	* @param table the rank table
+	* @param dst the integer array containing the result
+	* @return int the length of the dst.array
+	*/
     public static int unpackStrings2(byte src[], int table[], int dst[])
     {
         int size             = dst.length;
@@ -490,63 +646,6 @@ public class StringMapper
         return(number_unpacked);
     }
 
-    public static int unpackStrings2(byte src[], int table[], byte dst[])
-    {
-        int size             = dst.length;
-        int number_of_values = table.length;
-        int maximum_length   = number_of_values - 1;
-        int length           = 1;
-        int src_byte         = 0;
-        int dst_byte         = 0;
-        int number_unpacked  = 0;
-        int mask             = 1;
-        int bit              = 0;
-       
-        byte [] inverse_table = new byte[number_of_values];
-        for(int i = 0; i < number_of_values; i++)
-        {
-            int j            = table[i];
-            inverse_table[j] = (byte)i;
-        }
-        
-        try
-        {
-        	while(dst_byte < size)
-            {
-                int non_zero = src[src_byte] & (mask << bit);
-                if(non_zero != 0 && length < maximum_length)
-                    length++;
-                else if(non_zero == 0)
-                {
-                    int k           = length - 1;
-                    dst[dst_byte++] = inverse_table[k]; 
-                    length          = 1;
-                    number_unpacked++;
-                    
-                }
-                else if(length == maximum_length)
-                {
-                	int k = length;
-                	dst[dst_byte++] = inverse_table[k];
-                    number_unpacked++;
-                    length = 1;
-                }
-                bit++;
-                if(bit == 8)
-                {
-                    bit = 0;
-                    src_byte++;
-                }
-            }
-        }
-        catch(Exception e)
-        {
-        	System.out.println(e.toString());
-        	System.out.println("Exiting unpackStrings2 with an exception.");
-        }
-        return(number_unpacked);
-    }
-    
     // Zero bit/zero string functions.
     // Zero bits correspond to stop bits in our implementation.
     public static int compressZeroBits(byte src[], int size, byte dst[]) 
