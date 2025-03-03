@@ -646,8 +646,16 @@ public class StringMapper
         return(number_unpacked);
     }
 
-    // Zero bit/zero string functions.
+    
+    // Stop bit methods.  
     // Zero bits correspond to stop bits in our implementation.
+    /**
+   	*  
+   	* @param src     input bytes
+   	* @param size    original bit length
+   	* @param dst     byte array containing the result
+   	* @return        transformed bit length
+   	*/
     public static int compressZeroBits(byte src[], int size, byte dst[]) 
 	{
 		for (int i = 0; i < dst.length; i++)
