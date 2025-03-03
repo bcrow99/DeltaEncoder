@@ -1,11 +1,21 @@
-import java.util.*;
-import java.util.zip.*;
-import java.lang.Math.*;
-import java.math.*;
-
+import java.util.ArrayList;
+/**
+* This is a class that segments data, and then merges it back depending on how it affect the compression rate.
+* 
+* @author Brian Crowley
+* @version 1.0
+*/
 public class SegmentMapper 
 {
-	
+	// We dont parameterize the list because we want to add random types.
+	/**
+	* Segments a byte string and then merges the segments back together,
+	* depending on how it affects the rate of compression.
+	*
+	* @param src the input byte string
+	* @param minimum_bitlength original segment length
+	* @return the segmented/merged byte string
+	*/
 	public static ArrayList getMergedSegmentedData(byte[] string, int minimum_bitlength) 
 	{
 		ArrayList list = new ArrayList();
@@ -294,7 +304,11 @@ public class SegmentMapper
 		}
 	}
 	
-	
+	/**
+	* Produces a set of masks that can be anded to isolate a bit.
+	*
+	* @return byte masks
+	*/
 	public static byte [] getPositiveMask()
 	{
 		byte [] mask = new byte[8];
@@ -304,6 +318,11 @@ public class SegmentMapper
 		return mask;
 	}
 	
+	/**
+	* Produces a set of masks that can be anded to isolate a bit.
+	*
+	* @return int masks
+	*/
 	public static int [] getPositiveMask2()
 	{
 		int [] mask = new int[32];
@@ -313,6 +332,11 @@ public class SegmentMapper
 		return mask;
 	}
 	
+	/**
+	* Produces a set of masks that can be ored to isolate a bit.
+	*
+	* @return byte masks
+	*/
 	public static byte [] getNegativeMask()
 	{
 		byte [] mask = new byte[8];
@@ -324,6 +348,11 @@ public class SegmentMapper
 		return mask;
 	}
 	
+	/**
+	* Produces a set of masks that can be anded to isolate a leading segment.
+	*
+	* @return byte masks
+	*/
 	public static byte [] getLeadingMask()
 	{
 		byte [] mask = new byte[7];
@@ -333,6 +362,11 @@ public class SegmentMapper
 		return mask;	
 	}
 	
+	/**
+	* Produces a set of masks that can be anded to isolate a trailing segment.
+	*
+	* @return byte masks
+	*/
 	public static byte [] getTrailingMask()
 	{
 		byte [] mask = new byte[7];
