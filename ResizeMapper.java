@@ -1,4 +1,4 @@
-.public class ResizeMapper
+public class ResizeMapper
 {
 	// These functions accept arbitrary dimensions, up or down.
 	public static int [] resizeX(int src[], int xdim, int new_xdim)
