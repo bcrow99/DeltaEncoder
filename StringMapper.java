@@ -124,7 +124,7 @@ public class StringMapper
     // This set of functions makes no assumptions about the 
     // the maxiumum length of an individual string.
     
-	/**
+    /**
 	* Uses a rank table of most popular to least popular
 	* to turn integer representations into unary strings,
 	* and then pack pack them into a byte array.  
@@ -135,7 +135,7 @@ public class StringMapper
 	* @param table the rank table
 	* @return byte array containing the bit string
 	*/
-	public static int packStrings(int src[], int table[], byte dst[])
+    public static int packStrings(int src[], int table[], byte dst[])
     {
         int size             = src.length;
         for(int i = 0; i < dst.length; i++)
