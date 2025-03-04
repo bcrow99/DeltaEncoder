@@ -7,10 +7,10 @@ import java.util.ArrayList;
 */
 public class SegmentMapper 
 {
-	// We dont parameterize the list because we want to add random types.
 	/**
 	* Segments a byte string and then merges the segments back together,
 	* depending on how it affects the rate of compression.
+	* We dont parameterize the list because we want to add random types.
 	*
 	* @param src the input byte string
 	* @param minimum_bitlength original segment length

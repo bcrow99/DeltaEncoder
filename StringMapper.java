@@ -50,8 +50,6 @@ public class StringMapper
 	    return histogram_list;
 	}
 	
-	
-	
 	/**
 	* Creates a histogram from an int array and returns
 	* a list including the histogram and some other key
@@ -512,7 +510,6 @@ public class StringMapper
         return(number_of_bits);
     }
     
-    
     /**
    	* Uses a rank table of most popular to least popular
    	* to turn unary strings into bytes.
@@ -522,63 +519,62 @@ public class StringMapper
    	* @param dst the byte array containing the result
    	* @return int the length of the dst.array
    	*/
-       public static int unpackStrings2(byte src[], int table[], byte dst[])
-       {
-           int size             = dst.length;
-           int number_of_values = table.length;
-           int maximum_length   = number_of_values - 1;
-           int length           = 1;
-           int src_byte         = 0;
-           int dst_byte         = 0;
-           int number_unpacked  = 0;
-           int mask             = 1;
-           int bit              = 0;
-          
-           byte [] inverse_table = new byte[number_of_values];
-           for(int i = 0; i < number_of_values; i++)
-           {
-               int j            = table[i];
-               inverse_table[j] = (byte)i;
-           }
-           
-           try
-           {
-           	while(dst_byte < size)
-               {
-                   int non_zero = src[src_byte] & (mask << bit);
-                   if(non_zero != 0 && length < maximum_length)
-                       length++;
-                   else if(non_zero == 0)
-                   {
-                       int k           = length - 1;
-                       dst[dst_byte++] = inverse_table[k]; 
-                       length          = 1;
-                       number_unpacked++;
-                       
-                   }
-                   else if(length == maximum_length)
-                   {
-                   	int k = length;
-                   	dst[dst_byte++] = inverse_table[k];
-                       number_unpacked++;
-                       length = 1;
-                   }
-                   bit++;
-                   if(bit == 8)
-                   {
-                       bit = 0;
-                       src_byte++;
-                   }
-               }
-           }
-           catch(Exception e)
-           {
-           	System.out.println(e.toString());
-           	System.out.println("Exiting unpackStrings2 with an exception.");
-           }
-           return(number_unpacked);
-       }
-    
+    public static int unpackStrings2(byte src[], int table[], byte dst[])
+    {
+        int size             = dst.length;
+        int number_of_values = table.length;
+        int maximum_length   = number_of_values - 1;
+        int length           = 1;
+        int src_byte         = 0;
+        int dst_byte         = 0;
+        int number_unpacked  = 0;
+        int mask             = 1;
+        int bit              = 0;
+       
+        byte [] inverse_table = new byte[number_of_values];
+        for(int i = 0; i < number_of_values; i++)
+        {
+            int j            = table[i];
+            inverse_table[j] = (byte)i;
+        }
+        
+        try
+        {
+        	while(dst_byte < size)
+            {
+                int non_zero = src[src_byte] & (mask << bit);
+                if(non_zero != 0 && length < maximum_length)
+                    length++;
+                else if(non_zero == 0)
+                {
+                    int k           = length - 1;
+                    dst[dst_byte++] = inverse_table[k]; 
+                    length          = 1;
+                    number_unpacked++;
+                    
+                }
+                else if(length == maximum_length)
+                {
+                	int k = length;
+                	dst[dst_byte++] = inverse_table[k];
+                    number_unpacked++;
+                    length = 1;
+                }
+                bit++;
+                if(bit == 8)
+                {
+                    bit = 0;
+                    src_byte++;
+                }
+            }
+        }
+        catch(Exception e)
+        {
+        	System.out.println(e.toString());
+        	System.out.println("Exiting unpackStrings2 with an exception.");
+        }
+        return(number_unpacked);
+    }    
     
     /**
 	* Uses a rank table of most popular to least popular
@@ -650,6 +646,8 @@ public class StringMapper
     // Stop bit methods.  
     // Zero bits correspond to stop bits in our implementation.
     /**
+   	* Does a bitwise substitution that will expand or contract
+   	* the original bit string. 
    	*  
    	* @param src     input bytes
    	* @param size    original bit length
@@ -759,7 +757,16 @@ public class StringMapper
 
 		return (number_of_bits);
 	}
-
+    
+    /**
+   	* Does the inverse bitwise substitution that will expand or contract
+   	* the original bit string. 
+   	*  
+   	* @param src     input bytes
+   	* @param size    original bit length
+   	* @param dst     byte array containing the result
+   	* @return        transformed bit length
+   	*/
 	public static int decompressZeroBits(byte src[], int size, byte dst[]) 
 	{
 		// This is necessary because dst can be used multiple times,
@@ -862,7 +869,15 @@ public class StringMapper
 		return (number_of_bits);
 	}
 	
-	
+	/**
+   	* This applies a bitwise substitution iteratively that will
+   	* expand or contract a bit string.
+   	*  
+   	* @param src     input bytes
+   	* @param size    original bit length
+   	* @param dst     byte array containing the result
+   	* @return        transformed bit length
+   	*/
     public static int compressZeroStrings(byte src[], int bit_length, byte dst[])
     {
     	int     current_length  = 0;
@@ -965,6 +980,14 @@ public class StringMapper
     	return current_length;
     }
    
+    /**
+   	* This applies a bitwise substitution iteratively that will
+   	* expand or contract a bit string.
+   	*  
+   	* @param src     input bytes
+   	* @param size    original bit length
+   	* @return        byte array containing the result
+   	*/
     public static byte[] compressZeroStrings(byte[] src, int bit_length)
     {
     	try
