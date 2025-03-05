@@ -595,7 +595,7 @@ public class HuffmanWriter
 			    int [] frequency = new int[n];
 			    for(int k = 0; k < n; k++)
 			    	frequency[k] = (int)frequency_list.get(k);
-			    byte [] huffman_length   = CodeMapper.getHuffmanLength2(frequency);
+			    byte [] huffman_length   = CodeMapper.getHuffmanLength(frequency);
 			    int [] huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
 			    int [] rank_table       = StringMapper.getRankTable(histogram);
 			    
