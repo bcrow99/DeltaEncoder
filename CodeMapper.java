@@ -1,10 +1,31 @@
-import java.util.*;
-import java.util.zip.*;
-import java.lang.Math.*;
-import java.math.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.math.BigInteger;
+
+/**
+ * This is a class that abstracts prefix-free codes so they can be parsed
+ * without having to know anything about the codes except their lengths.
+ * 
+ * @author Brian Crowley
+ * @version 1.0
+ */
 
 public class CodeMapper
 {
+	/**
+	 * Packs a byte array using a rank table, a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 * The lengths need to be 127 or less.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the packed values
+	 * 
+	 * @return int the number of src values packed.
+	 */
 	public static int packCode(byte src[], int table[], int [] code, byte [] length, byte dst[])
     {
 		int k = 0;
@@ -42,11 +63,23 @@ public class CodeMapper
     	    current_bit += code_length;
     	}
     	
-    	
     	int bit_length = current_bit;
     	return bit_length;
     }
 	
+	/**
+	 * Packs an int array using a rank table, a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 * The lengths need to be 256 or less.
+	 *
+	 * @param src the input int array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the packed values
+	 * 
+	 * @return int the number of src values packed.
+	 */
 	public static int packCode(int src[], int table[], int [] code, byte [] length, byte dst[])
     {
     	int n = code.length;
@@ -84,6 +117,18 @@ public class CodeMapper
     	return bit_length;
     }
   
+	/**
+	 * Packs ints into a byte array using a rank table, a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 *
+	 * @param src the input int array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the packed values
+	 * 
+	 * @return int the number of src values packed.
+	 */
 	public static int packCode(int src[], int table[], int [] code, int [] length, byte dst[])
     {
     	int current_bit = 0;
@@ -120,6 +165,18 @@ public class CodeMapper
     	return bit_length;
     }
   
+	/**
+	 * Packs ints into a byte array using a rank table, a set of codes and their lengths.
+	 * The codes need to be 64 bits or less.
+	 *
+	 * @param src the input int array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the packed values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int packCode(int src[], int table[], long [] code, int [] length, byte dst[])
     {
     	int current_bit = 0;
@@ -155,6 +212,18 @@ public class CodeMapper
     	return bit_length;
     }
   
+    /**
+	 * Packs ints into a byte array using a rank table, a set of codes and their lengths.
+	 * The codes can be any bit length supported by BigInteger.
+	 *
+	 * @param src the input int array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the packed values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int packCode(int src[], int table[], BigInteger [] code, int [] length, byte dst[])
     {
     	int current_bit = 0;
@@ -220,6 +289,20 @@ public class CodeMapper
     	return bit_length;
     }
     
+    /**
+	 * Unpacks a byte array into another byte array using a rank table, 
+	 * a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 * The lengths need to be 127 or less.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param length the length of the codes
+	 * @param dst the byte array containing the unpacked values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int unpackCode(byte [] src, int [] table, int [] code, byte [] code_length, int string_length, byte [] dst)
     {
 
@@ -310,7 +393,21 @@ public class CodeMapper
     
     
     
-    
+    /**
+	 * Unpacks a byte array into an int array using a rank table, 
+	 * a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 * The lengths need to be 127 or less.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param code_length the length of the codes
+	 * @param string_length the length of the bit string contained in the byte array
+	 * @param dst the int array containing the unpacked values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int unpackCode(byte [] src, int [] table, int [] code, byte [] code_length, int string_length, int [] dst)
     {
 
@@ -397,7 +494,20 @@ public class CodeMapper
     
     
     
-  
+    /**
+	 * Unpacks a byte array into an int array using a rank table, 
+	 * a set of codes and their lengths.
+	 * The codes need to be 32 bits or less.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param code_length the length of the codes
+	 * @param string_length the length of the bit string contained in the byte array
+	 * @param dst the int array containing the unpacked values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int unpackCode(byte src[], int table[], int [] code, int [] code_length, int string_length, int dst[])
     {
     	boolean debug = false;
@@ -543,6 +653,20 @@ public class CodeMapper
     	return number_unpacked;
     }
     
+    /**
+	 * Unpacks a byte array into an int array using a rank table, 
+	 * a set of codes and their lengths.
+	 * The codes need to be 64 bits or less.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param code_length the length of the codes
+	 * @param string_length the length of the bit string contained in the byte array
+	 * @param dst the int array containing the unpacked values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int unpackCode(byte src[], int table[], long [] code, int [] code_length, int string_length, int dst[])
     {
     	int number_of_different_values = table.length;
@@ -619,7 +743,20 @@ public class CodeMapper
     	return number_unpacked;
     }
     
-    
+    /**
+	 * Unpacks a byte array into an int array using a rank table, 
+	 * a set of codes and their lengths.
+	 * The codes can be any length supported by BitInteger.
+	 *
+	 * @param src the input byte array
+	 * @param table the rank table
+	 * @param code the set of codes
+	 * @param code_length the length of the codes
+	 * @param string_length the length of the bit string contained in the byte array
+	 * @param dst the int array containing the unpacked values
+	 * 
+	 * @return int the number of src values packed.
+	 */
     public static int unpackCode(byte src[], int table[], BigInteger [] code, int [] code_length, int string_length, int dst[])
     {
     	boolean debug = false;
@@ -736,6 +873,29 @@ public class CodeMapper
        
     	return number_unpacked;
     }
+    
+    /**
+   	 * Generates a set of unary string codes that are 32 bits or less.
+   	 *
+   	 * @param n the number of codes
+   	 * @return long array containing codes
+   	 */
+    public static int[] getUnaryLength(int n)
+    {
+    	int [] length = new int[n];
+    	for(int i = 0; i < n; i++)
+    		length[i] = i + 1;
+    	length[n - 1]--;
+    	return length;
+    }
+    
+    
+    /**
+	 * Generates a set of unary string codes that are 64 bits or less.
+	 *
+	 * @param n the number of codes
+	 * @return long array containing codes
+	 */
     public static long[] getUnaryCode(int n)
     {
         long [] code         = new long[n];
@@ -751,6 +911,13 @@ public class CodeMapper
         return code;
     }
     
+    /**
+	 * Generates a set of unary string codes that are 
+	 * any length supported by BigInteger.
+	 *
+	 * @param n the number of codes
+	 * @return long array containing codes
+	 */
     public static BigInteger[] getBigUnaryCode(int n)
     {
         BigInteger [] code         = new BigInteger[n];
@@ -767,16 +934,16 @@ public class CodeMapper
         return code;
     }
     
-    public static int[] getUnaryLength(int n)
-    {
-    	int [] length = new int[n];
-    	for(int i = 0; i < n; i++)
-    		length[i] = i + 1;
-    	length[n - 1]--;
-    	return length;
-    }
     
-    public static byte [] getHuffmanLength2(int [] frequency)
+    /**
+	 * Generates a set of huffman lengths from a frequency table,
+	 * that can then be used to generate actual codes.
+	 * From psuedo code by Alastair Moffit.
+	 *
+	 * @param frequency the frequency table
+	 * @return a set of byte codes
+	 */
+    public static byte [] getHuffmanLength(int [] frequency)
     {
     	// The in-place processing is one of the
     	// trickiest parts of this code, but we
@@ -872,8 +1039,15 @@ public class CodeMapper
     	return code_length;
     }
      
-    
-    public static int[] getHuffmanLength(int [] frequency)
+    /**
+	 * Creates a list with all the information needed to do the 
+	 * huffman coding, the estimated amount of compression,
+	 * and the shannon limit for comparison.
+	 *
+	 * @param src the input byte array
+	 * @return unparameterized list with information.
+	 */
+    public static int[] getHuffmanLength2(int [] frequency)
     {
     	// The in-place processing is one of the
     	// trickiest parts of this code, but we
@@ -963,6 +1137,13 @@ public class CodeMapper
     	 return w;
     }
      
+    /**
+	 * Generates the canonical huffman code from a set of lengths.
+	 * From psuedo code by Alastair Moffit.
+	 *
+	 * @param length the code lengths
+	 * @return set of huffman codes
+	 */
     public static int[] getCanonicalCode(byte [] length)
     {
     	int n = length.length;
@@ -1001,7 +1182,13 @@ public class CodeMapper
         return reversed_code;
     }
     
-    
+    /**
+	 * Generates the canonical huffman code from a set of lengths.
+	 * From psuedo code by Alastair Moffit.
+	 *
+	 * @param length the code lengths
+	 * @return set of huffman codes
+	 */
     public static int[] getCanonicalCode(int [] length)
     {
     	int n = length.length;
@@ -1040,6 +1227,13 @@ public class CodeMapper
         return reversed_code;
     }
  
+    /**
+	 * Generates the canonical huffman code from a set of lengths.
+	 * From psuedo code by Alastair Moffit.
+	 *
+	 * @param length the code lengths
+	 * @return set of huffman codes
+	 */
     public static long[] getCanonicalCode2(int [] length)
     {
     	int n = length.length;
@@ -1078,6 +1272,13 @@ public class CodeMapper
         return reversed_code;
     }
  
+    /**
+	 * Generates the canonical huffman code from a set of lengths.
+	 * From psuedo code by Alastair Moffit.
+	 *
+	 * @param length the code lengths
+	 * @return set of huffman codes
+	 */
     public static BigInteger [] getBigCanonicalCode(int [] length)
     {
     	int n = length.length;
@@ -1122,6 +1323,14 @@ public class CodeMapper
         return reversed_code;
     }
     
+    /**
+	 * Creates a histogram from a byte array and returns a list including the
+	 * histogram and some other key information. The list is not parameterized so
+	 * that random types can be added.
+	 *
+	 * @param src the input byte array
+	 * @return unparameterized list with histogram and additonal information.
+	 */
     public static double getZeroRatio(int [] code, int [] length, int [] frequency)
     {
     	int    n     = code.length;
@@ -1149,12 +1358,24 @@ public class CodeMapper
     	return ratio;
     }
     
+    /**
+	 * Filling a hole in java math library.
+	 *
+	 * @param value 
+	 * @return log 2 value
+	 */
     public static double log2(double value)
     {
     	double result = (Math.log(value)/Math.log(2.));
     	return result;
     }
     
+    /**
+	 * Gets the Shannon limit for a given frequency table.
+	 *
+	 * @param frequency the frequency table
+	 * @return anticipated limit to size of prefix-free code transformation.
+	 */
     public static double getShannonLimit(int [] frequency)
     {
     	int n   = frequency.length;
@@ -1178,18 +1399,13 @@ public class CodeMapper
         return limit;
     }
 
-    public static int getCost(int [] length, int [] frequency)
-    {
-    	int n    = length.length;
-    	int cost = 0;
-    	
-    	for(int i = 0; i < n; i++)
-    	{
-    	    cost += length[i] * frequency[i];
-    	}
-    	return cost;
-    }
-    
+    /**
+	 * Get the anticipated bit length from a code length
+	 * table and a frequency table.
+	 *
+	 * @param length the code lengths
+	 * @return the anticipated bit length
+	 */
     public static int getCost(byte [] length, int [] frequency)
     {
     	int n    = length.length;
@@ -1202,6 +1418,35 @@ public class CodeMapper
     	return cost;
     }
     
+    /**
+	 * Get the anticipated bit length from a code length
+	 * table and a frequency table.
+	 *
+	 * @param length the code lengths
+	 * @return the anticipated bit length
+	 */
+    public static int getCost(int [] length, int [] frequency)
+    {
+    	int n    = length.length;
+    	int cost = 0;
+    	
+    	for(int i = 0; i < n; i++)
+    	{
+    	    cost += length[i] * frequency[i];
+    	}
+    	return cost;
+    }
+    
+    /**
+	 * Huffman length tables lend themselves to some
+	 * straight forward packing schemes.
+	 * This function packs a length table 
+	 * and adds it to a list along with
+	 * information needed to unpack it.
+	 *
+	 * @param length the code lengths
+	 * @return unparameterized list with packed lengths.
+	 */
     public static ArrayList packLengthTable(byte [] length)
     {
         ArrayList result = new ArrayList();
@@ -1303,6 +1548,12 @@ public class CodeMapper
         return result;
     }
     
+    /**
+	 * Unpacks the length table.
+	 *
+	 * @param length_list list with packed lengths
+	 * @return unpacked lengths.
+	 */
     public static byte [] unpackLengthTable(ArrayList length_list)
     {
         int  n          = (int)length_list.get(0);	
@@ -1417,6 +1668,15 @@ public class CodeMapper
         return length;
     }
     
+    /**
+	 * Unpacks the length table.
+	 *
+	 * @param n number of lengths
+	 * @param initial length
+	 * @param the maximum delta between lengths
+	 * @param the packed deltas
+	 * @return unpacked lengths.
+	 */
     public static byte [] unpackLengthTable(int n, byte init_value, byte max_delta, byte [] packed_delta)
     {
         byte [] length = new byte[n];
@@ -1523,6 +1783,14 @@ public class CodeMapper
         return length;
     }
     
+    /**
+	 * Creates a list with all the information needed to do the 
+	 * huffman coding, the estimated amount of compression,
+	 * and the shannon limit for comparison.
+	 *
+	 * @param src the input byte array
+	 * @return unparameterized list with information.
+	 */
     public static ArrayList getHuffmanList(byte [] string)
     {
         ArrayList list = new ArrayList();
@@ -1549,7 +1817,7 @@ public class CodeMapper
 	    
 	    double shannon_limit = getShannonLimit(frequency);
 	    
-	    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+	    byte [] huffman_length = CodeMapper.getHuffmanLength(frequency);
 	    
 	    // We produce a huffman code from the lengths.
 	    int [] huffman_code    = CodeMapper.getCanonicalCode(huffman_length);
@@ -1566,7 +1834,13 @@ public class CodeMapper
         return list;
     }
     
-    
+    /**
+	 * Creates a list with all the information needed to do the 
+	 * huffman coding and also actually does the huffman coding.
+	 *
+	 * @param src the input byte array
+	 * @return unparameterized list with information and packed string.
+	 */
     public static ArrayList getHuffmanList2(byte [] string)
     {
         ArrayList list = new ArrayList();
@@ -1590,7 +1864,7 @@ public class CodeMapper
 	    int [] frequency = new int[n];
 	    for(int k = 0; k < n; k++)
 	    	frequency[k] = (int)frequency_list.get(k);
-	    byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+	    byte [] huffman_length = CodeMapper.getHuffmanLength(frequency);
 	    
 	    // We produce a huffman code from the lengths.
 	    int [] huffman_code    = CodeMapper.getCanonicalCode(huffman_length);
