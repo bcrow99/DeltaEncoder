@@ -5,6 +5,15 @@ import java.math.*;
 
 public class DeltaMapper
 {
+	/**
+	 * Produces an array of ints that is the difference
+	 * between two arrays of ints.  
+	 *
+	 * @param src1 the array of ints being subtracted from (minuend)
+	 * @param src2 the array of ints being subtracted (subatrahend)
+	 *            
+	 * @return an array of ints that is the difference between them
+	 */
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -18,6 +27,15 @@ public class DeltaMapper
 		return(difference);
 	}
 	
+	/**
+	 * Produces an array of ints that is the sum
+	 * of two arrays of ints.  
+	 *
+	 * @param src1 the array of ints being added to (augend)
+	 * @param src2 the array of ints being added (addend)
+	 *            
+	 * @return an array of ints that is the sum of the two
+	 */
 	public static int[] getSum(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -31,6 +49,47 @@ public class DeltaMapper
 		return(sum);
 	}
 	
+	/**
+	 * Produces an array of ints in a java pixel format.
+	 * The assumption is that they are 3 b-g-r channels.
+	 *
+	 * @param blue 
+	 * @param green
+	 * @param red
+	 * @param xdim the xdim of the channel
+	 *            
+	 * @return an array of ints in a java pixel format
+	 */
+	public static int[] getPixel(int[] blue, int[] green, int[] red, int xdim)
+	{
+        int ydim     = blue.length / xdim;
+        int [] pixel = new int[blue.length];
+       
+		int k = 0;
+		for(int i = 0; i < ydim; i++)
+		{
+			for(int j = 0; j < xdim; j++)
+			{
+				pixel[k] = blue[k]  + (green[k] << 8) + (red[k] << 16);
+			    k++;
+			}
+		}
+		
+		return pixel;
+	}
+	
+	/**
+	 * Produces an array of ints in a java pixel format.
+	 * The assumption is that they are 3 b-g-r channels.
+	 *
+	 * @param blue 
+	 * @param green
+	 * @param red
+	 * @param xdim the xdim of the channel
+	 * @param pixel_shift the amount each channel is quantized (>> pixel_shift)
+	 *            
+	 * @return an array of ints in a java pixel format
+	 */
 	public static int[] getPixel(int[] blue, int[] green, int[] red, int xdim, int pixel_shift)
 	{
         int ydim = blue.length / xdim;

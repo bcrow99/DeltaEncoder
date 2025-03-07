@@ -878,8 +878,8 @@ public class CodeMapper
 	/**
 	 * Generates a set of unary string codes that are 32 bits or less.
 	 *
-	 * @param n
-	 *            the number of codes
+	 * @param n the number of codes
+	 *            
 	 * @return long array containing codes
 	 */
 	public static int[] getUnaryLength(int n)
