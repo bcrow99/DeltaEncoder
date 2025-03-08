@@ -49,6 +49,15 @@ public class DeltaMapper
 		return(sum);
 	}
 	
+	/**
+	 * Does a left shift or right shift on an array of ints.
+	 * If the shift is positive the shift is left,
+	 * if the shift is negative the shift is right.
+	 *
+	 * @param src input int of arrays
+	 *            
+	 * @return an array of shifted ints 
+	 */
 	public static int[] shift(int src[], int shift)
 	{
 		int    length        = src.length;
