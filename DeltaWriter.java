@@ -526,11 +526,8 @@ public class DeltaWriter
 		// with every change in the parameters.
 		public void actionPerformed(ActionEvent event)
 		{
-			ArrayList shifted_channel_list = new ArrayList();
-			ArrayList resized_channel_list = new ArrayList();
-			ArrayList quantized_channel_list = new ArrayList();
+			ArrayList quantized_channel_list   = new ArrayList();
 			ArrayList dequantized_channel_list = new ArrayList();
-			byte[] iterations = new byte[3];
 			
 			int new_xdim = image_xdim;
 			int new_ydim = image_ydim;
@@ -738,7 +735,7 @@ public class DeltaWriter
 				}
 			}
 
-			// Error checking.
+			// Decompressing the data and displaying it.
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
@@ -823,14 +820,11 @@ public class DeltaWriter
 					if (reconstructed_iterations == 0 || reconstructed_iterations == 16)
 					{
 						int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
-						if (number_unpacked != new_xdim * new_ydim)
-							System.out.println("Number of values unpacked does not agree with image dimensions.");
-					} else
+					}
+					else
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						if (number_unpacked != new_xdim * new_ydim)
-							System.out.println("Number of values unpacked does not agree with image dimensions.");
 					}
 				}
 
@@ -908,15 +902,15 @@ public class DeltaWriter
 				}
 			}
 
+			// Assemble the rgb files if the minimum set contains difference channels.
 			int[] blue = new int[new_xdim * new_ydim];
 			int[] green = new int[new_xdim * new_ydim];
 			int[] red = new int[new_xdim * new_ydim];
-
 			if (min_set_id == 0)
 			{
-				blue = (int[]) dequantized_channel_list.get(0);
+				blue  = (int[]) dequantized_channel_list.get(0);
 				green = (int[]) dequantized_channel_list.get(1);
-				red = (int[]) dequantized_channel_list.get(2);
+				red   = (int[]) dequantized_channel_list.get(2);
 			} 
 			else if (min_set_id == 1)
 			{
@@ -990,18 +984,6 @@ public class DeltaWriter
 				blue = DeltaMapper.getDifference(red, red_blue);
 			}
 
-			/*
-			if (new_xdim != image_xdim || new_ydim != image_ydim)
-			{
-				int[] resized_blue = ResizeMapper.resize(blue, new_xdim, image_xdim, image_ydim);
-				blue = resized_blue;
-				int[] resized_green = ResizeMapper.resize(green, new_xdim, image_xdim, image_ydim);
-				green = resized_green;
-				int[] resized_red = ResizeMapper.resize(red, new_xdim, image_xdim, image_ydim);
-				red = resized_red;
-			}
-			*/
-
 			int[] original_blue = (int[]) channel_list.get(0);
 			int[] original_green = (int[]) channel_list.get(1);
 			int[] original_red = (int[]) channel_list.get(2);
@@ -1010,11 +992,6 @@ public class DeltaWriter
 
 			for (int i = 0; i < image_xdim * image_ydim; i++)
 			{
-				/*
-				blue[i] <<= pixel_shift;
-				green[i] <<= pixel_shift;
-				red[i] <<= pixel_shift;
-				*/
 				error[0][i] = original_blue[i] - blue[i];
 				error[1][i] = original_green[i] - green[i];
 				error[2][i] = original_red[i] - red[i];
@@ -1254,17 +1231,6 @@ public class DeltaWriter
 							offset += current_segment.length - 1; 
 						} 
 						out.write(concatenated_segments, 0, total_length);
-						
-
-						// Writing out each segment separately, assuming we want
-						// the data packetized.
-						/*
-						for (int k = 0; k < number_of_segments; k++)
-						{
-							byte[] current_segment = (byte[]) segments.get(k);
-							out.write(current_segment, 0, current_segment.length - 1);
-						}
-                        */
 					}
 				}
 
