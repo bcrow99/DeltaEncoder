@@ -49,6 +49,25 @@ public class DeltaMapper
 		return(sum);
 	}
 	
+	public static int[] shift(int src[], int shift)
+	{
+		int    length        = src.length;
+		int [] shifted_value = new int[length];
+		
+		if(shift < 0)
+		{
+		    for(int i = 0; i < src.length; i++)	
+		    	shifted_value[i] = src[i] >> -shift;
+		}
+		else
+		{
+			for(int i = 0; i < src.length; i++)	
+		    	shifted_value[i] = src[i] << shift;	
+		}
+		
+		return(shifted_value);
+	}
+	
 	/**
 	 * Produces an array of ints in a java pixel format.
 	 * The assumption is that they are 3 b-g-r channels.
