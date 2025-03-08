@@ -210,6 +210,7 @@ public class DeltaReader
 						}
 					}
 
+					/*
 					for (int k = 0; k < number_of_segments; k++)
 					{
 						int current_length = segment_length[k];
@@ -218,21 +219,26 @@ public class DeltaReader
 						current_segment[current_length] = segment_info[k];
 						compressed_string_list.add(current_segment);
 					}
+					*/
 
 					// Reading in all the segments at once improves i/o efficiency,
 					// but defeats the purpose of packetizing the data.
-					/*
-					 * System.out.println("Total length of segments is " + total_length); byte []
-					 * concatenated_segments = new byte[total_length];
-					 * in.read(concatenated_segments, 0, total_length);
-					 * 
-					 * int offset = 0; for(int k = 0; k < number_of_segments; k++) { int
-					 * current_length = segment_length[k]; byte [] current_segment = new
-					 * byte[current_length + 1]; int n = 0; for(int m = offset; m < offset +
-					 * current_length; m++) { current_segment[n++] = concatenated_segments[m]; }
-					 * current_segment[current_length] = segment_info[k];
-					 * compressed_string_list.add(current_segment); offset += current_length; }
-					 */
+					byte []concatenated_segments = new byte[total_length];
+					in.read(concatenated_segments, 0, total_length);
+					int offset = 0; 
+					for(int k = 0; k < number_of_segments; k++) 
+					{ 
+						int current_length = segment_length[k];
+					    byte [] current_segment = new byte[current_length + 1]; 
+					    int n = 0; 
+					    for(int m = offset; m < offset + current_length; m++) 
+					    { 
+					    	current_segment[n++] = concatenated_segments[m]; 
+					    }
+					    current_segment[current_length] = segment_info[k];
+					    compressed_string_list.add(current_segment); 
+					    offset += current_length; 
+					}
 
 					ArrayList decompressed_string_list = new ArrayList();
 					for (int k = 0; k < compressed_string_list.size(); k++)
@@ -247,7 +253,7 @@ public class DeltaReader
 							decompressed_string_list.add(decompressed_string);
 						}
 					}
-
+					
 					// Create buffer to put concatenated strings.
 					int string_length = 0;
 					for (int k = 0; k < decompressed_string_list.size(); k++)
@@ -261,7 +267,7 @@ public class DeltaReader
 
 					// Concatenate strings less trailing byte with individual string information.
 
-					int offset = 0;
+					offset = 0;
 					int total_bitlength = 0;
 					for (int k = 0; k < decompressed_string_list.size(); k++)
 					{
