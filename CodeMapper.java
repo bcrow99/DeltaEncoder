@@ -73,7 +73,7 @@ public class CodeMapper
 
 	/**
 	 * Packs an int array using a rank table, a set of codes and their lengths.
-	 * The codes need to be 32 bits or less. The lengths need to be 256 or less.
+	 * The codes need to be 32 bits or less. 
 	 *
 	 * @param src
 	 *            the input int array
@@ -106,59 +106,6 @@ public class CodeMapper
 			if(or_length % 8 != 0)
 				number_of_bytes++;
 			int current_byte = current_bit / 8;
-			if(number_of_bytes == 1)
-				dst[current_byte] |= (byte) (code_word & 0x00ff);
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					dst[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				dst[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
-	}
-
-	/**
-	 * Packs ints into a byte array using a rank table, a set of codes and their
-	 * lengths. The codes need to be 32 bits or less.
-	 *
-	 * @param src
-	 *            the input int array
-	 * @param table
-	 *            the rank table
-	 * @param code
-	 *            the set of codes
-	 * @param length
-	 *            the length of the codes
-	 * @param dst
-	 *            the byte array containing the packed values
-	 * 
-	 * @return int the number of src values packed.
-	 */
-	public static int packCode(int src[], int table[], int[] code, int[] length, byte dst[])
-	{
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-			int code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-
 			if(number_of_bytes == 1)
 				dst[current_byte] |= (byte) (code_word & 0x00ff);
 			else
