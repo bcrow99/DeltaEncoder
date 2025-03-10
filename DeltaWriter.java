@@ -645,7 +645,8 @@ public class DeltaWriter
 			map_list.clear();
 
 			// Create the segment strings for each reference or difference channel
-			// in the minimum set that will be used by the save handler.
+			// in the minimum set that will be used by the save handler and then
+			// decompressed by the reader.
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
@@ -1231,6 +1232,17 @@ public class DeltaWriter
 							offset += current_segment.length - 1; 
 						} 
 						out.write(concatenated_segments, 0, total_length);
+						
+
+						// Writing out each segment separately, assuming we want
+						// the data packetized.
+						/*
+						for (int k = 0; k < number_of_segments; k++)
+						{
+							byte[] current_segment = (byte[]) segments.get(k);
+							out.write(current_segment, 0, current_segment.length - 1);
+						}
+                        */
 					}
 				}
 

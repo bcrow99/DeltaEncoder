@@ -535,7 +535,8 @@ public class StringMapper
 					length = 1;
 					number_unpacked++;
 
-				} else if(length == maximum_length)
+				} 
+				else if(length == maximum_length)
 				{
 					int k = length;
 					dst[dst_byte++] = inverse_table[k];
@@ -549,7 +550,8 @@ public class StringMapper
 					src_byte++;
 				}
 			}
-		} catch (Exception e)
+		} 
+		catch (Exception e)
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting unpackStrings2 with an exception.");
@@ -633,8 +635,9 @@ public class StringMapper
 	 * @param dst  byte array containing the result
 	 * @return transformed bit length
 	 */
-	public static int compressZeroBits(byte src[], int size, byte dst[])
+	public static int [] compressZeroBits(byte src[], int size, byte dst[])
 	{
+		int [] result = new int[2];
 		for(int i = 0; i < dst.length; i++)
 			dst[i] = 0;
 		int current_byte = 0;
@@ -703,6 +706,8 @@ public class StringMapper
 						current_byte++;
 						current_bit = 0;
 					}
+					result[1] = 1;
+					//System.out.println("Odd zero bit at end of string.");
 				}
 				else
 				{
@@ -728,7 +733,8 @@ public class StringMapper
 					k++;
 				}
 			}
-		} catch (Exception e)
+		} 
+		catch (Exception e)
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressZeroBits with an exception.");
@@ -736,8 +742,10 @@ public class StringMapper
 
 		int number_of_bits = current_byte * 8;
 		number_of_bits += current_bit;
-
-		return(number_of_bits);
+        
+		result[0] = number_of_bits;
+		
+		return(result);
 	}
 
 	/**
@@ -891,10 +899,11 @@ public class StringMapper
 			else
 			{
 				iterations = 1;
-				current_length = compressZeroBits(src, bit_length, dst);
+				int [] result = compressZeroBits(src, bit_length, dst);
+				current_length = result[0];
 				amount = getCompressionAmount(dst, current_length, 0);
 
-				if(amount >= 0)
+				if(amount >= 0 || result[1] == 1)
 				{
 					int last_byte = current_length / 8;
 					if(current_length % 8 != 0)
@@ -913,19 +922,20 @@ public class StringMapper
 				else
 				{
 					byte[] temp = new byte[src.length];
-					while (amount < 0 && iterations < 15)
+					while(amount < 0 && iterations < 15 && result[1] == 0)
 					{
 						int previous_length = current_length;
 						if(iterations % 2 == 1)
 						{
-							current_length = compressZeroBits(dst, previous_length, temp);
+							result = compressZeroBits(dst, previous_length, temp);
+							current_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(temp, current_length, 0);
-
 						} 
 						else
 						{
-							current_length = compressZeroBits(temp, previous_length, dst);
+							result = compressZeroBits(temp, previous_length, dst);
+							current_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(dst, current_length, 0);
 						}
@@ -970,7 +980,7 @@ public class StringMapper
 	 * 
 	 * @param src  input bytes
 	 * @param size original bit length
-	 * @return byte array containing the transformed string with trailing data byte.
+	 * @return byte array containing the result
 	 */
 	public static byte[] compressZeroStrings(byte[] src, int bit_length)
 	{
@@ -997,9 +1007,11 @@ public class StringMapper
 			{
 				byte[] buffer1 = new byte[src.length];
 				byte[] buffer2 = new byte[src.length];
-				int compressed_length = compressZeroBits(src, bit_length, buffer1);
+				
+				int [] result = compressZeroBits(src, bit_length, buffer1);
+				int compressed_length = result[0];
 				amount = getCompressionAmount(buffer1, compressed_length, 0);
-				if(amount >= 0)
+				if(amount >= 0 && result[1] == 0)
 				{
 					// 1 iteration
 					int byte_length = compressed_length / 8;
@@ -1019,17 +1031,20 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15)
+					while (amount < 0 && iterations < 15 && result[1] == 0)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
 						{
-							compressed_length = compressZeroBits(buffer1, previous_length, buffer2);
+							result = compressZeroBits(buffer1, previous_length, buffer2);
+							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer2, compressed_length, 0);
-						} else
+						} 
+						else
 						{
-							compressed_length = compressZeroBits(buffer2, previous_length, buffer1);
+							result = compressZeroBits(buffer2, previous_length, buffer1);
+							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer1, compressed_length, 0);
 						}
@@ -1068,6 +1083,7 @@ public class StringMapper
 		return dst;
 	}
 
+	// This function expects a trailing byte with information.
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string.
@@ -1091,13 +1107,16 @@ public class StringMapper
 		// buffers over and over again.
 		byte[] buffer1 = new byte[src.length];
 		byte[] buffer2 = new byte[src.length];
+		byte[] dst     = new byte[src.length];
 		
 		try
 		{
-			int compressed_length = compressZeroBits(src, bit_length, buffer1);
+			int [] result = compressZeroBits(src, bit_length, buffer1);
+			int compressed_length = result[0];
 			amount = getCompressionAmount(buffer1, compressed_length, 0);
-			if(amount >= 0)
+			if(amount >= 0 || result[1] != 0)
 			{
+				// 1 iteration
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
 					byte_length++;
@@ -1106,7 +1125,7 @@ public class StringMapper
 					extra_bits = (byte) (8 - extra_bits);
 				extra_bits <<= 5;
 
-				byte[]dst = new byte[byte_length + 1];
+				dst = new byte[byte_length + 1];
 				System.arraycopy(buffer1, 0, dst, 0, byte_length);
 				dst[byte_length] = 1;
 				dst[byte_length] |= extra_bits;
@@ -1114,20 +1133,21 @@ public class StringMapper
 			}	
 			else
 			{
-				
 				int iterations = 1;
-				while (amount < 0 && iterations < 15)
+				while (amount < 0 && iterations < 15 && result[1] == 0)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
 					{
-						compressed_length = compressZeroBits(buffer1, previous_length, buffer2);
+						result = compressZeroBits(buffer1, previous_length, buffer2);
+						compressed_length = result[0];
 						iterations++;
 						amount = getCompressionAmount(buffer2, compressed_length, 0);
 					} 
 					else
 					{
-						compressed_length = compressZeroBits(buffer2, previous_length, buffer1);
+						result = compressZeroBits(buffer2, previous_length, buffer1);
+						compressed_length = result[0];
 						iterations++;
 						amount = getCompressionAmount(buffer1, compressed_length, 0);
 					}
@@ -1136,7 +1156,7 @@ public class StringMapper
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
 					byte_length++;
-				byte[]dst = new byte[byte_length + 1];
+				dst = new byte[byte_length + 1];
 				if(iterations % 2 == 0)
 					System.arraycopy(buffer2, 0, dst, 0, byte_length);
 				else
@@ -1154,8 +1174,6 @@ public class StringMapper
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressZeroStrings with an exception.");
-			byte [] dst = new byte[src.length];
-			System.arraycopy(src, 0, dst, 0, src.length);
 			return dst;
 		}
 	}
@@ -1166,12 +1184,10 @@ public class StringMapper
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string.
-	 * It requires that the bit string length and number of times it was 
-	 * transformed is contained in the trailing byte.
+	 * It requires that the bit string length is contained in the trailing byte.
 	 * 
-	 * @param src  input bytes containing transformed string.
-	 * @return byte array containing the inversed transformed result with a trailing 
-	 * data byte.
+	 * @param src  input bytes
+	 * @return byte array containing the result with a trailing data byte.
 	 */
 	public static byte[] decompressZeroStrings(byte[] src)
 	{
@@ -1303,17 +1319,8 @@ public class StringMapper
 	}
 
 	// This function expects to find the number of iterations in the final
-	// byte.
-	/**
-	 * This applies a bitwise substitution iteratively that will expand or contract
-	 * a bit string.
-	 * It requires that the iterations is contained in the trailing byte, and then
-	 * applies the inverse.
-	 * 
-	 * @param src  input bytes
-	 * @param bit_length length of bit string contained in byte
-	 * @return byte array containing the transformed result with a trailing data byte.
-	 */
+	// byte, as well as the number of odd bits determined by the bit length
+	// subtracted from the byte length.
 	public static int decompressZeroStrings(byte src[], int bit_length, byte dst[])
 	{
 		int last_byte = bit_length / 8;
@@ -1384,19 +1391,11 @@ public class StringMapper
 		}
 	}
 
-	// One bit functions.
+	// One bit/one string functions.
 	// One bits correspond to run bits in this implementation.
-	/**
-	 * Does a bitwise substitution that will expand or contract the original bit
-	 * string.
-	 * 
-	 * @param src  input bytes
-	 * @param size original bit length
-	 * @param dst  byte array containing the result
-	 * @return transformed bit length
-	 */
-	public static int compressOneBits(byte src[], int size, byte dst[])
+	public static int [] compressOneBits(byte src[], int size, byte dst[])
 	{
+		int [] result = new int[2];
 		for(int i = 0; i < dst.length; i++)
 			dst[i] = 0;
 		int current_byte = 0;
@@ -1414,7 +1413,6 @@ public class StringMapper
 			{
 				i++;
 				j++;
-
 				if(j == 8)
 				{
 					j = 0;
@@ -1458,9 +1456,8 @@ public class StringMapper
 					}
 				}
 			} 
-			else if((src[k] & (mask << j)) != 0 && (i == size - 1)) 
+			else if((src[k] & (mask << j)) != 0 && (i == size - 1)) // We're at the end of the string and we have an odd 1.															// odd 1.
 			{
-				// We're at the end of the string and we have an odd 1.
 				// Put a 0 down to signal that there is an odd 1.
 				// This works for single iterations but might fail in the recursive case.
 				// It seems like there could be extra trailing bits up to the amount of
@@ -1471,6 +1468,8 @@ public class StringMapper
 					current_byte++;
 					current_bit = 0;
 				}
+				//System.out.println("Odd one bit at end of string.");
+				result[1] = 1;
 			} 
 			else
 			{
@@ -1498,19 +1497,11 @@ public class StringMapper
 		}
 		int number_of_bits = current_byte * 8;
 		number_of_bits += current_bit;
-		return(number_of_bits);
+		result[0] = number_of_bits;
+
+		return(result);
 	}
 
-	/**
-	 * Does a bitwise substitution that will expand or contract the original bit
-	 * string.
-	 * 
-	 * @param src  input bytes
-	 * 
-	 * @param size original bit length
-	 * @param dst  byte array containing the result
-	 * @return inverse transformed bit length
-	 */
 	public static int decompressOneBits(byte src[], int size, byte dst[])
 	{
 		// This is necessary because dst can be used multiple times,
@@ -1568,8 +1559,7 @@ public class StringMapper
 							current_bit = 0;
 						}
 					}
-				} 
-				else if(((src[k] & (mask << j)) == 0) && i == size - 1)
+				} else if(((src[k] & (mask << j)) == 0) && i == size - 1)
 				{
 					// Append an odd 1.
 					dst[current_byte] |= (byte) mask << current_bit;
@@ -1606,7 +1596,8 @@ public class StringMapper
 					j = 0;
 					k++;
 				}
-			} catch (Exception e)
+			} 
+			catch (Exception e)
 			{
 				System.out.println(e.toString());
 				System.out.println("Size of input was " + size);
@@ -1620,15 +1611,6 @@ public class StringMapper
 		return(number_of_bits);
 	}
 
-	/**
-	 * This applies a bitwise substitution iteratively that will expand or contract
-	 * a bit string.
-	 * 
-	 * @param src  input bytes
-	 * @param length original bit length
-	 * @param  dst byte array containing the transformed string with trailing data byte.
-	 * @return length of tranformed bit string
-	 */
 	public static int compressOneStrings(byte src[], int length, byte dst[])
 	{
 		int current_length = 0;
@@ -1652,11 +1634,11 @@ public class StringMapper
 			} 
 			else
 			{
-				current_length = compressOneBits(src, length, dst);
+				int [] result = compressOneBits(src, length, dst);
 				int iterations = 1;
 				amount = getCompressionAmount(dst, current_length, 1);
 
-				if(amount >= 0)
+				if(amount >= 0 || result[1] != 0)
 				{
 					int last_byte = current_length / 8;
 					if(current_length % 8 != 0)
@@ -1666,23 +1648,26 @@ public class StringMapper
 					if(extra_bits != 0)
 						extra_bits = (byte) (8 - extra_bits);
 					extra_bits <<= 5;
-					dst[last_byte] |= extra_bits;
-					return(current_length);
+					dst[last_byte] = extra_bits;
+					dst[last_byte] |= 17;
+					return(result[0]);
 				} 
 				else
 				{
 					byte[] temp = new byte[src.length];
-					while (amount < 0 && iterations < 15)
+					while (amount < 0 && iterations < 15 && result[1] == 0)
 					{
 						int previous_length = current_length;
 						if(iterations % 2 == 1)
 						{
-							current_length = compressOneBits(dst, previous_length, temp);
+							result = compressOneBits(dst, previous_length, temp);
+							current_length = result[0];
 							amount = getCompressionAmount(temp, current_length, 1);
 						} 
 						else
 						{
-							current_length = compressOneBits(temp, previous_length, dst);
+							result = compressOneBits(temp, previous_length, dst);
+							current_length = result[0];
 							amount = getCompressionAmount(dst, current_length, 1);
 						}
 						iterations++;
@@ -1713,11 +1698,12 @@ public class StringMapper
 						extra_bits = (byte) (8 - modulus);
 
 					extra_bits <<= 5;
-					dst[last_byte] |= extra_bits;
+					dst[last_byte] = extra_bits;
+					dst[last_byte] |= 16 + iterations;
 				}
 			}
 		} 
-		catch(Exception e)
+		catch (Exception e)
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressOneStrings with exception.");
@@ -1725,14 +1711,6 @@ public class StringMapper
 		return current_length;
 	}
 
-	/**
-	 * This applies a bitwise substitution iteratively that will expand or contract
-	 * a bit string.
-	 * 
-	 * @param src  input bytes
-	 * @param length original bit length
-	 * @return dst byte array containing the transformed string with trailing data byte.
-	 */
 	public static byte[] compressOneStrings(byte[] src, int bit_length)
 	{
 		byte[] dst = new byte[1];
@@ -1754,20 +1732,20 @@ public class StringMapper
 					extra_bits = (byte) (8 - extra_bits);
 				extra_bits <<= 5;
 
-				// Need to set iterations to 16 to allow getting the type.
-				// Might possibly break the segmentation in the adaptive writer/reader.
 				dst[byte_length] = 16;
 
 				dst[byte_length] |= extra_bits;
 
 				return dst;
-			} else
+			} 
+			else
 			{
 				byte[] buffer1 = new byte[src.length];
 				byte[] buffer2 = new byte[src.length];
-				int compressed_length = compressOneBits(src, bit_length, buffer1);
+				int [] result = compressOneBits(src, bit_length, buffer1);
+				int compressed_length = result[0];
 				amount = getCompressionAmount(buffer1, compressed_length, 1);
-				if(amount >= 0)
+				if(amount >= 0 || result[1] != 0)
 				{
 					// 1 iteration
 					int byte_length = compressed_length / 8;
@@ -1790,19 +1768,20 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15)
+					while (amount < 0 && iterations < 15 && result[1] == 0)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
 						{
-
-							compressed_length = compressOneBits(buffer1, previous_length, buffer2);
+                            result = compressOneBits(buffer1, previous_length, buffer2);
+							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer2, compressed_length, 1);
-						} else
+						} 
+						else
 						{
-
-							compressed_length = compressOneBits(buffer2, previous_length, buffer1);
+                            result = compressOneBits(buffer2, previous_length, buffer1);
+							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer1, compressed_length, 1);
 						}
@@ -1826,7 +1805,8 @@ public class StringMapper
 					return dst;
 				}
 			}
-		} catch (Exception e)
+		} 
+		catch (Exception e)
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressOneStrings with an exception.");
@@ -1861,9 +1841,10 @@ public class StringMapper
 				
 		try
 		{
-			int compressed_length = compressOneBits(src, bit_length, buffer1);
+			int [] result = compressOneBits(src, bit_length, buffer1);
+			int compressed_length = result[0];
 			amount = getCompressionAmount(buffer1, compressed_length, 1);
-			if(amount >= 0)
+			if(amount >= 0 || result[1] != 0)
 			{
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
@@ -1882,18 +1863,20 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while (amount < 0 && iterations < 15)
+				while (amount < 0 && iterations < 15 && result[1] == 0)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
 					{
-						compressed_length = compressOneBits(buffer1, previous_length, buffer2);
+						result = compressOneBits(buffer1, previous_length, buffer2);
+						compressed_length = result[0];
 						iterations++;
 						amount = getCompressionAmount(buffer2, compressed_length, 1);
 					} 
 					else
 					{
-						compressed_length = compressZeroBits(buffer2, previous_length, buffer1);
+						result = compressOneBits(buffer2, previous_length, buffer1);
+						compressed_length = result[0];
 						iterations++;
 						amount = getCompressionAmount(buffer1, compressed_length, 1);
 					}
@@ -1927,16 +1910,6 @@ public class StringMapper
 	// This function expects to find the number of iterations in the final
 	// byte, as well as the number of odd bits determined by the bit length
 	// subtracted from the byte length.
-	/**
-	 * This applies a bitwise substitution iteratively that will expand or contract
-	 * a bit string.
-	 * 
-	 * @param src    input bytes with trailing data byte
-	 * @param length original bit length
-	 * @return dst   byte array containing the transformed string with trailing data byte
-	 * @return length of transformed bit string
-	 * 
-	 */
 	public static int decompressOneStrings(byte src[], int length, byte dst[])
 	{
 		// Getting the number of iterations appended to
@@ -2005,12 +1978,13 @@ public class StringMapper
 		}
 	}
 
+	// This function expects to find the number of iterations in the final
+	// byte, as well as the number of odd bits determined by the bit length
+	// subtracted from the byte length.
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string.
 	 * It requires that the bit string length is contained in the trailing byte.
-	 * The number contained in the byte is the number of odd bits when
-	 * the string length is subtracted from the array length * 8.
 	 * 
 	 * @param src  input bytes
 	 * @return byte array containing the result with a trailing data byte.
@@ -2055,10 +2029,12 @@ public class StringMapper
 
 			extra_bits = (byte) (uncompressed_length % 8);
 			if(extra_bits != 0)
+			{
 				extra_bits = (byte) (8 - extra_bits);
-			extra_bits <<= 5;
-			dst[byte_length] = extra_bits;
-
+			    extra_bits <<= 5;
+			    dst[byte_length] = extra_bits;
+			}
+            dst[byte_length] |= 16;
 			return dst;
 		} 
 		else if(iterations % 2 == 0)
@@ -2092,9 +2068,12 @@ public class StringMapper
 
 			extra_bits = (byte) (uncompressed_length % 8);
 			if(extra_bits != 0)
+			{
 				extra_bits = (byte) (8 - extra_bits);
-			extra_bits <<= 5;
-			dst[byte_length] = extra_bits;
+			    extra_bits <<= 5;
+			    dst[byte_length] = extra_bits;
+			}
+			dst[byte_length] |= 16;
 			return dst;
 		} 
 		else
@@ -2116,7 +2095,8 @@ public class StringMapper
 				if(iterations % 2 == 0)
 				{
 					uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2);
-				} else
+				} 
+				else
 				{
 					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
 				}
@@ -2129,27 +2109,22 @@ public class StringMapper
 			byte[] dst = new byte[byte_length + 1];
 
 			System.arraycopy(buffer1, 0, dst, 0, byte_length);
-
+            
 			extra_bits = (byte) (uncompressed_length % 8);
 			if(extra_bits != 0)
+			{
 				extra_bits = (byte) (8 - extra_bits);
-			extra_bits <<= 5;
-			dst[byte_length] = extra_bits;
+			    extra_bits <<= 5;
+			    dst[byte_length] = extra_bits;
+			}
+			dst[byte_length] |= 16;
 			return dst;
 		}
 	}
 
-	
-	
-	/**
-	 * This returns the inverse transform of a compressed bit string.
-	 * It requires that the string length and iterations is contained in the trailing byte.
-	 * 
-	 * @param string  input bytes with a trailing data byte.
-	 * @return byte array with a trailing data byte.
-	 */
 	public static byte[] decompressStrings(byte[] compressed_string)
 	{
+		/*
 		int type = getType(compressed_string);
 		if(type == 0)
 		{
@@ -2160,22 +2135,24 @@ public class StringMapper
 		{
 			byte[] decompressed_string = decompressOneStrings(compressed_string);
 			return decompressed_string;
+		} else
+			return compressed_string;
+		*/
+		int iterations = getIterations(compressed_string);
+		if(iterations < 16)
+		{
+			byte[] decompressed_string = decompressZeroStrings(compressed_string);
+			return decompressed_string;
 		} 
 		else
-			return compressed_string;
+		{
+			byte[] decompressed_string = decompressOneStrings(compressed_string);
+			return decompressed_string;
+		}
 	}
 
 	// Functions that get information about a string
 	// from the trailing byte.
-	
-	/**
-	 * This returns the bit string length of a bit string contained in
-	 * a byte array.
-	 * It requires that the bit string length is contained in the trailing byte.
-	 * 
-	 * @param string  input bytes
-	 * @return byte array with a trailing data byte.
-	 */
 	public static int getBitlength(byte[] string)
 	{
 		byte last_byte = string[string.length - 1];
@@ -2185,20 +2162,7 @@ public class StringMapper
 
 		return bitlength;
 	}
-	
-	/**
-	 * This returns the number of times the string was compressed,
-	 * with either transform.
-	 * If the number of iterations is less than 16,
-	 * it signifies that the string was compressed by reducing
-	 * the stop bits; otherwise the string was compressed
-	 * by reducing the run bits and the actual iterations
-	 * is produced by subtracting 16.
-	 * It requires that the iterations are contained in the trailing byte.
-	 * 
-	 * @param string  input bytes
-	 * @return byte array with a trailing data byte.
-	 */
+
 	public static byte getIterations(byte[] string)
 	{
 		byte last_byte = string[string.length - 1];
@@ -2207,16 +2171,6 @@ public class StringMapper
 		return iterations;
 	}
 
-	/**
-	 * This returns whether a string was compressed
-	 * by reducing the stop bits or the run bits,
-	 * with a 0 signifying stop bits and a 1 
-	 * signifying run bits.
-	 * It requires that the iterations are contained in the trailing byte.
-	 * 
-	 * @param src  input bytes
-	 * @return byte array with a trailing data byte.
-	 */
 	public static byte getType(byte[] string)
 	{
 		byte last_byte = string[string.length - 1];
@@ -2228,14 +2182,6 @@ public class StringMapper
 		return type;
 	}
 
-	/**
-	 * This returns the percentage of stop bits,
-	 * and (implicitly) the percentage of run bits
-	 * from a bit string contained in a byte array.
-	 * 
-	 * @param src  input bytes
-	 * @return byte array with a trailing data byte.
-	 */
 	public static double getZeroRatio(byte[] string, int bit_length)
 	{
 		int byte_length = bit_length / 8;
@@ -2275,14 +2221,6 @@ public class StringMapper
 		return ratio;
 	}
 
-	/**
-	 * This returns an unparameterized list that contains the information
-	 * needed to transform integers into unary strings.
-	 * It assumes the first value is a code signifying the type of value.
-	 * 
-	 * @param value  input ints
-	 * @return byte array with a trailing data byte.
-	 */
 	public static ArrayList getStringList(int[] value)
 	{
 		ArrayList string_list = new ArrayList();
@@ -2319,8 +2257,7 @@ public class StringMapper
 			byte[] compression_string1 = compressZeroStrings(string, bit_length);
 			byte[] compression_string2 = compressZeroStrings(string);
 			string_list.add(compression_string1);
-		} 
-		else
+		} else
 		{
 			byte[] compression_string1 = compressOneStrings(string, bit_length);
 			byte[] compression_string2 = compressOneStrings(string);
@@ -2330,14 +2267,8 @@ public class StringMapper
 		return string_list;
 	}
 
-	/**
-	 * This returns an unparameterized list that contains the information
-	 * needed to transform integers into unary strings.
-	 * It assumes the first value is not a code signifying the type of value.
-	 * 
-	 * @param value  input ints
-	 * @return byte array with a trailing data byte.
-	 */
+	// Packing and compressing arrays where the first value
+	// is not a code or a delta.
 	public static ArrayList getStringList2(int[] value)
 	{
 		ArrayList string_list = new ArrayList();
@@ -2370,8 +2301,7 @@ public class StringMapper
 		{
 			byte[] compression_string = compressZeroStrings(string);
 			string_list.add(compression_string);
-		} 
-		else
+		} else
 		{
 			byte[] compression_string = compressOneStrings(string);
 			string_list.add(compression_string);
@@ -2380,14 +2310,6 @@ public class StringMapper
 		return string_list;
 	}
 
-	/**
-	 * This returns an unparameterized list that contains the information
-	 * needed to transform bytes into unary strings.
-	 * It assumes the first value is not a code signifying the type of value.
-	 * 
-	 * @param value  input bytes
-	 * @return byte array with a trailing data byte.
-	 */
 	public static ArrayList getStringList2(byte[] value)
 	{
 		ArrayList string_list = new ArrayList();
@@ -2429,16 +2351,6 @@ public class StringMapper
 		return string_list;
 	}
 
-	
-	/**
-	 * This returns the number of bits a string will expand or contract
-	 * depending of the bitwise transform.
-	 * 
-	 * @param src  input bytes containing bit string
-	 * @param bit_length 
-	 * @param transform_type
-	 * @return int number of bits the string wil expand or contract
-	 */
 	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
 	{
 		int positive = 0;
@@ -2490,8 +2402,7 @@ public class StringMapper
 					}
 				}
 			}
-		} 
-		else
+		} else
 		{
 			int previous = 0;
 			for(int i = 0; i < n; i++)
