@@ -697,7 +697,7 @@ public class StringMapper
 				{
 					// We're at the end of the string and we have an odd 0.
 					// Put a 1 down to signal that there is an odd 0.
-					// This works for double iterations but can produce trailing
+					// This works for a single recursion but can produce trailing
 					// zero bits in the other recursive cases.
 					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
@@ -707,7 +707,6 @@ public class StringMapper
 						current_bit = 0;
 					}
 					result[1] = 1;
-					//System.out.println("Odd zero bit at end of string.");
 				}
 				else
 				{
@@ -1459,16 +1458,14 @@ public class StringMapper
 			else if((src[k] & (mask << j)) != 0 && (i == size - 1)) // We're at the end of the string and we have an odd 1.															// odd 1.
 			{
 				// Put a 0 down to signal that there is an odd 1.
-				// This works for single iterations but might fail in the recursive case.
-				// It seems like there could be extra trailing bits up to the amount of
-				// iterations, but that does not seem to happen.
+				// This works for a single recursion but might fail in the other recursive cases.
+				// It actually fails more rarely than we expect.
 				current_bit++;
 				if(current_bit == 8)
 				{
 					current_byte++;
 					current_bit = 0;
 				}
-				//System.out.println("Odd one bit at end of string.");
 				result[1] = 1;
 			} 
 			else
@@ -1504,8 +1501,9 @@ public class StringMapper
 
 	public static int decompressOneBits(byte src[], int size, byte dst[])
 	{
-		// This is necessary because dst can be used multiple times,
-		// so we can't count on it being initialized with zeros.
+		// This is necessary because dst can be used multiple times
+		// in our implementation, so we can't count on it being initialized 
+		// with zeros.
 		for(int i = 0; i < dst.length; i++)
 			dst[i] = 0;
 
@@ -1814,7 +1812,6 @@ public class StringMapper
 		}
 	}
 
-	// This function expects a trailing bit with information.
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string.
@@ -2124,7 +2121,6 @@ public class StringMapper
 
 	public static byte[] decompressStrings(byte[] compressed_string)
 	{
-		/*
 		int type = getType(compressed_string);
 		if(type == 0)
 		{
@@ -2137,18 +2133,6 @@ public class StringMapper
 			return decompressed_string;
 		} else
 			return compressed_string;
-		*/
-		int iterations = getIterations(compressed_string);
-		if(iterations < 16)
-		{
-			byte[] decompressed_string = decompressZeroStrings(compressed_string);
-			return decompressed_string;
-		} 
-		else
-		{
-			byte[] decompressed_string = decompressOneStrings(compressed_string);
-			return decompressed_string;
-		}
 	}
 
 	// Functions that get information about a string
@@ -2268,7 +2252,7 @@ public class StringMapper
 	}
 
 	// Packing and compressing arrays where the first value
-	// is not a code or a delta.
+	// is not a code.
 	public static ArrayList getStringList2(int[] value)
 	{
 		ArrayList string_list = new ArrayList();
