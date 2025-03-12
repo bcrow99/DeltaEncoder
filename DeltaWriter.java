@@ -74,6 +74,8 @@ public class DeltaWriter
 	public void init()
 	{
 	    System.out.println("Loaded file.");
+	    System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
+	    System.out.println();
 	}
 	
 	public DeltaWriter(String _filename)
@@ -88,8 +90,8 @@ public class DeltaWriter
 			image_xdim = original_image.getWidth();
 			image_ydim = original_image.getHeight();
 
-			System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
-			System.out.println();
+			//System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
+			//System.out.println();
 
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
