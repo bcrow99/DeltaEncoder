@@ -5,7 +5,6 @@ import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
 import java.util.zip.*;
-import java.lang.Math.*;
 import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
@@ -24,7 +23,7 @@ public class DeltaWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant = 4;
+	int pixel_quant = 6;
 	int pixel_shift = 3;
 	int segment_length = 12;
 	int correction = 0;
@@ -52,7 +51,7 @@ public class DeltaWriter
 	long file_length;
 	double file_compression_rate;
 
-	ArrayList channel_list, table_list, string_list, map_list, segment_list;
+	ArrayList <Object>channel_list, table_list, string_list, map_list, segment_list;
 
 	boolean initialized = false;
 
@@ -69,8 +68,14 @@ public class DeltaWriter
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
+		writer.init();
 	}
-
+	
+	public void init()
+	{
+	    System.out.println("Loaded file.");
+	}
+	
 	public DeltaWriter(String _filename)
 	{
 		filename = _filename;
@@ -86,11 +91,11 @@ public class DeltaWriter
 			System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
 			System.out.println();
 
-			channel_list = new ArrayList();
-			table_list   = new ArrayList();
-			string_list  = new ArrayList();
-			map_list     = new ArrayList();
-			segment_list = new ArrayList();
+			channel_list = new ArrayList<Object>();
+			table_list   = new ArrayList<Object>();
+			string_list  = new ArrayList<Object>();
+			map_list     = new ArrayList<Object>();
+			segment_list = new ArrayList<Object>();
 
 			channel_string = new String[6];
 			channel_string[0] = new String("blue");
@@ -221,8 +226,7 @@ public class DeltaWriter
 				{
 					AffineTransform scaling_transform = new AffineTransform();
 					scaling_transform.scale(scale, scale);
-					AffineTransformOp scale_op = new AffineTransformOp(scaling_transform,
-							AffineTransformOp.TYPE_BILINEAR);
+					AffineTransformOp scale_op = new AffineTransformOp(scaling_transform, AffineTransformOp.TYPE_BILINEAR);
 					display_image = new BufferedImage(canvas_xdim, canvas_ydim, original_image.getType());
 					display_image = scale_op.filter(original_image, display_image);
 				}
@@ -526,8 +530,8 @@ public class DeltaWriter
 		// with every change in the parameters.
 		public void actionPerformed(ActionEvent event)
 		{
-			ArrayList quantized_channel_list   = new ArrayList();
-			ArrayList dequantized_channel_list = new ArrayList();
+			ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
+			ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
 			
 			int new_xdim = image_xdim;
 			int new_ydim = image_ydim;
@@ -540,7 +544,7 @@ public class DeltaWriter
 			}
 			
 			// Quantize.
-			for (int i = 0; i < 3; i++)
+			for(int i = 0; i < 3; i++)
 			{
 				int[] channel = (int[]) channel_list.get(i);
 				if(pixel_quant == 0)
@@ -566,10 +570,38 @@ public class DeltaWriter
 				}
 			}
 			
+			/*
+			for(int i = 0; i < 3; i++)
+			{
+				int[] channel = (int[]) channel_list.get(i);
+				if(pixel_shift == 0)
+				{
+					if(pixel_quant == 0)
+						quantized_channel_list.add(channel);	
+					else
+					{
+						int [] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
+						quantized_channel_list.add(resized_channel);
+					}
+				}
+				else
+				{
+					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+					if(pixel_quant == 0)
+						quantized_channel_list.add(shifted_channel);	
+					else
+					{
+						int [] resized_channel = ResizeMapper.resize(shifted_channel, image_xdim, new_xdim, new_ydim);
+						quantized_channel_list.add(resized_channel);
+					}
+				}
+			}
+			*/
+			
 			// Get the set of deltas that have a minimum sum, including difference channels.
-			int[] quantized_blue = (int[]) quantized_channel_list.get(0);
-			int[] quantized_green = (int[]) quantized_channel_list.get(1);
-			int[] quantized_red = (int[]) quantized_channel_list.get(2);
+			int[] quantized_blue = quantized_channel_list.get(0);
+			int[] quantized_green = quantized_channel_list.get(1);
+			int[] quantized_red = quantized_channel_list.get(2);
          
 			int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
 			int[] quantized_red_green = DeltaMapper.getDifference(quantized_red, quantized_green);
@@ -582,7 +614,7 @@ public class DeltaWriter
 			for (int i = 0; i < 6; i++)
 			{
 				int min = 256;
-				int[] quantized_channel = (int[]) quantized_channel_list.get(i);
+				int[] quantized_channel = quantized_channel_list.get(i);
 
 				// Find the channel minimums.
 				for (int j = 0; j < quantized_channel.length; j++)
@@ -645,15 +677,14 @@ public class DeltaWriter
 			map_list.clear();
 
 			// Create the segment strings for each reference or difference channel
-			// in the minimum set that will be used by the save handler and then
-			// decompressed by the reader.
+			// in the minimum set that will be used by the save handler.
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
 
-				int[] quantized_channel = (int[]) quantized_channel_list.get(j);
-
-				ArrayList result = new ArrayList();
+				int[] quantized_channel = quantized_channel_list.get(j);
+                
+				ArrayList<Object> result = new ArrayList<Object>();
 				
 				if (delta_type == 0)
 				{
@@ -706,12 +737,12 @@ public class DeltaWriter
 				string_list.add(compression_string);
 
 				channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
-				channel_string_type[i] = StringMapper.getType(compression_string);
-				channel_iterations[i] = StringMapper.getIterations(compression_string);
+				channel_string_type[i]       = StringMapper.getType(compression_string);
+				channel_iterations[i]        = StringMapper.getIterations(compression_string);
 
-				if (segment_length == 0)
+				if(segment_length == 0)
 				{
-					ArrayList segments = new ArrayList();
+					ArrayList<byte[]> segments = new ArrayList<byte[]>();
 					segments.add(compression_string);
 					segment_list.add(segments);
 				} 
@@ -726,13 +757,13 @@ public class DeltaWriter
 					if (minimum_segment_length < 96)
 						minimum_segment_length = 96;
 
-					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string,
-							minimum_segment_length);
-					ArrayList segments = (ArrayList) segment_data_list.get(0);
+					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
+					ArrayList<byte[]> segments = (ArrayList<byte[]>) segment_data_list.get(0);
 					int number_of_segments = segments.size();
 					max_bytelength[i] = (int) segment_data_list.get(1);
 					segment_list.add(segments);
 					System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
+					System.out.println();
 				}
 			}
 
@@ -750,9 +781,7 @@ public class DeltaWriter
 				if (number_of_segments == 1)
 				{
 					byte[] current_string = (byte[]) segments.get(0);
-					int current_type = StringMapper.getType(current_string);
 					int current_iterations = StringMapper.getIterations(current_string);
-					int current_bitlength = StringMapper.getBitlength(current_string);
 
 					if (current_iterations == 0 || current_iterations == 16)
 					{
@@ -770,7 +799,7 @@ public class DeltaWriter
 				} 
 				else
 				{
-					ArrayList decompressed_segments = new ArrayList();
+					ArrayList<byte[]> decompressed_segments = new ArrayList<byte[]>();
 					for (int k = 0; k < number_of_segments; k++)
 					{
 						byte[] current_string = (byte[]) segments.get(k);
@@ -787,7 +816,7 @@ public class DeltaWriter
 					int string_length = 0;
 					for (int k = 0; k < decompressed_segments.size(); k++)
 					{
-						byte[] current_string = (byte[]) decompressed_segments.get(k);
+						byte[] current_string = decompressed_segments.get(k);
 						string_length += current_string.length - 1;
 					}
 
@@ -800,7 +829,7 @@ public class DeltaWriter
 					int total_bitlength = 0;
 					for (int k = 0; k < decompressed_segments.size(); k++)
 					{
-						byte[] segment = (byte[]) decompressed_segments.get(k);
+						byte[] segment = decompressed_segments.get(k);
 						for (int m = 0; m < segment.length - 1; m++)
 							reconstructed_string[offset + m] = segment[m];
 						offset += segment.length - 1;
@@ -816,16 +845,42 @@ public class DeltaWriter
 						reconstructed_string[reconstructed_string.length - 1] = extra_bits;
 					}
 					reconstructed_string[reconstructed_string.length - 1] |= channel_iterations[i];
-
+                    
+					
+					byte [] original_string = (byte [])string_list.get(i);
+					boolean same            = true;
+					int current_index       = 0;
+					while(same && current_index < original_string.length)
+					{
+					    if(original_string[current_index] != reconstructed_string[current_index])
+					    {
+					    	same = false;
+					    	System.out.println("Reconstructed string differs from original string at index " + current_index);
+					    	System.out.println("Original value is " + original_string[current_index]);
+					    	System.out.println("Reconstructed value is " + reconstructed_string[current_index]);
+					    	System.out.println("Previous value is " + original_string[current_index - 1]);
+					    }
+					    current_index++;
+					}
+					if(same)
+					{
+						System.out.println("Original string is the same as the reconstructed string.");
+						System.out.println();
+					}
+					
 					int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
 					if (reconstructed_iterations == 0 || reconstructed_iterations == 16)
 					{
 						int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
+						if(number_unpacked != delta.length)
+							System.out.println("Did not unpacked expected number of values.");
 					}
 					else
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+						if(number_unpacked != delta.length)
+							System.out.println("Did not unpacked expected number of values.");
 					}
 				}
 
@@ -901,6 +956,34 @@ public class DeltaWriter
 				    	dequantized_channel_list.add(resized_channel);	
 				    }
 				}
+				
+				/*
+				if(pixel_quant == 0)
+				{
+				    if(pixel_shift == 0)
+				    {
+				    	dequantized_channel_list.add(channel);
+				    }
+				    else
+				    {
+				    	int [] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
+				    	dequantized_channel_list.add(shifted_channel);
+				    }
+				}
+				else
+				{
+					int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);
+				    if(pixel_shift == 0)
+				    {
+				    	dequantized_channel_list.add(resized_channel);	
+				    }
+				    else
+				    {
+				    	int [] shifted_channel = DeltaMapper.shift(resized_channel, pixel_shift);	
+				    	dequantized_channel_list.add(shifted_channel);	
+				    }
+				}
+				*/
 			}
 
 			// Assemble the rgb files if the minimum set contains difference channels.
@@ -909,52 +992,52 @@ public class DeltaWriter
 			int[] red = new int[new_xdim * new_ydim];
 			if (min_set_id == 0)
 			{
-				blue  = (int[]) dequantized_channel_list.get(0);
-				green = (int[]) dequantized_channel_list.get(1);
-				red   = (int[]) dequantized_channel_list.get(2);
+				blue  = dequantized_channel_list.get(0);
+				green = dequantized_channel_list.get(1);
+				red   = dequantized_channel_list.get(2);
 			} 
 			else if (min_set_id == 1)
 			{
-				blue = (int[]) dequantized_channel_list.get(0);
-				red = (int[]) dequantized_channel_list.get(1);
-				int[] red_green = (int[]) dequantized_channel_list.get(2);
+				blue = dequantized_channel_list.get(0);
+				red = dequantized_channel_list.get(1);
+				int[] red_green = dequantized_channel_list.get(2);
 				green = DeltaMapper.getDifference(red, red_green);
 			} 
 			else if (min_set_id == 2)
 			{
-				blue = (int[]) dequantized_channel_list.get(0);
-				red = (int[]) dequantized_channel_list.get(1);
-				int[] blue_green = (int[]) dequantized_channel_list.get(2);
+				blue = dequantized_channel_list.get(0);
+				red = dequantized_channel_list.get(1);
+				int[] blue_green = dequantized_channel_list.get(2);
 				green = DeltaMapper.getDifference(blue, blue_green);
 			} 
 			else if (min_set_id == 3)
 			{
-				blue = (int[]) dequantized_channel_list.get(0);
-				int[] blue_green = (int[]) dequantized_channel_list.get(1);
+				blue = dequantized_channel_list.get(0);
+				int[] blue_green = dequantized_channel_list.get(1);
 				green = DeltaMapper.getDifference(blue, blue_green);
-				int[] red_green = (int[]) dequantized_channel_list.get(2);
+				int[] red_green = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(red_green, green);
 			} 
 			else if (min_set_id == 4)
 			{
-				blue = (int[]) dequantized_channel_list.get(0);
-				int[] blue_green = (int[]) dequantized_channel_list.get(1);
+				blue = dequantized_channel_list.get(0);
+				int[] blue_green = dequantized_channel_list.get(1);
 				green = DeltaMapper.getDifference(blue, blue_green);
-				int[] red_blue = (int[]) dequantized_channel_list.get(2);
+				int[] red_blue = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(blue, red_blue);
 			} 
 			else if (min_set_id == 5)
 			{
-				green = (int[]) dequantized_channel_list.get(0);
-				red = (int[]) dequantized_channel_list.get(1);
-				int[] blue_green = (int[]) dequantized_channel_list.get(2);
+				green = dequantized_channel_list.get(0);
+				red = dequantized_channel_list.get(1);
+				int[] blue_green = dequantized_channel_list.get(2);
 				blue = DeltaMapper.getSum(blue_green, green);
 			} 
 			else if (min_set_id == 6)
 			{
-				red = (int[]) dequantized_channel_list.get(0);
-				int[] blue_green = (int[]) dequantized_channel_list.get(1);
-				int[] red_green = (int[]) dequantized_channel_list.get(2);
+				red = dequantized_channel_list.get(0);
+				int[] blue_green = dequantized_channel_list.get(1);
+				int[] red_green = dequantized_channel_list.get(2);
 				for (int i = 0; i < red_green.length; i++)
 					red_green[i] = -red_green[i];
 				green = DeltaMapper.getSum(red_green, red);
@@ -962,26 +1045,26 @@ public class DeltaWriter
 			} 
 			else if (min_set_id == 7)
 			{
-				green = (int[]) dequantized_channel_list.get(0);
-				int[] blue_green = (int[]) dequantized_channel_list.get(1);
+				green = dequantized_channel_list.get(0);
+				int[] blue_green = dequantized_channel_list.get(1);
 				blue = DeltaMapper.getSum(green, blue_green);
-				int[] red_green = (int[]) dequantized_channel_list.get(2);
+				int[] red_green = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(green, red_green);
 			} 
 			else if (min_set_id == 8)
 			{
-				green = (int[]) dequantized_channel_list.get(0);
-				int[] red_green = (int[]) dequantized_channel_list.get(1);
+				green = dequantized_channel_list.get(0);
+				int[] red_green = dequantized_channel_list.get(1);
 				red = DeltaMapper.getSum(green, red_green);
-				int[] red_blue = (int[]) dequantized_channel_list.get(2);
+				int[] red_blue = dequantized_channel_list.get(2);
 				blue = DeltaMapper.getDifference(red, red_blue);
 			} 
 			else if (min_set_id == 9)
 			{
-				red = (int[]) dequantized_channel_list.get(0);
-				int[] red_green = (int[]) dequantized_channel_list.get(1);
+				red = dequantized_channel_list.get(0);
+				int[] red_green = dequantized_channel_list.get(1);
 				green = DeltaMapper.getDifference(red, red_green);
-				int[] red_blue = (int[]) dequantized_channel_list.get(2);
+				int[] red_blue = dequantized_channel_list.get(2);
 				blue = DeltaMapper.getDifference(red, red_blue);
 			}
 
@@ -1104,7 +1187,7 @@ public class DeltaWriter
 						byte[] map = (byte[]) map_list.get(i);
 						ArrayList map_string_list = StringMapper.getStringList2(map);
 						int map_min = (int) map_string_list.get(0);
-						int map_bit_length = (int) map_string_list.get(1);
+						//int map_bit_length = (int) map_string_list.get(1);
 						int[] string_table = (int[]) map_string_list.get(2);
 						byte[] compressed_map = (byte[]) map_string_list.get(3);
 
@@ -1134,7 +1217,7 @@ public class DeltaWriter
 						int huffman_bit_length = (int) huffman_list.get(0);
 						double shannon_limit = (double) huffman_list.get(1);
 
-						int huffman_length = huffman_bit_length + 256 * 8 + 256 / 8;
+						//int huffman_length = huffman_bit_length + 256 * 8 + 256 / 8;
 
 						out.writeInt(string.length);
 
@@ -1182,6 +1265,7 @@ public class DeltaWriter
 						out.writeInt(max_bytelength[i]);
 						if (max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 						{
+							//System.out.println("Segment length fits in unsigned byte.");
 							byte[] segment_length = new byte[number_of_segments];
 							for (int k = 0; k < number_of_segments; k++)
 							{
@@ -1197,6 +1281,7 @@ public class DeltaWriter
 						} 
 						else if (max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						{
+							//System.out.println("Segment length fits in unsigned short.");
 							int[] segment_length = new int[number_of_segments];
 							for (int k = 0; k < number_of_segments; k++)
 							{
@@ -1208,6 +1293,7 @@ public class DeltaWriter
 						} 
 						else
 						{
+							//System.out.println("Segment length fits in an int.");
 							int[] segment_length = new int[number_of_segments];
 							for (int k = 0; k < number_of_segments; k++)
 							{
@@ -1232,17 +1318,6 @@ public class DeltaWriter
 							offset += current_segment.length - 1; 
 						} 
 						out.write(concatenated_segments, 0, total_length);
-						
-
-						// Writing out each segment separately, assuming we want
-						// the data packetized.
-						/*
-						for (int k = 0; k < number_of_segments; k++)
-						{
-							byte[] current_segment = (byte[]) segments.get(k);
-							out.write(current_segment, 0, current_segment.length - 1);
-						}
-                        */
 					}
 				}
 

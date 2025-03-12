@@ -612,7 +612,8 @@ public class CodeMapper
 					current_byte = current_bit / 8;
 					offset = current_bit % 8;
 					break;
-				} else if(j == code.length - 1)
+				} 
+				else if(j == code.length - 1)
 					System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
