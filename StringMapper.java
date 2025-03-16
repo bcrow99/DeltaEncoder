@@ -1113,6 +1113,104 @@ public class StringMapper
 			int [] result = compressZeroBits(src, bit_length, buffer1);
 			int compressed_length = result[0];
 			amount = getCompressionAmount(buffer1, compressed_length, 0);
+			
+			if(amount >= 0)
+			//if(amount >= 0 || result[1] != 0)
+			{
+				// 1 iteration
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
+					byte_length++;
+				byte extra_bits = (byte) (compressed_length % 8);
+				if(extra_bits != 0)
+					extra_bits = (byte) (8 - extra_bits);
+				extra_bits <<= 5;
+
+				dst = new byte[byte_length + 1];
+				System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = 1;
+				dst[byte_length] |= extra_bits;
+				return dst;
+			}	
+			else
+			{
+				int iterations = 1;
+				while (amount < 0 && iterations < 15)
+				//while (amount < 0 && iterations < 15 && result[1] == 0)
+				{
+					int previous_length = compressed_length;
+					if(iterations % 2 == 1)
+					{
+						result = compressZeroBits(buffer1, previous_length, buffer2);
+						compressed_length = result[0];
+						iterations++;
+						amount = getCompressionAmount(buffer2, compressed_length, 0);
+					} 
+					else
+					{
+						result = compressZeroBits(buffer2, previous_length, buffer1);
+						compressed_length = result[0];
+						iterations++;
+						amount = getCompressionAmount(buffer1, compressed_length, 0);
+					}
+				}
+
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
+					byte_length++;
+				dst = new byte[byte_length + 1];
+				if(iterations % 2 == 0)
+					System.arraycopy(buffer2, 0, dst, 0, byte_length);
+				else
+					System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = (byte) iterations;
+				byte extra_bits = (byte) (compressed_length % 8);
+				if(extra_bits != 0)
+					extra_bits = (byte) (8 - extra_bits);
+				extra_bits <<= 5;
+				dst[byte_length] |= extra_bits;
+					return dst;   	
+			}
+		}
+		catch (Exception e)
+		{
+			System.out.println(e.toString());
+			System.out.println("Exiting compressZeroStrings with an exception.");
+			return dst;
+		}
+	}
+
+	// This function expects a trailing byte with information.
+	/**
+	 * This applies a bitwise substitution iteratively that will expand or contract
+	 * a bit string.
+	 * It requires that the bit string length is contained in the trailing byte.
+	 * 
+	 * @param src  input bytes
+	 * @return byte array containing the result with a trailing data byte.
+	 */
+	public static byte[] compressZeroStrings2(byte[] src)
+	{
+		int bit_length = getBitlength(src);
+		int amount     = getCompressionAmount(src, bit_length, 0);
+		if(amount > 0)
+		{
+			byte [] dst = new byte[src.length];
+			System.arraycopy(src, 0, dst, 0, src.length);
+			return dst;
+		}
+		
+		// Save on garbage collecting by using two
+		// buffers over and over again.
+		byte[] buffer1 = new byte[src.length];
+		byte[] buffer2 = new byte[src.length];
+		byte[] dst     = new byte[src.length];
+		
+		try
+		{
+			int [] result = compressZeroBits(src, bit_length, buffer1);
+			int compressed_length = result[0];
+			amount = getCompressionAmount(buffer1, compressed_length, 0);
 			if(amount >= 0 || result[1] != 0)
 			{
 				// 1 iteration
@@ -1557,7 +1655,8 @@ public class StringMapper
 							current_bit = 0;
 						}
 					}
-				} else if(((src[k] & (mask << j)) == 0) && i == size - 1)
+				} 
+				else if(((src[k] & (mask << j)) == 0) && i == size - 1)
 				{
 					// Append an odd 1.
 					dst[current_byte] |= (byte) mask << current_bit;
@@ -2205,6 +2304,53 @@ public class StringMapper
 		return ratio;
 	}
 
+	public static void getMostSkewedSegment(byte [] segment, int offset, int minimum_length)
+	{
+		int  byte_offset = offset / 8;
+		int  bit_offset  = offset % 8;
+		byte mask        = 1;
+		
+		int number_of_segments = segment.length * 8 - bit_offset - minimum_length;
+	
+		int current_length = number_of_segments;
+		
+		ArrayList length_list = new ArrayList();
+		ArrayList ratio_list  = new ArrayList();
+		
+		/*
+		for(int i = current_length; i >= minimum_length; i--)
+		{
+			int zero_sum = 0;
+			int one_sum = 0;
+		}
+		*/
+		int current_byte_offset = byte_offset;
+		int current_bit_offset  = bit_offset;
+		
+		int zero_sum = 0;
+		int one_sum  = 0;
+		while(current_byte_offset < segment.length)
+		{
+		    int i = segment[current_byte_offset] & (mask << current_bit_offset);	
+		    if(i == 0)
+		        zero_sum++;
+		    else
+		    	one_sum++;
+		    current_bit_offset++;
+		    if(current_bit_offset == 8)
+		    {
+		    	current_bit_offset = 0;
+		    	current_byte_offset++;
+		    }
+		}
+		
+		double ratio = zero_sum;
+		ratio /= (zero_sum + one_sum);
+		System.out.println("The zero ratio is " + String.format("%.4f", ratio));
+	}
+		
+
+	
 	public static ArrayList getStringList(int[] value)
 	{
 		ArrayList string_list = new ArrayList();
@@ -2241,7 +2387,8 @@ public class StringMapper
 			byte[] compression_string1 = compressZeroStrings(string, bit_length);
 			byte[] compression_string2 = compressZeroStrings(string);
 			string_list.add(compression_string1);
-		} else
+		} 
+		else
 		{
 			byte[] compression_string1 = compressOneStrings(string, bit_length);
 			byte[] compression_string2 = compressOneStrings(string);
