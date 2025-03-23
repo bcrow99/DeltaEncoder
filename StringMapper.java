@@ -2622,74 +2622,6 @@ public class StringMapper
 		return ratio;
 	}
 
-	/*
-	public static double getMostSkewedSegment(byte [] string, int offset, int segment_length)
-	{
-		int  byte_offset = offset / 8;
-		int  bit_offset  = offset % 8;
-		byte mask        = 1;
-		ArrayList<Double> ratio_list  = new ArrayList<Double>();
-		
-		// Number of segments to check.
-		int number_of_segments  = (string.length - 1) * 8 - bit_offset - segment_length;
-		int current_byte_offset = byte_offset;
-		int current_bit_offset  = bit_offset;
-		
-		for(int i = 0; i < number_of_segments; i++)
-		{
-			int zero_sum = 0;
-			int one_sum  = 0;
-			
-			int segment_byte_offset = current_byte_offset;
-			int segment_bit_offset  = current_bit_offset;
-			
-			for(int j = 0; j < segment_length; j++)
-			{
-				int k = string[segment_byte_offset] & (mask <<segment_bit_offset);	
-				if(k == 0)
-			        zero_sum++;
-			    else
-			    	one_sum++;
-			    segment_bit_offset++;
-			    if(segment_bit_offset == 8)
-			    {
-			    	segment_bit_offset = 0;
-			    	segment_byte_offset++;
-			    }
-			}
-			double ratio = zero_sum;
-			ratio       /= (zero_sum + one_sum);
-			ratio_list.add(ratio);
-			
-			current_bit_offset++;
-			if(current_bit_offset == 8)
-		    {
-				current_bit_offset = 0;
-				current_byte_offset++;
-		    }
-		}
-		
-		
-		
-		double skew = 0.;
-		double most_skewed_ratio = .5;
-		
-		for(int i = 0; i < ratio_list.size(); i++)
-		{
-			double current_ratio = ratio_list.get(i);
-			if(current_ratio == 1.)
-				System.out.println("Current ratio is 1.");
-		    double current_skew  = Math.abs(5. - current_ratio);
-		    if(current_skew > skew)
-		    {
-		    	skew = current_skew;
-		    	most_skewed_ratio = current_ratio;
-		    }
-		}
-		return most_skewed_ratio;
-	}
-	*/
-	
 	public static ArrayList<Double> getRatioList(byte [] string, int segment_length)
 	{
 		ArrayList<Double> ratio_list  = new ArrayList<Double>();
@@ -2735,6 +2667,112 @@ public class StringMapper
 		}
 		
 		return ratio_list;
+	}
+	
+	
+	public static ArrayList<int []> getRatioDeltaList(ArrayList<Double> ratio_list, int segment_length)
+	{
+		ArrayList delta_list  = new ArrayList<int []>();
+		
+		double ratio        = ratio_list.get(0);
+		int ratio_number = 0;
+		
+		double limit = .05;
+		while(ratio > limit)
+		{
+			ratio_number++;
+			limit += .05;
+		}
+		
+		int bit_offset = 0;
+		int bit_length = segment_length;
+		
+		double next_ratio = ratio_list.get(bit_offset + segment_length);
+		int    next_number = 0;
+		
+		limit = .05;
+		while(next_ratio > limit)
+		{
+			next_number++;
+			limit += .05;
+		}
+		
+		int current_number = ratio_number;
+		if(ratio_number < 7 && next_number < 7)
+		{
+		    current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+		    bit_length += segment_length;
+		}
+		else if(ratio_number > 6 && ratio_number < 12 && next_number > 6 && next_number < 12)
+		{
+			current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+			bit_length += segment_length;
+		}
+		else if(ratio_number > 11 && next_number > 11)
+		{
+			current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+			bit_length += segment_length;
+		}
+		else
+		{
+			int current_segment_length = segment_length / 2;
+			boolean found_similar_number = false;
+			while(current_segment_length % 2 == 0 && !found_similar_number)
+			{
+				next_ratio  = ratio_list.get(bit_offset + current_segment_length);
+				next_number = 0;
+				
+				limit = .05;
+				while(next_ratio > limit)
+				{
+					next_number++;
+					limit += .05;
+				} 
+				
+				if(ratio_number < 7 && next_number < 7)
+				{
+				    //current_number = (ratio_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+				    //bit_length += current_segment_length;
+				    found_similar_number = true;
+				}
+				else if(ratio_number > 6 && ratio_number < 12 && next_number > 6 && next_number < 12)
+				{
+					//current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+					//bit_length += current_segment_length;
+					found_similar_number = true;
+				}
+				else if(ratio_number > 11 && next_number > 11)
+				{
+					//current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+					//bit_length += current_segment_length;
+					found_similar_number = true;
+				}
+				else
+					current_segment_length /= 2;
+			}
+			
+			if(found_similar_number)
+				System.out.println("Found similar number.");
+			else
+				System.out.println("Did not find similar number.");
+		}
+		
+		
+		
+		
+		int [] delta = new int[3];
+		delta[0]     = current_number;
+		delta[1]     = bit_offset;
+		delta[2]     = bit_length;
+		delta_list.add(delta);
+		
+		
+		System.out.println("Initial ratio is " + String.format("%.2f", ratio));
+		System.out.println("Initial ratio number is " + ratio_number);
+	    System.out.println("Current number is " + current_number);
+	    System.out.println("Bit length is " + bit_length);
+		
+		return delta_list;
 	}
 	
 	
