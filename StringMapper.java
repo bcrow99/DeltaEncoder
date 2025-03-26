@@ -2669,12 +2669,11 @@ public class StringMapper
 		return ratio_list;
 	}
 	
-	
 	public static ArrayList<int []> getRatioDeltaList(ArrayList<Double> ratio_list, int segment_length)
 	{
 		ArrayList delta_list  = new ArrayList<int []>();
 		
-		double ratio        = ratio_list.get(0);
+		double ratio     = ratio_list.get(0);
 		int ratio_number = 0;
 		
 		double limit = .05;
@@ -2687,7 +2686,22 @@ public class StringMapper
 		int bit_offset = 0;
 		int bit_length = segment_length;
 		
-		double next_ratio = ratio_list.get(bit_offset + segment_length);
+		
+		int [] delta = new int[3];
+		delta[0]     = ratio_number;
+		
+		/*
+		delta[1]     = bit_offset;
+		delta[2]     = bit_length;
+		*/
+		delta[1] = 0;
+		delta[2] = segment_length;
+		delta_list.add(delta);
+		
+		
+		
+		
+		double next_ratio = ratio_list.get(bit_offset + bit_length + segment_length);
 		int    next_number = 0;
 		
 		limit = .05;
@@ -2698,20 +2712,219 @@ public class StringMapper
 		}
 		
 		int current_number = ratio_number;
-		if(ratio_number < 7 && next_number < 7)
+		if(current_number < 7 && next_number < 7)
 		{
-		    current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+		    current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+		    
+		    if(current_number > ratio_number)
+		    {
+		    	current_number = ratio_number;
+		    }
+		    else
+		    {
+		    
+		    
+		    
 		    bit_length += segment_length;
+		    boolean searching_backwards = false;
+		    while(next_number < 7 && !searching_backwards)
+		    {
+		    	next_ratio  = ratio_list.get(bit_offset + bit_length + segment_length);
+				next_number = 0;
+				
+				limit = .05;
+				while(next_ratio > limit)
+				{
+					next_number++;
+					limit += .05;
+				}
+				
+				if(next_number < 7)
+			    {
+			    	current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+				    bit_length    += segment_length;  
+			    }
+			    else
+			    {
+			    	searching_backwards          = true;
+			    	int current_segment_length   = segment_length / 2;
+					boolean found_similar_number = false;
+					
+					while(current_segment_length % 2 == 0 && !found_similar_number)
+					{
+						next_ratio  = ratio_list.get(bit_offset + current_segment_length);
+						next_number = 0;
+						
+						limit = .05;
+						while(next_ratio > limit)
+						{
+							next_number++;
+							limit += .05;
+						} 
+						
+						if(next_number < 7)
+						{
+						    current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+						    bit_length    += current_segment_length;
+						    found_similar_number = true;
+						}
+						else
+							current_segment_length /= 2;
+					}
+			    }
+				
+		    }
+		    }
+		    
 		}
-		else if(ratio_number > 6 && ratio_number < 12 && next_number > 6 && next_number < 12)
+		else if(current_number > 6 && current_number < 12 && next_number > 6 && next_number < 12)
 		{
+			/*
 			current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
 			bit_length += segment_length;
+			boolean searching_backwards = false;
+			if(next_number < 7)
+		    {
+		    	current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+			    bit_length    += segment_length;  
+		    }
+		    else
+		    {
+		    	searching_backwards          = true;
+		    	int current_segment_length   = segment_length / 2;
+				boolean found_similar_number = false;
+				
+				while(current_segment_length % 2 == 0 && !found_similar_number)
+				{
+					next_ratio  = ratio_list.get(bit_offset + current_segment_length);
+					next_number = 0;
+					
+					limit = .05;
+					while(next_ratio > limit)
+					{
+						next_number++;
+						limit += .05;
+					} 
+					
+					if(next_number < 7)
+					{
+					    current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+					    bit_length    += current_segment_length;
+					    found_similar_number = true;
+					}
+					else
+						current_segment_length /= 2;
+				}
+		    }
+			*/
+			current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+		    bit_length += segment_length;
+		    boolean searching_backwards = false;
+		    while(next_number > 6 && next_number < 12 && !searching_backwards)
+		    {
+		    	next_ratio  = ratio_list.get(bit_offset + bit_length + segment_length);
+				next_number = 0;
+				
+				limit = .05;
+				while(next_ratio > limit)
+				{
+					next_number++;
+					limit += .05;
+				}
+				
+				if(next_number > 6 && next_number < 12)
+			    {
+			    	current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+				    bit_length    += segment_length;  
+			    }
+			    else
+			    {
+			    	searching_backwards          = true;
+			    	int current_segment_length   = segment_length / 2;
+					boolean found_similar_number = false;
+					
+					while(current_segment_length % 2 == 0 && !found_similar_number)
+					{
+						next_ratio  = ratio_list.get(bit_offset + current_segment_length);
+						next_number = 0;
+						
+						limit = .05;
+						while(next_ratio > limit)
+						{
+							next_number++;
+							limit += .05;
+						} 
+						
+						if(next_number > 6 && next_number < 12)
+						{
+						    current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+						    bit_length    += current_segment_length;
+						    found_similar_number = true;
+						}
+						else
+							current_segment_length /= 2;
+					}
+			    }
+		    }
 		}
-		else if(ratio_number > 11 && next_number > 11)
+		else if(current_number > 11 && next_number > 11)
 		{
-			current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+			current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
+			if(current_number < ratio_number)
+			{
+				current_number = ratio_number;
+			}
+			else
+			{
 			bit_length += segment_length;
+			boolean searching_backwards = false;
+		    while(next_number > 11 && !searching_backwards)
+		    {
+		    	next_ratio  = ratio_list.get(bit_offset + bit_length + segment_length);
+				next_number = 0;
+				
+				limit = .05;
+				while(next_ratio > limit)
+				{
+					next_number++;
+					limit += .05;
+				}
+				
+				if(next_number > 11)
+			    {
+			    	current_number = (current_number * bit_length + next_number * segment_length) / (bit_length + segment_length); 	
+				    bit_length    += segment_length;  
+			    }
+			    else
+			    {
+			    	searching_backwards          = true;
+			    	int current_segment_length   = segment_length / 2;
+					boolean found_similar_number = false;
+					
+					while(current_segment_length % 2 == 0 && !found_similar_number)
+					{
+						next_ratio  = ratio_list.get(bit_offset + current_segment_length);
+						next_number = 0;
+						
+						limit = .05;
+						while(next_ratio > limit)
+						{
+							next_number++;
+							limit += .05;
+						} 
+						
+						if(next_number > 6 && next_number < 12)
+						{
+						    current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+						    bit_length    += current_segment_length;
+						    found_similar_number = true;
+						}
+						else
+							current_segment_length /= 2;
+					}
+			    }
+		    }
+			}
 		}
 		else
 		{
@@ -2729,48 +2942,43 @@ public class StringMapper
 					limit += .05;
 				} 
 				
-				if(ratio_number < 7 && next_number < 7)
+				if(current_number < 7 && next_number < 7)
 				{
-				    //current_number = (ratio_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
-				    //bit_length += current_segment_length;
+				    current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length); 	
+				    bit_length += current_segment_length;
 				    found_similar_number = true;
 				}
-				else if(ratio_number > 6 && ratio_number < 12 && next_number > 6 && next_number < 12)
+				else if(current_number > 6 && current_number < 12 && next_number > 6 && next_number < 12)
 				{
-					//current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
-					//bit_length += current_segment_length;
+					current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length);
+					bit_length += current_segment_length;
 					found_similar_number = true;
 				}
 				else if(ratio_number > 11 && next_number > 11)
 				{
-					//current_number = (ratio_number * bit_length + next_number * segment_length) / (bit_length + segment_length);
-					//bit_length += current_segment_length;
+					current_number = (current_number * bit_length + next_number * current_segment_length) / (bit_length + current_segment_length);
+					bit_length += current_segment_length;
 					found_similar_number = true;
 				}
 				else
 					current_segment_length /= 2;
 			}
-			
-			if(found_similar_number)
-				System.out.println("Found similar number.");
-			else
-				System.out.println("Did not find similar number.");
 		}
 		
-		
-		
-		
+		/*
 		int [] delta = new int[3];
 		delta[0]     = current_number;
 		delta[1]     = bit_offset;
 		delta[2]     = bit_length;
 		delta_list.add(delta);
+	    */
 		
+		bit_offset += bit_length;
 		
-		System.out.println("Initial ratio is " + String.format("%.2f", ratio));
-		System.out.println("Initial ratio number is " + ratio_number);
-	    System.out.println("Current number is " + current_number);
+		/*
+		System.out.println("Initial ratio number is " + current_number);
 	    System.out.println("Bit length is " + bit_length);
+		*/
 		
 		return delta_list;
 	}
@@ -2810,39 +3018,15 @@ public class StringMapper
 		if(zero_percentage > .5)
 		{
 			// This is an unclipped string, so we do not expect the trailing byte.
+			// This method does not look for a trailing byte.
 			byte[] compression_string = compressZeroStrings(string, bit_length);
-			byte[] compression_string2 = compressZeroStrings2(string, bit_length);
 			string_list.add(compression_string);
-			
-			int iterations1 = getIterations(compression_string);
-			int bitlength1  = getBitlength(compression_string);
-			int iterations2 = getIterations(compression_string2);
-			int bitlength2  = getBitlength(compression_string2);
-			
-			System.out.println("Compressed zero strings.");
-			System.out.println("Compression string 1 had " + iterations1 + " iterations.");
-			System.out.println("Compression string 1 had bit length " + bitlength1);
-			System.out.println("Compression string 2 had " + iterations2 + " iterations.");
-			System.out.println("Compression string 2 had bit length " + bitlength2);
-			System.out.println();
 		} 
 		else
 		{
+			// See above.
 			byte[] compression_string = compressOneStrings(string, bit_length);
-			byte[] compression_string2 = compressOneStrings2(string, bit_length);
-			string_list.add(compression_string2);
-			
-			int iterations1 = getIterations(compression_string);
-			int bitlength1  = getBitlength(compression_string);
-			int iterations2 = getIterations(compression_string2);
-			int bitlength2  = getBitlength(compression_string2);
-			
-			System.out.println("Compressed one strings.");
-			System.out.println("Compression string 1 had " + iterations1 + " iterations.");
-			System.out.println("Compression string 1 had bit length " + bitlength1);
-			System.out.println("Compression string 2 had " + iterations2 + " iterations.");
-			System.out.println("Compression string 2 had bit length " + bitlength2);
-			System.out.println();
+			string_list.add(compression_string);
 		}
 
 		return string_list;
