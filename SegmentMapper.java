@@ -280,6 +280,10 @@ public class SegmentMapper
 				    	    	byte extra_bits = (byte)(8 - modulus);
 				    	    	extra_bits    <<= 5;
 				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] = extra_bits;
+				    	    	
+				    	    	//System.out.println("Segments "  + i + " and " + (i + 1) + " combined are uneven");
+				    	    	//System.out.println("Current number of segments is " + current_number_of_segments);
+				    	    	//System.out.println();
 				    	    }
 				    	    byte [] merged_segment = new byte[1];
 				    	    if(current_iterations > 15)
@@ -290,7 +294,7 @@ public class SegmentMapper
 				    	    else
 				    	        merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);
 				    	    int merged_bitlength = StringMapper.getBitlength(merged_segment);
-				    	    
+				    	    //if(merged_bitlength - overhead < combined_bitlength)
 				    	    if(merged_bitlength - overhead < decompressed_combined_bitlength)
 				    	    {
 				    	    	merged_list.add(merged_segment);
@@ -380,6 +384,43 @@ public class SegmentMapper
 		}
 	}
 	
+	
+	
+	public static byte[] shiftRight(byte[] src, int bit_length)
+	{
+		int offset = bit_length / 8;
+		byte[] dst = new byte[src.length - offset];
+	    
+	    
+	    int j      = 0;
+	    for(int i = offset; i < src.length; i++)
+	        dst[j++] = src[i];
+	    
+	    int shift = bit_length % 8;
+	    if(shift != 0)
+	    {
+	        int reverse_shift  = 8 - shift;
+	        int segment_length = 8 - shift;
+	        
+	        byte mask = getTrailingMask(segment_length);
+	        
+	    	for(int i = 0; i < dst.length - 1; i++)
+	    	{
+	    		dst[i] >>= shift;
+	    	    dst[i] &=  mask;
+	    	    byte extra_bits = (byte)(dst[i + 1] << reverse_shift);
+	    	    dst[i] |= extra_bits;
+	    	    
+	    	}
+	    	
+	    	int i = dst.length - 1;
+	    	dst[i] >>= shift;
+	    	dst[i] &= mask;
+	    }
+	    
+	    return dst;
+	}
+	
 	/**
 	* Produces a set of masks that can be anded to isolate a bit.
 	*
@@ -425,7 +466,7 @@ public class SegmentMapper
 	}
 	
 	/**
-	* Produces a set of masks that can be anded to isolate a leading segment.
+	* Produces a set of masks that can be anded to isolate a trailing segment.
 	*
 	* @return byte masks
 	*/
@@ -436,6 +477,15 @@ public class SegmentMapper
 		for(int i = 1; i < 7; i++)
 			mask[i] = (byte)(mask[i - 1] * 2);
 		return mask;	
+	}
+	
+	public static byte getLeadingMask(int length)
+	{
+		byte [] mask = new byte[7];
+		mask[0] = -2;
+		for(int i = 1; i < 7; i++)
+			mask[i] = (byte)(mask[i - 1] * 2);
+		return mask[length - 1];	
 	}
 	
 	/**
@@ -451,4 +501,14 @@ public class SegmentMapper
 			mask[i] = (byte)(mask[i - 1] * 2 + 1);
 		return mask;	
 	}
+	
+	public static byte getTrailingMask(int length)
+	{
+		byte [] mask = new byte[7];
+		mask[0] = 1;
+		for(int i = 1; i < 7; i++)
+			mask[i] = (byte)(mask[i - 1] * 2 + 1);
+		return mask[length - 1];	
+	}
+	
 }
