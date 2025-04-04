@@ -2716,6 +2716,197 @@ public class StringMapper
 		
 		
 		int current_index    = 0;
+		//int current_offset   = 0;
+		int current_length   = segment_length;
+		
+		
+		
+		
+		
+		double ratio       = ratio_list.get(current_index);
+		int current_number = getNumber(ratio, bin_size);
+		
+		int next_index    = current_index + current_length;
+		ratio = ratio_list.get(next_index);
+		int next_number = getNumber(ratio, bin_size);
+		
+		if(isSimilar(current_number, next_number, lower_limit, upper_limit))
+		{
+			int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+			current_length += segment_length;
+			
+			//System.out.println("Searching forwards.");
+			// Keep looking forward until a dissimilar number is reached.
+			while(isSimilar(current_number, next_number, lower_limit, upper_limit))
+			{
+				next_index    = current_index + current_length;
+				if(next_index <= max_index)
+				{
+					ratio       = ratio_list.get(next_index);
+					next_number = getNumber(ratio, bin_size);
+					
+					// Theoretically the aggregated number will always be in the same
+					// category as the original current number.
+					if(isSimilar(aggregated_number, next_number, lower_limit, upper_limit))
+					{
+						aggregated_number = (aggregated_number * current_length + next_number * segment_length) / (current_length + segment_length);
+						current_length += segment_length;
+					}
+				}
+				else
+					break;
+			}
+			
+			current_number = aggregated_number;	
+		}
+		
+		int [] delta = new int[3];
+		delta[0] = current_index;
+		delta[1] = current_length;
+		delta[2] = current_number;
+		delta_list.add(delta);
+		
+		current_index += current_length;
+		
+		System.out.println("Max index is " + max_index);
+		System.out.println("Current index is " + current_index);
+		
+		if( current_index >= max_index)
+		{
+		    if(current_index > max_index)
+		    {
+			    current_length = string.length - max_index;
+			    ratio = getZeroRatio(string, current_index, current_length);
+		        current_number = getNumber(ratio, bin_size);
+		    }
+		    else
+		    {
+		    	current_length = segment_length;
+			    ratio = ratio_list.get(current_index);
+			    current_number = getNumber(ratio, bin_size);
+		    }
+		    delta = new int[3];
+			delta[0] = current_index;
+			delta[1] = current_length;
+			delta[2] = current_number;
+			delta_list.add(delta);
+		}
+		else
+		{
+			boolean reached_end_of_string = false;
+			current_length = segment_length;
+			while(current_index < max_index - current_length)
+			{
+				System.out.println("Current index is " + current_index);
+			    next_index = current_index + current_length;   
+			    ratio = ratio_list.get(next_index);
+				next_number = getNumber(ratio, bin_size);
+				
+				if(isSimilar(current_number, next_number, lower_limit, upper_limit))
+				{
+					if(next_index == max_index)
+				    	reached_end_of_string = true;
+					
+					int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+					current_length       += segment_length;
+					
+					//System.out.println("Searching forwards.");
+					// Keep looking forward until a dissimilar number is reached.
+					while(isSimilar(current_number, next_number, lower_limit, upper_limit))
+					{
+						next_index    = current_index + current_length;
+						if(next_index <= max_index)
+						{
+							ratio       = ratio_list.get(next_index);
+							next_number = getNumber(ratio, bin_size);
+							// Theoretically the aggregated number will always be in the same
+							// category as the original current number.
+							if(isSimilar(aggregated_number, next_number, lower_limit, upper_limit))
+							{
+								aggregated_number = (aggregated_number * current_length + next_number * segment_length) / (current_length + segment_length);
+								current_length += segment_length;
+							}
+						}
+						else
+							break;
+					}
+					
+					current_number = aggregated_number;	
+					delta = new int[3];
+					delta[0] = current_index;
+					delta[1] = current_length;
+					delta[2] = current_number;
+					delta_list.add(delta);
+					
+					if(current_index < max_index - current_length)
+					{
+					    current_index += current_length;
+					    current_length = segment_length;
+					    ratio = ratio_list.get(current_index);
+					    current_number = getNumber(ratio, bin_size);
+					}
+				}
+				else
+				{
+					delta = new int[3];
+					delta[0] = current_index;
+					delta[1] = current_length;
+					delta[2] = current_number;
+					delta_list.add(delta);
+					
+					
+					current_index += current_length;
+					if(current_index < max_index - segment_length)
+					{
+					    current_length = segment_length;
+					    ratio = ratio_list.get(current_index);
+					    current_number = getNumber(ratio, bin_size);	
+					}
+				}
+			}
+			
+			if(!reached_end_of_string)
+			{
+				System.out.println("Did not reach end of string during aggregating process.");
+			    if(current_index > max_index)
+		        {
+			        current_length = string.length - max_index;
+			        ratio = getZeroRatio(string, current_index, current_length);
+		            current_number = getNumber(ratio, bin_size);
+		        }
+			    /*
+		        else 
+		        {
+		    	    current_length = segment_length;
+			        ratio = ratio_list.get(current_index);
+			        current_number = getNumber(ratio, bin_size);
+		        }
+		        */
+		        delta = new int[3];
+			    delta[0] = current_index;
+			    delta[1] = current_length;
+			    delta[2] = current_number;
+			    delta_list.add(delta);
+			}
+		}
+		
+		return delta_list;
+	}
+	
+	
+	public static ArrayList<int []> getRatioDeltaList2(ArrayList<Double> ratio_list, int segment_length, byte [] string)
+	{
+		ArrayList delta_list = new ArrayList<int []>();
+		int ratio_list_size  = ratio_list.size();
+		int max_index        =  ratio_list_size - 1;
+		int minimum_length   = 40;
+		
+		double bin_size      = .05;
+		int lower_limit      = 7;
+		int upper_limit      = 11;
+		
+		
+		int current_index    = 0;
 		int current_offset   = 0;
 		int current_length   = segment_length;
 		
@@ -2782,7 +2973,7 @@ public class StringMapper
 						current_number = aggregated_number;
 				    }
 				    
-				    // Even if the new current number is now different, we've reached our base case.
+				    // Even if the new current number is now dissimilar, we've reached our base case.
 				    found_similar_number = true;
 				}
 			}
@@ -2819,16 +3010,106 @@ public class StringMapper
 		else
 		{
 			boolean reached_end_of_string = false;
-			/*
+			current_length = segment_length;
 			while(current_index < max_index)
 			{
-			    
+			    next_index = current_offset + current_length;   
+			    if(next_index == max_index)
+			    	reached_end_of_string = true;
+			    ratio = ratio_list.get(next_index);
+				next_number = getNumber(ratio, bin_size);
+				
+				if(isSimilar(current_number, next_number, lower_limit, upper_limit))
+				{
+					int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+					current_length += segment_length;
+					
+					System.out.println("Searching forwards.");
+					// Keep looking forward until a dissimilar number is reached.
+					while(isSimilar(current_number, next_number, lower_limit, upper_limit))
+					{
+						next_index    = current_offset + current_length;
+						if(next_index <= max_index)
+						{
+							ratio       = ratio_list.get(next_index);
+							next_number = getNumber(ratio, bin_size);
+							
+							// Theoretically the aggregated number will always be in the same
+							// category as the original current number.
+							if(isSimilar(aggregated_number, next_number, lower_limit, upper_limit))
+							{
+								aggregated_number = (aggregated_number * current_length + next_number * segment_length) / (current_length + segment_length);
+								current_length += segment_length;
+							}
+						}
+						else
+							break;
+					}
+					
+					current_number = aggregated_number;	
+					delta = new int[3];
+					delta[0] = current_index;
+					delta[1] = current_length;
+					delta[2] = current_number;
+					delta_list.add(delta);
+					
+					current_index += current_length;
+					current_length = segment_length;
+					ratio = ratio_list.get(current_index);
+					current_number = getNumber(ratio, bin_size);
+				}
+				else
+				{
+				    // Look backwards for a similar number and decrement the current length until it reaches a minimum length.	
+					boolean found_similar_number = false;
+					int i = segment_length;
+					System.out.println("Searching backwards for similar number ");
+					while(i > minimum_length && !found_similar_number)
+					{
+						//System.out.println("Searching backwards for similar number " + i);
+						i--;
+						ratio = ratio_list.get(i + current_offset);
+						next_number = getNumber(ratio, bin_size);
+						if(isSimilar(current_number, next_number, lower_limit, upper_limit))
+						{
+							// Now check if the current number has changed.
+							current_length       = i;
+						    ratio = getZeroRatio(string, current_index, current_length);
+						    current_number = getNumber(ratio, bin_size);
+						   
+						    if(isSimilar(current_number, next_number, lower_limit, upper_limit))
+						    {
+						    	// The current number is still similar to the next number, so we aggregate the ratio numbers and lengths.
+						    	int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+								current_length += segment_length;  
+								current_number = aggregated_number;
+						    }
+						    delta = new int[3];
+							delta[0] = current_index;
+							delta[1] = current_length;
+							delta[2] = current_number;
+							delta_list.add(delta);
+							
+							current_index += current_length;
+							current_length = segment_length;
+							ratio = ratio_list.get(current_index);
+							current_number = getNumber(ratio, bin_size);
+							
+						    // Even if the new current number is now dissimilar, we've reached our base case.
+						    found_similar_number = true;
+						}
+					}
+					if(found_similar_number)
+						System.out.println("Found similar number.");
+					//else
+					//	System.out.println("Did not find similar number.");
+					System.out.println();
+				}
 				
 				
 				
 				
 			}
-			*/
 			if(!reached_end_of_string)
 			{
 			    if(current_index > max_index)
@@ -2857,7 +3138,7 @@ public class StringMapper
 		return delta_list;
 	}
 	
-	public static ArrayList<int []> getRatioDeltaList2(ArrayList<Double> ratio_list, int segment_length)
+	public static ArrayList<int []> getRatioDeltaList3(ArrayList<Double> ratio_list, int segment_length)
 	{
 		ArrayList delta_list = new ArrayList<int []>();
 		int       list_size  = ratio_list.size();
