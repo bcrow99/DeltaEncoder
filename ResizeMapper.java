@@ -21,7 +21,7 @@ public class ResizeMapper
 		int ydim = src.length / xdim;
 		int[] dst = new int[new_xdim * ydim];
 
-		if (new_xdim == xdim)
+		if(new_xdim == xdim)
 		{
 			for (int i = 0; i < xdim * ydim; i++)
 				dst[i] = src[i];
@@ -50,6 +50,37 @@ public class ResizeMapper
 					dst[m++] = src[k];
 			}
 		} 
+		/*
+		else if (new_xdim > xdim)
+		{
+			int delta = new_xdim - xdim;
+			int number_of_segments = delta + 1;
+			int segment_length = xdim / number_of_segments;
+			int last_segment_length = xdim % number_of_segments;
+
+			int m = 0;
+			for (int i = 0; i < ydim; i++)
+			{
+				int start = i * xdim;
+				int stop = start + segment_length;
+
+				for (int j = 0; j < number_of_segments; j++)
+				{
+					for (int k = start; k < stop; k++)
+						dst[m++] = src[k];
+					dst[m] = (src[stop] + src[stop - 1]) / 2;
+
+					m++;
+					start += segment_length;
+					stop = start + segment_length;
+				}
+				// Write the values from the last segment without adding a pixel.
+				stop = start + last_segment_length;
+				for (int k = start; k < stop; k++)
+					dst[m++] = src[k];
+			}
+		}
+		*/
 		else if (new_xdim > xdim)
 		{
 			int delta = new_xdim - xdim;
@@ -79,6 +110,7 @@ public class ResizeMapper
 					dst[m++] = src[k];
 			}
 		}
+		
 		return dst;
 	}
 
