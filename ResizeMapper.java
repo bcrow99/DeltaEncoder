@@ -95,30 +95,6 @@ public class ResizeMapper
 		} 
 		else if (new_xdim < xdim)
 		{
-			/*
-			int delta = xdim - new_xdim;
-			int number_of_segments = delta + 1;
-			int segment_length = xdim / number_of_segments;
-			int last_segment_length = segment_length + xdim % number_of_segments;
-
-			int m = 0;
-			for (int i = 0; i < ydim; i++)
-			{
-				int start = i * xdim;
-				int stop = start + segment_length - 1;
-				for (int j = 0; j < number_of_segments - 1; j++)
-				{
-					for (int k = start; k < stop; k++)
-						dst[m++] = src[k];
-					start += segment_length;
-					stop = start + segment_length - 1;
-				}
-				stop = start + last_segment_length;
-				for (int k = start; k < stop; k++)
-					dst[m++] = src[k];
-			}
-			*/
-			
 			int number_of_segments = xdim - new_xdim + 1;
 			int remainder          = new_xdim % number_of_segments;
 			if(remainder == 0)
@@ -140,8 +116,9 @@ public class ResizeMapper
 			}
 			else
 			{
+				
 				number_of_segments = xdim - new_xdim;
-				remainder          = new_xdim / number_of_segments;
+				remainder          = new_xdim % number_of_segments;
 				int segment_length = new_xdim / number_of_segments;
 				if(remainder == 0)
 				{
@@ -157,19 +134,33 @@ public class ResizeMapper
 							start += segment_length + 1;
 							stop = start + segment_length;
 						}
-					}	
+					}
 				}
 				else
 				{
+					
 				    boolean [] isLong   = new boolean[number_of_segments];
 				    double     interval = 1.; interval /= remainder + 1;
-				    double     position = interval;
-				    while(position < 1.)
+				    int increment = (int)interval * number_of_segments;
+				    int index = increment;
+				    int number_of_long_segments = 0;
+				    for(int i = 0; i < remainder; i++)
 				    {
-				    	int i = (int)(Math.floor(position * number_of_segments));
-				    	isLong[i] = true;
-				    	position += interval;
+				        isLong[index] = true;
+				        index        += increment;
+				        number_of_long_segments++;
 				    }
+				    
+				    /*
+				    System.out.println("Got here.");
+					System.out.println("Number of segments is " + number_of_segments);
+					System.out.println("Remainder is " + remainder);
+				    System.out.println("Number of long segments is " + number_of_long_segments);
+				    System.out.println("Length of combined segments is " + (number_of_long_segments + number_of_segments * segment_length));
+				    System.out.println("New xdim is " + new_xdim);
+				    System.out.println();
+				    */
+				    
 				    int m = 0;
 					for(int i = 0; i < ydim; i++)
 					{
@@ -185,11 +176,12 @@ public class ResizeMapper
 							stop = start + segment_length;
 						}
 					}	
-				}
+				}	
 			}
 		} 
 		else if (new_xdim > xdim)
 		{
+			/*
 			int delta = new_xdim - xdim;
 			int number_of_segments = delta + 1;
 			int segment_length = xdim / number_of_segments;
@@ -211,11 +203,113 @@ public class ResizeMapper
 					start += segment_length;
 					stop = start + segment_length;
 				}
+				
 				// Write the values from the last segment without adding a pixel.
 				stop = start + last_segment_length;
 				for (int k = start; k < stop; k++)
 					dst[m++] = src[k];
 			}
+			*/
+			
+			int number_of_segments = new_xdim - xdim + 1;
+			int remainder          = xdim % number_of_segments;
+			if(remainder == 0)
+			{
+				int segment_length = xdim / number_of_segments;
+				int k = 0;
+				int m = 0;
+				for(int i = 0; i < ydim - 1; i++)
+				{
+					int start = i * new_xdim;
+					int stop = start + segment_length;
+					for (int j = 0; j < number_of_segments; j++)
+					{
+						for(k = start; k < stop; k++)
+							dst[m++] = src[k];
+						dst[m++] = (src[k] + src[k - 1]) / 2;
+						//start += segment_length + 1;
+						start += segment_length;
+						stop = start + segment_length;
+					}
+				}
+				int start = xdim * (ydim - 1);
+				int stop  = start + segment_length;
+				for(int i = start; i < stop; i++)
+					dst[m++] = src[i];
+			}
+			else
+			{
+				
+				number_of_segments = new_xdim - xdim;
+				remainder          = xdim % number_of_segments;
+				int segment_length = xdim / number_of_segments;
+				if(remainder == 0)
+				{
+					int k = 0;
+					int m = 0;
+					for (int i = 0; i < ydim; i++)
+					{
+						int start = i * new_xdim;
+						int stop = start + segment_length;
+						for(int j = 0; j < number_of_segments - 1; j++)
+						{
+							for(k = start; k < stop; k++)
+								dst[m++] = src[k];
+							dst[m++] = (src[k] + src[k - 1]) / 2;
+							//start += segment_length + 1;
+							start += segment_length;
+							stop = start + segment_length;
+						}
+						for(k = start; k < stop; k++)
+							dst[m++] = src[k];
+						dst[m++] = src[k - 1];
+					}
+				}
+				else
+				{
+				    boolean [] isLong   = new boolean[number_of_segments];
+				    double     interval = 1.; interval /= remainder + 1;
+				    int increment = (int)interval * number_of_segments;
+				    int index = increment;
+				    int number_of_long_segments = 0;
+				    for(int i = 0; i < remainder; i++)
+				    {
+				        isLong[index] = true;
+				        index        += increment;
+				        number_of_long_segments++;
+				    }
+				    
+				    System.out.println("Got here.");
+					System.out.println("Number of segments is " + number_of_segments);
+					System.out.println("Remainder is " + remainder);
+				    System.out.println("Number of long segments is " + number_of_long_segments);
+				    System.out.println("Length of combined segments is " + (number_of_long_segments + number_of_segments * segment_length));
+				    System.out.println("New xdim is " + new_xdim);
+				    System.out.println();
+
+				    int k = 0;
+				    int m = 0;
+					for(int i = 0; i < ydim; i++)
+					{
+						int start = i * xdim;
+						int stop  = start + segment_length;
+						for(int j = 0; j < number_of_segments - 1; j++)
+						{
+							if(isLong[j])
+								stop++;
+							for(k = start; k < stop; k++)
+								dst[m++] = src[k];
+							dst[m++] = (src[k] + src[k - 1]) / 2;
+							start = stop + 1;
+							stop = start + segment_length;
+						}
+						for(k = start; k < stop; k++)
+							dst[m++] = src[k];
+						dst[m++] = src[k - 1];
+					}	
+				}	
+			}
+			
 		}
 		
 		return dst;
