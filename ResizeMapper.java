@@ -83,6 +83,8 @@ public class ResizeMapper
 		return dst;
 	}
 	
+	
+	
 	public static int[] resizeX2(int src[], int xdim, int new_xdim)
 	{
 		int ydim = src.length / xdim;
@@ -261,9 +263,9 @@ public class ResizeMapper
 				}	
 			}	
 		}
-		
 		return dst;
 	}
+	
 	/**
 	* Changes the height of a raster, making it either larger or smaller.
 	*
@@ -364,38 +366,6 @@ public class ResizeMapper
 				dst[i] = src[i];
 		else if(new_ydim < ydim)
 		{
-			/*
-			int delta = ydim - new_ydim;
-			int number_of_segments = delta + 1;
-			int segment_length = ydim / number_of_segments;
-			int last_segment_length = segment_length + ydim % number_of_segments;
-          
-			int m = 0;
-			for (int i = 0; i < xdim; i++)
-			{
-				m = i;
-				int start = i;
-				int stop = start + segment_length * xdim - xdim;
-				for (int j = 0; j < number_of_segments - 1; j++)
-				{
-					for (int k = start; k < stop; k += xdim)
-					{
-						dst[m] = src[k];
-						m += xdim;
-					}
-
-					start = stop + xdim;
-					stop = start + segment_length * xdim - xdim;
-				}
-				stop = start + last_segment_length * xdim;
-				for (int k = start; k < stop; k += xdim)
-				{
-					dst[m] = src[k];
-					m += xdim;
-				}
-			}
-			*/
-			
 			int number_of_segments = ydim - new_ydim + 1;
 			int remainder          = new_ydim % number_of_segments;
 			if(remainder == 0)
@@ -483,67 +453,15 @@ public class ResizeMapper
 							stop = start + segment_length * xdim;
 						}
 					}
-					
-					/*
-					System.out.println("Got here.");
-					System.out.println("Original ydim is " + ydim);
-					System.out.println("New ydim is " + new_ydim);
-					System.out.println("Number of segments is " + number_of_segments);
-					System.out.println("Number of long segments is " + number_of_long_segments);
-					System.out.println("Segment length is " + segment_length);
-					System.out.println("Combined length of segments is " + (number_of_segments * segment_length + number_of_long_segments));
-					
-					System.out.println("Dst length is " + dst.length);
-					System.out.println("Last dst index is " + (m - xdim));
-					System.out.println();
-					*/
 				}
 			}
 		} 
 		else if(new_ydim > ydim)
 		{
-			/*
-			int delta = new_ydim - ydim;
-			int number_of_segments = delta + 1;
-			int segment_length = ydim / number_of_segments;
-			int last_segment_length = segment_length + ydim % number_of_segments;
-
-			int m = 0;
-			for (int i = 0; i < xdim; i++)
-			{
-				m = i;
-				int start = i;
-				int stop = start + segment_length * xdim;
-
-				for (int j = 0; j < number_of_segments - 1; j++)
-				{
-					for (int k = start; k < stop; k += xdim)
-					{
-						dst[m] = src[k];
-						m += xdim;
-					}
-					// We add a pixel at the end of each segment.
-					dst[m] = (src[stop] + src[stop - xdim]) / 2;
-
-					m += xdim;
-					start = stop;
-					stop = start + segment_length * xdim;
-				}
-
-				// We write the last segment without adding a pixel.
-				stop = start + last_segment_length * xdim;
-				for (int k = start; k < stop; k += xdim)
-				{
-					dst[m] = src[k];
-					m += xdim;
-				}
-			}
-			*/
 			int number_of_segments = new_ydim - ydim + 1;
 			int remainder          = ydim % number_of_segments;
 			if(remainder == 0)
 			{
-				System.out.println("Got here 1.");
 				int segment_length = ydim / number_of_segments;
 				int m = 0;
 				for (int i = 0; i < xdim; i++)
@@ -580,30 +498,9 @@ public class ResizeMapper
 			{
 				number_of_segments = new_ydim - ydim;
 				remainder          = ydim % number_of_segments;
-				int segment_length = xdim / number_of_segments;
+				int segment_length = ydim / number_of_segments;
 				if(remainder == 0)
 				{
-					System.out.println("Got here 2.");
-					/*
-					int k = 0;
-					int m = 0;
-					for (int i = 0; i < xdim; i++)
-					{
-						int start = i * xdim;
-						int stop = start + segment_length * xdim;
-						for(int j = 0; j < number_of_segments - 1; j++)
-						{
-							for(k = start; k < stop; k++)
-								dst[m++] = src[k];
-							dst[m++] = (src[k] + src[k - xdim]) / 2;
-							start += segment_length;
-							stop = start + segment_length;
-						}
-						for(k = start; k < stop; k++)
-							dst[m++] = src[k];
-						dst[m++] = src[k - 1];
-					}
-					*/
 					int j = 0;
 					int k = 0;
 					int m = 0;
@@ -633,43 +530,6 @@ public class ResizeMapper
 				}
 				else
 				{
-					/*
-				    boolean [] isLong   = new boolean[number_of_segments];
-				    double     interval = 1.; interval /= remainder + 1;
-				    int increment = (int)(interval * number_of_segments);
-				    int index = increment;
-				    int number_of_long_segments = 0;
-				    for(int i = 0; i < remainder; i++)
-				    {
-				        isLong[index] = true;
-				        index        += increment;
-				        number_of_long_segments++;
-				    }
-				    
-				    int k = 0;
-				    int m = 0;
-					for(int i = 0; i < ydim; i++)
-					{
-						int start = i * xdim;
-						int stop  = start + segment_length;
-						for(int j = 0; j < number_of_segments - 1; j++)
-						{
-							if(isLong[j])
-							{
-								stop++;
-							}
-							for(k = start; k < stop; k++)
-								dst[m++] = src[k];
-							dst[m++] = (src[k] + src[k - 1]) / 2;
-							start = stop;
-							stop  = start + segment_length;
-						}
-						for(k = start; k < stop; k++)
-							dst[m++] = src[k];
-						dst[m++] = src[k - 1];
-					}	
-					*/
-					
 					boolean [] isLong   = new boolean[number_of_segments];
 				    double     interval = 1.; interval /= remainder + 1;
 				    int increment = (int)(interval * number_of_segments);
@@ -700,14 +560,17 @@ public class ResizeMapper
 						{
 							if(isLong[j])
 								stop += xdim;
+							
 							for(k = start; k < stop; k += xdim)
 							{
 								dst[m] = src[k];
 								m += xdim;
 							}
 							dst[m] = (src[k] + src[k - xdim]) / 2;
-							start = stop + xdim;
-							stop = start + segment_length * xdim;
+							m += xdim;
+							
+							start = stop;
+							stop  = start + segment_length * xdim;
 						}
 						if(isLong[j])
 							stop += xdim;
@@ -718,18 +581,6 @@ public class ResizeMapper
 						}
 						dst[m] = src[k - xdim];
 					}
-					
-					System.out.println("Got here 3.");
-					System.out.println("Original ydim is " + ydim);
-					System.out.println("New ydim is " + new_ydim);
-					System.out.println("Number of segments is " + number_of_segments);
-					System.out.println("Number of long segments is " + number_of_long_segments);
-					System.out.println("Segment length is " + segment_length);
-					System.out.println("Combined length of segments is " + (number_of_segments * segment_length + number_of_long_segments));
-					
-					System.out.println("Dst length is " + dst.length);
-					System.out.println("Last dst index is " + (k - xdim));
-					System.out.println();
 				}	
 			}	
 		}
@@ -756,7 +607,7 @@ public class ResizeMapper
 		} 
 		else
 		{
-			int[] tmp = resizeY(src, xdim, new_ydim);
+			int[] tmp = resizeY2(src, xdim, new_ydim);
 			int[] dst = resizeX2(tmp, xdim, new_xdim);
 			return dst;
 		}
