@@ -226,7 +226,9 @@ public class SegmentMapper
 				    
 				    // The current segment and the next segment should have
 			    	// similar zero ratios if they have the same number of iterations.
-				    if(current_iterations == next_iterations)
+				    
+				    //if(current_iterations == next_iterations)
+				    if(current_iterations == next_iterations || (current_iterations == 0 && next_iterations == 16) || (current_iterations == 16 && next_iterations == 0))	
 				    {
 				    	// Get the combined bit length of the two segments to compare
 				        // with the merged bit length minus overhead for one segment.
@@ -484,6 +486,13 @@ public class SegmentMapper
 			{
 				byte [] compressed_segment = StringMapper.compressZeroStrings(segment);
 				byte [] decompressed_segment = StringMapper.decompressZeroStrings(compressed_segment);
+				int     one_amount             = StringMapper.getCompressionAmount(compressed_segment, StringMapper.getBitlength(compressed_segment), 1);
+				if(one_amount < 0)
+				{
+					System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + one_amount + " with one bitwise transform.");
+					System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
+				}
+				
 				if(decompressed_segment.length != segment.length)
 				{
 					System.out.println("Checking zero string compression");
@@ -521,6 +530,12 @@ public class SegmentMapper
 			else
 			{
 				byte [] compressed_segment = StringMapper.compressOneStrings(segment);
+				int     zero_amount             = StringMapper.getCompressionAmount(compressed_segment, StringMapper.getBitlength(compressed_segment), 0);
+				if(zero_amount < 0)
+				{
+					System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + zero_amount + " with zero bitwise transform.");
+					System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
+				}
 				byte [] decompressed_segment = StringMapper.decompressOneStrings(compressed_segment);
 				if(decompressed_segment.length != segment.length)
 				{
@@ -659,6 +674,13 @@ public class SegmentMapper
 				    	    {
 				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
 				    	    	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
+				    	    	
+								int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
+								if(one_amount < 0)
+								{
+									System.out.print("Merged segment " + i + " could be reduced by " + one_amount);
+								}
+				    	    	
 				    	    }
 				    	    else
 				    	        merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);
@@ -669,6 +691,7 @@ public class SegmentMapper
 				    	    	merged_list.add(merged_segment);
 				    	    	input_list.add(uncompressed_merged_segment);
 					    	    i++;	
+					    	 
 					    	    
 				    	    }
 				    	    else
@@ -773,6 +796,20 @@ public class SegmentMapper
 			    	else
 			    		compressions.add(current_iterations - 16);
 			    }
+			    
+			    /*
+			    int     zero_amount            = StringMapper.getCompressionAmount(current_segment, current_bitlength, 0);
+				int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
+				if(zero_amount < 0 || one_amount < 0)
+				{
+					System.out.print("Segment " + i + " with ratio number "	+ number + " and iterations " + current_iterations + " :");
+					if(zero_amount < 0)
+						System.out.println("Reduced by " + zero_amount + " with zero bitwise transform.");
+					if(one_amount < 0)
+						System.out.println("Reduced by " + one_amount + " with one bitwise transform.");
+					System.out.println();
+				}
+				*/
 			}
 			list.add(compressed_segment_list);
 			list.add(max_segment_bytelength);

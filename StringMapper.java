@@ -902,7 +902,8 @@ public class StringMapper
 				current_length = result[0];
 				amount = getCompressionAmount(dst, current_length, 0);
 
-				if(amount >= 0 || result[1] == 1)
+				//if(amount >= 0 || result[1] == 1)
+				if(amount >= 0)
 				{
 					int last_byte = current_length / 8;
 					if(current_length % 8 != 0)
@@ -921,7 +922,8 @@ public class StringMapper
 				else
 				{
 					byte[] temp = new byte[src.length];
-					while(amount < 0 && iterations < 15 && result[1] == 0)
+					//while(amount < 0 && iterations < 15 && result[1] == 0)
+					while(amount < 0 && iterations < 15)
 					{
 						int previous_length = current_length;
 						if(iterations % 2 == 1)
@@ -1012,7 +1014,8 @@ public class StringMapper
 				int [] result = compressZeroBits(src, bit_length, buffer1);
 				int compressed_length = result[0];
 				amount = getCompressionAmount(buffer1, compressed_length, 0);
-				if(amount >= 0 || result[1] != 0)
+				//if(amount >= 0 || result[1] != 0)
+				if(amount >= 0)
 				{
 					// 1 iteration
 					int byte_length = compressed_length / 8;
@@ -1032,7 +1035,8 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15 && result[1] == 0)
+					//while (amount < 0 && iterations < 15 && result[1] == 0)
+					while (amount < 0 && iterations < 15)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
@@ -1231,7 +1235,8 @@ public class StringMapper
 				int [] result = compressZeroBits(src, bit_length, buffer1);
 				int compressed_length = result[0];
 				amount = getCompressionAmount(buffer1, compressed_length, 0);
-				if(amount >= 0 && result[1] == 0)
+				//if(amount >= 0 && result[1] == 0)
+				if(amount >= 0)
 				{
 					// 1 iteration
 					int byte_length = compressed_length / 8;
@@ -1251,7 +1256,8 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15 && result[1] == 0)
+					//while (amount < 0 && iterations < 15 && result[1] == 0)
+					while (amount < 0 && iterations < 15)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
@@ -1301,99 +1307,6 @@ public class StringMapper
 		}
 	}
 
-	/*
-	public static byte[] compressZeroStrings(byte[] src)
-	{
-		int bit_length = getBitlength(src);
-		int amount     = getCompressionAmount(src, bit_length, 0);
-		if(amount > 0)
-		{
-			byte [] dst = new byte[src.length];
-			System.arraycopy(src, 0, dst, 0, src.length);
-			return dst;
-		}
-		
-		// Save on garbage collecting by using two
-		// buffers over and over again.
-		byte[] buffer1 = new byte[src.length];
-		byte[] buffer2 = new byte[src.length];
-		byte[] dst     = new byte[src.length];
-		
-		try
-		{
-			int [] result = compressZeroBits(src, bit_length, buffer1);
-			int compressed_length = result[0];
-			amount = getCompressionAmount(buffer1, compressed_length, 0);
-			
-			if(amount >= 0)
-			//if(amount >= 0 || result[1] != 0)
-			{
-				// 1 iteration
-				int byte_length = compressed_length / 8;
-				if(compressed_length % 8 != 0)
-					byte_length++;
-				byte extra_bits = (byte) (compressed_length % 8);
-				if(extra_bits != 0)
-					extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-
-				dst = new byte[byte_length + 1];
-				System.arraycopy(buffer1, 0, dst, 0, byte_length);
-				dst[byte_length] = 1;
-				dst[byte_length] |= extra_bits;
-				return dst;
-			}	
-			else
-			{
-				int iterations = 1;
-				while (amount < 0 && iterations < 15)
-				//while (amount < 0 && iterations < 15 && result[1] == 0)
-				{
-					int previous_length = compressed_length;
-					if(iterations % 2 == 1)
-					{
-						result = compressZeroBits(buffer1, previous_length, buffer2);
-						compressed_length = result[0];
-						iterations++;
-						amount = getCompressionAmount(buffer2, compressed_length, 0);
-					} 
-					else
-					{
-						result = compressZeroBits(buffer2, previous_length, buffer1);
-						compressed_length = result[0];
-						iterations++;
-						amount = getCompressionAmount(buffer1, compressed_length, 0);
-					}
-				}
-
-				int byte_length = compressed_length / 8;
-				if(compressed_length % 8 != 0)
-					byte_length++;
-				dst = new byte[byte_length + 1];
-				if(iterations % 2 == 0)
-					System.arraycopy(buffer2, 0, dst, 0, byte_length);
-				else
-					System.arraycopy(buffer1, 0, dst, 0, byte_length);
-				dst[byte_length] = (byte) iterations;
-				byte extra_bits = (byte) (compressed_length % 8);
-				if(extra_bits != 0)
-					extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] |= extra_bits;
-					return dst;   	
-			}
-		}
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting compressZeroStrings with an exception.");
-			return dst;
-		}
-	}
-    */
-	
-	
-	
 	// This function expects a trailing byte with information.
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
@@ -1949,7 +1862,8 @@ public class StringMapper
 				int iterations = 1;
 				amount = getCompressionAmount(dst, current_length, 1);
 
-				if(amount >= 0 || result[1] != 0)
+				//if(amount >= 0 || result[1] != 0)
+				if(amount >= 0)
 				{
 					int last_byte = current_length / 8;
 					if(current_length % 8 != 0)
@@ -1966,7 +1880,8 @@ public class StringMapper
 				else
 				{
 					byte[] temp = new byte[src.length];
-					while (amount < 0 && iterations < 15 && result[1] == 0)
+					//while (amount < 0 && iterations < 15 && result[1] == 0)
+					while (amount < 0 && iterations < 15)
 					{
 						int previous_length = current_length;
 						if(iterations % 2 == 1)
@@ -2056,7 +1971,8 @@ public class StringMapper
 				int [] result = compressOneBits(src, bit_length, buffer1);
 				int compressed_length = result[0];
 				amount = getCompressionAmount(buffer1, compressed_length, 1);
-				if(amount >= 0 || result[1] != 0)
+				//if(amount >= 0 || result[1] != 0)
+				if(amount >= 0)
 				{
 					// 1 iteration
 					int byte_length = compressed_length / 8;
@@ -2073,13 +1989,18 @@ public class StringMapper
 					// Add 16 to indicate string type.
 					dst[byte_length] = 1 + 16;
 					dst[byte_length] |= extra_bits;
-
+					amount = getCompressionAmount(dst, compressed_length, 1);
+					if(amount < 0)
+					{
+						System.out.println("String can be compressed further 1.");
+					}
 					return dst;
 				} 
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15 && result[1] == 0)
+					//while (amount < 0 && iterations < 15 && result[1] == 0)
+					while (amount < 0 && iterations < 15)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
@@ -2113,6 +2034,11 @@ public class StringMapper
 						extra_bits = (byte) (8 - extra_bits);
 					extra_bits <<= 5;
 					dst[byte_length] |= extra_bits;
+					amount = getCompressionAmount(dst, compressed_length, 1);
+					if(amount < 0)
+					{
+						System.out.println("String can be compressed further 2.");
+					}
 					return dst;
 				}
 			}
@@ -2258,7 +2184,8 @@ public class StringMapper
 			int [] result = compressOneBits(src, bit_length, buffer1);
 			int compressed_length = result[0];
 			amount = getCompressionAmount(buffer1, compressed_length, 1);
-			if(amount >= 0 || result[1] != 0)
+			//if(amount >= 0 || result[1] != 0)
+			if(amount >= 0)
 			{
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
@@ -2277,7 +2204,8 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while (amount < 0 && iterations < 15 && result[1] == 0)
+				//while (amount < 0 && iterations < 15 && result[1] == 0)
+				while (amount < 0 && iterations < 15)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
@@ -2299,6 +2227,7 @@ public class StringMapper
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
 					byte_length++;
+				
 				dst = new byte[byte_length + 1];
 				if(iterations % 2 == 0)
 					System.arraycopy(buffer2, 0, dst, 0, byte_length);
@@ -3969,7 +3898,8 @@ public class StringMapper
 					}
 				}
 			}
-		} else
+		} 
+		else
 		{
 			int previous = 0;
 			for(int i = 0; i < n; i++)
