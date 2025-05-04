@@ -1207,106 +1207,178 @@ public class StringMapper
 	 */
 	public static byte[] compressZeroStrings(byte[] src)
 	{
-		int bit_length = getBitlength(src);
-		try
+		ArrayList bitlength_list   = new ArrayList();
+		ArrayList zero_ratio_list  = new ArrayList();
+		ArrayList zero_amount_list = new ArrayList();
+		ArrayList one_amount_list  = new ArrayList();
+		
+		int    bit_length  = getBitlength(src);
+		double zero_ratio  = getZeroRatio(src, bit_length);
+		int    zero_amount = getCompressionAmount(src, bit_length, 0);
+		int    one_amount  = getCompressionAmount(src, bit_length, 1);
+	    
+		bitlength_list.add(bit_length);
+		zero_ratio_list.add(zero_ratio);
+		zero_amount_list.add(zero_amount);
+		one_amount_list.add(one_amount);
+		
+		if(zero_amount > 0)
 		{
-			int amount = getCompressionAmount(src, bit_length, 0);
-			if(amount > 0)
+			if(one_amount < 0)
 			{
-				int byte_length = bit_length / 8;
-				if(bit_length % 8 != 0)
+			   int iterations = getIterations(src);
+			   System.out.println("String with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
+			   System.out.println("The amount expected from the zero transform is " + zero_amount);
+			   System.out.println("The amount expected from the one transform is " + one_amount);
+			   System.out.println();
+			}
+			
+			byte [] dst    = new byte[src.length];
+			System.arraycopy(src, 0, dst, 0, src.length);
+			return dst;
+		}
+		else
+		{
+			byte[] buffer1 = new byte[src.length];
+			byte[] buffer2 = new byte[src.length];
+			
+			int [] result            = compressZeroBits(src, bit_length, buffer1);
+			int    compressed_length = result[0];
+			
+			if(compressed_length - bit_length != zero_amount)
+			{
+				System.out.println("Actual amount " + (compressed_length - bit_length) + " was not equal to predicted amount " + zero_amount + " after initial iteration.");
+				System.out.println();
+			}
+			
+			zero_ratio  = getZeroRatio(buffer1, compressed_length);
+			zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
+			one_amount  = getCompressionAmount(buffer1, compressed_length, 1);
+		    
+			bitlength_list.add(compressed_length);
+			zero_ratio_list.add(zero_ratio);
+			zero_amount_list.add(zero_amount);
+			one_amount_list.add(one_amount);
+			
+			//if(zero_amount >= 0 || result[1] == 1)
+			if(zero_amount >= 0)
+			{
+			    if(one_amount < 0)
+			    {
+			    	System.out.println("Anomalous string behavior:");
+				    int size = zero_ratio_list.size();
+				    for(int i = 0; i < size; i++)
+				    {
+				    	int current_length      = (int)bitlength_list.get(i);
+				    	double current_ratio    = (double)zero_ratio_list.get(i);
+				    	int current_zero_amount = (int)zero_amount_list.get(i);
+				    	int current_one_amount  = (int)one_amount_list.get(i);
+				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    }
+				    System.out.println();
+			    }
+				
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
 					byte_length++;
-				byte[] dst = new byte[byte_length + 1];
-				System.arraycopy(src, 0, dst, 0, byte_length);
-
-				byte extra_bits = (byte) (bit_length % 8);
+				byte extra_bits = (byte) (compressed_length % 8);
 				if(extra_bits != 0)
 					extra_bits = (byte) (8 - extra_bits);
 				extra_bits <<= 5;
 
-				dst[byte_length] = extra_bits;
+				byte[] dst = new byte[byte_length + 1];
+				System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = 1;
+				dst[byte_length] |= extra_bits;
 				return dst;
 			} 
 			else
 			{
-				byte[] buffer1 = new byte[src.length];
-				byte[] buffer2 = new byte[src.length];
-				
-				int [] result = compressZeroBits(src, bit_length, buffer1);
-				int compressed_length = result[0];
-				amount = getCompressionAmount(buffer1, compressed_length, 0);
-				//if(amount >= 0 && result[1] == 0)
-				if(amount >= 0)
+				int iterations = 1;
+				//while (zero_amount < 0 && iterations < 15 && result[1] == 0)
+				while(zero_amount < 0 && iterations < 15)
 				{
-					// 1 iteration
-					int byte_length = compressed_length / 8;
-					if(compressed_length % 8 != 0)
-						byte_length++;
-					byte extra_bits = (byte) (compressed_length % 8);
-					if(extra_bits != 0)
-						extra_bits = (byte) (8 - extra_bits);
-					extra_bits <<= 5;
-
-					byte[] dst = new byte[byte_length + 1];
-					System.arraycopy(buffer1, 0, dst, 0, byte_length);
-					dst[byte_length] = 1;
-					dst[byte_length] |= extra_bits;
-					return dst;
-				} 
-				else
-				{
-					int iterations = 1;
-					//while (amount < 0 && iterations < 15 && result[1] == 0)
-					while (amount < 0 && iterations < 15)
+					int previous_length = compressed_length;
+					if(iterations % 2 == 1)
 					{
-						int previous_length = compressed_length;
-						if(iterations % 2 == 1)
+						result            = compressZeroBits(buffer1, previous_length, buffer2);
+						compressed_length = result[0];
+						
+						iterations++;
+						if(compressed_length - previous_length != zero_amount)
 						{
-							result = compressZeroBits(buffer1, previous_length, buffer2);
-							compressed_length = result[0];
-							iterations++;
-							amount = getCompressionAmount(buffer2, compressed_length, 0);
-						} 
-						else
-						{
-							result = compressZeroBits(buffer2, previous_length, buffer1);
-							compressed_length = result[0];
-							iterations++;
-							amount = getCompressionAmount(buffer1, compressed_length, 0);
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println();
 						}
-					}
-
-					int byte_length = compressed_length / 8;
-					if(compressed_length % 8 != 0)
-						byte_length++;
-					byte[] dst = new byte[byte_length + 1];
-					if(iterations % 2 == 0)
-					{
-						System.arraycopy(buffer2, 0, dst, 0, byte_length);
+						
+						zero_ratio        = getZeroRatio(buffer2, compressed_length);
+						zero_amount       = getCompressionAmount(buffer2, compressed_length, 0);
+						one_amount        = getCompressionAmount(buffer2, compressed_length, 1);
+						bitlength_list.add(compressed_length);
+						zero_ratio_list.add(zero_ratio);
+						zero_amount_list.add(zero_amount);
+						one_amount_list.add(one_amount);
 					} 
 					else
 					{
-						System.arraycopy(buffer1, 0, dst, 0, byte_length);
+						result = compressZeroBits(buffer2, previous_length, buffer1);
+						compressed_length = result[0];
+						
+						iterations++;
+						if(compressed_length - previous_length != zero_amount)
+						{
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println();
+						}
+						
+						zero_ratio        = getZeroRatio(buffer1, compressed_length);
+						zero_amount       = getCompressionAmount(buffer1, compressed_length, 0);
+						one_amount        = getCompressionAmount(buffer1, compressed_length, 1);
+						bitlength_list.add(compressed_length);
+						zero_ratio_list.add(zero_ratio);
+						zero_amount_list.add(zero_amount);
+						
+						one_amount_list.add(one_amount);
 					}
-					dst[byte_length] = (byte) iterations;
-					byte extra_bits = (byte) (compressed_length % 8);
-					if(extra_bits != 0)
-						extra_bits = (byte) (8 - extra_bits);
-					extra_bits <<= 5;
-					dst[byte_length] |= extra_bits;
-					return dst;
 				}
+				
+				if(one_amount < 0)
+			    {
+					System.out.println("Anomalous string behavior:");
+				    int size = zero_ratio_list.size();
+				    for(int i = 0; i < size; i++)
+				    {
+				    	int current_length      = (int)bitlength_list.get(i);
+				    	double current_ratio    = (double)zero_ratio_list.get(i);
+				    	int current_zero_amount = (int)zero_amount_list.get(i);
+				    	int current_one_amount  = (int)one_amount_list.get(i);
+				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    }
+				    System.out.println();
+			    }
+				
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
+					byte_length++;
+				byte[] dst = new byte[byte_length + 1];
+				if(iterations % 2 == 0)
+					System.arraycopy(buffer2, 0, dst, 0, byte_length);
+				else
+					System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = (byte) iterations;
+				byte extra_bits = (byte) (compressed_length % 8);
+				if(extra_bits != 0)
+					extra_bits = (byte) (8 - extra_bits);
+				extra_bits <<= 5;
+				dst[byte_length] |= extra_bits;
+			
+				return dst;
 			}
-		} 
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting compressZeroStrings with an exception.");
-			byte[] dst = new byte[1];
-			return dst;
 		}
 	}
 
+	
+	
 	// This function expects a trailing byte with information.
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
@@ -1326,9 +1398,7 @@ public class StringMapper
 			System.arraycopy(src, 0, dst, 0, src.length);
 			return dst;
 		}
-		
-		// Save on garbage collecting by using two
-		// buffers over and over again.
+	
 		byte[] buffer1 = new byte[src.length];
 		byte[] buffer2 = new byte[src.length];
 		byte[] dst     = new byte[src.length];
@@ -2162,6 +2232,177 @@ public class StringMapper
 	 * @param src  input bytes with trailing byte containing bit length
 	 * @return byte array containing the result
 	 */
+	/*
+	public static byte[] compressOneStrings(byte[] src)
+	{
+		ArrayList bitlength_list   = new ArrayList();
+		ArrayList zero_ratio_list  = new ArrayList();
+		ArrayList zero_amount_list = new ArrayList();
+		ArrayList one_amount_list  = new ArrayList();
+		
+		int    bit_length  = getBitlength(src);
+		double zero_ratio  = getZeroRatio(src, bit_length);
+		int    zero_amount = getCompressionAmount(src, bit_length, 0);
+		int    one_amount  = getCompressionAmount(src, bit_length, 1);
+	    
+		bitlength_list.add(bit_length);
+		zero_ratio_list.add(zero_ratio);
+		zero_amount_list.add(zero_amount);
+		one_amount_list.add(one_amount);
+		
+		if(one_amount > 0)
+		{
+			if(zero_amount < 0)
+			{
+			   int iterations = getIterations(src);
+			   System.out.println("String with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
+			   System.out.println("The amount expected from the zero transform is " + zero_amount);
+			   System.out.println("The amount expected from the one transform is " + one_amount);
+			   System.out.println();
+			}
+			
+			byte [] dst    = new byte[src.length];
+			System.arraycopy(src, 0, dst, 0, src.length);
+			return dst;
+		}
+		else
+		{
+			byte[] buffer1 = new byte[src.length];
+			byte[] buffer2 = new byte[src.length];
+			
+			int [] result            = compressOneBits(src, bit_length, buffer1);
+			int    compressed_length = result[0];
+			
+			if(compressed_length - bit_length != one_amount)
+			{
+				System.out.println("Actual amount " + (compressed_length - bit_length) + " was not equal to predicted amount " + one_amount + " after initial iteration.");
+				System.out.println();
+			}
+			
+			zero_ratio  = getZeroRatio(buffer1, compressed_length);
+			zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
+			one_amount  = getCompressionAmount(buffer1, compressed_length, 1);
+		    
+			bitlength_list.add(compressed_length);
+			zero_ratio_list.add(zero_ratio);
+			zero_amount_list.add(zero_amount);
+			one_amount_list.add(one_amount);
+			
+			//if(zero_amount >= 0 || result[1] == 1)
+			if(one_amount >= 0)
+			{
+			    if(zero_amount < 0)
+			    {
+			    	System.out.println("Anomalous string behavior:");
+				    int size = zero_ratio_list.size();
+				    for(int i = 0; i < size; i++)
+				    {
+				    	int current_length      = (int)bitlength_list.get(i);
+				    	double current_ratio    = (double)zero_ratio_list.get(i);
+				    	int current_zero_amount = (int)zero_amount_list.get(i);
+				    	int current_one_amount  = (int)one_amount_list.get(i);
+				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    }
+				    System.out.println();
+			    }
+				
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
+					byte_length++;
+				byte extra_bits = (byte) (compressed_length % 8);
+				if(extra_bits != 0)
+					extra_bits = (byte) (8 - extra_bits);
+				extra_bits <<= 5;
+
+				byte[] dst = new byte[byte_length + 1];
+				System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = 1;
+				dst[byte_length] |= extra_bits;
+				return dst;
+			} 
+			else
+			{
+				int iterations = 1;
+				//while(one_amount < 0 && iterations < 15 && result[1] == 0)
+				while(one_amount < 0 && iterations < 15)
+				{
+					int previous_length = compressed_length;
+					if(iterations % 2 == 1)
+					{
+						result            = compressOneBits(buffer1, previous_length, buffer2);
+						compressed_length = result[0];
+						iterations++;
+						if(compressed_length - previous_length != zero_amount)
+						{
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println();
+						}
+						
+						zero_ratio        = getZeroRatio(buffer2, compressed_length);
+						zero_amount       = getCompressionAmount(buffer2, compressed_length, 0);
+						one_amount        = getCompressionAmount(buffer2, compressed_length, 1);
+						bitlength_list.add(compressed_length);
+						zero_ratio_list.add(zero_ratio);
+						zero_amount_list.add(zero_amount);
+						one_amount_list.add(one_amount);
+					} 
+					else
+					{
+						result = compressOneBits(buffer2, previous_length, buffer1);
+						compressed_length = result[0];
+						iterations++;
+						if(compressed_length - previous_length != zero_amount)
+						{
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println();
+						}
+						
+						zero_ratio        = getZeroRatio(buffer1, compressed_length);
+						zero_amount       = getCompressionAmount(buffer1, compressed_length, 0);
+						one_amount        = getCompressionAmount(buffer1, compressed_length, 1);
+						bitlength_list.add(compressed_length);
+						zero_ratio_list.add(zero_ratio);
+						zero_amount_list.add(zero_amount);
+						one_amount_list.add(one_amount);
+					}
+				}
+				
+				if(zero_amount < 0)
+			    {
+					System.out.println("Anomalous string behavior:");
+				    int size = zero_ratio_list.size();
+				    for(int i = 0; i < size; i++)
+				    {
+				    	int current_length      = (int)bitlength_list.get(i);
+				    	double current_ratio    = (double)zero_ratio_list.get(i);
+				    	int current_zero_amount = (int)zero_amount_list.get(i);
+				    	int current_one_amount  = (int)one_amount_list.get(i);
+				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    }
+				    System.out.println();
+			    }
+				
+				int byte_length = compressed_length / 8;
+				if(compressed_length % 8 != 0)
+					byte_length++;
+				byte[] dst = new byte[byte_length + 1];
+				if(iterations % 2 == 0)
+					System.arraycopy(buffer2, 0, dst, 0, byte_length);
+				else
+					System.arraycopy(buffer1, 0, dst, 0, byte_length);
+				dst[byte_length] = (byte) iterations;
+				byte extra_bits = (byte) (compressed_length % 8);
+				if(extra_bits != 0)
+					extra_bits = (byte) (8 - extra_bits);
+				extra_bits <<= 5;
+				dst[byte_length] |= extra_bits;
+			
+				return dst;
+			}
+		}
+	}
+	*/
+	
 	public static byte[] compressOneStrings(byte[] src)
 	{
 		int bit_length = getBitlength(src);
@@ -2249,7 +2490,7 @@ public class StringMapper
 			return dst;
 		}
 	}
-
+   
 	// This function expects to find the number of iterations in the final
 	// byte, as well as the number of odd bits determined by the bit length
 	// subtracted from the byte length.
@@ -3945,10 +4186,6 @@ public class StringMapper
 		}
 		int total = positive - negative;
 
-		// Account for the extra bits, although
-		// it doesn't show up in the bit length.
-		if(bit_length % 8 != 0)
-			total += 8 - bit_length % 8;
 		return total;
 	}
 }
