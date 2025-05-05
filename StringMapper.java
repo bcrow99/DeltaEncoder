@@ -1224,6 +1224,7 @@ public class StringMapper
 		
 		if(zero_amount > 0)
 		{
+			// We only print a message that the string didn't compress if the inverse transform would produce compression.
 			if(one_amount < 0)
 			{
 			   int iterations = getIterations(src);
@@ -1265,7 +1266,7 @@ public class StringMapper
 			{
 			    if(one_amount < 0)
 			    {
-			    	System.out.println("Anomalous string behavior:");
+			    	System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -1344,7 +1345,7 @@ public class StringMapper
 				
 				if(one_amount < 0)
 			    {
-					System.out.println("Anomalous string behavior:");
+					System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -1761,6 +1762,7 @@ public class StringMapper
 					current_byte++;
 					current_bit = 0;
 				}
+				//This is a flag to let us know there might be a problem later on.
 				result[1] = 1;
 			} 
 			else
@@ -2232,7 +2234,6 @@ public class StringMapper
 	 * @param src  input bytes with trailing byte containing bit length
 	 * @return byte array containing the result
 	 */
-	/*
 	public static byte[] compressOneStrings(byte[] src)
 	{
 		ArrayList bitlength_list   = new ArrayList();
@@ -2252,6 +2253,7 @@ public class StringMapper
 		
 		if(one_amount > 0)
 		{
+			// We only print a message that the string didn't compress if the inverse transform would produce compression.
 			if(zero_amount < 0)
 			{
 			   int iterations = getIterations(src);
@@ -2288,12 +2290,12 @@ public class StringMapper
 			zero_amount_list.add(zero_amount);
 			one_amount_list.add(one_amount);
 			
-			//if(zero_amount >= 0 || result[1] == 1)
+			//if(one_amount >= 0 || result[1] == 1)
 			if(one_amount >= 0)
 			{
-			    if(zero_amount < 0)
+				if(zero_amount < 0)
 			    {
-			    	System.out.println("Anomalous string behavior:");
+			    	System.out.println("Anomalous 1 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -2314,27 +2316,28 @@ public class StringMapper
 					extra_bits = (byte) (8 - extra_bits);
 				extra_bits <<= 5;
 
-				byte[] dst = new byte[byte_length + 1];
+				byte [] dst = new byte[byte_length + 1];
 				System.arraycopy(buffer1, 0, dst, 0, byte_length);
-				dst[byte_length] = 1;
+				dst[byte_length] = 17;
 				dst[byte_length] |= extra_bits;
 				return dst;
-			} 
+			}	
 			else
 			{
 				int iterations = 1;
-				//while(one_amount < 0 && iterations < 15 && result[1] == 0)
-				while(one_amount < 0 && iterations < 15)
+				//while (one_amount < 0 && iterations < 15 && result[1] == 0)
+				while (one_amount < 0 && iterations < 15)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
 					{
-						result            = compressOneBits(buffer1, previous_length, buffer2);
+						result = compressOneBits(buffer1, previous_length, buffer2);
 						compressed_length = result[0];
 						iterations++;
-						if(compressed_length - previous_length != zero_amount)
+						
+						if(compressed_length - previous_length != one_amount)
 						{
-							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + one_amount + " after  iteration " + iterations);
 							System.out.println();
 						}
 						
@@ -2351,9 +2354,10 @@ public class StringMapper
 						result = compressOneBits(buffer2, previous_length, buffer1);
 						compressed_length = result[0];
 						iterations++;
-						if(compressed_length - previous_length != zero_amount)
+						
+						if(compressed_length - previous_length != one_amount)
 						{
-							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
+							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + one_amount + " after  iteration " + iterations);
 							System.out.println();
 						}
 						
@@ -2366,10 +2370,10 @@ public class StringMapper
 						one_amount_list.add(one_amount);
 					}
 				}
-				
+
 				if(zero_amount < 0)
 			    {
-					System.out.println("Anomalous string behavior:");
+					System.out.println("Anomalous 1 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -2385,91 +2389,8 @@ public class StringMapper
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
 					byte_length++;
-				byte[] dst = new byte[byte_length + 1];
-				if(iterations % 2 == 0)
-					System.arraycopy(buffer2, 0, dst, 0, byte_length);
-				else
-					System.arraycopy(buffer1, 0, dst, 0, byte_length);
-				dst[byte_length] = (byte) iterations;
-				byte extra_bits = (byte) (compressed_length % 8);
-				if(extra_bits != 0)
-					extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] |= extra_bits;
-			
-				return dst;
-			}
-		}
-	}
-	*/
-	
-	public static byte[] compressOneStrings(byte[] src)
-	{
-		int bit_length = getBitlength(src);
-		int amount = getCompressionAmount(src, bit_length, 1);
-		if(amount >= 0)
-		{
-			byte [] dst = new byte[src.length];
-			System.arraycopy(src, 0, dst, 0, src.length);
-			return dst;
-		}
-		
-		// Save on garbage collecting by using two
-		// buffers over and over again.
-		byte[] buffer1 = new byte[src.length];
-		byte[] buffer2 = new byte[src.length];
-		byte[] dst     = new byte[src.length];
 				
-		try
-		{
-			int [] result = compressOneBits(src, bit_length, buffer1);
-			int compressed_length = result[0];
-			amount = getCompressionAmount(buffer1, compressed_length, 1);
-			//if(amount >= 0 || result[1] != 0)
-			if(amount >= 0)
-			{
-				int byte_length = compressed_length / 8;
-				if(compressed_length % 8 != 0)
-					byte_length++;
-				byte extra_bits = (byte) (compressed_length % 8);
-				if(extra_bits != 0)
-					extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-
-				dst = new byte[byte_length + 1];
-				System.arraycopy(buffer1, 0, dst, 0, byte_length);
-				dst[byte_length] = 17;
-				dst[byte_length] |= extra_bits;
-				return dst;
-			}	
-			else
-			{
-				int iterations = 1;
-				//while (amount < 0 && iterations < 15 && result[1] == 0)
-				while (amount < 0 && iterations < 15)
-				{
-					int previous_length = compressed_length;
-					if(iterations % 2 == 1)
-					{
-						result = compressOneBits(buffer1, previous_length, buffer2);
-						compressed_length = result[0];
-						iterations++;
-						amount = getCompressionAmount(buffer2, compressed_length, 1);
-					} 
-					else
-					{
-						result = compressOneBits(buffer2, previous_length, buffer1);
-						compressed_length = result[0];
-						iterations++;
-						amount = getCompressionAmount(buffer1, compressed_length, 1);
-					}
-				}
-
-				int byte_length = compressed_length / 8;
-				if(compressed_length % 8 != 0)
-					byte_length++;
-				
-				dst = new byte[byte_length + 1];
+				byte [] dst = new byte[byte_length + 1];
 				if(iterations % 2 == 0)
 					System.arraycopy(buffer2, 0, dst, 0, byte_length);
 				else
@@ -2482,12 +2403,6 @@ public class StringMapper
 				dst[byte_length] |= extra_bits;
 				return dst;   	
 			}
-		}
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting compressOneStrings with an exception.");
-			return dst;
 		}
 	}
    
