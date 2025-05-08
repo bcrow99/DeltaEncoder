@@ -1037,6 +1037,7 @@ public class StringMapper
 			//if(zero_amount >= 0 || result[1] == 1)
 			if(zero_amount >= 0)
 			{
+				boolean isAnomalous = false;
 			    if(one_amount < 0)
 			    {
 			    	System.out.println("Anomalous 0 string behavior:");
@@ -1049,7 +1050,19 @@ public class StringMapper
 				    	int current_one_amount  = (int)one_amount_list.get(i);
 				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
 				    }
+				    int increment = bit_length / 10;
+				    int offset    = 0;
+				    int length    = increment;
+				    System.out.print("Segmented zero ratios: ");
+				    for(int i = 0; i < 10; i++)
+				    {
+				    	double current_ratio = getZeroRatio(src, offset, length);
+				    	offset += increment;
+				        System.out.print(String.format("%.2f", current_ratio) + " ");
+				    }
+				    
 				    System.out.println();
+				    isAnomalous = true;
 			    }
 				
 				int byte_length = compressed_length / 8;
@@ -1064,6 +1077,26 @@ public class StringMapper
 				System.arraycopy(buffer1, 0, dst, 0, byte_length);
 				dst[byte_length] = 1;
 				dst[byte_length] |= extra_bits;
+				
+				if(isAnomalous)
+				{
+					if(isAnomalous)
+					{
+						int increment = compressed_length / 10;
+					    int offset    = 0;
+					    int length    = increment;
+					    
+					    for(int i = 0; i < 10; i++)
+					    {
+					    	double current_ratio = getZeroRatio(dst, offset, length);
+					    	offset += increment;
+					        System.out.print(String.format("%.2f", current_ratio) + " ");
+					    }
+					    
+					    System.out.println();	
+					    System.out.println();
+					}
+				}
 				return dst;
 			} 
 			else
@@ -1116,6 +1149,7 @@ public class StringMapper
 					}
 				}
 				
+				boolean isAnomalous = false;
 				if(one_amount < 0)
 			    {
 					System.out.println("Anomalous 0 string behavior:");
@@ -1128,7 +1162,21 @@ public class StringMapper
 				    	int current_one_amount  = (int)one_amount_list.get(i);
 				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
 				    }
+				    
+				    System.out.print("Segmented zero ratios: ");
+				    int increment = bit_length / 10;
+				    int offset    = 0;
+				    int length    = increment;
+				    
+				    for(int i = 0; i < 10; i++)
+				    {
+				    	double current_ratio = getZeroRatio(src, offset, length);
+				    	offset += increment;
+				        System.out.print(String.format("%.2f", current_ratio) + " ");
+				    }
+				    
 				    System.out.println();
+				    isAnomalous = true;
 			    }
 				
 				int byte_length = compressed_length / 8;
@@ -1145,6 +1193,25 @@ public class StringMapper
 					extra_bits = (byte) (8 - extra_bits);
 				extra_bits <<= 5;
 				dst[byte_length] |= extra_bits;
+				
+				if(isAnomalous)
+				{
+					int increment = compressed_length / 10;
+				    int offset    = 0;
+				    int length    = increment;
+				    
+				    for(int i = 0; i < 10; i++)
+				    {
+				    	double current_ratio = getZeroRatio(dst, offset, length);
+				    	offset += increment;
+				        System.out.print(String.format("%.2f", current_ratio) + " ");
+				    }
+				    
+				    System.out.println();	
+				    System.out.println();
+				}
+				
+				
 			
 				return dst;
 			}
