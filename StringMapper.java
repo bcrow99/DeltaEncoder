@@ -1718,7 +1718,8 @@ public class StringMapper
 		zero_amount_list.add(zero_amount);
 		one_amount_list.add(one_amount);
 		
-		if(one_amount > 0)
+		
+		if(one_amount > 1)
 		{
 			// We only print a message that the string didn't compress if the inverse transform would produce compression.
 			if(zero_amount < 0)
