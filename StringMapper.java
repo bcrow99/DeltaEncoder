@@ -1035,7 +1035,7 @@ public class StringMapper
 			one_amount_list.add(one_amount);
 			
 			//if(zero_amount >= 0 || result[1] == 1)
-			if(zero_amount >= 0)
+			if(zero_amount > 0)
 			{
 				boolean isAnomalous = false;
 			    if(one_amount < 0)
@@ -1719,7 +1719,7 @@ public class StringMapper
 		one_amount_list.add(one_amount);
 		
 		
-		if(one_amount > 1)
+		if(one_amount > 0)
 		{
 			// We only print a message that the string didn't compress if the inverse transform would produce compression.
 			if(zero_amount < 0)
