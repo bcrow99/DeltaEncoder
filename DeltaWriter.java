@@ -7,8 +7,7 @@ import java.util.*;
 import java.util.zip.*;
 import javax.imageio.*;
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
+import javax.swing.event.*;
 
 public class DeltaWriter
 {
@@ -23,12 +22,13 @@ public class DeltaWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant = 6;
+	int pixel_quant = 4;
 	int pixel_shift = 3;
 	int segment_length = 12;
 	int correction = 0;
 	int min_set_id = 0;
 	int delta_type = 2;
+	int histogram_type = 0;
 
 	double scale = 1.;
 
@@ -51,23 +51,23 @@ public class DeltaWriter
 	long file_length;
 	double file_compression_rate;
 
-	ArrayList <Object>channel_list, table_list, string_list, map_list, segment_list;
+	ArrayList <Object>channel_list, table_list, string_list, cat_string_list, map_list, segment_list;
 
 	boolean initialized = false;
 
 	public static void main(String[] args)
 	{
-		if (args.length != 1)
+		if(args.length != 1)
 		{
-			System.out.println("Usage: java DeltaWriter <filename>");
+			System.out.println("Usage: java DeltaWriter2 <filename>");
 			System.exit(0);
 		}
 
-		//String prefix = new String("");
-		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix = new String("");
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
-		DeltaWriter writer = new DeltaWriter(prefix + filename);
+		DeltaWriter2 writer = new DeltaWriter2(prefix + filename);
 		writer.init();
 	}
 	
@@ -96,6 +96,7 @@ public class DeltaWriter
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
 			string_list  = new ArrayList<Object>();
+			cat_string_list  = new ArrayList<Object>();
 			map_list     = new ArrayList<Object>();
 			segment_list = new ArrayList<Object>();
 
@@ -131,11 +132,10 @@ public class DeltaWriter
 			max_bytelength      = new int[3];
 			channel_iterations  = new byte[3];
 			
-			if (raster_type == BufferedImage.TYPE_3BYTE_BGR)
+			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				pixel = new int[image_xdim * image_ydim];
-				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, image_xdim, image_ydim, pixel, 0,
-						image_xdim);
+				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
 				try
 				{
 					pixel_grabber.grabPixels();
@@ -278,6 +278,105 @@ public class DeltaWriter
 				save_item.addActionListener(save_handler);
 				file_menu.add(save_item);
 
+				JMenu histogram_menu = new JMenu("Histogram");
+				
+				 // A modeless dialog box that shows up if Histogram->Show Histogram is selected.
+		     	JPanel histogram_panel = new JPanel(new BorderLayout());
+		     	Canvas histogram_canvas = new HistogramCanvas();
+		     	//histogram_canvas.setSize(256, 100);
+		     	histogram_canvas.setSize(522, 100);
+		     	
+		     	/*
+		     	JScrollBar histogram_scrollbar = new JScrollBar(JScrollBar.HORIZONTAL, 0, 1, 0, 101);
+		     	AdjustmentListener histogram_scrollbar_handler = new AdjustmentListener()
+		     	{
+		     	    public void adjustmentValueChanged(AdjustmentEvent event)
+		     		{
+		     			int position = event.getValue();
+		     			if (event.getValueIsAdjusting() == false)
+		     			{
+		     				System.out.println("Position is " + position);
+		     			}
+		     		}
+		     	};
+		     	histogram_scrollbar.addAdjustmentListener(histogram_scrollbar_handler);
+		     	histogram_panel.add(histogram_scrollbar, BorderLayout.SOUTH);
+                */
+		     	
+		     	
+		     	histogram_panel.add(histogram_canvas, BorderLayout.CENTER);
+		     	
+				
+		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
+		     	histogram_dialog.add(histogram_panel);
+			      
+		     	JMenuItem histogram_item = new JMenuItem("Show Histogram");
+				ActionListener histogram_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						Dimension canvas_dimension = histogram_canvas.getSize();
+						double    canvas_xdim      = canvas_dimension.getWidth();
+						double    canvas_ydim      = canvas_dimension.getHeight();
+						
+						y += canvas_ydim + 125;
+						histogram_dialog.setLocation(x, y);
+						histogram_dialog.pack();
+						histogram_dialog.setVisible(true);
+					}
+				};
+				histogram_item.addActionListener(histogram_handler);
+				histogram_menu.add(histogram_item);
+		     	
+				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[9];
+
+				histogram_button[0] = new JRadioButtonMenuItem("0");
+				histogram_button[1] = new JRadioButtonMenuItem("0*");
+				histogram_button[2] = new JRadioButtonMenuItem("0**");
+				histogram_button[3] = new JRadioButtonMenuItem("1");
+				histogram_button[4] = new JRadioButtonMenuItem("1*");
+				histogram_button[5] = new JRadioButtonMenuItem("1**");
+				histogram_button[6] = new JRadioButtonMenuItem("2");
+				histogram_button[7] = new JRadioButtonMenuItem("2*");
+				histogram_button[8] = new JRadioButtonMenuItem("2**");
+				
+
+				histogram_button[histogram_type].setSelected(true);
+
+				class HistogramButtonHandler implements ActionListener
+				{
+					int index;
+
+					HistogramButtonHandler(int index)
+					{
+						this.index = index;
+					}
+
+					public void actionPerformed(ActionEvent e)
+					{
+						if (histogram_type != index)
+						{
+							histogram_button[histogram_type].setSelected(false);
+							histogram_type = index;
+							histogram_button[histogram_type].setSelected(true);
+							//apply_item.doClick();
+							histogram_canvas.repaint();
+						} 
+						else
+							histogram_button[histogram_type].setSelected(true);
+					}
+				}
+
+				for (int i = 0; i < 9; i++)
+				{
+					histogram_button[i].addActionListener(new HistogramButtonHandler(i));
+					histogram_menu.add(histogram_button[i]);
+				}
+		     	
 				JMenu settings_menu = new JMenu("Settings");
 
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
@@ -490,7 +589,6 @@ public class DeltaWriter
 						else
 							delta_button[delta_type].setSelected(true);
 					}
-
 				}
 
 				for (int i = 0; i < 8; i++)
@@ -501,6 +599,7 @@ public class DeltaWriter
 
 				menu_bar.add(file_menu);
 				menu_bar.add(delta_menu);
+				menu_bar.add(histogram_menu);
 				menu_bar.add(settings_menu);
 
 				frame.setJMenuBar(menu_bar);
@@ -572,33 +671,6 @@ public class DeltaWriter
 				}
 			}
 			
-			/*
-			for(int i = 0; i < 3; i++)
-			{
-				int[] channel = (int[]) channel_list.get(i);
-				if(pixel_shift == 0)
-				{
-					if(pixel_quant == 0)
-						quantized_channel_list.add(channel);	
-					else
-					{
-						int [] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
-						quantized_channel_list.add(resized_channel);
-					}
-				}
-				else
-				{
-					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
-					if(pixel_quant == 0)
-						quantized_channel_list.add(shifted_channel);	
-					else
-					{
-						int [] resized_channel = ResizeMapper.resize(shifted_channel, image_xdim, new_xdim, new_ydim);
-						quantized_channel_list.add(resized_channel);
-					}
-				}
-			}
-			*/
 			
 			// Get the set of deltas that have a minimum sum, including difference channels.
 			int[] quantized_blue = quantized_channel_list.get(0);
@@ -751,6 +823,11 @@ public class DeltaWriter
 				else
 				{
 					int bitlength = StringMapper.getBitlength(compression_string);
+					
+					double zero_ratio = StringMapper.getZeroRatio(compression_string, bitlength);
+					
+					System.out.println("The compression string zero ratio is " + String.format("%.2f", zero_ratio));
+				
 					int original_number_of_segments = (int) Math.pow(2, segment_length);
 					int minimum_segment_length = bitlength / original_number_of_segments;
 					int remainder = minimum_segment_length % 8;
@@ -758,14 +835,46 @@ public class DeltaWriter
 					// The minimum that usually produces the maximum compression is around 96.
 					if (minimum_segment_length < 96)
 						minimum_segment_length = 96;
-
-					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData(compression_string, minimum_segment_length);
+      
+					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, minimum_segment_length);
 					ArrayList<byte[]> segments = (ArrayList<byte[]>) segment_data_list.get(0);
 					int number_of_segments = segments.size();
 					max_bytelength[i] = (int) segment_data_list.get(1);
 					segment_list.add(segments);
-					System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
+					System.out.println("Number of original segments for channel " + i + " is " + original_number_of_segments);
+					System.out.println("Number of merged segments for channel " + i + " is " + number_of_segments);
 					System.out.println();
+					
+					ArrayList<Integer> ratio_number       = (ArrayList<Integer>) segment_data_list.get(2);
+					ArrayList<Boolean> segment_compressed = (ArrayList<Boolean>) segment_data_list.get(3);
+					ArrayList<Integer> compressions       = (ArrayList<Integer>) segment_data_list.get(4);
+					// Should be the same as number of segments.
+					int ratio_number_size = ratio_number.size();
+					if(ratio_number_size != number_of_segments)
+						System.out.println("Number list different size from segment list");
+					//System.out.println("Ratio bin numbers for channel " + i + ":");
+					
+					for(int k = 0; k < ratio_number_size; k++)
+					{
+						int     number                 = ratio_number.get(k);
+						boolean is_compressed          = segment_compressed.get(k);
+						int     number_of_compressions = compressions.get(k);
+						byte [] current_segment        = segments.get(k);
+						int     current_bitlength      = StringMapper.getBitlength(current_segment);
+						/*
+						int     zero_amount            = StringMapper.getCompressionAmount(current_segment, current_bitlength, 0);
+						int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
+						if(zero_amount < 0 || one_amount < 0)
+						{
+							System.out.print("Segment " + k + " with ratio number "	+ number + " and iterations " + number_of_compressions + " :");
+							if(zero_amount < 0)
+								System.out.println("Reduced by " + zero_amount + " with zero bitwise transform.");
+							if(one_amount < 0)
+								System.out.println("Reduced by " + one_amount + " with one bitwise transform.");
+							System.out.println();
+						}
+						*/
+					}		
 				}
 			}
 
@@ -864,25 +973,20 @@ public class DeltaWriter
 					    }
 					    current_index++;
 					}
-					if(same)
-					{
-						System.out.println("Original string is the same as the reconstructed string.");
-						System.out.println();
-					}
 					
 					int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
 					if (reconstructed_iterations == 0 || reconstructed_iterations == 16)
 					{
 						int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
 						if(number_unpacked != delta.length)
-							System.out.println("Did not unpacked expected number of values.");
+							System.out.println("Did not unpack expected number of values.");
 					}
 					else
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if(number_unpacked != delta.length)
-							System.out.println("Did not unpacked expected number of values.");
+							System.out.println("Did not unpack expected number of values.");
 					}
 				}
 
@@ -958,61 +1062,33 @@ public class DeltaWriter
 				    	dequantized_channel_list.add(resized_channel);	
 				    }
 				}
-				
-				/*
-				if(pixel_quant == 0)
-				{
-				    if(pixel_shift == 0)
-				    {
-				    	dequantized_channel_list.add(channel);
-				    }
-				    else
-				    {
-				    	int [] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
-				    	dequantized_channel_list.add(shifted_channel);
-				    }
-				}
-				else
-				{
-					int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);
-				    if(pixel_shift == 0)
-				    {
-				    	dequantized_channel_list.add(resized_channel);	
-				    }
-				    else
-				    {
-				    	int [] shifted_channel = DeltaMapper.shift(resized_channel, pixel_shift);	
-				    	dequantized_channel_list.add(shifted_channel);	
-				    }
-				}
-				*/
 			}
 
 			// Assemble the rgb files if the minimum set contains difference channels.
 			int[] blue = new int[new_xdim * new_ydim];
 			int[] green = new int[new_xdim * new_ydim];
 			int[] red = new int[new_xdim * new_ydim];
-			if (min_set_id == 0)
+			if(min_set_id == 0)
 			{
 				blue  = dequantized_channel_list.get(0);
 				green = dequantized_channel_list.get(1);
 				red   = dequantized_channel_list.get(2);
 			} 
-			else if (min_set_id == 1)
+			else if(min_set_id == 1)
 			{
 				blue = dequantized_channel_list.get(0);
 				red = dequantized_channel_list.get(1);
 				int[] red_green = dequantized_channel_list.get(2);
 				green = DeltaMapper.getDifference(red, red_green);
 			} 
-			else if (min_set_id == 2)
+			else if(min_set_id == 2)
 			{
 				blue = dequantized_channel_list.get(0);
 				red = dequantized_channel_list.get(1);
 				int[] blue_green = dequantized_channel_list.get(2);
 				green = DeltaMapper.getDifference(blue, blue_green);
 			} 
-			else if (min_set_id == 3)
+			else if(min_set_id == 3)
 			{
 				blue = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
@@ -1020,7 +1096,7 @@ public class DeltaWriter
 				int[] red_green = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(red_green, green);
 			} 
-			else if (min_set_id == 4)
+			else if(min_set_id == 4)
 			{
 				blue = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
@@ -1035,7 +1111,7 @@ public class DeltaWriter
 				int[] blue_green = dequantized_channel_list.get(2);
 				blue = DeltaMapper.getSum(blue_green, green);
 			} 
-			else if (min_set_id == 6)
+			else if(min_set_id == 6)
 			{
 				red = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
@@ -1045,7 +1121,7 @@ public class DeltaWriter
 				green = DeltaMapper.getSum(red_green, red);
 				blue = DeltaMapper.getSum(blue_green, green);
 			} 
-			else if (min_set_id == 7)
+			else if(min_set_id == 7)
 			{
 				green = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
@@ -1053,7 +1129,7 @@ public class DeltaWriter
 				int[] red_green = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(green, red_green);
 			} 
-			else if (min_set_id == 8)
+			else if(min_set_id == 8)
 			{
 				green = dequantized_channel_list.get(0);
 				int[] red_green = dequantized_channel_list.get(1);
@@ -1061,7 +1137,7 @@ public class DeltaWriter
 				int[] red_blue = dequantized_channel_list.get(2);
 				blue = DeltaMapper.getDifference(red, red_blue);
 			} 
-			else if (min_set_id == 9)
+			else if(min_set_id == 9)
 			{
 				red = dequantized_channel_list.get(0);
 				int[] red_green = dequantized_channel_list.get(1);
@@ -1132,7 +1208,7 @@ public class DeltaWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			if (!initialized)
+			if(!initialized)
 				apply_item.doClick();
 			int channel_id[] = DeltaMapper.getChannels(min_set_id);
 
@@ -1184,7 +1260,7 @@ public class DeltaWriter
 							out.writeShort(table[k]);
 					}
 
-					if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+					if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 					{
 						byte[] map = (byte[]) map_list.get(i);
 						ArrayList map_string_list = StringMapper.getStringList2(map);
@@ -1206,7 +1282,7 @@ public class DeltaWriter
 					int number_of_segments = segments.size();
 					out.writeInt(number_of_segments);
 
-					if (number_of_segments == 1)
+					if(number_of_segments == 1)
 					{
 						byte[] string = (byte[]) string_list.get(i);
 
@@ -1255,6 +1331,7 @@ public class DeltaWriter
 					} 
 					else
 					{
+						
 						int total_length = 0;
 						byte[] segment_info = new byte[number_of_segments];
 						for (int k = 0; k < number_of_segments; k++)
@@ -1338,6 +1415,134 @@ public class DeltaWriter
 			catch (Exception e)
 			{
 				System.out.println(e.toString());
+			}
+		}
+	}
+	
+	class HistogramCanvas extends Canvas
+	{
+		public void paint(Graphics g)
+		{
+			Graphics2D g2 = (Graphics2D) g;
+
+			Rectangle visible_area = g2.getClipBounds();
+
+			int xdim = (int) visible_area.getWidth();
+			int ydim = (int) visible_area.getHeight();
+			g2.setColor(java.awt.Color.WHITE);
+			g2.fillRect(0, 0, xdim, ydim);
+			
+			int channel     = histogram_type / 3;
+			int compression = histogram_type % 3;
+			int [] count    = new int[256];
+			byte[] string   = (byte[]) string_list.get(channel);
+			int number_of_segments = 1;
+			
+			if(compression == 0)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations != 0 && iterations != 16)
+					string = StringMapper.decompressStrings(string);	
+			}
+			else if(compression == 1)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations == 0 || iterations == 16)
+				    System.out.println("String was not compressed.");
+			}
+			else if(compression == 2)
+			{
+				ArrayList segments = (ArrayList) segment_list.get(channel);
+				number_of_segments = segments.size();	
+				
+				// We can't use the segment length to determine if the 
+				// string is segmented because it might have been merged
+				// back into an unsegmented string.
+				if(number_of_segments == 1)
+				{
+				    System.out.println("String was not segmented.");	
+				}
+				else
+				{
+					int total_length = 0;
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						byte [] current_segment = (byte [])segments.get(i);
+						total_length += current_segment.length - 1;
+					}
+					string = new byte[total_length];
+					int offset = 0;
+					for(int i = 0; i < number_of_segments; i++) 
+					{ 
+						byte [] current_segment = (byte[])segments.get(i); 
+						for(int j = 0; j < current_segment.length - 1; j++)
+					        string[j + offset] = current_segment[j]; 
+						offset += current_segment.length - 1; 
+					} 
+				}
+			}
+			
+			
+			int     j    = string.length - 1;
+			if(number_of_segments > 1)
+				j++;
+			for(int i = 0; i < j; i++)
+			{
+				int k = string[i];
+				if(k < 0)
+					k += 256;
+				count[k]++;
+			}
+			int number_of_different_values = 0;
+			for(int i = 0; i < 256; i++)
+			{
+				if(count[i] != 0)
+					number_of_different_values++;  
+			}
+			
+		
+			int max   = count[0];
+			int index = 0;
+			
+			for(int i = 1; i < 256; i++)
+			{
+				if(count[i] > max)
+				{
+				    max   = count[i];
+				    index = i;
+				}
+			}
+			
+			
+			System.out.println("Number of different values is " + number_of_different_values);
+			System.out.println("Max instances is " + max + " out of " + (string.length - 1) + " at index " + index);
+			System.out.println();
+			
+			g2.setColor(java.awt.Color.BLACK);
+			
+			double width = xdim;
+			width    /= 256;
+		
+			int offset = 5;
+			int increment = (int)width;
+			for(int i = 0; i < 256; i++)
+			{
+				double k = count[i];
+				k       /= max;
+				k       *= ydim;
+				
+				int height = (int)k;
+				int delta  = ydim - height;
+				
+				if(height != 0)
+				    g2.fillRect(offset , delta, increment, height);
+				else
+				{
+					g2.setColor(java.awt.Color.RED);
+					g2.drawLine(offset , delta, offset + increment, delta);
+					g2.setColor(java.awt.Color.BLACK);
+				}
+				offset += increment;
 			}
 		}
 	}
