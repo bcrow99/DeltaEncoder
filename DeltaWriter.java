@@ -7,6 +7,8 @@ import java.util.*;
 import java.util.zip.*;
 import javax.imageio.*;
 import javax.swing.*;
+//import javax.swing.event.ChangeEvent;
+//import javax.swing.event.ChangeListener;
 import javax.swing.event.*;
 
 public class DeltaWriter
@@ -59,7 +61,7 @@ public class DeltaWriter
 	{
 		if(args.length != 1)
 		{
-			System.out.println("Usage: java DeltaWriter2 <filename>");
+			System.out.println("Usage: java DeltaWriter <filename>");
 			System.exit(0);
 		}
 
@@ -67,7 +69,7 @@ public class DeltaWriter
 		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
-		DeltaWriter2 writer = new DeltaWriter2(prefix + filename);
+		DeltaWriter writer = new DeltaWriter(prefix + filename);
 		writer.init();
 	}
 	
@@ -1464,6 +1466,7 @@ public class DeltaWriter
 				}
 				else
 				{
+					/*
 					int total_length = 0;
 					for(int i = 0; i < number_of_segments; i++)
 					{
@@ -1479,6 +1482,77 @@ public class DeltaWriter
 					        string[j + offset] = current_segment[j]; 
 						offset += current_segment.length - 1; 
 					} 
+					*/
+					
+					int total_bitlength = 0;
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						byte [] current_segment = (byte [])segments.get(i);
+						total_bitlength       += StringMapper.getBitlength(current_segment);
+					}
+					
+					int total_bytelength = total_bitlength / 8;
+					if(total_bitlength % 8 != 0)
+						total_bytelength++;
+					string = new byte[total_bytelength];
+					
+					int bit_offset  = 0;
+					int byte_offset = 0;
+					
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						byte [] current_segment = (byte [])segments.get(i);
+						int bitlength           = StringMapper.getBitlength(current_segment);
+						if(bit_offset % 8 == 0)
+						{
+						    for(int j = 0; j < current_segment.length - 1; j++)	
+						        string[byte_offset + j]	= current_segment[j];
+						    
+						    bit_offset += bitlength;
+						    byte_offset = bit_offset / 8;
+						}
+						else
+						{
+						    byte start_bits = current_segment[0];
+						    start_bits    <<= bit_offset;
+						    string[byte_offset]  |= start_bits;
+						    
+						    int number_of_extra_bytes = (bit_offset % 8 + bitlength) / 8;
+						    if(number_of_extra_bytes > 0)
+						    {
+						    	
+						    	byte remainder = (byte)(8 - bit_offset);
+						    	for(int j = 0; j < number_of_extra_bytes; j++)
+						    	{
+						    	    byte end_bits = current_segment[j];
+						    	    end_bits    >>= remainder;
+						    	    string[byte_offset + 1 + j] = remainder;
+						    	    if(j != number_of_extra_bytes - 1)
+						    	    {
+						    	    	start_bits = current_segment[j + 1];
+									    start_bits    <<= bit_offset;
+									    string[byte_offset + 2 + j]  |= start_bits;	
+						    	    }
+						    	}
+						    	bit_offset += bitlength;
+							    byte_offset = bit_offset / 8;
+						    	
+							    /*
+						    	catch(Exception e)
+						    	{
+						    		System.out.println("Exception packing segmented bits.");
+						    		System.out.println(e.toString());
+						    		System.out.println("Cat string length is " + string.length);
+						    		System.out.println("Byte offset is " + byte_offset);
+						    	}
+						    	*/
+						    }
+						}
+					}
+					System.out.println("Cat string length is " + string.length);
+					System.out.println("Total bit length is " + total_bitlength);
+		    		System.out.println("Byte offset is " + byte_offset);
+		    		System.out.println("Bit offset is " + bit_offset);
 				}
 			}
 			
