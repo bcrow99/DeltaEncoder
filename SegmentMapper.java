@@ -390,6 +390,7 @@ public class SegmentMapper
 	* Segments a byte string and then merges the segments back together,
 	* depending on how it affects the rate of compression.
 	* We dont parameterize the list because we want to add random types.
+	* Similar to the method above but returns some extra information.
 	*
 	* @param src the input byte string
 	* @param minimum_bitlength original segment length
@@ -489,8 +490,8 @@ public class SegmentMapper
 				int     one_amount             = StringMapper.getCompressionAmount(compressed_segment, StringMapper.getBitlength(compressed_segment), 1);
 				if(one_amount < 0)
 				{
-					System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + one_amount + " with one bitwise transform.");
-					System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
+					//System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + one_amount + " with one bitwise transform.");
+					//System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
 				}
 				
 				if(decompressed_segment.length != segment.length)
@@ -530,7 +531,7 @@ public class SegmentMapper
 			else
 			{
 				byte [] compressed_segment = StringMapper.compressOneStrings(segment);
-				int     zero_amount             = StringMapper.getCompressionAmount(compressed_segment, StringMapper.getBitlength(compressed_segment), 0);
+				int     zero_amount        = StringMapper.getCompressionAmount(compressed_segment, StringMapper.getBitlength(compressed_segment), 0);
 				if(zero_amount < 0)
 				{
 					System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + zero_amount + " with zero bitwise transform.");
@@ -607,7 +608,6 @@ public class SegmentMapper
 				    int current_iterations = StringMapper.getIterations(current_segment);
 				    int next_iterations    = StringMapper.getIterations(next_segment);
 				    
-				    
 				    // The current segment and the next segment should have
 			    	// similar zero ratios if they have the same number of iterations.
 				    if(current_iterations == next_iterations || (current_iterations == 0 && next_iterations == 16) || (current_iterations == 16 && next_iterations == 0))
@@ -634,7 +634,29 @@ public class SegmentMapper
 				    	    	extra_bits    <<= 5;
 				    	    	merged_segment[merged_segment.length - 1] = extra_bits;
 				    	    }
+				    	    
+				    	    double zero_ratio = StringMapper.getZeroRatio(merged_segment, combined_bitlength);
+				    	    if(zero_ratio >= .5)
+				    	    	current_iterations = 0;
+				    	    else
+				    	    	current_iterations = 16;
 				    	    merged_segment[merged_segment.length - 1] |= current_iterations;
+				    	    
+				    	    int compression_amount = 0;
+				    	    if(current_iterations == 0)
+				    	    	compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 0);
+				    	    else
+				    	    	compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 1);
+				    	    if(compression_amount < 0)
+				    	    {
+				    	    	System.out.println("Uncompressed segment can be compressed by " + compression_amount);
+				    	    	System.out.println();
+				    	    }
+				    	    else if(compression_amount == 0)
+				    	    {
+				    	    	System.out.println("Length of uncompressed segment is not changed by bit transform.");
+				    	    	System.out.println();
+				    	    }
 				    	    merged_list.add(merged_segment);
 				    	    input_list.add(merged_segment);
 				    	    
@@ -649,8 +671,8 @@ public class SegmentMapper
 			    	        int decompressed_next_bitlength      = StringMapper.getBitlength(decompressed_next_segment); 
 				    		int decompressed_combined_bitlength  = decompressed_current_bitlength + decompressed_next_bitlength;
 				            
-				            int bytelength = decompressed_current_segment.length + decompressed_next_segment.length - 1;
-				            byte [] uncompressed_merged_segment = new byte[bytelength];
+				        int bytelength = decompressed_current_segment.length + decompressed_next_segment.length - 1;
+				        byte [] uncompressed_merged_segment = new byte[bytelength];
 				            
 				            for(int k = 0; k < decompressed_current_segment.length - 1; k++)
 				    	    	uncompressed_merged_segment[k] = decompressed_current_segment[k];
@@ -672,8 +694,8 @@ public class SegmentMapper
 				    	    byte [] merged_segment = new byte[1];
 				    	    if(current_iterations > 15)
 				    	    {
-				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
-				    	    	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
+				    	    	    uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
+				    	        	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
 				    	    	
 								int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
 								if(one_amount < 0)
@@ -885,9 +907,9 @@ public class SegmentMapper
 	}
 	
 	/**
-	* Produces a set of masks that can be anded to isolate a bit.
+	* Produces a set of masks that can be anded to isolate a bit at any position.
 	*
-	* @return byte masks
+	* @return byte [] masks
 	*/
 	public static byte [] getPositiveMask()
 	{
@@ -897,6 +919,23 @@ public class SegmentMapper
 			mask[i] = (byte)(mask[i - 1] << 1);
 		return mask;
 	}
+	
+	
+	/**
+	* Produces a mask that can be anded to isolate a bit at a specific position.
+	*
+	* @return byte mask
+	*/
+	public static byte getPositiveMask(int position)
+	{
+		int i = 1;
+		for(int j = 0; j < position; j++)
+			i *= 2;
+		byte mask = (byte)i;
+		
+		return mask;
+	}
+	
 	
 	/**
 	* Produces a set of masks that can be anded to isolate a bit.
@@ -913,9 +952,9 @@ public class SegmentMapper
 	}
 	
 	/**
-	* Produces a set of masks that can be ored to isolate a bit.
+	* Produces a set of masks that can be ored to isolate a bit at any position.
 	*
-	* @return byte masks
+	* @return byte [] masks
 	*/
 	public static byte [] getNegativeMask()
 	{
@@ -929,9 +968,26 @@ public class SegmentMapper
 	}
 	
 	/**
-	* Produces a set of masks that can be anded to isolate a trailing segment.
+	* Produces a mask that can be ored to isolate a bit at a specific position.
 	*
-	* @return byte masks
+	* @return byte mask
+	*/
+	public static byte getNegativeMask(int position)
+	{
+		int i = 1;
+		for(int j = 0; j < position; j++)
+			i *= 2;
+		
+		byte mask = (byte)i;
+		mask      = (byte)(~mask);
+		
+		return mask;
+	}
+	
+	/**
+	* Produces a set of masks that can be anded to isolate leading segments.
+	*
+	* @return byte [] masks
 	*/
 	public static byte [] getLeadingMask()
 	{
@@ -942,6 +998,12 @@ public class SegmentMapper
 		return mask;	
 	}
 	
+	/**
+	* Produces a single mask that can be anded to isolate a leading segment of a 
+	* specific length.
+	*
+	* @return byte mask
+	*/
 	public static byte getLeadingMask(int length)
 	{
 		byte [] mask = new byte[7];
@@ -952,9 +1014,9 @@ public class SegmentMapper
 	}
 	
 	/**
-	* Produces a set of masks that can be anded to isolate a trailing segment.
+	* Produces a set of masks that can be anded to isolate trailing segments.
 	*
-	* @return byte masks
+	* @return byte [] mask
 	*/
 	public static byte [] getTrailingMask()
 	{
@@ -965,6 +1027,12 @@ public class SegmentMapper
 		return mask;	
 	}
 	
+	/**
+	* Produces a single mask that can be anded to isolate a trailing segment of a 
+	* specific length.
+	*
+	* @return byte mask
+	*/
 	public static byte getTrailingMask(int length)
 	{
 		byte [] mask = new byte[7];
@@ -972,6 +1040,34 @@ public class SegmentMapper
 		for(int i = 1; i < 7; i++)
 			mask[i] = (byte)(mask[i - 1] * 2 + 1);
 		return mask[length - 1];	
+	}
+	
+	public static int getBit(byte [] string, int position)
+	{
+		int  byte_offset = position / 8;
+		int  bit_offset  = position % 8;
+		byte mask        = getPositiveMask(bit_offset); 
+		
+		if((string[byte_offset] | mask) == 0)
+			return 0;
+		else
+			return 1;
+	}
+	
+	public static void setBit(byte [] string, int position, int value)
+	{
+		int byte_offset = position / 8;
+		int bit_offset  = position % 8;
+		if(value == 0)
+		{
+			byte mask = getNegativeMask(bit_offset);
+			string[byte_offset] &= mask;
+		}
+		else
+		{
+			byte mask = getPositiveMask(bit_offset);
+			string[byte_offset] |= mask;
+		}
 	}
 	
 }
