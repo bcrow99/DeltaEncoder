@@ -863,18 +863,17 @@ public class SegmentMapper
 	        
 	        byte mask = getTrailingMask(segment_length);
 	        
-	    	for(int i = 0; i < dst.length - 1; i++)
-	    	{
-	    		dst[i] >>= shift;
-	    	    dst[i] &=  mask;
-	    	    byte extra_bits = (byte)(dst[i + 1] << reverse_shift);
-	    	    dst[i] |= extra_bits;
-	    	    
-	    	}
+	    	    for(int i = 0; i < dst.length - 1; i++)
+	    	    {
+	    		    dst[i] >>= shift;
+	    	        dst[i] &=  mask;
+	    	        byte extra_bits = (byte)(dst[i + 1] << reverse_shift);
+	    	        dst[i] |= extra_bits;  
+	    	    }
 	    	
-	    	int i = dst.length - 1;
-	    	dst[i] >>= shift;
-	    	dst[i] &= mask;
+	    	    int i = dst.length - 1;
+	       	dst[i] >>= shift;
+	      	dst[i] &= mask;
 	    }
 	    
 	    return dst;
@@ -1048,7 +1047,7 @@ public class SegmentMapper
 		int  bit_offset  = position % 8;
 		byte mask        = getPositiveMask(bit_offset); 
 		
-		if((string[byte_offset] | mask) == 0)
+		if((string[byte_offset] & mask) == 0)
 			return 0;
 		else
 			return 1;
