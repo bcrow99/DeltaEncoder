@@ -7,8 +7,6 @@ import java.util.*;
 import java.util.zip.*;
 import javax.imageio.*;
 import javax.swing.*;
-//import javax.swing.event.ChangeEvent;
-//import javax.swing.event.ChangeListener;
 import javax.swing.event.*;
 
 public class DeltaWriter
@@ -325,7 +323,7 @@ public class DeltaWriter
 						double    canvas_xdim      = canvas_dimension.getWidth();
 						double    canvas_ydim      = canvas_dimension.getHeight();
 						
-						y += canvas_ydim + 125;
+						y += canvas_ydim - 200;
 						histogram_dialog.setLocation(x, y);
 						histogram_dialog.pack();
 						histogram_dialog.setVisible(true);
@@ -863,6 +861,12 @@ public class DeltaWriter
 						int     number_of_compressions = compressions.get(k);
 						byte [] current_segment        = segments.get(k);
 						int     current_bitlength      = StringMapper.getBitlength(current_segment);
+						
+						/*
+						if(current_bitlength < 96)
+						    System.out.println("Current bitlength is " + current_bitlength);
+						*/
+						
 						/*
 						int     zero_amount            = StringMapper.getCompressionAmount(current_segment, current_bitlength, 0);
 						int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
@@ -1466,24 +1470,6 @@ public class DeltaWriter
 				}
 				else
 				{
-					/*
-					int total_length = 0;
-					for(int i = 0; i < number_of_segments; i++)
-					{
-						byte [] current_segment = (byte [])segments.get(i);
-						total_length += current_segment.length - 1;
-					}
-					string = new byte[total_length];
-					int offset = 0;
-					for(int i = 0; i < number_of_segments; i++) 
-					{ 
-						byte [] current_segment = (byte[])segments.get(i); 
-						for(int j = 0; j < current_segment.length - 1; j++)
-					        string[j + offset] = current_segment[j]; 
-						offset += current_segment.length - 1; 
-					} 
-					*/
-					
 					int total_bitlength = 0;
 					for(int i = 0; i < number_of_segments; i++)
 					{
@@ -1496,70 +1482,331 @@ public class DeltaWriter
 						total_bytelength++;
 					string = new byte[total_bytelength];
 					
-					int bit_offset  = 0;
-					int byte_offset = 0;
 					
+					byte [] mask = {1, 3, 7, 15, 31, 63, 127};
+					ArrayList <Integer> length_list = new <Integer>ArrayList();
+					ArrayList <byte[]> reconstructed_segments = new ArrayList <byte[]>();
+					
+					int bit_offset = 0;
+					
+					for(int i = 0; i < number_of_segments - 1; i++)
+					{
+						int m = bit_offset % 8;
+					    int n = bit_offset / 8;
+					    
+					    
+					    byte [] current_segment = (byte [])segments.get(i);
+						int bitlength           = StringMapper.getBitlength(current_segment);
+						
+						
+						if(m == 0)
+						{
+							for(int j = 0; j < current_segment.length - 1; j++)	
+						        string[n + j] = current_segment[j];	
+						}
+						else
+						{
+							for(int j = 0; j < current_segment.length - 1; j++)
+							{
+								byte a     = (byte)(current_segment[j] << m);
+								string[n + j] |= a;
+								
+								int number_of_bits = m;
+								byte b             = (byte)(current_segment[j] >> 8 - m);
+								b                 &= mask[number_of_bits - 1];
+							    string[n + j + 1] = b;
+							}
+						} 
+						
+						bit_offset += bitlength;
+						length_list.add(bitlength);
+					}
+					
+					byte [] last_segment = (byte [])segments.get(number_of_segments - 1);
+					int m                = bit_offset % 8;
+				    int n                = bit_offset / 8;
+				    int bitlength        = StringMapper.getBitlength(last_segment);
+				    if(m == 0)
+					{
+						for(int j = 0; j < last_segment.length - 1; j++)	
+					        string[n + j] = last_segment[j];	
+					}
+				    else
+					{
+						for(int j = 0; j < last_segment.length - 2; j++)
+						{
+							byte a     = (byte)(last_segment[j] << m);
+							string[n + j] |= a;
+							
+							int number_of_bits = m;
+							byte b             = (byte)(last_segment[j] >> 8 - m);
+							b                 &= mask[number_of_bits - 1];
+						    string[n + j + 1] = b;
+						}
+						byte a = (byte)(last_segment[last_segment.length - 2] << m);
+						string[n + last_segment.length - 2] |= a;
+						if(n + last_segment.length - 2 + 1 < string.length)
+						{
+							byte b             = (byte)(last_segment[last_segment.length - 2] >> 8 - m);
+							b                 &= mask[m - 1];
+						    string[n + last_segment.length - 2 + 1] = b;   	
+						}
+						
+					} 
+					
+					bit_offset += bitlength;
+					length_list.add(bitlength);
+					
+					
+					//long start = System.nanoTime();
+					
+					/*
+					int k = 0;
 					for(int i = 0; i < number_of_segments; i++)
 					{
 						byte [] current_segment = (byte [])segments.get(i);
 						int bitlength           = StringMapper.getBitlength(current_segment);
-						if(bit_offset % 8 == 0)
+						length_list.add(bitlength);
+						
+						for(int j = 0; j < bitlength; j++)
 						{
-						    for(int j = 0; j < current_segment.length - 1; j++)	
-						        string[byte_offset + j]	= current_segment[j];
-						    
-						    bit_offset += bitlength;
-						    byte_offset = bit_offset / 8;
+							int value = SegmentMapper.getBit(current_segment, j);	
+							SegmentMapper.setBit(string, k++, value);
+						}
+					}
+					*/
+					
+					
+					//long stop = System.nanoTime();
+					//long time = stop - start;
+					//System.out.println("It took " + (time / 1000000) + " ms to write string with bits.");
+					
+					if(length_list.size() != number_of_segments)
+						System.out.println("Number of lengths is different from number of segments.");
+					
+				
+					long start = System.nanoTime();
+					int k = 0;
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						bitlength = length_list.get(i);
+						int number_of_bytes = bitlength / 8;
+						if(bitlength % 8 != 0)
+							number_of_bytes++;
+						byte [] current_segment = new byte[number_of_bytes + 1];
+						for(int j = 0; j < bitlength; j++)
+						{
+							int value = SegmentMapper.getBit(string, k++);
+							SegmentMapper.setBit(current_segment, j, value);
+						}
+						reconstructed_segments.add(current_segment);
+					}
+					
+					long stop = System.nanoTime();
+					long time = stop - start;
+					System.out.println("It took " + (time / 1000000) + " ms to write segments with bits.");
+					
+					byte [] high_end_mask = SegmentMapper.getLeadingMask();
+					
+					
+					start = System.nanoTime();
+					bit_offset = 0;
+					
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						bitlength = length_list.get(i);
+						int number_of_bytes = bitlength / 8;
+						if(bitlength % 8 != 0)
+							number_of_bytes++;
+						byte [] reconstructed_segment = new byte[number_of_bytes + 1];
+						
+						m = bit_offset % 8;
+						n = bit_offset / 8;
+						if(m == 0)
+						{
+							for(int j = 0; j < reconstructed_segment.length - 1; j++)
+								reconstructed_segment[j] = string[n + j];
+							if(bitlength % 8 != 0)
+							{
+								int number_of_bits = bitlength % 8;
+								reconstructed_segment[number_of_bytes - 1] &= mask[number_of_bits - 1];
+							}
 						}
 						else
 						{
-						    byte start_bits = current_segment[0];
-						    start_bits    <<= bit_offset;
-						    string[byte_offset]  |= start_bits;
-						    
-						    int number_of_extra_bytes = (bit_offset % 8 + bitlength) / 8;
-						    if(number_of_extra_bytes > 0)
-						    {
-						    	
-						    	byte remainder = (byte)(8 - bit_offset);
-						    	for(int j = 0; j < number_of_extra_bytes; j++)
-						    	{
-						    	    byte end_bits = current_segment[j];
-						    	    end_bits    >>= remainder;
-						    	    string[byte_offset + 1 + j] = remainder;
-						    	    if(j != number_of_extra_bytes - 1)
-						    	    {
-						    	    	start_bits = current_segment[j + 1];
-									    start_bits    <<= bit_offset;
-									    string[byte_offset + 2 + j]  |= start_bits;	
-						    	    }
-						    	}
-						    	bit_offset += bitlength;
-							    byte_offset = bit_offset / 8;
-						    	
-							    /*
-						    	catch(Exception e)
-						    	{
-						    		System.out.println("Exception packing segmented bits.");
-						    		System.out.println(e.toString());
-						    		System.out.println("Cat string length is " + string.length);
-						    		System.out.println("Byte offset is " + byte_offset);
-						    	}
-						    	*/
-						    }
+							for(int j = 0; j < reconstructed_segment.length - 1; j++)
+							{
+								reconstructed_segment[j]  = (byte)(string[n + j] >> m);
+								int number_of_bits        = 8 - m;
+								reconstructed_segment[j] &= mask[number_of_bits - 1];
+								
+								if(j < number_of_bytes - 1)
+								{
+									byte high_bits = (byte)(string[n + j + 1]);
+									reconstructed_segment[j] |= high_bits << 8 - m;
+								}
+								else if(j == number_of_bytes - 1)
+								{
+									if(n + j + 1 < string.length)
+									{
+									    byte high_bits = (byte)(string[n + j + 1]); 
+						    	            reconstructed_segment[j] |= high_bits << 8 - m;
+						    	            int number_of_extra_bits = (j + 1) * 8 - bitlength;
+						    	            if(number_of_extra_bits > 0)
+							    	            reconstructed_segment[j] &= mask[8 - number_of_extra_bits - 1]; 
+									}
+								}
+							}
+						}
+						
+						byte [] original_segment = (byte [])segments.get(i);
+						if(original_segment.length != reconstructed_segment.length)
+						    System.out.println("Reconstructed length is different from orginal length.");	
+						else
+							reconstructed_segment[original_segment.length - 1] = original_segment[original_segment.length - 1];
+						reconstructed_segments.add(reconstructed_segment);
+						bit_offset += bitlength;
+					}
+					stop = System.nanoTime();
+					time = stop - start;
+					System.out.println("It took " + (time / 1000000) + " ms to write segments with bytes.");
+					
+					
+					boolean isEqual = true;
+					int     first_segment = 0;
+					int     first_index   = 0;
+					for(int i = 0; i < number_of_segments; i++)
+					{
+						byte [] original_segment = (byte[])segments.get(i);
+						byte [] reconstructed_segment = reconstructed_segments.get(i);
+						for(int j = 0; j < reconstructed_segment.length - 1; j++)
+						{
+							if(reconstructed_segment[j] != original_segment[j] && isEqual)
+							{
+								isEqual = false;
+								first_segment = i;
+								first_index   = j;
+							}
 						}
 					}
-					System.out.println("Cat string length is " + string.length);
-					System.out.println("Total bit length is " + total_bitlength);
-		    		System.out.println("Byte offset is " + byte_offset);
-		    		System.out.println("Bit offset is " + bit_offset);
+					
+					if(isEqual)
+					{
+						System.out.println("Reconstructed segments are the same as original segments.");
+						System.out.println();
+					}
+					else
+					{
+						System.out.println("Reconstructed segments are not the same as original segments.");
+						System.out.println("First segment with different value is " + first_segment + " at index " + first_index);
+						System.out.println();
+						
+						int a = first_segment - 1;
+						if(a < 0)
+							a = 0;
+					    int b = a + 1;
+						
+						byte [] original_segment = (byte [])segments.get(a);
+						byte [] reconstructed_segment = reconstructed_segments.get(a);
+						
+						bitlength = StringMapper.getBitlength(original_segment);
+						int iterations = StringMapper.getIterations(original_segment);
+						
+                        byte [] positive_mask = SegmentMapper.getPositiveMask();
+                        
+                        System.out.println("Bitlength of first segment is " + bitlength);
+                        
+                        int number_of_bytes = bitlength / 8;
+                        if(bitlength % 8 != 0)
+                        	    number_of_bytes++;
+                        
+                        System.out.println("Original segment bit values:");
+                        for(int i = 0; i < number_of_bytes; i++)
+                        {
+                        	    byte segment_byte = original_segment[i];
+                        	    for(int j = 0; j < 8; j++)
+        						{
+        							if((segment_byte & positive_mask[j]) != 0)
+        								System.out.print("1 ");
+        							else
+        								System.out.print("0 ");
+        						}
+                        	    System.out.print("  ");
+                        }
+                        
+                        System.out.println();
+                        
+                        System.out.println("Reconstructed segment bit values:");
+                        for(int i = 0; i < number_of_bytes; i++)
+                        {
+                        	    byte segment_byte = reconstructed_segment[i];
+                        	    for(int j = 0; j < 8; j++)
+        						{
+        							if((segment_byte & positive_mask[j]) != 0)
+        								System.out.print("1 ");
+        							else
+        								System.out.print("0 ");
+        						}
+                        	    System.out.print("  "); 	    
+                        }
+                        
+                        System.out.println();
+                        
+                        original_segment = (byte [])segments.get(b);
+					    reconstructed_segment = reconstructed_segments.get(b);
+						
+						bitlength  = StringMapper.getBitlength(original_segment);
+						iterations = StringMapper.getIterations(original_segment);
+						
+                        System.out.println("Bitlength of second segment is " + bitlength);
+                        
+                        number_of_bytes = bitlength / 8;
+                        if(bitlength % 8 != 0)
+                        	    number_of_bytes++;
+                        
+                        System.out.println("Original segment bit values:");
+                        for(int i = 0; i < number_of_bytes; i++)
+                        {
+                        	    byte segment_byte = original_segment[i];
+                        	    for(int j = 0; j < 8; j++)
+        						{
+        							if((segment_byte & positive_mask[j]) != 0)
+        								System.out.print("1 ");
+        							else
+        								System.out.print("0 ");
+        						}
+                        	    System.out.print("  ");
+                        }
+                        
+                        System.out.println();
+                        
+                        System.out.println("Reconstructed segment bit values:");
+                        for(int i = 0; i < number_of_bytes; i++)
+                        {
+                        	    byte segment_byte = reconstructed_segment[i];
+                        	    for(int j = 0; j < 8; j++)
+        						{
+        							if((segment_byte & positive_mask[j]) != 0)
+        								System.out.print("1 ");
+        							else
+        								System.out.print("0 ");
+        						}
+                        	    System.out.print("  "); 	    
+                        }
+                        
+                        System.out.println();
+                        
+					}
 				}
 			}
 			
 			
 			int     j    = string.length - 1;
+			
+			// If the string is concatenated segments, it does not include a trailing data byte.
 			if(number_of_segments > 1)
 				j++;
+			
 			for(int i = 0; i < j; i++)
 			{
 				int k = string[i];
@@ -1567,6 +1814,7 @@ public class DeltaWriter
 					k += 256;
 				count[k]++;
 			}
+			
 			int number_of_different_values = 0;
 			for(int i = 0; i < 256; i++)
 			{
@@ -1574,7 +1822,6 @@ public class DeltaWriter
 					number_of_different_values++;  
 			}
 			
-		
 			int max   = count[0];
 			int index = 0;
 			
@@ -1586,7 +1833,6 @@ public class DeltaWriter
 				    index = i;
 				}
 			}
-			
 			
 			System.out.println("Number of different values is " + number_of_different_values);
 			System.out.println("Max instances is " + max + " out of " + (string.length - 1) + " at index " + index);
