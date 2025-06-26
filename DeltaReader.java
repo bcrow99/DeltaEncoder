@@ -3,7 +3,6 @@ import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
 import java.util.*;
-//import java.util.concurrent.Callable;
 import java.util.concurrent.*;
 import java.util.zip.*;
 import javax.imageio.*;
@@ -76,9 +75,6 @@ public class DeltaReader
 				int j = channel_id[i];
 				min[i] = in.readInt();
 				init[i] = in.readInt();
-
-				// System.out.println("Init value is " + init[i]);
-				// System.out.println("Getting channel parameters.");
 				delta_min[i] = in.readInt();
 				length[i] = in.readInt();
 				compressed_length[i] = in.readInt();
@@ -103,7 +99,6 @@ public class DeltaReader
 						table[k] = in.readShort();
 				}
 				table_list.add(table);
-				// System.out.println("Added table");
 
 				if (delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
@@ -169,47 +164,144 @@ public class DeltaReader
 
 					int[] segment_length = new int[number_of_segments];
 					byte[] segment_info = new byte[number_of_segments];
-					in.read(segment_info, 0, number_of_segments);
-
+					
+					int number_of_zipped_bytes = in.readInt();
+					if(number_of_zipped_bytes == 0)
+					{
+					    in.read(segment_info, 0, number_of_segments);
+					    //System.out.println("Segment data was not zipped.");
+					}
+					else
+					{
+						//System.out.println("Segment data was zipped.");
+						byte[] zipped_data = new byte[number_of_zipped_bytes];
+						in.read(zipped_data, 0, number_of_zipped_bytes);
+						Inflater inflater = new Inflater();
+						inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
+						int unzipped_length = inflater.inflate(segment_info);
+						if(unzipped_length != number_of_segments)
+							System.out.println("Unzipped data not expected length.");	
+					}
+                     
 					int max_bytelength = in.readInt();
 					if (max_bytelength <= Byte.MAX_VALUE * 2 + 1)
 					{
-						System.out.println("Max segment length is an unsigned byte.");
+						//System.out.println("Max segment length is an unsigned byte.");
 						byte[] segment_length_bytes = new byte[number_of_segments];
-						in.read(segment_length_bytes, 0, number_of_segments);
-
+						
+						number_of_zipped_bytes = in.readInt();
+						if(number_of_zipped_bytes == 0)
+						{
+						    //System.out.println("Did not zip byte lengths.");
+						    in.read(segment_length_bytes, 0, number_of_segments);
+						}
+						else
+						{
+							//System.out.println("Zipped byte lengths.");
+							byte[] zipped_data = new byte[number_of_zipped_bytes];
+							in.read(zipped_data, 0, number_of_zipped_bytes);
+							Inflater inflater = new Inflater();
+							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
+							int unzipped_length = inflater.inflate(segment_length_bytes);
+							if(unzipped_length != number_of_segments)
+								System.out.println("Unzipped data not expected length.");	
+						}
+						
 						for (int k = 0; k < number_of_segments; k++)
 						{
 							int current_length = segment_length_bytes[k];
 							if (current_length < 0)
-								current_length += Byte.MAX_VALUE * 2 + 2;
+								current_length += 256;
 							total_length += current_length;
 							segment_length[k] = current_length;
 						}
 					} 
 					else if (max_bytelength <= Short.MAX_VALUE * 2 + 1)
 					{
-						System.out.println("Max segment length is an unsigned short.");
-						for (int k = 0; k < number_of_segments; k++)
+						//System.out.println("Max segment length is an unsigned short.");
+						
+						byte[] segment_length_bytes = new byte[2 * number_of_segments];
+						
+						number_of_zipped_bytes = in.readInt();
+						if(number_of_zipped_bytes == 0)
 						{
-							int current_length = in.readShort();
-							if (current_length < 0)
-								current_length += Short.MAX_VALUE * 2 + 2;
-							total_length += current_length;
-							segment_length[k] = current_length;
+						    //System.out.println("Did not zip short lengths.");
+						    in.read(segment_length_bytes, 0, 2 * number_of_segments);
+						}
+						else
+						{
+							//System.out.println("Zipped short lengths.");
+							byte[] zipped_data = new byte[number_of_zipped_bytes];
+							in.read(zipped_data, 0, number_of_zipped_bytes);
+							Inflater inflater = new Inflater();
+							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
+							int unzipped_length = inflater.inflate(segment_length_bytes);
+							if(unzipped_length != number_of_segments * 2)
+								System.out.println("Unzipped lengths not expected length.");	
+						}
+						
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int a = (int)segment_length_bytes[2 * k];
+							if(a < 0)
+								a += 256;
+							int b = (int)segment_length_bytes[2 * k + 1];
+							if(b < 0)
+								b += 256;
+							b   <<= 8;
+							
+							segment_length[k] = a | b;
+							total_length     += segment_length[k];
 						}
 					} 
 					else
 					{
-						System.out.println("Max segment length is an int.");
-						for (int k = 0; k < number_of_segments; k++)
+						//System.out.println("Max segment length is an int.");
+						byte[] segment_length_bytes = new byte[4 * number_of_segments];
+						
+						number_of_zipped_bytes = in.readInt();
+						if(number_of_zipped_bytes == 0)
 						{
-							int current_length = in.readInt();
-							segment_length[k] = current_length;
-							total_length += current_length;
+						    //System.out.println("Did not zip int lengths.");
+						    in.read(segment_length_bytes, 0, 4 * number_of_segments);
+						}
+						else
+						{
+							//System.out.println("Zipped int lengths.");
+							byte[] zipped_data = new byte[number_of_zipped_bytes];
+							in.read(zipped_data, 0, number_of_zipped_bytes);
+							Inflater inflater = new Inflater();
+							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
+							int unzipped_length = inflater.inflate(segment_length_bytes);
+							if(unzipped_length != number_of_segments * 4)
+								System.out.println("Unzipped lengths not expected length.");	
+						}
+						
+						for(int k = 0; k < number_of_segments; k++)
+						{
+							int a = (int)segment_length_bytes[2 * k];
+							if(a < 0)
+								a += 256;
+							int b = (int)segment_length_bytes[2 * k + 1];
+							if(b < 0)
+								b += 256;
+							b   <<= 8;
+							int c = (int)segment_length_bytes[2 * k + 2];
+							if(c < 0)
+								c += 256;
+							c   <<= 16;
+							int d = (int)segment_length_bytes[2 * k + 3];
+							if(d < 0)
+								d += 256;
+							d   <<= 24;
+							
+							segment_length[k] = a | b | c | d;
+							total_length     += segment_length[k];
 						}
 					}
-
+ 
+					// Reading them in separately in case the purpose
+					// is packetization.
 					/*
 					for (int k = 0; k < number_of_segments; k++)
 					{
@@ -219,12 +311,15 @@ public class DeltaReader
 						current_segment[current_length] = segment_info[k];
 						compressed_string_list.add(current_segment);
 					}
-					*/
-
+                    */
+					
 					// Reading in all the segments at once improves i/o efficiency,
 					// but defeats the purpose of packetizing the data.
+					//System.out.println("Total length of segments is " + total_length); 
 					byte []concatenated_segments = new byte[total_length];
+					
 					in.read(concatenated_segments, 0, total_length);
+					
 					int offset = 0; 
 					for(int k = 0; k < number_of_segments; k++) 
 					{ 
@@ -232,14 +327,12 @@ public class DeltaReader
 					    byte [] current_segment = new byte[current_length + 1]; 
 					    int n = 0; 
 					    for(int m = offset; m < offset + current_length; m++) 
-					    { 
-					    	current_segment[n++] = concatenated_segments[m]; 
-					    }
+					    	    current_segment[n++] = concatenated_segments[m]; 
 					    current_segment[current_length] = segment_info[k];
 					    compressed_string_list.add(current_segment); 
 					    offset += current_length; 
 					}
-
+					
 					ArrayList decompressed_string_list = new ArrayList();
 					for (int k = 0; k < compressed_string_list.size(); k++)
 					{
@@ -253,7 +346,7 @@ public class DeltaReader
 							decompressed_string_list.add(decompressed_string);
 						}
 					}
-					
+
 					// Create buffer to put concatenated strings.
 					int string_length = 0;
 					for (int k = 0; k < decompressed_string_list.size(); k++)

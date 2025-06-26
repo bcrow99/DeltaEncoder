@@ -309,28 +309,6 @@ public class DeltaWriter
 				
 		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
 		     	histogram_dialog.add(histogram_panel);
-			      
-		     	JMenuItem histogram_item = new JMenuItem("Show Histogram");
-				ActionListener histogram_handler = new ActionListener()
-				{
-					public void actionPerformed(ActionEvent e)
-					{
-						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
-
-						Dimension canvas_dimension = histogram_canvas.getSize();
-						double    canvas_xdim      = canvas_dimension.getWidth();
-						double    canvas_ydim      = canvas_dimension.getHeight();
-						
-						y += canvas_ydim - 200;
-						histogram_dialog.setLocation(x, y);
-						histogram_dialog.pack();
-						histogram_dialog.setVisible(true);
-					}
-				};
-				histogram_item.addActionListener(histogram_handler);
-				histogram_menu.add(histogram_item);
 		     	
 				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[9];
 
@@ -377,6 +355,28 @@ public class DeltaWriter
 					histogram_menu.add(histogram_button[i]);
 				}
 		     	
+				JMenuItem histogram_item = new JMenuItem("Show Histogram");
+				ActionListener histogram_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						Dimension canvas_dimension = histogram_canvas.getSize();
+						double    canvas_xdim      = canvas_dimension.getWidth();
+						double    canvas_ydim      = canvas_dimension.getHeight();
+						
+						y += canvas_ydim - 200;
+						histogram_dialog.setLocation(x, y);
+						histogram_dialog.pack();
+						histogram_dialog.setVisible(true);
+					}
+				};
+				histogram_item.addActionListener(histogram_handler);
+				histogram_menu.add(histogram_item);
+				
 				JMenu settings_menu = new JMenu("Settings");
 
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
@@ -845,6 +845,11 @@ public class DeltaWriter
 					System.out.println("Number of merged segments for channel " + i + " is " + number_of_segments);
 					System.out.println();
 					
+					
+					
+					
+					
+					/*
 					ArrayList<Integer> ratio_number       = (ArrayList<Integer>) segment_data_list.get(2);
 					ArrayList<Boolean> segment_compressed = (ArrayList<Boolean>) segment_data_list.get(3);
 					ArrayList<Integer> compressions       = (ArrayList<Integer>) segment_data_list.get(4);
@@ -862,12 +867,7 @@ public class DeltaWriter
 						byte [] current_segment        = segments.get(k);
 						int     current_bitlength      = StringMapper.getBitlength(current_segment);
 						
-						/*
-						if(current_bitlength < 96)
-						    System.out.println("Current bitlength is " + current_bitlength);
-						*/
 						
-						/*
 						int     zero_amount            = StringMapper.getCompressionAmount(current_segment, current_bitlength, 0);
 						int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
 						if(zero_amount < 0 || one_amount < 0)
@@ -879,8 +879,9 @@ public class DeltaWriter
 								System.out.println("Reduced by " + one_amount + " with one bitwise transform.");
 							System.out.println();
 						}
-						*/
-					}		
+						
+					}
+					*/		
 				}
 			}
 
@@ -1306,7 +1307,10 @@ public class DeltaWriter
 						out.writeInt(string.length);
 
 						int current_iterations = StringMapper.getIterations(string);
-
+						if (current_iterations > 15)
+							current_iterations -= 16;
+						System.out.println("The unary string compressed " + current_iterations + " time(s).");
+						
 						Deflater deflater = new Deflater();
 						deflater.setInput(string);
 						byte[] zipped_string = new byte[2 * string.length];
@@ -1314,9 +1318,6 @@ public class DeltaWriter
 						int zipped_length = deflater.deflate(zipped_string);
 						deflater.end();
 
-						if (current_iterations > 15)
-							current_iterations -= 16;
-						System.out.println("The unary string compressed " + current_iterations + " time(s).");
 						if (zipped_length < string.length)
 						{
 							System.out.println("Zipped channel " + i);
@@ -1329,6 +1330,7 @@ public class DeltaWriter
 							out.writeInt(0);
 							out.write(string, 0, string.length);
 						}
+						
 						System.out.println("Unary length is " + unary_length);
 						System.out.println("Unary huffman length is " + huffman_bit_length);
 						System.out.println("Unary zipped length is " + (zipped_length * 8));
@@ -1337,21 +1339,125 @@ public class DeltaWriter
 					} 
 					else
 					{
-						
 						int total_length = 0;
-						byte[] segment_info = new byte[number_of_segments];
+						byte[] segment_data = new byte[number_of_segments];
 						for (int k = 0; k < number_of_segments; k++)
 						{
 							byte[] current_segment = (byte[]) segments.get(k);
-							segment_info[k] = current_segment[current_segment.length - 1];
+							segment_data[k]        = current_segment[current_segment.length - 1];
 						}
-						out.write(segment_info, 0, number_of_segments);
+						
+						// Optionally zip segment data.
+						Deflater deflater = new Deflater();
+						deflater.setInput(segment_data);
+						byte[] zipped_data = new byte[2 * segment_data.length];
+						deflater.finish();
+						int zipped_length = deflater.deflate(zipped_data);
+						deflater.end();
 
+						if (zipped_length < segment_data.length)
+						{
+							System.out.println("Zipped channel " + i + " data.");
+							out.writeInt(zipped_length);
+							out.write(zipped_data, 0, zipped_length);
+						} 
+						else
+						{
+							System.out.println("Did not zip channel " + i + " data.");
+							out.writeInt(0);
+							out.write(segment_data, 0, number_of_segments);
+						}
+						
 						out.writeInt(max_bytelength[i]);
+						
+						int length_type = 0;
+						byte [] segment_length = new byte[1];
+						if(max_bytelength[i] > Short.MAX_VALUE * 2 + 1)
+						{
+							System.out.println("Segment length fits in an int.");
+							length_type = 2;
+							segment_length = new byte[4 * number_of_segments];
+					    }
+						else if(max_bytelength[i] > Byte.MAX_VALUE * 2 + 1)
+						{
+							System.out.println("Segment length fits in an unsigned short.");
+							length_type = 1;
+							segment_length = new byte[2 * number_of_segments];
+						}
+						else
+						{
+							System.out.println("Segment length fits in an unsigned byte.");
+							segment_length = new byte[number_of_segments];	
+						}
+						
+						for (int k = 0; k < number_of_segments; k++)
+						{
+							if(length_type == 0)
+							{
+								byte[] current_segment = (byte[]) segments.get(k);
+								segment_length[k] = (byte) (current_segment.length - 1);
+								total_length += current_segment.length - 1;	
+							}
+							else if(length_type == 1)
+							{
+								byte[] current_segment    = (byte[]) segments.get(k);
+								int length                = current_segment.length - 1;
+								short a                   = (short)length;
+							    a                        &= 0x00ff;
+							    short b                   = (short)(length >> 8);
+							    b                        &= 0x00ff;
+							    segment_length[2 * k]     = (byte)a;
+							    segment_length[2 * k + 1] = (byte)b;
+								total_length += length;	
+									
+							}
+							else if(length_type == 2)
+							{
+								byte[] current_segment    = (byte[]) segments.get(k);
+								int length                = current_segment.length - 1;
+								int a                     = length;
+							    a                        &= 0x000000ff;
+							    int b                   = length >> 8;
+							    b                        &= 0x000000ff;
+							    int c                     = length;
+							    c                        &= 0x000000ff;
+							    int d                   = length >> 8;
+							    d                        &= 0x000000ff;
+							    segment_length[2 * k]     = (byte)a;
+							    segment_length[2 * k + 1] = (byte)b;
+							    segment_length[2 * k + 2] = (byte)c;
+							    segment_length[2 * k + 3] = (byte)d;
+								total_length += length;	
+							}
+						}
+						
+						// Optionally zip segment lengths.
+						deflater = new Deflater();
+						deflater.setInput(segment_length);
+						zipped_data = new byte[2 * segment_length.length];
+						deflater.finish();
+						zipped_length = deflater.deflate(zipped_data);
+						deflater.end();
+
+						if (zipped_length < segment_length.length)
+						{
+							System.out.println("Zipped channel " + i + " lengths.");
+							out.writeInt(zipped_length);
+							out.write(zipped_data, 0, zipped_length);
+						} 
+						else
+						{
+							System.out.println("Did not zip channel " + i + " lengths.");
+							out.writeInt(0);
+							out.write(segment_length, 0, segment_length.length);
+						}
+						
+						/*
 						if (max_bytelength[i] <= Byte.MAX_VALUE * 2 + 1)
 						{
-							//System.out.println("Segment length fits in unsigned byte.");
+							System.out.println("Segment length fits in unsigned byte.");
 							byte[] segment_length = new byte[number_of_segments];
+							
 							for (int k = 0; k < number_of_segments; k++)
 							{
 								byte[] current_segment = (byte[]) segments.get(k);
@@ -1361,33 +1467,76 @@ public class DeltaWriter
 								else
 									total_length += segment_length[k] + Byte.MAX_VALUE * 2 + 2;
 							}
+							
+							// Optionally zip segment lengths.
+							deflater = new Deflater();
+							deflater.setInput(segment_length);
+							zipped_data = new byte[2 * number_of_segments];
+							deflater.finish();
+							zipped_length = deflater.deflate(zipped_data);
+							deflater.end();
+
+							if (zipped_length < number_of_segments)
+							{
+								System.out.println("Zipped channel " + i + " data.");
+								out.writeInt(zipped_length);
+								out.write(zipped_data, 0, zipped_length);
+							} 
+							else
+							{
+								System.out.println("Did not zip channel " + i + " data.");
+								out.writeInt(0);
+								out.write(segment_length, 0, number_of_segments);
+							}
+							
 							out.write(segment_length, 0, number_of_segments);
 
 						} 
-						else if (max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
+						else if(max_bytelength[i] <= Short.MAX_VALUE * 2 + 1)
 						{
-							//System.out.println("Segment length fits in unsigned short.");
-							int[] segment_length = new int[number_of_segments];
+							System.out.println("Segment length fits in unsigned short.");
+							byte [] segment_length = new byte[2 * number_of_segments];
+							
 							for (int k = 0; k < number_of_segments; k++)
 							{
-								byte[] current_segment = (byte[]) segments.get(k);
-								segment_length[k] = current_segment.length - 1;
-								total_length += segment_length[k];
-								out.writeShort(segment_length[k]);
+								byte[] current_segment    = (byte[]) segments.get(k);
+								int length                = current_segment.length - 1;
+								short a                   = (short)length;
+							    a                        &= 0x00ff;
+							    short b                   = (short)(length >> 8);
+							    b                        &= 0x00ff;
+							    segment_length[2 * k]     = (byte)a;
+							    segment_length[2 * k + 1] = (byte)b;
+								total_length += length;
 							}
+							out.write(segment_length, 0, 2 * number_of_segments);
 						} 
 						else
 						{
-							//System.out.println("Segment length fits in an int.");
-							int[] segment_length = new int[number_of_segments];
+							System.out.println("Segment length fits in an int.");
+							byte[] segment_length = new byte[4 * number_of_segments];
+							
 							for (int k = 0; k < number_of_segments; k++)
 							{
-								byte[] current_segment = (byte[]) segments.get(k);
-								segment_length[k] = current_segment.length - 1;
-								total_length += segment_length[k];
-								out.writeInt(segment_length[k]);
+								byte[] current_segment    = (byte[]) segments.get(k);
+								int length                = current_segment.length - 1;
+								int a                     = length;
+							    a                        &= 0x000000ff;
+							    int b                   = length >> 8;
+							    b                        &= 0x000000ff;
+							    int c                     = length;
+							    c                        &= 0x000000ff;
+							    int d                   = length >> 8;
+							    d                        &= 0x000000ff;
+							    segment_length[2 * k]     = (byte)a;
+							    segment_length[2 * k + 1] = (byte)b;
+							    segment_length[2 * k + 2] = (byte)c;
+							    segment_length[2 * k + 3] = (byte)d;
+								total_length += length;
 							}
+							out.write(segment_length, 0, 4 * number_of_segments);
 						}
+						*/
 
 						// Writing out all the segments at once improves i/o efficiency,
 						// but defeats the purpose of packetizing the data if that's why
