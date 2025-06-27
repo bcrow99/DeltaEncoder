@@ -299,26 +299,25 @@ public class DeltaReader
 							total_length     += segment_length[k];
 						}
 					}
- 
-					// Reading them in separately in case the purpose
-					// is packetization.
-					/*
-					for (int k = 0; k < number_of_segments; k++)
+					
+					int zipped_length = in.readInt();
+					int cat_length    = in.readInt();
+					byte []concatenated_segments = new byte[cat_length];
+					
+					if(zipped_length == 0)
 					{
-						int current_length = segment_length[k];
-						byte[] current_segment = new byte[current_length + 1];
-						in.read(current_segment, 0, current_length);
-						current_segment[current_length] = segment_info[k];
-						compressed_string_list.add(current_segment);
+					    in.read(concatenated_segments, 0, cat_length);
 					}
-                    */
-					
-					// Reading in all the segments at once improves i/o efficiency,
-					// but defeats the purpose of packetizing the data.
-					//System.out.println("Total length of segments is " + total_length); 
-					byte []concatenated_segments = new byte[total_length];
-					
-					in.read(concatenated_segments, 0, total_length);
+					else
+					{
+						byte[] zipped_data = new byte[zipped_length];
+						in.read(zipped_data, 0, zipped_length);
+						Inflater inflater = new Inflater();
+						inflater.setInput(zipped_data, 0, zipped_length);
+						int unzipped_length = inflater.inflate(concatenated_segments);
+						if(unzipped_length != cat_length)
+							System.out.println("Unzipped segments not expected length.");		
+					}
 					
 					int offset = 0; 
 					for(int k = 0; k < number_of_segments; k++) 

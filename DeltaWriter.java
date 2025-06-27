@@ -1419,12 +1419,9 @@ public class DeltaWriter
 							out.write(segment_length, 0, segment_length.length);
 						}
 
-						// Writing out all the segments at once improves i/o efficiency,
-						// but defeats the purpose of packetizing the data if that's why
-						// the data was segmented.
-						// Another purpose for the segmentation could be to simply
-						// improve the compression rate.
-						byte [] concatenated_segments = new byte[total_length]; int offset = 0;
+						
+						byte [] concatenated_segments = new byte[total_length]; 
+						int offset = 0;
 						for(int k = 0; k < number_of_segments; k++) 
 						{ 
 							byte [] current_segment = (byte[])segments.get(k); 
@@ -1432,7 +1429,32 @@ public class DeltaWriter
 						        concatenated_segments[m + offset] = current_segment[m]; 
 							offset += current_segment.length - 1; 
 						} 
-						out.write(concatenated_segments, 0, total_length);
+						
+						// Optionally zip concatenated segments with padding.
+						deflater = new Deflater();
+						deflater.setInput(concatenated_segments);
+						zipped_data = new byte[2 * concatenated_segments.length];
+						deflater.finish();
+						zipped_length = deflater.deflate(zipped_data);
+						deflater.end();
+						
+						
+						if(zipped_length < total_length)
+						{
+							System.out.println("Zipped concatenated segments.");
+							out.writeInt(zipped_length);
+							out.writeInt(total_length);
+							out.write(zipped_data, 0, zipped_length);
+						}
+						else
+						{
+							out.writeInt(0);
+							out.writeInt(total_length);	
+							out.write(concatenated_segments, 0, total_length);
+							System.out.println("Did not zip concatenated segments.");
+						}
+						
+						
 					}
 				}
 
@@ -1504,6 +1526,7 @@ public class DeltaWriter
 				}
 				else
 				{
+					/*
 					Long start = System.nanoTime();
 					ArrayList result = SegmentMapper.packSegments(segments);
 					Long stop = System.nanoTime();
@@ -1538,6 +1561,73 @@ public class DeltaWriter
 					stop = System.nanoTime();
 					time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to unpack segments with method 2.");
+					*/
+					int  [] segment_bitlength = new int[number_of_segments];
+					byte [] segment_data      = new byte[number_of_segments];
+					int total_length = 0;
+					for(int k = 0; k < number_of_segments; k++) 
+					{ 
+						byte [] segment = (byte[])segments.get(k);
+						total_length   += segment.length - 1;
+						
+					}
+					
+					byte [] concatenated_segments = new byte[total_length]; 
+					int offset = 0;
+					for(int k = 0; k < number_of_segments; k++) 
+					{ 
+						byte [] segment = (byte[])segments.get(k); 
+						for(int m = 0; m < segment.length - 1; m++)
+					        concatenated_segments[m + offset] = segment[m]; 
+						offset += segment.length - 1; 
+					} 
+					
+					string = concatenated_segments;
+					
+					ArrayList packed_list       = SegmentMapper.packSegments2(segments);
+					byte []   packed_segments   = (byte [])packed_list.get(0);
+					ArrayList unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_bitlength, segment_data);
+					
+					/*
+					if(unpacked_segments.size() != segments.size())
+					{
+						System.out.println("Original number of segments was " + segments.size() + ", unpacked number was " + unpacked_segments.size());
+					}
+					else
+					{
+						boolean isEqual = true;
+						int     list_index   = 0;
+					    outer: for(int i = 0; i < segments.size(); i++)	
+					    {
+					    	    byte [] original_segment = (byte [])segments.get(i);
+					    	    byte [] unpacked_segment = (byte [])unpacked_segments.get(i);
+					    	    if(original_segment.length != unpacked_segment.length)
+					    	    {
+					    	    	    isEqual = false;
+					    	    	    index   = i;
+					    	    	    break outer;
+					    	    }
+					    	    else
+					    	    {
+					    	    	    for(int j = 0; j < original_segment.length; j++)
+					    	    	    {
+					    	    	    	    if(original_segment[j] != unpacked_segment[j])
+					    	    	    	    {
+					    	    	    	    	    isEqual = false;
+					    	    	    	    	    index   = i;
+					    	    	    	    	    break outer;
+					    	    	    	    }
+					    	    	    }
+					    	    }
+					    }
+					    if(isEqual)
+					    {
+					    	    System.out.println("The segments from the original list and the unpacked list were the same.");
+					    }
+					    else
+					    	    System.out.println("The lists differed at segment " + index);
+					}
+					*/
 					
 					if(compression == 3)
 					{
@@ -1559,6 +1649,8 @@ public class DeltaWriter
 						else
 							System.out.println("Segmented data did not compress when zipped.");
 					}
+					
+					
 					
 					/*
 					boolean isEqual = true;
