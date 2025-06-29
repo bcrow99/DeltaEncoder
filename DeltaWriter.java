@@ -310,25 +310,29 @@ public class DeltaWriter
 		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
 		     	histogram_dialog.add(histogram_panel);
 		     	
-				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[12];
+				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[18];
 
 				histogram_button[0]  = new JRadioButtonMenuItem("0");
 				histogram_button[1]  = new JRadioButtonMenuItem("0*");
-				histogram_button[2]  = new JRadioButtonMenuItem("0**");
-				histogram_button[3]  = new JRadioButtonMenuItem("0***");
+				histogram_button[2]  = new JRadioButtonMenuItem("0^");
+				histogram_button[3]  = new JRadioButtonMenuItem("0*^");
+				histogram_button[4]  = new JRadioButtonMenuItem("0**");
+				histogram_button[5]  = new JRadioButtonMenuItem("0**^");
 				
-				histogram_button[4]  = new JRadioButtonMenuItem("1");
-				histogram_button[5]  = new JRadioButtonMenuItem("1*");
-				histogram_button[6]  = new JRadioButtonMenuItem("1**");
-				histogram_button[7]  = new JRadioButtonMenuItem("1***");
+				histogram_button[6]  = new JRadioButtonMenuItem("1");
+				histogram_button[7]  = new JRadioButtonMenuItem("1*");
+				histogram_button[8]  = new JRadioButtonMenuItem("1^");
+				histogram_button[9]  = new JRadioButtonMenuItem("1*^");
+				histogram_button[10] = new JRadioButtonMenuItem("1**");
+				histogram_button[11] = new JRadioButtonMenuItem("1**^");
 				
-				histogram_button[8]  = new JRadioButtonMenuItem("2");
-				histogram_button[9]  = new JRadioButtonMenuItem("2*");
-				histogram_button[10] = new JRadioButtonMenuItem("2**");
-				histogram_button[11] = new JRadioButtonMenuItem("2***");
+				histogram_button[12] = new JRadioButtonMenuItem("2");
+				histogram_button[13] = new JRadioButtonMenuItem("2*");
+				histogram_button[14] = new JRadioButtonMenuItem("2^");
+				histogram_button[15] = new JRadioButtonMenuItem("2*^");
+				histogram_button[16] = new JRadioButtonMenuItem("2**");
+				histogram_button[17] = new JRadioButtonMenuItem("2**^");
 				
-				
-
 				histogram_button[histogram_type].setSelected(true);
 
 				class HistogramButtonHandler implements ActionListener
@@ -354,7 +358,7 @@ public class DeltaWriter
 					}
 				}
 
-				for (int i = 0; i < 12; i++)
+				for (int i = 0; i < 18; i++)
 				{
 					histogram_button[i].addActionListener(new HistogramButtonHandler(i));
 					histogram_menu.add(histogram_button[i]);
@@ -838,7 +842,7 @@ public class DeltaWriter
 					int remainder = minimum_segment_length % 8;
 					minimum_segment_length -= remainder;
 					// The minimum that usually produces the maximum compression is around 96.
-					if (minimum_segment_length < 96)
+					if(minimum_segment_length < 96)
 						minimum_segment_length = 96;
       
 					ArrayList segment_data_list = SegmentMapper.getMergedSegmentedData2(compression_string, minimum_segment_length);
@@ -1081,7 +1085,7 @@ public class DeltaWriter
 				int[] red_blue = dequantized_channel_list.get(2);
 				red = DeltaMapper.getSum(blue, red_blue);
 			} 
-			else if (min_set_id == 5)
+			else if(min_set_id == 5)
 			{
 				green = dequantized_channel_list.get(0);
 				red = dequantized_channel_list.get(1);
@@ -1523,8 +1527,8 @@ public class DeltaWriter
 			g2.setColor(java.awt.Color.WHITE);
 			g2.fillRect(0, 0, xdim, ydim);
 			
-			int channel     = histogram_type / 4;
-			int compression = histogram_type % 4;
+			int channel     = histogram_type / 6;
+			int compression = histogram_type % 6;
 			int [] count    = new int[256];
 			byte[] string   = (byte[]) string_list.get(channel);
 			int number_of_segments = 1;
@@ -1534,14 +1538,83 @@ public class DeltaWriter
 				int iterations = StringMapper.getIterations(string);	
 				if(iterations != 0 && iterations != 16)
 					string = StringMapper.decompressStrings(string);	
+				System.out.println("Displaying packed deltas.");
 			}
 			else if(compression == 1)
 			{
 				int iterations = StringMapper.getIterations(string);	
 				if(iterations == 0 || iterations == 16)
+				{
 				    System.out.println("String was not compressed.");
+				    System.out.println("Displaying packed deltas.");
+				}
+				else
+					System.out.println("Displaying packed compressed deltas."); 
 			}
-			else if(compression == 2 || compression == 3)
+			else if(compression == 2)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations != 0 && iterations != 16)
+					string = StringMapper.decompressStrings(string);	
+				// Optionally zip segment data.
+				Deflater deflater = new Deflater();
+				deflater.setInput(string);
+				byte[] zipped_data = new byte[2 * string.length];
+				deflater.finish();
+				int zipped_length = deflater.deflate(zipped_data);
+				deflater.end();
+
+				if (zipped_length < string.length)
+				{
+					byte [] clipped_data = new byte[zipped_length];
+					for(int i = 0; i < zipped_length; i++)
+						clipped_data[i] = zipped_data[i];
+					string = clipped_data;
+					System.out.println("Packed deltas compressed when zipped.");
+					System.out.println("Displaying zipped packed deltas.");
+				} 
+				else
+				{
+					System.out.println("Packed deltas did not compress when zipped.");
+					System.out.println("Displaying zipped packed deltas.");	
+				}	
+			}
+			else if(compression == 3)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				
+				// Optionally zip segment data.
+				Deflater deflater = new Deflater();
+				deflater.setInput(string);
+				byte[] zipped_data = new byte[2 * string.length];
+				deflater.finish();
+				int zipped_length = deflater.deflate(zipped_data);
+				deflater.end();
+
+				if (zipped_length < string.length)
+				{
+					byte [] clipped_data = new byte[zipped_length];
+					for(int i = 0; i < zipped_length; i++)
+						clipped_data[i] = zipped_data[i];
+					string = clipped_data;
+					if(iterations == 0 || iterations == 16)
+					{
+					    System.out.println("Packed deltas compressed when zipped.");
+					    System.out.println("Displaying zipped packed deltas.");
+					}
+					else
+					{
+						System.out.println("Packed compressed deltas compressed when zipped.");
+					    System.out.println("Displaying zipped compressed packed deltas."); 	
+					}
+				} 
+				else
+				{
+					System.out.println("Packed/compressed deltas did not compress when zipped.");
+					System.out.println("Displaying packed/compressed deltas.");	
+				}	
+			}
+			else if(compression == 4 || compression == 5)
 			{
 				ArrayList segments = (ArrayList) segment_list.get(channel);
 				number_of_segments = segments.size();	
@@ -1554,40 +1627,17 @@ public class DeltaWriter
 					// Either the string was never segmented or it merged
 					// back into a single string.
 				    System.out.println("String was not segmented.");	
+				    System.out.println("Displaying packed/compressed deltas.");
 				}
 				else
 				{
-					Long start = System.nanoTime();
 					ArrayList packed_list       = SegmentMapper.packSegments(segments);
-					Long stop = System.nanoTime();
-					Long time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 1.");
-					
-					start = System.nanoTime();
-					packed_list       = SegmentMapper.packSegments2(segments);
-					stop = System.nanoTime();
-					time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 2.");
-					
 					byte []   packed_segments   = (byte [])packed_list.get(0);
 				    string = packed_segments;
-					
-				    int [] segment_length = new int[number_of_segments];
-				    byte [] segment_data  = new byte[number_of_segments];
-				    for(int i = 0; i < number_of_segments; i++)
-					{
-						byte [] segment   = (byte [])segments.get(i);
-						segment_length[i] = segment.length - 1;
-						segment_data[i]   = segment[segment.length - 1];
-					}
-				    
-					start = System.nanoTime();
-					ArrayList <byte []> unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_data);
-					stop = System.nanoTime();
-					time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 2.");
-			
-					if(compression == 3)
+				
+				    if(compression == 4)
+				    	    System.out.println("Displaying packed segments.");   
+				    else if(compression == 5)
 					{
 						Deflater deflater = new Deflater();
 						deflater.setInput(string);
@@ -1602,10 +1652,14 @@ public class DeltaWriter
 							for(int i = 0; i < zipped_length; i++)
 								clipped_data[i] = zipped_data[i];
 							string = clipped_data;
-							System.out.println("Segmented data compressed when zipped.");
+							System.out.println("Packed segments compressed when zipped.");
+							System.out.println("Displaying zipped packed segments.");
 						}
 						else
-							System.out.println("Segmented data did not compress when zipped.");
+						{
+							System.out.println("Packed segment did not compress when zipped.");
+							System.out.println("Displaying unzipped packed segments.");
+						}
 					}
 				}
 			}
