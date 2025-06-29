@@ -225,12 +225,12 @@ public class SegmentMapper
 				    
 				    
 				    // The current segment and the next segment should have
-			    	// similar zero ratios if they have the same number of iterations.
+			    	    // similar zero ratios if they have the same number of iterations.
 				    
 				    //if(current_iterations == next_iterations)
 				    if(current_iterations == next_iterations || (current_iterations == 0 && next_iterations == 16) || (current_iterations == 16 && next_iterations == 0))	
 				    {
-				    	// Get the combined bit length of the two segments to compare
+				    	    // Get the combined bit length of the two segments to compare
 				        // with the merged bit length minus overhead for one segment.
 				        int current_bitlength   = StringMapper.getBitlength(current_segment);
 				        int next_bitlength      = StringMapper.getBitlength(next_segment);
@@ -290,8 +290,8 @@ public class SegmentMapper
 				    	    byte [] merged_segment = new byte[1];
 				    	    if(current_iterations > 15)
 				    	    {
-				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
-				    	    	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
+				    	    	    uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
+				    	    	    merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
 				    	    }
 				    	    else
 				    	        merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);
@@ -299,15 +299,15 @@ public class SegmentMapper
 				    	    //if(merged_bitlength - overhead < combined_bitlength)
 				    	    if(merged_bitlength - overhead < decompressed_combined_bitlength)
 				    	    {
-				    	    	merged_list.add(merged_segment);
-				    	    	input_list.add(uncompressed_merged_segment);
+				    	    	    merged_list.add(merged_segment);
+				    	    	    input_list.add(uncompressed_merged_segment);
 					    	    i++;	
 					    	    
 				    	    }
 				    	    else
 				    	    {
-				    	    	merged_list.add(current_segment); 
-				    	    	input_list.add(current_segment);
+				    	    	    merged_list.add(current_segment); 
+				    	    	    input_list.add(current_segment);
 				    	    }
 				        }
 				    }
@@ -1050,7 +1050,7 @@ public class SegmentMapper
 	*
 	* @return ArrayList unpacked segments a list of bit strings with a data byte.
 	*/
-	public static ArrayList <byte []> unpackSegments(byte []string, int bitlength[], byte data[])
+	public static ArrayList <byte []> unpackSegments(byte []string, int bytelength[], byte data[])
 	{
 		int number_of_segments = data.length;
 		ArrayList <byte []> unpacked_segments = new ArrayList <byte []>();
@@ -1059,95 +1059,106 @@ public class SegmentMapper
 		int bit_offset = 0;
 		for(int i = 0; i < number_of_segments - 1; i++)
 		{
-			int number_of_bytes = bitlength[i] / 8;
-			if(bitlength[i] % 8 != 0)
-				number_of_bytes++;
-			byte [] unpacked_segment = new byte[number_of_bytes + 1];
+			byte extra_bits = (byte)(data[i] >> 5);
+			extra_bits &= 7;
+			int bitlength = bytelength[i] * 8 - extra_bits;
+			byte [] segment = new byte[bytelength[i] + 1];
 			
 			int m = bit_offset % 8;
 			int n = bit_offset / 8;
 			if(m == 0)
 			{
-				for(int j = 0; j < unpacked_segment.length - 1; j++)
-					unpacked_segment[j] = string[n + j];
-				// We only need to do this if we can't assume 
-				// empty bits have been zeroed.
-				/*
-				if(bitlength[i] % 8 != 0)
+				for(int j = 0; j < bytelength[i]; j++)
+					segment[j] = string[n + j];
+				// It can be useful later if extra bits are zeroed.
+				if(bitlength % 8 != 0)
 				{
-					int number_of_bits = bitlength[i] % 8;
-					unpacked_segment[number_of_bytes - 1] &= mask[number_of_bits - 1];
+					int number_of_bits = bitlength % 8;
+					segment[bytelength[i] - 1] &= mask[number_of_bits - 1];
 				}
-				*/
 			}
 			else
 			{
-				for(int j = 0; j < unpacked_segment.length - 1; j++)
+				for(int j = 0; j < bytelength[i]; j++)
 				{
-					unpacked_segment[j]  = (byte)(string[n + j] >> m);
+					segment[j]  = (byte)(string[n + j] >> m);
 					int number_of_bits   = 8 - m;
-					unpacked_segment[j] &= mask[number_of_bits - 1];
+					segment[j] &= mask[number_of_bits - 1];
 					
-					if(j < number_of_bytes - 1)
+					if(j < bytelength[i] - 1)
 					{
 						byte high_bits = (byte)(string[n + j + 1]);
-						unpacked_segment[j] |= high_bits << 8 - m;
+						segment[j] |= high_bits << 8 - m;
 					}
-					else if(j == number_of_bytes - 1)
+					else if(j == bytelength[i] - 1)
 					{
 						byte high_bits = (byte)(string[n + j + 1]); 
-					    unpacked_segment[j] |= high_bits << 8 - m;
-		    	            int number_of_extra_bits = (j + 1) * 8 - bitlength[i];
+					    segment[j] |= high_bits << 8 - m;
+		    	            int number_of_extra_bits = (j + 1) * 8 - bitlength;
 		    	            if(number_of_extra_bits > 0)
-		    	            	    unpacked_segment[j] &= mask[8 - number_of_extra_bits - 1];	     
+		    	            	    segment[j] &= mask[8 - number_of_extra_bits - 1];	     
 					}
 				}
 			}
-			
-			unpacked_segment[number_of_bytes] = data[i];
-			unpacked_segments.add(unpacked_segment);
-			bit_offset += bitlength[i];
+
+			segment[bytelength[i]] = data[i];
+			unpacked_segments.add(segment);
+			bit_offset += bitlength;
 		}
 		 
+		
 		int i = number_of_segments - 1;
-		int number_of_bytes = bitlength[i] / 8;
-		if(bitlength[i] % 8 != 0)
-			number_of_bytes++;
-		byte [] unpacked_segment = new byte[number_of_bytes + 1];
+		byte extra_bits = (byte)(data[i] >> 5);
+		extra_bits &= 7;
+		int bitlength = bytelength[i] * 8 - extra_bits;
+		byte [] segment = new byte[bytelength[i] + 1];
 		
 		int m = bit_offset % 8;
 		int n = bit_offset / 8;
 		if(m == 0)
 		{
-			for(int j = 0; j < unpacked_segment.length - 1; j++)
-				unpacked_segment[j] = string[n + j];	
+			for(int j = 0; j < bytelength[i]; j++)
+				segment[j] = string[n + j];	
 		}
 		else
 		{
-			for(int j = 0; j < unpacked_segment.length - 1; j++)
+			for(int j = 0; j < bytelength[i]; j++)
 			{
-				unpacked_segment[j]  = (byte)(string[n + j] >> m);
+				segment[j]  = (byte)(string[n + j] >> m);
 				int number_of_bits   = 8 - m;
-				unpacked_segment[j] &= mask[number_of_bits - 1];
+				segment[j] &= mask[number_of_bits - 1];
 				
-				if(j < number_of_bytes - 1)
+				if(j < bytelength[i] - 1)
 				{
 					byte high_bits = (byte)(string[n + j + 1]);
-					unpacked_segment[j] |= high_bits << 8 - m;
+					segment[j] |= high_bits << 8 - m;
 				}
-				else if(j == number_of_bytes - 1)
+				else if(j == bytelength[i] - 1)
 				{
 					if(n + j + 1 < string.length)
 					{
 					    byte high_bits = (byte)(string[n + j + 1]); 
-					    unpacked_segment[j] |= high_bits << 8 - m;
-		    	            int number_of_extra_bits = (j + 1) * 8 - bitlength[i];
+					    segment[j] |= high_bits << 8 - m;
+		    	            int number_of_extra_bits = (j + 1) * 8 - bitlength;
 		    	            if(number_of_extra_bits > 0)
-		    	            	    unpacked_segment[j] &= mask[8 - number_of_extra_bits - 1]; 
+		    	            {
+		    	            	    number_of_bits = 8 - number_of_extra_bits;
+		    	            	    segment[j] &= mask[number_of_bits - 1];
+		    	            }
+		    	            
+		    	            
+		    	            
+		    	            
+		    	            
+		    	            /*
+		    	            if(number_of_extra_bits > 0)
+		    	            	    segment[j] &= mask[8 - number_of_extra_bits - 1]; 
+		    	            	*/
 					}
 				}
 			}	
 		}
+		unpacked_segments.add(segment);
 		
 		return unpacked_segments;
 	}
@@ -1157,7 +1168,7 @@ public class SegmentMapper
 	*
 	* @return ArrayList unpacked segments a list of bit strings with a data byte.
 	*/
-	public static ArrayList <byte []> unpackSegments2(byte []string, int bitlength[], byte data[])
+	public static ArrayList <byte []> unpackSegments2(byte []string, int bytelength[], byte data[])
 	{
 		int number_of_segments = data.length;
 		ArrayList <byte []> unpacked_segments = new ArrayList <byte []>();
@@ -1165,16 +1176,16 @@ public class SegmentMapper
 		int k = 0;
 		for(int i = 0; i < number_of_segments; i++)
 		{
-			int number_of_bytes = bitlength[i] / 8;
-			if(bitlength[i] % 8 != 0)
-				number_of_bytes++;
-			byte [] segment = new byte[number_of_bytes + 1];
-			for(int j = 0; j < bitlength[i]; j++)
+			byte extra_bits = (byte)(data[i] >> 5);
+			extra_bits &= 7;
+			int bitlength = bytelength[i] * 8 - extra_bits;
+			byte [] segment = new byte[bytelength[i] + 1];
+			for(int j = 0; j < bitlength; j++)
 			{
 				int value = SegmentMapper.getBit(string, k++);
 				SegmentMapper.setBit(segment, j, value);
 			}
-			segment[number_of_bytes] = data[i];
+			segment[bytelength[i]] = data[i];
 			unpacked_segments.add(segment);
 		}
 		
