@@ -878,51 +878,54 @@ public class DeltaWriter
 					{
 						byte[] decompressed_string = StringMapper.decompressStrings(current_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						if (number_unpacked != new_xdim * new_ydim)
+						if(number_unpacked != new_xdim * new_ydim)
 							System.out.println("Number of values unpacked does not agree with image dimensions.");
 					}
 				} 
 				else
 				{
 					ArrayList<byte[]> decompressed_segments = new ArrayList<byte[]>();
+					
+					// Keep track of byte length so we can create a buffer 
+					// for the reconstructed string.
+					int bytelength = 0;
 					for (int k = 0; k < number_of_segments; k++)
 					{
-						byte[] current_string = (byte[]) segments.get(k);
-						int current_iterations = StringMapper.getIterations(current_string);
-						if (current_iterations == 0 || current_iterations == 16)
-							decompressed_segments.add(current_string);
+						byte[] segment = (byte[]) segments.get(k);
+						int iterations = StringMapper.getIterations(segment);
+						if(iterations == 0 || iterations == 16)
+						{
+							bytelength += segment.length - 1;
+							decompressed_segments.add(segment);
+						}
 						else
 						{
-							byte[] decompressed_string = StringMapper.decompressStrings(current_string);
-							decompressed_segments.add(decompressed_string);
+							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
+							bytelength                 += decompressed_segment.length - 1;
+							decompressed_segments.add(decompressed_segment);
+							
 						}
 					}
-					// Create buffer to put concatenated strings.
-					int string_length = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
-					{
-						byte[] current_string = decompressed_segments.get(k);
-						string_length += current_string.length - 1;
-					}
-
 					// Add byte for string information.
-					string_length++;
-					byte[] reconstructed_string = new byte[string_length];
+					bytelength++;
+					
+					byte[] reconstructed_string = new byte[bytelength];
 
-					// Concatenate strings less trailing byte with individual string information.
+					// Concatenate segments less trailing byte with segment information.
 					int offset = 0;
 					int total_bitlength = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
+					for(int k = 0; k < decompressed_segments.size(); k++)
 					{
 						byte[] segment = decompressed_segments.get(k);
 						for (int m = 0; m < segment.length - 1; m++)
 							reconstructed_string[offset + m] = segment[m];
 						offset += segment.length - 1;
-						int segment_bitlength = StringMapper.getBitlength(segment);
-						total_bitlength += segment_bitlength;
+						int bitlength = StringMapper.getBitlength(segment);
+						total_bitlength += bitlength;
 					}
 
-					if (total_bitlength % 8 != 0)
+					// Set the data byte for the reconstructed string.
+					if(total_bitlength % 8 != 0)
 					{
 						int modulus = total_bitlength % 8;
 						byte extra_bits = (byte) (8 - modulus);
@@ -939,11 +942,11 @@ public class DeltaWriter
 					{
 					    if(original_string[current_index] != reconstructed_string[current_index])
 					    {
-					    	same = false;
-					    	System.out.println("Reconstructed string differs from original string at index " + current_index);
-					    	System.out.println("Original value is " + original_string[current_index]);
-					    	System.out.println("Reconstructed value is " + reconstructed_string[current_index]);
-					    	System.out.println("Previous value is " + original_string[current_index - 1]);
+					        	same = false;
+					    	    System.out.println("Reconstructed string differs from original string at index " + current_index);
+					    	    System.out.println("Original value is " + original_string[current_index]);
+					    	    System.out.println("Reconstructed value is " + reconstructed_string[current_index]);
+					    	    System.out.println("Previous value is " + original_string[current_index - 1]);
 					    }
 					    current_index++;
 					}
@@ -1554,70 +1557,36 @@ public class DeltaWriter
 				}
 				else
 				{
-					/*
 					Long start = System.nanoTime();
-					ArrayList result = SegmentMapper.packSegments(segments);
+					ArrayList packed_list       = SegmentMapper.packSegments(segments);
 					Long stop = System.nanoTime();
 					Long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 1.");
 					
 					start = System.nanoTime();
-					result = SegmentMapper.packSegments2(segments);
+					packed_list       = SegmentMapper.packSegments2(segments);
 					stop = System.nanoTime();
 					time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 2.");
 					
-					// Resetting the string value we originally accessed from the channel list.
-                    string = (byte [])result.get(0);
-					// Getting the bit lengths of the segments.
-					int [] bitlength = (int [])result.get(1);
-					// Getting the data bytes.
-					byte [] data = new byte[number_of_segments];
-					for(int i = 0; i < number_of_segments; i++)
-					{
-						byte [] segment = (byte [])segments.get(i);
-						data[i]         = segment[segment.length - 1];
-					}
-					
-					ArrayList <byte[]> unpacked_segments = SegmentMapper.unpackSegments(string, bitlength, data);
-					stop = System.nanoTime();
-					time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to unpack segments with method 1.");
-					
-					start = System.nanoTime();
-					unpacked_segments = SegmentMapper.unpackSegments2(string, bitlength, data);
-					stop = System.nanoTime();
-					time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to unpack segments with method 2.");
-					*/
-					int  [] segment_bitlength = new int[number_of_segments];
-					byte [] segment_data      = new byte[number_of_segments];
-					int total_length = 0;
-					for(int k = 0; k < number_of_segments; k++) 
-					{ 
-						byte [] segment = (byte[])segments.get(k);
-						total_length   += segment.length - 1;
-						
-					}
-					
-					byte [] concatenated_segments = new byte[total_length]; 
-					int offset = 0;
-					for(int k = 0; k < number_of_segments; k++) 
-					{ 
-						byte [] segment = (byte[])segments.get(k); 
-						for(int m = 0; m < segment.length - 1; m++)
-					        concatenated_segments[m + offset] = segment[m]; 
-						offset += segment.length - 1; 
-					} 
-					
-					string = concatenated_segments;
-					
-					ArrayList packed_list       = SegmentMapper.packSegments2(segments);
 					byte []   packed_segments   = (byte [])packed_list.get(0);
-					//ArrayList unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_bitlength, segment_data);
+				    string = packed_segments;
 					
+				    int [] segment_length = new int[number_of_segments];
+				    byte [] segment_data  = new byte[number_of_segments];
+				    for(int i = 0; i < number_of_segments; i++)
+					{
+						byte [] segment   = (byte [])segments.get(i);
+						segment_length[i] = segment.length - 1;
+						segment_data[i]   = segment[segment.length - 1];
+					}
+				    
+					start = System.nanoTime();
+					ArrayList <byte []> unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_data);
+					stop = System.nanoTime();
+					time = stop - start;
+					System.out.println("It took " + (time / 1000000) + " ms to pack segments with method 2.");
 			
-					
 					if(compression == 3)
 					{
 						Deflater deflater = new Deflater();
@@ -1638,135 +1607,6 @@ public class DeltaWriter
 						else
 							System.out.println("Segmented data did not compress when zipped.");
 					}
-					
-					
-					
-					/*
-					boolean isEqual = true;
-					int     first_segment = 0;
-					int     first_index   = 0;
-					for(int i = 0; i < number_of_segments; i++)
-					{
-						byte [] original_segment = (byte[])segments.get(i);
-						byte [] reconstructed_segment = unpacked_segments.get(i);
-						for(int j = 0; j < reconstructed_segment.length - 1; j++)
-						{
-							if(reconstructed_segment[j] != original_segment[j] && isEqual)
-							{
-								isEqual = false;
-								first_segment = i;
-								first_index   = j;
-							}
-						}
-					}
-					
-					if(isEqual)
-					{
-						System.out.println("Reconstructed segments are the same as original segments.");
-						System.out.println();
-					}
-					else
-					{
-						System.out.println("Reconstructed segments are not the same as original segments.");
-						System.out.println("First segment with different value is " + first_segment + " at index " + first_index);
-						System.out.println();
-						
-						int a = first_segment - 1;
-						if(a < 0)
-							a = 0;
-					    int b = a + 1;
-						
-						byte [] original_segment = (byte [])segments.get(a);
-						byte [] unpacked_segment = unpacked_segments.get(a);
-						
-						int length = StringMapper.getBitlength(original_segment);
-						int iterations = StringMapper.getIterations(original_segment);
-						
-                        byte [] positive_mask = SegmentMapper.getPositiveMask();
-                        
-                        System.out.println("Bitlength of first segment is " + length);
-                        
-                        int number_of_bytes = length / 8;
-                        if(length % 8 != 0)
-                        	    number_of_bytes++;
-                        
-                        System.out.println("Original segment bit values:");
-                        for(int i = 0; i < number_of_bytes; i++)
-                        {
-                        	    byte segment_byte = original_segment[i];
-                        	    for(int j = 0; j < 8; j++)
-        						{
-        							if((segment_byte & positive_mask[j]) != 0)
-        								System.out.print("1 ");
-        							else
-        								System.out.print("0 ");
-        						}
-                        	    System.out.print("  ");
-                        }
-                        
-                        System.out.println();
-                        
-                        System.out.println("Reconstructed segment bit values:");
-                        for(int i = 0; i < number_of_bytes; i++)
-                        {
-                        	    byte segment_byte = unpacked_segment[i];
-                        	    for(int j = 0; j < 8; j++)
-        						{
-        							if((segment_byte & positive_mask[j]) != 0)
-        								System.out.print("1 ");
-        							else
-        								System.out.print("0 ");
-        						}
-                        	    System.out.print("  "); 	    
-                        }
-                        
-                        System.out.println();
-                        
-                        original_segment = (byte [])segments.get(b);
-                        unpacked_segment = unpacked_segments.get(b);
-						
-					    length  = StringMapper.getBitlength(original_segment);
-						iterations = StringMapper.getIterations(original_segment);
-						
-                        System.out.println("Bitlength of second segment is " + length);
-                        
-                        number_of_bytes = length / 8;
-                        if(length % 8 != 0)
-                        	    number_of_bytes++;
-                        
-                        System.out.println("Original segment bit values:");
-                        for(int i = 0; i < number_of_bytes; i++)
-                        {
-                        	    byte segment_byte = original_segment[i];
-                        	    for(int j = 0; j < 8; j++)
-        						{
-        							if((segment_byte & positive_mask[j]) != 0)
-        								System.out.print("1 ");
-        							else
-        								System.out.print("0 ");
-        						}
-                        	    System.out.print("  ");
-                        }
-                        
-                        System.out.println();
-                        
-                        System.out.println("Reconstructed segment bit values:");
-                        for(int i = 0; i < number_of_bytes; i++)
-                        {
-                        	    byte segment_byte = unpacked_segment[i];
-                        	    for(int j = 0; j < 8; j++)
-        						{
-        							if((segment_byte & positive_mask[j]) != 0)
-        								System.out.print("1 ");
-        							else
-        								System.out.print("0 ");
-        						}
-                        	    System.out.print("  "); 	    
-                        }
-                        System.out.println();
-                        
-					}
-					*/
 				}
 			}
 			
