@@ -610,7 +610,7 @@ public class DeltaWriter
 				frame.setJMenuBar(menu_bar);
 
 				frame.pack();
-				frame.setLocation(5, 5);
+				frame.setLocation(5, 200);
 				frame.setVisible(true);
 			}
 		} 
@@ -1324,13 +1324,13 @@ public class DeltaWriter
 
 						if (zipped_length < segment_data.length)
 						{
-							System.out.println("Zipped channel " + i + " data.");
+							//System.out.println("Zipped channel " + i + " data.");
 							out.writeInt(zipped_length);
 							out.write(zipped_data, 0, zipped_length);
 						} 
 						else
 						{
-							System.out.println("Did not zip channel " + i + " data.");
+							//System.out.println("Did not zip channel " + i + " data.");
 							out.writeInt(0);
 							out.write(segment_data, 0, number_of_segments);
 						}
@@ -1408,18 +1408,19 @@ public class DeltaWriter
 
 						if (zipped_length < segment_length.length)
 						{
-							System.out.println("Zipped channel " + i + " lengths.");
+							//System.out.println("Zipped channel " + i + " lengths.");
 							out.writeInt(zipped_length);
 							out.write(zipped_data, 0, zipped_length);
 						} 
 						else
 						{
-							System.out.println("Did not zip channel " + i + " lengths.");
+							//System.out.println("Did not zip channel " + i + " lengths.");
 							out.writeInt(0);
 							out.write(segment_length, 0, segment_length.length);
 						}
 
 						
+						/*
 						byte [] concatenated_segments = new byte[total_length]; 
 						int offset = 0;
 						for(int k = 0; k < number_of_segments; k++) 
@@ -1453,8 +1454,35 @@ public class DeltaWriter
 							out.write(concatenated_segments, 0, total_length);
 							System.out.println("Did not zip concatenated segments.");
 						}
+						*/
 						
 						
+						ArrayList packed_list = SegmentMapper.packSegments(segments);
+						byte [] packed_segments = (byte [])packed_list.get(0);
+						int packed_length = packed_segments.length;
+						
+						// Optionally zip packed segments.
+						deflater = new Deflater();
+						deflater.setInput(packed_segments);
+						zipped_data = new byte[2 * packed_length];
+						deflater.finish();
+						zipped_length = deflater.deflate(zipped_data);
+						deflater.end();
+						
+						if(zipped_length < packed_length)
+						{
+							System.out.println("Zipped packed segments.");
+							out.writeInt(zipped_length);
+							out.writeInt(packed_length);
+							out.write(zipped_data, 0, zipped_length);
+						}
+						else
+						{
+							out.writeInt(0);
+							out.writeInt(packed_length);	
+							out.write(packed_segments, 0, packed_length);
+							System.out.println("Did not zip packed segments.");
+						}
 					}
 				}
 
@@ -1586,48 +1614,9 @@ public class DeltaWriter
 					
 					ArrayList packed_list       = SegmentMapper.packSegments2(segments);
 					byte []   packed_segments   = (byte [])packed_list.get(0);
-					ArrayList unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_bitlength, segment_data);
+					//ArrayList unpacked_segments = SegmentMapper.unpackSegments2(packed_segments, segment_bitlength, segment_data);
 					
-					/*
-					if(unpacked_segments.size() != segments.size())
-					{
-						System.out.println("Original number of segments was " + segments.size() + ", unpacked number was " + unpacked_segments.size());
-					}
-					else
-					{
-						boolean isEqual = true;
-						int     list_index   = 0;
-					    outer: for(int i = 0; i < segments.size(); i++)	
-					    {
-					    	    byte [] original_segment = (byte [])segments.get(i);
-					    	    byte [] unpacked_segment = (byte [])unpacked_segments.get(i);
-					    	    if(original_segment.length != unpacked_segment.length)
-					    	    {
-					    	    	    isEqual = false;
-					    	    	    index   = i;
-					    	    	    break outer;
-					    	    }
-					    	    else
-					    	    {
-					    	    	    for(int j = 0; j < original_segment.length; j++)
-					    	    	    {
-					    	    	    	    if(original_segment[j] != unpacked_segment[j])
-					    	    	    	    {
-					    	    	    	    	    isEqual = false;
-					    	    	    	    	    index   = i;
-					    	    	    	    	    break outer;
-					    	    	    	    }
-					    	    	    }
-					    	    }
-					    }
-					    if(isEqual)
-					    {
-					    	    System.out.println("The segments from the original list and the unpacked list were the same.");
-					    }
-					    else
-					    	    System.out.println("The lists differed at segment " + index);
-					}
-					*/
+			
 					
 					if(compression == 3)
 					{

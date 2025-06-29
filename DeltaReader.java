@@ -160,7 +160,7 @@ public class DeltaReader
 				else
 				{
 					int total_length = 0;
-					ArrayList compressed_string_list = new ArrayList();
+					
 
 					int[] segment_length = new int[number_of_segments];
 					byte[] segment_info = new byte[number_of_segments];
@@ -300,6 +300,9 @@ public class DeltaReader
 						}
 					}
 					
+					
+					/*
+					// Slightly faster and slightly less compression.
 					int zipped_length = in.readInt();
 					int cat_length    = in.readInt();
 					byte []concatenated_segments = new byte[cat_length];
@@ -319,38 +322,39 @@ public class DeltaReader
 							System.out.println("Unzipped segments not expected length.");		
 					}
 					
+					ArrayList <byte []> original_segments = new ArrayList <byte []>();
 					int offset = 0; 
 					for(int k = 0; k < number_of_segments; k++) 
 					{ 
-						int current_length = segment_length[k];
-					    byte [] current_segment = new byte[current_length + 1]; 
+						int byte_length = segment_length[k];
+					    byte [] segment = new byte[byte_length + 1]; 
 					    int n = 0; 
-					    for(int m = offset; m < offset + current_length; m++) 
-					    	    current_segment[n++] = concatenated_segments[m]; 
-					    current_segment[current_length] = segment_info[k];
-					    compressed_string_list.add(current_segment); 
-					    offset += current_length; 
+					    for(int m = offset; m < offset + byte_length; m++) 
+					    	    segment[n++] = concatenated_segments[m]; 
+					    segment[byte_length] = segment_info[k];
+					    original_segments.add(segment); 
+					    offset += byte_length; 
 					}
 					
-					ArrayList decompressed_string_list = new ArrayList();
-					for (int k = 0; k < compressed_string_list.size(); k++)
+					ArrayList <byte []> decompressed_segments = new ArrayList <byte []>();
+					for (int k = 0; k < number_of_segments; k++)
 					{
-						byte[] current_string = (byte[]) compressed_string_list.get(k);
-						int iterations = StringMapper.getIterations(current_string);
+						byte[] segment = original_segments.get(k);
+						int iterations = StringMapper.getIterations(segment);
 						if (iterations == 0 || iterations == 16)
-							decompressed_string_list.add(current_string);
+							decompressed_segments.add(segment);
 						else
 						{
-							byte[] decompressed_string = StringMapper.decompressStrings(current_string);
-							decompressed_string_list.add(decompressed_string);
+							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
+							decompressed_segments.add(decompressed_segment);
 						}
 					}
 
 					// Create buffer to put concatenated strings.
 					int string_length = 0;
-					for (int k = 0; k < decompressed_string_list.size(); k++)
+					for (int k = 0; k < decompressed_segments.size(); k++)
 					{
-						byte[] current_string = (byte[]) decompressed_string_list.get(k);
+						byte[] current_string = decompressed_segments.get(k);
 						string_length += current_string.length - 1;
 					}
 					// Add byte for odd bits.
@@ -358,12 +362,11 @@ public class DeltaReader
 					byte[] string = new byte[string_length];
 
 					// Concatenate strings less trailing byte with individual string information.
-
 					offset = 0;
 					int total_bitlength = 0;
-					for (int k = 0; k < decompressed_string_list.size(); k++)
+					for (int k = 0; k < decompressed_segments.size(); k++)
 					{
-						byte[] segment = (byte[]) decompressed_string_list.get(k);
+						byte[] segment = decompressed_segments.get(k);
 						for (int m = 0; m < segment.length - 1; m++)
 							string[offset + m] = segment[m];
 						offset += segment.length - 1;
@@ -380,12 +383,79 @@ public class DeltaReader
 					}
 					string[string.length - 1] |= channel_iterations[i];
 					string_list.add(string);
+					*/
+					
+					int zipped_length = in.readInt();
+					int packed_length = in.readInt();
+					byte [] packed_segments = new byte[packed_length];
+					if(zipped_length == 0)
+						 in.read(packed_segments, 0, packed_length);	
+					else
+					{
+						byte[] zipped_data = new byte[zipped_length];
+						in.read(zipped_data, 0, zipped_length);
+						Inflater inflater = new Inflater();
+						inflater.setInput(zipped_data, 0, zipped_length);
+						int unzipped_length = inflater.inflate(packed_segments);
+						if(unzipped_length != packed_length)
+							System.out.println("Unzipped segments not expected length.");		
+					}
+					
+					ArrayList <byte []> original_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_info);
+					ArrayList <byte []> decompressed_segments = new ArrayList <byte []>();
+					for (int k = 0; k < number_of_segments; k++)
+					{
+						byte[] segment = original_segments.get(k);
+						int iterations = StringMapper.getIterations(segment);
+						if (iterations == 0 || iterations == 16)
+							decompressed_segments.add(segment);
+						else
+						{
+							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
+							decompressed_segments.add(decompressed_segment);
+						}
+					}
+
+					// Create buffer to put concatenated strings.
+					int string_length = 0;
+					for (int k = 0; k < decompressed_segments.size(); k++)
+					{
+						byte[] current_string = decompressed_segments.get(k);
+						string_length += current_string.length - 1;
+					}
+					// Add byte for odd bits.
+					string_length++;
+					byte[] string = new byte[string_length];
+
+					// Concatenate strings less trailing byte with individual string information.
+					int offset = 0;
+					int total_bitlength = 0;
+					for (int k = 0; k < decompressed_segments.size(); k++)
+					{
+						byte[] segment = decompressed_segments.get(k);
+						for (int m = 0; m < segment.length - 1; m++)
+							string[offset + m] = segment[m];
+						offset += segment.length - 1;
+						int segment_bitlength = StringMapper.getBitlength(segment);
+						total_bitlength += segment_bitlength;
+					}
+
+					if(total_bitlength % 8 != 0)
+					{
+						int modulus = total_bitlength % 8;
+						byte extra_bits = (byte) (8 - modulus);
+						extra_bits <<= 5;
+						string[string.length - 1] = extra_bits;
+					}
+					string[string.length - 1] |= channel_iterations[i];
+					string_list.add(string);
 				}
 			}
 
 			long stop = System.nanoTime();
 			long time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to read file.");
+			
 
 			int cores = Runtime.getRuntime().availableProcessors();
 			System.out.println("There are " + cores + " processors available.");
