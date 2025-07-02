@@ -113,6 +113,15 @@ public class StringMapper
 		return rank;
 	}
 
+	/**
+	 * Creates a table containing the number of 0 bits in any byte value.
+	 * 
+	 *
+	 * @return int [] bit_table with the number of 0 bits for any byte value.
+	 */
+	
+	
+	
 	// This set of functions makes no assumptions about the
 	// the maxiumum length of an individual string.
 
@@ -1040,6 +1049,7 @@ public class StringMapper
 				boolean isAnomalous = false;
 			    if(one_amount < 0)
 			    {
+			    	/*
 			    	System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
@@ -1063,6 +1073,7 @@ public class StringMapper
 				    
 				    System.out.println();
 				    isAnomalous = true;
+				    */
 			    }
 				
 				int byte_length = compressed_length / 8;
@@ -1090,11 +1101,11 @@ public class StringMapper
 					    {
 					    	double current_ratio = getZeroRatio(dst, offset, length);
 					    	offset += increment;
-					        System.out.print(String.format("%.2f", current_ratio) + " ");
+					        //System.out.print(String.format("%.2f", current_ratio) + " ");
 					    }
 					    
-					    System.out.println();	
-					    System.out.println();
+					    //System.out.println();	
+					    //System.out.println();
 					}
 				}
 				return dst;
@@ -1152,6 +1163,7 @@ public class StringMapper
 				boolean isAnomalous = false;
 				if(one_amount < 0)
 			    {
+					/*
 					System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
@@ -1177,6 +1189,7 @@ public class StringMapper
 				    
 				    System.out.println();
 				    isAnomalous = true;
+				    */
 			    }
 				
 				int byte_length = compressed_length / 8;
@@ -1194,6 +1207,7 @@ public class StringMapper
 				extra_bits <<= 5;
 				dst[byte_length] |= extra_bits;
 				
+				/*
 				if(isAnomalous)
 				{
 					int increment = compressed_length / 10;
@@ -1210,8 +1224,7 @@ public class StringMapper
 				    System.out.println();	
 				    System.out.println();
 				}
-				
-				
+				*/
 			
 				return dst;
 			}
@@ -2081,6 +2094,107 @@ public class StringMapper
 				else
 					one_sum++;
 			}
+		}
+
+		int remainder = bit_length % 8;
+		if(remainder != 0)
+		{
+			for(int i = 0; i < remainder; i++)
+			{
+				int j = string[byte_length] & mask << i;
+				if(j == 0)
+					zero_sum++;
+				else
+					one_sum++;
+			}
+		}
+
+		double ratio = zero_sum;
+		ratio /= zero_sum + one_sum;
+		return ratio;
+	}
+	
+	public static int[] getBitTable()
+	{
+		int [] table = new int[256];
+		
+		byte value = 0;
+		byte mask  = 1;
+		int  sum   = 0;
+		for(int i = 0; i < 256; i++)
+		{
+			for(int j = 0; j < 8; j++)
+			{
+			    int k = value & mask << j;
+				if(k == 0)
+					sum++;
+			}
+			table[i] = sum;
+			sum      = 0;
+			value++;
+		}
+		return table;
+	}
+	
+	
+	public static double getZeroRatio(byte[] string, int bit_length, int [] table)
+	{
+		int byte_length = bit_length / 8;
+		int zero_sum = 0;
+		int one_sum = 0;
+		
+
+		int n = byte_length;
+		
+		for(int i = 0; i < n; i++)
+		{
+			int j = (int)string[i];
+			if(j < 0)
+				j += 256;
+			zero_sum += table[j];
+			one_sum  += 8 - table[j];
+		}
+
+		byte mask = 1;
+		int remainder = bit_length % 8;
+		if(remainder != 0)
+		{
+			for(int i = 0; i < remainder; i++)
+			{
+				int j = string[byte_length] & mask << i;
+				if(j == 0)
+					zero_sum++;
+				else
+					one_sum++;
+			}
+		}
+
+		double ratio = zero_sum;
+		ratio       /= zero_sum + one_sum;
+		
+		return ratio;
+	}
+	
+	
+	
+	public static double getZeroRatio2(byte[] string, int bit_length)
+	{
+		int byte_length = bit_length / 8;
+		int zero_sum = 0;
+		int one_sum = 0;
+		byte mask = 1;
+
+		int n = byte_length;
+		
+		int [] bit_table = getBitTable();
+		
+		for(int i = 0; i < n; i++)
+		{
+			int j = (int)string[i];
+			if(j < 0)
+				j += 256;
+			zero_sum += bit_table[j];
+			one_sum  += 8 - bit_table[j];
 		}
 
 		int remainder = bit_length % 8;
