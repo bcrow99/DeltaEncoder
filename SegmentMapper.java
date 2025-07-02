@@ -66,7 +66,7 @@ public class SegmentMapper
 		    	for(int j = 0; j < segment.length - 1; j++)
 					segment[j] = string[i * (segment_bytelength - 1) + j];
 		    	
-		    	double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
+		    	double zero_ratio = StringMapper.getZeroRatio2(segment, segment_bitlength);
 		    	byte iterations = 0;
 				if (zero_ratio < .5)
 					iterations = 16;
@@ -87,7 +87,7 @@ public class SegmentMapper
 				}
 		    	segment[segment.length - 1] = extra_bits;
 		    	
-		    	double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
+		    	double zero_ratio = StringMapper.getZeroRatio2(segment, last_segment_bitlength);
 		    	byte iterations = 0;
 				if (zero_ratio < .5)
 					iterations = 16;
@@ -442,33 +442,34 @@ public class SegmentMapper
 		{
 		    if(i < number_of_segments - 1)
 		    {
-		    	byte [] segment = new byte[segment_bytelength];
-		    	for(int j = 0; j < segment.length - 1; j++)
+		        	byte [] segment = new byte[segment_bytelength];
+		    	    for(int j = 0; j < segment.length - 1; j++)
 					segment[j] = string[i * (segment_bytelength - 1) + j];
 		    	
-		    	double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength);
-		    	byte iterations = 0;
-				if (zero_ratio < .5)
+		    	    
+		    	    double zero_ratio = StringMapper.getZeroRatio2(segment, segment_bitlength);
+		       	byte iterations = 0;
+			    if(zero_ratio < .5)
 					iterations = 16;
 				segment[segment.length - 1] = iterations;
 				segment_list.add(segment);
 		    }	
 		    else 
 		    {
-		    	byte [] segment = new byte[last_segment_bytelength];   
-		    	for(int j = 0; j < segment.length - 1; j++)
+		    	    byte [] segment = new byte[last_segment_bytelength];   
+		    	    for(int j = 0; j < segment.length - 1; j++)
 					segment[j] = string[i * (segment_bytelength - 1) + j];
 		    	
-		    	byte extra_bits = 0;
+		    	    byte extra_bits = 0;
 				if(remainder != 0)
 				{
 					extra_bits = (byte)(8 - remainder);
 				    extra_bits <<= 5;
 				}
-		    	segment[segment.length - 1] = extra_bits;
+		    	    segment[segment.length - 1] = extra_bits;
 		    	
-		    	double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength);
-		    	byte iterations = 0;
+		    	    double zero_ratio = StringMapper.getZeroRatio2(segment, last_segment_bitlength);
+		      	byte iterations = 0;
 				if (zero_ratio < .5)
 					iterations = 16;
 				segment[segment.length - 1] |= iterations;
@@ -491,7 +492,7 @@ public class SegmentMapper
 				if(one_amount < 0)
 				{
 					//System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + one_amount + " with one bitwise transform.");
-					//System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
+					//System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio2(compressed_segment, StringMapper.getBitlength(compressed_segment)));
 				}
 				
 				if(decompressed_segment.length != segment.length)
@@ -508,24 +509,24 @@ public class SegmentMapper
 				{
 				
 					boolean same = true;
-		    	    int current_index = 0;
-		    	    while(same && current_index < segment.length)
-		    	    {
-		    	        if(decompressed_segment[current_index] != segment[current_index])	
+		    	        int current_index = 0;
+		    	        while(same && current_index < segment.length)
 		    	        {
-		    	        	System.out.println("Checking zero string compression");
-		    	        	System.out.println("The original segment is not equal to decompressed segment at index " + current_index);
-		    	            System.out.println("The original value is " + segment[current_index]);
-		    	            System.out.println("The decompressed value is " + decompressed_segment[current_index]);
-		    	            System.out.println();
-		    	        	same = false;   
+		    	            if(decompressed_segment[current_index] != segment[current_index])	
+		    	            {
+		    	        	        System.out.println("Checking zero string compression");
+		    	              	System.out.println("The original segment is not equal to decompressed segment at index " + current_index);
+		    	                System.out.println("The original value is " + segment[current_index]);
+		    	                System.out.println("The decompressed value is " + decompressed_segment[current_index]);
+		    	                System.out.println();
+		    	        	       same = false;   
+		    	            } 
+		    	            current_index++;
 		    	        }
-		    	        current_index++;
-		    	    }
-		    	    if(!same)
-		    	    	compressed_segment_list.add(segment);
-		    	    else
-		    	    	compressed_segment_list.add(compressed_segment);
+		    	        if(!same)
+		    	    	        compressed_segment_list.add(segment);
+		    	        else
+		    	    	        compressed_segment_list.add(compressed_segment);
 				}
 			}
 			else
@@ -535,7 +536,7 @@ public class SegmentMapper
 				if(zero_amount < 0)
 				{
 					System.out.println("Compressed segment " + i + " with type " + StringMapper.getType(compressed_segment) + " could be reduced by " + zero_amount + " with zero bitwise transform.");
-					System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio(compressed_segment, StringMapper.getBitlength(compressed_segment)));
+					System.out.println("The zero ratio of the segment is " + StringMapper.getZeroRatio2(compressed_segment, StringMapper.getBitlength(compressed_segment)));
 				}
 				byte [] decompressed_segment = StringMapper.decompressOneStrings(compressed_segment);
 				if(decompressed_segment.length != segment.length)
@@ -552,24 +553,24 @@ public class SegmentMapper
 				{
 				
 					boolean same = true;
-		    	    int current_index = 0;
-		    	    while(same && current_index < segment.length)
-		    	    {
-		    	        if(decompressed_segment[current_index] != segment[current_index])	
+		    	        int current_index = 0;
+		    	        while(same && current_index < segment.length)
 		    	        {
-		    	        	System.out.println("Checking one string compression.");
-		    	        	System.out.println("The original segment is not equal to decompressed segment at index " + current_index);
-		    	            System.out.println("The original value is " + segment[current_index]);
-		    	            System.out.println("The decompressed value is " + decompressed_segment[current_index]);
-		    	            System.out.println();
-		    	        	same = false;   
+		    	            if(decompressed_segment[current_index] != segment[current_index])	
+		    	            {
+		    	        	        System.out.println("Checking one string compression.");
+		    	        	        System.out.println("The original segment is not equal to decompressed segment at index " + current_index);
+		    	                System.out.println("The original value is " + segment[current_index]);
+		    	                System.out.println("The decompressed value is " + decompressed_segment[current_index]);
+		    	                System.out.println();
+		    	        	        same = false;   
+		    	            }
+		    	            current_index++;
 		    	        }
-		    	        current_index++;
-		    	    }
-		    	    if(!same)
-		    	    	compressed_segment_list.add(segment);
-		    	    else
-		    	    	compressed_segment_list.add(compressed_segment);
+		    	        if(!same)
+		    	         	compressed_segment_list.add(segment);
+		    	        else
+		    	    	        compressed_segment_list.add(compressed_segment);
 				}
 			}
 		}
@@ -622,111 +623,108 @@ public class SegmentMapper
 				        {
 				            int bytelength         = current_segment.length + next_segment.length - 1;
 				            byte [] merged_segment = new byte[bytelength];
-				    	    for(int k = 0; k < current_segment.length - 1; k++)
-				    	    	merged_segment[k] = current_segment[k];
-				    	    int offset = current_segment.length - 1;
-				    	    for(int k = 0; k < next_segment.length - 1; k++)
-				    	    	merged_segment[k + offset] = next_segment[k];
-				    	    int modulus = combined_bitlength % 8;
-				    	    if(modulus != 0)
-				    	    {
-				    	    	byte extra_bits = (byte)(8 - modulus);
-				    	    	extra_bits    <<= 5;
-				    	    	merged_segment[merged_segment.length - 1] = extra_bits;
-				    	    }
+				    	        for(int k = 0; k < current_segment.length - 1; k++)
+				    	    	        merged_segment[k] = current_segment[k];
+				    	        int offset = current_segment.length - 1;
+				    	        for(int k = 0; k < next_segment.length - 1; k++)
+				    	         	merged_segment[k + offset] = next_segment[k];
+				    	        int modulus = combined_bitlength % 8;
+				    	        if(modulus != 0)
+				    	        {
+				    	    	        byte extra_bits = (byte)(8 - modulus);
+				    	    	        extra_bits    <<= 5;
+				    	    	        merged_segment[merged_segment.length - 1] = extra_bits;
+				    	        }
 				    	    
-				    	    double zero_ratio = StringMapper.getZeroRatio(merged_segment, combined_bitlength);
-				    	    if(zero_ratio >= .5)
-				    	    	current_iterations = 0;
-				    	    else
-				    	    	current_iterations = 16;
-				    	    merged_segment[merged_segment.length - 1] |= current_iterations;
+				    	        double zero_ratio = StringMapper.getZeroRatio2(merged_segment, combined_bitlength);
+				    	        if(zero_ratio >= .5)
+				    	         	current_iterations = 0;
+				    	        else
+				    	    	        current_iterations = 16;
+				    	        merged_segment[merged_segment.length - 1] |= current_iterations;
 				    	    
-				    	    int compression_amount = 0;
-				    	    if(current_iterations == 0)
-				    	    	compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 0);
-				    	    else
-				    	    	compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 1);
-				    	    if(compression_amount < 0)
-				    	    {
-				    	    	System.out.println("Uncompressed segment can be compressed by " + compression_amount);
-				    	    	System.out.println();
-				    	    }
-				    	    else if(compression_amount == 0)
-				    	    {
-				    	    	System.out.println("Length of uncompressed segment is not changed by bit transform.");
-				    	    	System.out.println();
-				    	    }
-				    	    merged_list.add(merged_segment);
-				    	    input_list.add(merged_segment);
+				    	        int compression_amount = 0;
+				    	        if(current_iterations == 0)
+				    	         	compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 0);
+				    	        else
+				    	    	        compression_amount = StringMapper.getCompressionAmount(merged_segment, combined_bitlength, 1);
+				    	        if(compression_amount < 0)
+				    	        {
+				    	    	        System.out.println("Uncompressed segment can be compressed by " + compression_amount);
+				    	    	        System.out.println();
+				    	        }
+				    	        else if(compression_amount == 0)
+				    	        {
+				    	    	        System.out.println("Length of uncompressed segment is not changed by bit transform.");
+				    	         	System.out.println();
+				    	        }
+				    	        merged_list.add(merged_segment);
+				    	        input_list.add(merged_segment);
 				    	    
-				    	    i++;
+				    	        i++;
 				        }
 				        else
 				        {
-				        	byte [] decompressed_current_segment = StringMapper.decompressStrings(current_segment);
-				        	byte [] decompressed_next_segment    = StringMapper.decompressStrings(next_segment);
+				        	    byte [] decompressed_current_segment = StringMapper.decompressStrings(current_segment);
+				        	    byte [] decompressed_next_segment    = StringMapper.decompressStrings(next_segment);
 				        	
-				    		int decompressed_current_bitlength   = StringMapper.getBitlength(decompressed_current_segment);
-			    	        int decompressed_next_bitlength      = StringMapper.getBitlength(decompressed_next_segment); 
-				    		int decompressed_combined_bitlength  = decompressed_current_bitlength + decompressed_next_bitlength;
+				    		    int decompressed_current_bitlength   = StringMapper.getBitlength(decompressed_current_segment);
+			    	            int decompressed_next_bitlength      = StringMapper.getBitlength(decompressed_next_segment); 
+				    		    int decompressed_combined_bitlength  = decompressed_current_bitlength + decompressed_next_bitlength;
 				            
-				        int bytelength = decompressed_current_segment.length + decompressed_next_segment.length - 1;
-				        byte [] uncompressed_merged_segment = new byte[bytelength];
+				            int bytelength = decompressed_current_segment.length + decompressed_next_segment.length - 1;
+				            byte [] uncompressed_merged_segment = new byte[bytelength];
 				            
 				            for(int k = 0; k < decompressed_current_segment.length - 1; k++)
-				    	    	uncompressed_merged_segment[k] = decompressed_current_segment[k];
-				    	    int offset = decompressed_current_segment.length - 1;
-				    	    for(int k = 0; k < decompressed_next_segment.length - 1; k++)
-				    	    	uncompressed_merged_segment[k + offset] = decompressed_next_segment[k];
+				    	    	        uncompressed_merged_segment[k] = decompressed_current_segment[k];
+				    	        int offset = decompressed_current_segment.length - 1;
+				    	        for(int k = 0; k < decompressed_next_segment.length - 1; k++)
+				    	    	        uncompressed_merged_segment[k + offset] = decompressed_next_segment[k];
 				    	    
-				    	    int modulus = decompressed_combined_bitlength % 8;
-				    	    if(modulus != 0)
-				    	    {
-				    	    	byte extra_bits = (byte)(8 - modulus);
-				    	    	extra_bits    <<= 5;
-				    	    	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] = extra_bits;
+				    	        int modulus = decompressed_combined_bitlength % 8;
+				    	        if(modulus != 0)
+				    	        {
+				    	         	byte extra_bits = (byte)(8 - modulus);
+				    	         	extra_bits    <<= 5;
+				    	         	uncompressed_merged_segment[uncompressed_merged_segment.length - 1] = extra_bits;
 				    	    	
-				    	    	//System.out.println("Segments "  + i + " and " + (i + 1) + " combined are uneven");
-				    	    	//System.out.println("Current number of segments is " + current_number_of_segments);
-				    	    	//System.out.println();
-				    	    }
-				    	    byte [] merged_segment = new byte[1];
-				    	    if(current_iterations > 15)
-				    	    {
-				    	    	    uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
-				    	        	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
+				    	      	//System.out.println("Segments "  + i + " and " + (i + 1) + " combined are uneven");
+				    	      	//System.out.println("Current number of segments is " + current_number_of_segments);
+				    	     	//System.out.println();
+				    	       }
+				    	       byte [] merged_segment = new byte[1];
+				    	       if(current_iterations > 15)
+				    	       {
+				    	    	        uncompressed_merged_segment[uncompressed_merged_segment.length - 1] |= 16;	
+				    	          	merged_segment = StringMapper.compressOneStrings(uncompressed_merged_segment);
 				    	    	
 								int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
 								if(one_amount < 0)
 								{
 									System.out.print("Merged segment " + i + " could be reduced by " + one_amount);
 								}
-				    	    	
-				    	    }
-				    	    else
-				    	        merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);
-				    	    int merged_bitlength = StringMapper.getBitlength(merged_segment);
-				    	    //if(merged_bitlength - overhead < combined_bitlength)
-				    	    if(merged_bitlength - overhead < decompressed_combined_bitlength)
-				    	    {
-				    	    	merged_list.add(merged_segment);
-				    	    	input_list.add(uncompressed_merged_segment);
-					    	    i++;	
-					    	 
-					    	    
-				    	    }
-				    	    else
-				    	    {
-				    	    	merged_list.add(current_segment); 
-				    	    	input_list.add(current_segment);
-				    	    }
+				    	        }
+				    	        else
+				    	            merged_segment = StringMapper.compressZeroStrings(uncompressed_merged_segment);
+				    	        int merged_bitlength = StringMapper.getBitlength(merged_segment);
+				    	        //if(merged_bitlength - overhead < combined_bitlength)
+				    	        if(merged_bitlength - overhead < decompressed_combined_bitlength)
+				    	        {
+				    	    	        merged_list.add(merged_segment);
+				    	    	        input_list.add(uncompressed_merged_segment);
+					    	        i++;	
+				    	        }
+				    	        else
+				    	        {
+				    	    	        merged_list.add(current_segment); 
+				    	         	input_list.add(current_segment);
+				    	        }
 				        }
 				    }
 				    else
 				    {
-				    	merged_list.add(current_segment);	
-				    	input_list.add(current_segment);
+				    	    merged_list.add(current_segment);	
+				    	    input_list.add(current_segment);
 				    }
 			    }
 				else if(i == current_number_of_segments - 1)
@@ -771,7 +769,7 @@ public class SegmentMapper
 		    list.add(string.length - 1);
 		    
 		    int    bitlength = StringMapper.getBitlength(string);
-		    double ratio     = StringMapper.getZeroRatio(string, bitlength);
+		    double ratio     = StringMapper.getZeroRatio2(string, bitlength);
 		    int    number    = SegmentMapper.getNumber(ratio, bin_size);
 		    segment_number.add(number);
 		    list.add(segment_number);
@@ -779,60 +777,50 @@ public class SegmentMapper
 		    int  current_iterations = StringMapper.getIterations(string);
 		    if(current_iterations == 0 || current_iterations == 16)
 		    {
-		    	segment_is_compressed.add(false);
-		    	compressions.add(0);
+		    	    segment_is_compressed.add(false);
+		     	compressions.add(0);
 		    }
 		    else
 		    {
-		    	segment_is_compressed.add(true);
-		    	if(current_iterations < 16)
-		    		compressions.add(current_iterations);
-		    	else
-		    		compressions.add(current_iterations - 16);
+		    	    segment_is_compressed.add(true);
+		    	    if(current_iterations < 16)
+		    		    compressions.add(current_iterations);
+		    	    else
+		    		    compressions.add(current_iterations - 16);
 		    }
 		    list.add(segment_is_compressed);
 		    
 		}
 		else
 		{
+			int [] bit_table = StringMapper.getBitTable();
 			for(int i = 0; i < size; i++)
 			{
 				byte [] current_segment = (byte [])compressed_segment_list.get(i);
 				
 				int current_bitlength   = StringMapper.getBitlength(current_segment);
-				double ratio            = StringMapper.getZeroRatio(current_segment, current_bitlength);
+				
+				double ratio            = StringMapper.getZeroRatio(current_segment, current_bitlength, bit_table);
+				
 				int    number           = SegmentMapper.getNumber(ratio, bin_size);
 			    segment_number.add(number);
 			    
 			    int  current_iterations = StringMapper.getIterations(current_segment);
 			    if(current_iterations == 0 || current_iterations == 16)
 			    {
-			    	segment_is_compressed.add(false);
-			    	compressions.add(0);
+			    	    segment_is_compressed.add(false);
+			    	    compressions.add(0);
 			    }
 			    else
 			    {
-			    	segment_is_compressed.add(true);
-			    	if(current_iterations < 16)
-			    		compressions.add(current_iterations);
-			    	else
-			    		compressions.add(current_iterations - 16);
+			        	segment_is_compressed.add(true);
+			    	    if(current_iterations < 16)
+			    		    compressions.add(current_iterations);
+			      	else
+			    		    compressions.add(current_iterations - 16);
 			    }
-			    
-			    /*
-			    int     zero_amount            = StringMapper.getCompressionAmount(current_segment, current_bitlength, 0);
-				int     one_amount             = StringMapper.getCompressionAmount(current_segment, current_bitlength, 1);
-				if(zero_amount < 0 || one_amount < 0)
-				{
-					System.out.print("Segment " + i + " with ratio number "	+ number + " and iterations " + current_iterations + " :");
-					if(zero_amount < 0)
-						System.out.println("Reduced by " + zero_amount + " with zero bitwise transform.");
-					if(one_amount < 0)
-						System.out.println("Reduced by " + one_amount + " with one bitwise transform.");
-					System.out.println();
-				}
-				*/
 			}
+			
 			list.add(compressed_segment_list);
 			list.add(max_segment_bytelength);
 			list.add(segment_number);
@@ -1475,13 +1463,14 @@ public class SegmentMapper
 			if(bitlength[i] % 8 != 0)
 				bytelength++;
 			
-			
 			byte [] segment = new byte[bytelength];
-			for(int j = 0; j < bitlength[0]; j++)
+			
+			for(int j = 0; j < bitlength[i]; j++)
 			{
 				int value = SegmentMapper.getBit(string, k++);
 				SegmentMapper.setBit(segment, j, value);
 			}
+			
 			unpacked_segments.add(segment);
 		}
 		
