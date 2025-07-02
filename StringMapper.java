@@ -1043,14 +1043,15 @@ public class StringMapper
 			zero_amount_list.add(zero_amount);
 			one_amount_list.add(one_amount);
 			
+			// This does not appear necessary, but might be useful.
 			//if(zero_amount >= 0 || result[1] == 1)
 			if(zero_amount > 0)
 			{
 				boolean isAnomalous = false;
 			    if(one_amount < 0)
 			    {
-			    	/*
-			    	System.out.println("Anomalous 0 string behavior:");
+			      	/*
+			    	    System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -1163,6 +1164,7 @@ public class StringMapper
 				boolean isAnomalous = false;
 				if(one_amount < 0)
 			    {
+					// Difficult to understand why this happens.
 					/*
 					System.out.println("Anomalous 0 string behavior:");
 				    int size = zero_ratio_list.size();
@@ -1207,6 +1209,9 @@ public class StringMapper
 				extra_bits <<= 5;
 				dst[byte_length] |= extra_bits;
 				
+				// For now we'll ignore this.
+				// It happens fairly rarely, but there might be a way to make it happen more often.
+				// It could be a way to tune the zero ratio.
 				/*
 				if(isAnomalous)
 				{
@@ -1252,7 +1257,7 @@ public class StringMapper
 		int bit_length = (src.length - 1) * 8 - extra_bits;
 
 		// If it's not a zero type string, we'll still process it.
-		// This might actually compress a one type string.
+		// This will compress a one type string.
 		if(iterations > 16)
 		{
 			System.out.println("Not zero type string.");
@@ -1734,7 +1739,8 @@ public class StringMapper
 		
 		if(one_amount > 0)
 		{
-			// We only print a message that the string didn't compress if the inverse transform would produce compression.
+			// This never seems to happen with one or run strings,
+			// which is why there's a print statement, in case it does.
 			if(zero_amount < 0)
 			{
 			   int iterations = getIterations(src);
@@ -1771,12 +1777,15 @@ public class StringMapper
 			zero_amount_list.add(zero_amount);
 			one_amount_list.add(one_amount);
 			
+			// Might be useful to check if the string being compressed is well formed.
+			// Doesn't seem to matter.
 			//if(one_amount >= 0 || result[1] == 1)
 			if(one_amount >= 0)
 			{
+				// See above.
 				if(zero_amount < 0)
 			    {
-			    	System.out.println("Anomalous 1 string behavior:");
+			      	System.out.println("Anomalous 1 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
@@ -1854,15 +1863,16 @@ public class StringMapper
 
 				if(zero_amount < 0)
 			    {
+					// See above.
 					System.out.println("Anomalous 1 string behavior:");
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
-				    	int current_length      = (int)bitlength_list.get(i);
-				    	double current_ratio    = (double)zero_ratio_list.get(i);
-				    	int current_zero_amount = (int)zero_amount_list.get(i);
-				    	int current_one_amount  = (int)one_amount_list.get(i);
-				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    	    int current_length      = (int)bitlength_list.get(i);
+				       	double current_ratio    = (double)zero_ratio_list.get(i);
+				    	    int current_zero_amount = (int)zero_amount_list.get(i);
+				    	    int current_one_amount  = (int)one_amount_list.get(i);
+				    	    System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
 				    }
 				    System.out.println();
 			    }
@@ -1904,13 +1914,13 @@ public class StringMapper
 		int bit_length = (src.length - 1) * 8 - extra_bits;
 
 		// If it's not a one type string, we'll still process it.
-		// This might actually compress a zero type string.
+		// This will compress a zero type string.
 		if(iterations < 16)
 			System.out.println("Not one type string."); 
 		else
 			iterations -= 16;
 
-		// If it was not compressed, we copy src to dst.
+		// If it was not compressable, we copy src to dst.
 		if(iterations == 0)
 		{
 			byte[] dst = new byte[src.length];
@@ -2251,8 +2261,8 @@ public class StringMapper
 			    segment_bit++;
 			    if(segment_bit == 8)
 			    {
-			    	segment_bit = 0;
-			    	segment_byte++;
+			    	    segment_bit = 0;
+			    	    segment_byte++;
 			    }
 			}
 			double ratio = zero_sum;
@@ -2444,26 +2454,6 @@ public class StringMapper
 				System.out.println("Current index is " + current_index);
 				System.out.println("Max index is " + max_index);
 				System.out.println();
-				
-				/*
-			    if(current_index > max_index)
-		        {
-			        current_length = string.length - max_index;
-			        ratio = getZeroRatio(string, current_index, current_length);
-		            current_number = SegmentMapper.getNumber(ratio, bin_size);
-		        }
-		        else 
-		        {
-		    	    current_length = segment_length;
-			        ratio = ratio_list.get(current_index);
-			        current_number = SegmentMapper.getNumber(ratio, bin_size);
-		        }
-		        delta = new int[3];
-			    delta[0] = current_index;
-			    delta[1] = current_length;
-			    delta[2] = current_number;
-			    delta_list.add(delta);
-			    */
 			}
 		}
 		
@@ -2500,7 +2490,7 @@ public class StringMapper
 			current_length += segment_length;
 			
 			System.out.println("Searching forwards.");
-			// Keep looking forward until a dSegmentMapper.isSimilar number is reached.
+			// Keep looking forward until a similar number is reached.
 			while(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 			{
 				next_index    = current_offset + current_length;
@@ -2544,13 +2534,13 @@ public class StringMapper
 				   
 				    if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 				    {
-				    	// The current number is still similar to the next number, so we aggregate the ratio numbers and lengths.
-				    	int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+				    	    // The current number is still similar to the next number, so we aggregate the ratio numbers and lengths.
+				      	int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
 						current_length += segment_length;  
 						current_number = aggregated_number;
 				    }
 				    
-				    // Even if the new current number is now dSegmentMapper.isSimilar, we've reached our base case.
+				    // Even if the new current number is now similar, we've reached our base case.
 				    found_similar_number = true;
 				}
 			}
@@ -2602,7 +2592,7 @@ public class StringMapper
 					current_length += segment_length;
 					
 					System.out.println("Searching forwards.");
-					// Keep looking forward until a dSegmentMapper.isSimilar number is reached.
+					// Keep looking forward until a similar number is reached.
 					while(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 					{
 						next_index    = current_offset + current_length;
@@ -2656,8 +2646,8 @@ public class StringMapper
 						   
 						    if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 						    {
-						    	// The current number is still similar to the next number, so we aggregate the ratio numbers and lengths.
-						    	int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
+						    	    // The current number is still similar to the next number, so we aggregate the ratio numbers and lengths.
+						    	    int aggregated_number = (current_number * current_length + next_number * segment_length) / (current_length + segment_length);
 								current_length += segment_length;  
 								current_number = aggregated_number;
 						    }
