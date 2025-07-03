@@ -17,7 +17,7 @@ public class StringMapper
 	 * that random types can be added.
 	 *
 	 * @param src the input byte array
-	 * @return unparameterized list with histogram and additonal information.
+	 * @return unparameterized list with histogram and additional information.
 	 */
 	public static ArrayList getHistogram(byte src[])
 	{
@@ -53,7 +53,7 @@ public class StringMapper
 	 * that random types can be added.
 	 *
 	 * @param src the input int array
-	 * @return unparameterized list with histogram and additonal information.
+	 * @return unparameterized list with histogram and additional information.
 	 */
 	public static ArrayList getHistogram(int src[])
 	{
@@ -113,11 +113,6 @@ public class StringMapper
 		return rank;
 	}
 
-	/**
-	 * Creates a table containing the number of 0 bits in any byte value.
-	 * 
-	 * @return int [] bit_table with the number of 0 bits for any byte value.
-	 */
 	
 	
 	
@@ -1739,7 +1734,7 @@ public class StringMapper
 		if(one_amount > 0)
 		{
 			// This never seems to happen with one (or run) strings,
-			// which is why there's a print statement, in case it does.
+			// which is why there's a print statement in the rare case it does.
 			if(zero_amount < 0)
 			{
 			   int iterations = getIterations(src);
@@ -1763,13 +1758,6 @@ public class StringMapper
 			int [] result            = compressOneBits(src, bit_length, buffer1);
 			int    compressed_length = result[0];
 			
-			/*
-			if(compressed_length - bit_length != one_amount)
-			{
-				System.out.println("Actual amount " + (compressed_length - bit_length) + " was not equal to predicted amount " + one_amount + " after initial iteration.");
-				System.out.println();
-			}
-			*/
 			
 			zero_ratio  = getZeroRatio(buffer1, compressed_length);
 			zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
@@ -1780,7 +1768,7 @@ public class StringMapper
 			zero_amount_list.add(zero_amount);
 			one_amount_list.add(one_amount);
 			
-			// Might be useful to check if the string being compressed is well formed.
+			// Could check if the string being compressed is well formed.
 			// Doesn't seem to matter.
 			//if(one_amount >= 0 || result[1] == 1)
 			if(one_amount >= 0)
@@ -2146,6 +2134,11 @@ public class StringMapper
 		return ratio;
 	}
 	
+	/**
+	 * Creates a table containing the number of 0 bits in any byte value.
+	 * 
+	 * @return int [] bit_table with the number of 0 bits for any byte value.
+	 */
 	public static int[] getBitTable()
 	{
 		int [] table = new int[256];
@@ -2326,11 +2319,11 @@ public class StringMapper
 		
 		
 		double ratio       = ratio_list.get(current_index);
-		int current_number = SegmentMapper.getNumber(ratio, bin_size);
+		int current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		
 		int next_index    = current_index + current_length;
 		ratio = ratio_list.get(next_index);
-		int next_number = SegmentMapper.getNumber(ratio, bin_size);
+		int next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		
 		if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 		{
@@ -2345,7 +2338,7 @@ public class StringMapper
 				if(next_index <= max_index)
 				{
 					ratio       = ratio_list.get(next_index);
-					next_number = SegmentMapper.getNumber(ratio, bin_size);
+					next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 					
 					// Theoretically the aggregated number will always be in the same
 					// category as the original current number.
@@ -2378,13 +2371,13 @@ public class StringMapper
 		    {
 			    current_length = string.length - max_index;
 			    ratio = getZeroRatio(string, current_index, current_length);
-		        current_number = SegmentMapper.getNumber(ratio, bin_size);
+		        current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		    }
 		    else
 		    {
 		    	current_length = segment_length;
 			    ratio = ratio_list.get(current_index);
-			    current_number = SegmentMapper.getNumber(ratio, bin_size);
+			    current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		    }
 		    delta = new int[3];
 			delta[0] = current_index;
@@ -2401,7 +2394,7 @@ public class StringMapper
 				
 			    next_index = current_index + current_length;   
 			    ratio = ratio_list.get(next_index);
-				next_number = SegmentMapper.getNumber(ratio, bin_size);
+				next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 				
 				if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 				{
@@ -2419,7 +2412,7 @@ public class StringMapper
 						if(next_index <= max_index)
 						{
 							ratio       = ratio_list.get(next_index);
-							next_number = SegmentMapper.getNumber(ratio, bin_size);
+							next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 							// Theoretically the aggregated number will always be in the same
 							// category as the original current number.
 							if(SegmentMapper.isSimilar(aggregated_number, next_number, lower_limit, upper_limit))
@@ -2444,7 +2437,7 @@ public class StringMapper
 					    current_index += current_length;
 					    current_length = segment_length;
 					    ratio = ratio_list.get(current_index);
-					    current_number = SegmentMapper.getNumber(ratio, bin_size);
+					    current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 					    //System.out.println("Current index is " + current_index);
 						//System.out.println("Max index is " + current_index);
 					}
@@ -2465,7 +2458,7 @@ public class StringMapper
 					{
 					    current_length = segment_length;
 					    ratio = ratio_list.get(current_index);
-					    current_number = SegmentMapper.getNumber(ratio, bin_size);	
+					    current_number = SegmentMapper.getBinNumber(ratio, bin_size);	
 					}
 				}
 			}
@@ -2500,11 +2493,11 @@ public class StringMapper
 		int current_length   = segment_length;
 		
 		double ratio       = ratio_list.get(current_index);
-		int current_number = SegmentMapper.getNumber(ratio, bin_size);
+		int current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		
 		int next_index    = current_offset + current_length;
 		ratio = ratio_list.get(next_index);
-		int next_number = SegmentMapper.getNumber(ratio, bin_size);
+		int next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		
 		if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 		{
@@ -2519,7 +2512,7 @@ public class StringMapper
 				if(next_index <= max_index)
 				{
 					ratio       = ratio_list.get(next_index);
-					next_number = SegmentMapper.getNumber(ratio, bin_size);
+					next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 					
 					// Theoretically the aggregated number will always be in the same
 					// category as the original current number.
@@ -2546,13 +2539,13 @@ public class StringMapper
 				System.out.println("Searching backwards for similar number.");
 				i--;
 				ratio = ratio_list.get(i + current_offset);
-				next_number = SegmentMapper.getNumber(ratio, bin_size);
+				next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 				if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 				{
 					// Now check if the current number has changed.
 					current_length       = i;
 				    ratio = getZeroRatio(string, current_offset, current_length);
-				    current_number = SegmentMapper.getNumber(ratio, bin_size);
+				    current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 				   
 				    if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 				    {
@@ -2582,13 +2575,13 @@ public class StringMapper
 		    {
 			    current_length = string.length - max_index;
 			    ratio = getZeroRatio(string, current_offset, current_length);
-		        current_number = SegmentMapper.getNumber(ratio, bin_size);
+		        current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		    }
 		    else
 		    {
 		    	current_length = segment_length;
 			    ratio = ratio_list.get(current_index);
-			    current_number = SegmentMapper.getNumber(ratio, bin_size);
+			    current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		    }
 		    delta = new int[3];
 			delta[0] = current_index;
@@ -2606,7 +2599,7 @@ public class StringMapper
 			    if(next_index == max_index)
 			    	reached_end_of_string = true;
 			    ratio = ratio_list.get(next_index);
-				next_number = SegmentMapper.getNumber(ratio, bin_size);
+				next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 				
 				if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 				{
@@ -2621,7 +2614,7 @@ public class StringMapper
 						if(next_index <= max_index)
 						{
 							ratio       = ratio_list.get(next_index);
-							next_number = SegmentMapper.getNumber(ratio, bin_size);
+							next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 							
 							// Theoretically the aggregated number will always be in the same
 							// category as the original current number.
@@ -2645,7 +2638,7 @@ public class StringMapper
 					current_index += current_length;
 					current_length = segment_length;
 					ratio = ratio_list.get(current_index);
-					current_number = SegmentMapper.getNumber(ratio, bin_size);
+					current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 				}
 				else
 				{
@@ -2658,13 +2651,13 @@ public class StringMapper
 						//System.out.println("Searching backwards for similar number " + i);
 						i--;
 						ratio = ratio_list.get(i + current_offset);
-						next_number = SegmentMapper.getNumber(ratio, bin_size);
+						next_number = SegmentMapper.getBinNumber(ratio, bin_size);
 						if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 						{
 							// Now check if the current number has changed.
 							current_length       = i;
 						    ratio = getZeroRatio(string, current_index, current_length);
-						    current_number = SegmentMapper.getNumber(ratio, bin_size);
+						    current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 						   
 						    if(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 						    {
@@ -2682,7 +2675,7 @@ public class StringMapper
 							current_index += current_length;
 							current_length = segment_length;
 							ratio = ratio_list.get(current_index);
-							current_number = SegmentMapper.getNumber(ratio, bin_size);
+							current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 							
 						    // Even if the new current number is now dSegmentMapper.isSimilar, we've reached our base case.
 						    found_similar_number = true;
@@ -2705,13 +2698,13 @@ public class StringMapper
 		        {
 			        current_length = string.length - max_index;
 			        ratio = getZeroRatio(string, current_offset, current_length);
-		            current_number = SegmentMapper.getNumber(ratio, bin_size);
+		            current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		        }
 		        else 
 		        {
 		    	    current_length = segment_length;
 			        ratio = ratio_list.get(current_index);
-			        current_number = SegmentMapper.getNumber(ratio, bin_size);
+			        current_number = SegmentMapper.getBinNumber(ratio, bin_size);
 		        }
 		        delta = new int[3];
 			    delta[0] = current_index;
