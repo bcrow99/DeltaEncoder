@@ -116,7 +116,6 @@ public class StringMapper
 	/**
 	 * Creates a table containing the number of 0 bits in any byte value.
 	 * 
-	 *
 	 * @return int [] bit_table with the number of 0 bits for any byte value.
 	 */
 	
@@ -1739,7 +1738,7 @@ public class StringMapper
 		
 		if(one_amount > 0)
 		{
-			// This never seems to happen with one or run strings,
+			// This never seems to happen with one (or run) strings,
 			// which is why there's a print statement, in case it does.
 			if(zero_amount < 0)
 			{
@@ -1759,14 +1758,18 @@ public class StringMapper
 			byte[] buffer1 = new byte[src.length];
 			byte[] buffer2 = new byte[src.length];
 			
+			// The result contains the length of the bit string contained in the buffer,
+			// and a number signifying whether the original string was well formed or not.
 			int [] result            = compressOneBits(src, bit_length, buffer1);
 			int    compressed_length = result[0];
 			
+			/*
 			if(compressed_length - bit_length != one_amount)
 			{
 				System.out.println("Actual amount " + (compressed_length - bit_length) + " was not equal to predicted amount " + one_amount + " after initial iteration.");
 				System.out.println();
 			}
+			*/
 			
 			zero_ratio  = getZeroRatio(buffer1, compressed_length);
 			zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
@@ -1789,11 +1792,11 @@ public class StringMapper
 				    int size = zero_ratio_list.size();
 				    for(int i = 0; i < size; i++)
 				    {
-				    	int current_length      = (int)bitlength_list.get(i);
-				    	double current_ratio    = (double)zero_ratio_list.get(i);
-				    	int current_zero_amount = (int)zero_amount_list.get(i);
-				    	int current_one_amount  = (int)one_amount_list.get(i);
-				    	System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
+				    	    int current_length      = (int)bitlength_list.get(i);
+				    	    double current_ratio    = (double)zero_ratio_list.get(i);
+				        	int current_zero_amount = (int)zero_amount_list.get(i);
+				    	    int current_one_amount  = (int)one_amount_list.get(i);
+				    	    System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
 				    }
 				    System.out.println();
 			    }
@@ -2037,21 +2040,40 @@ public class StringMapper
 			return dst;
 		}
 	}
-
-	public static byte[] decompressStrings(byte[] compressed_string)
+	
+	public static byte[] compressStrings(byte[] string)
 	{
-		int type = getType(compressed_string);
+		int type = getType(string);
 		if(type == 0)
 		{
-			byte[] decompressed_string = decompressZeroStrings(compressed_string);
+			byte[] compressed_string = compressZeroStrings(string);
+			return compressed_string;
+		} 
+		else if(type == 1)
+		{
+			byte[] compressed_string = compressOneStrings(string);
+			return compressed_string;
+		} 
+		else
+			return string;
+	}
+
+
+	public static byte[] decompressStrings(byte[] string)
+	{
+		int type = getType(string);
+		if(type == 0)
+		{
+			byte[] decompressed_string = decompressZeroStrings(string);
 			return decompressed_string;
 		} 
 		else if(type == 1)
 		{
-			byte[] decompressed_string = decompressOneStrings(compressed_string);
+			byte[] decompressed_string = decompressOneStrings(string);
 			return decompressed_string;
-		} else
-			return compressed_string;
+		} 
+		else
+			return string;
 	}
 
 	// Functions that get information about a string
