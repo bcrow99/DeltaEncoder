@@ -57,7 +57,7 @@ public class SegmentMapper
 		// Get an initial list of uncompressed segments of equal length, except possibly the last segment.
 		// Set iterations to 16 or 0, depending on the type.  Extra bits will be 0, except possibly
 		// the last segment.
-		ArrayList segments = new ArrayList();
+		ArrayList <byte []> segments = new ArrayList <byte []>();
 		
 		// Look up table for collecting bit data.
 		int [] bit_table = StringMapper.getBitTable();	
@@ -102,10 +102,10 @@ public class SegmentMapper
 		    }
 		}
 		
-		ArrayList compressed_segments = new ArrayList();
+		ArrayList <byte []> compressed_segments = new ArrayList <byte []>();
 		for(int i = 0; i < number_of_segments; i++)
 		{
-			byte [] segment           = (byte [])segments.get(i);
+			byte [] segment           = segments.get(i);
 			byte [] compressed_segment = StringMapper.compressStrings(segment);
 			compressed_segments.add(compressed_segment);
 		}
@@ -132,10 +132,10 @@ public class SegmentMapper
 		    
 			for(int i = 0; i < current_number_of_segments; i++) 
 			{
-				byte [] current_segment = (byte[])compressed_segments.get(i);
+				byte [] current_segment = compressed_segments.get(i);
 				if(i < current_number_of_segments - 1)
 				{
-				    byte [] next_segment   = (byte[])compressed_segments.get(i + 1);
+				    byte [] next_segment   = compressed_segments.get(i + 1);
 				    int current_iterations = StringMapper.getIterations(current_segment);
 				    int next_iterations    = StringMapper.getIterations(next_segment);
 				    
@@ -266,18 +266,26 @@ public class SegmentMapper
 		int last_segment_bitlength   = minimum_bitlength + remainder;
 		int last_segment_bytelength  = last_segment_bitlength / 8;
 		
+		byte last_extra_bits         = 0;
 		if (remainder % 8 != 0)
+		{
 			last_segment_bytelength++;
+			last_extra_bits   = (byte)(8 - remainder);
+		    last_extra_bits <<= 5;
+		}
 		
 		last_segment_bytelength++;
 		
 		int max_segment_bytelength = last_segment_bytelength;
 		
-		ArrayList segments = new ArrayList();
+		ArrayList <byte []>segments = new ArrayList <byte []>();
 		
 		int [] bit_table = StringMapper.getBitTable();	
 		
-		int [] bin_number = new int[number_of_segments];
+		
+		int [] bitlength              = new int[number_of_segments];
+		int [] bin_number             = new int[number_of_segments];
+		double bin                    = .05;
 		
 		for(int i = 0; i < number_of_segments; i++)
 		{
@@ -288,12 +296,20 @@ public class SegmentMapper
 					segment[j] = string[i * (segment_bytelength - 1) + j];
 		    	 
 		    	    double zero_ratio = StringMapper.getZeroRatio(segment, segment_bitlength, bit_table);
-		       	byte iterations = 0;
+		    	    
+		    	    bin_number[i] = getBinNumber(zero_ratio, bin);
+		    	    bitlength[i]  = segment_bitlength;
+		    	    
+		       	
 			    if(zero_ratio < .5)
-					iterations = 16;
-				segment[segment.length - 1] = iterations;
+			    {
+			    	    byte transform_iterations   = 0;
+					transform_iterations        = 16;
+					segment[segment.length - 1] = transform_iterations;
+			    }
+				
 				segments.add(segment);
-				bin_number[i] = getBinNumber(zero_ratio, .05);
+				
 		    }	
 		    else 
 		    {
@@ -301,28 +317,90 @@ public class SegmentMapper
 		    	    for(int j = 0; j < segment.length - 1; j++)
 					segment[j] = string[i * (segment_bytelength - 1) + j];
 		    	
-		    	    byte extra_bits = 0;
-				if(remainder != 0)
-				{
-					extra_bits = (byte)(8 - remainder);
-				    extra_bits <<= 5;
-				}
-		    	    segment[segment.length - 1] = extra_bits;
+		    	    // The only segment that might be uneven.
+		    	    segment[segment.length - 1] = last_extra_bits;
 		    	
 		    	    double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength, bit_table);
-		      	byte iterations = 0;
+		    	    
+		    	    bin_number[i] = getBinNumber(zero_ratio, bin);
+		    	    bitlength[i]  = last_segment_bitlength;
+		      
 				if (zero_ratio < .5)
-					iterations = 16;
-				segment[segment.length - 1] |= iterations;
-				segments.add(segment);
-				bin_number[i] = getBinNumber(zero_ratio, .05);
+				{
+					byte transform_iterations = 16;
+				    segment[segment.length - 1] |= transform_iterations;
+				}
+				
+				segments.add(segment);	
 		    }
 		}
 		
-		ArrayList compressed_segments = new ArrayList();
+		ArrayList merged_segments2 = new ArrayList();
+		
+		int number_of_bins = (int)(1. / bin);
+		int bin_divider    = number_of_bins / 2;
 		for(int i = 0; i < number_of_segments; i++)
 		{
-			byte [] segment           = (byte [])segments.get(i);
+			if(i < number_of_segments - 1)
+			{
+			    int current_bin = bin_number[i];
+			    int j           = 1;
+			    int next_bin    = bin_number[i + j];
+			    if(current_bin == next_bin)
+			    {
+			    	    while(current_bin == next_bin)  
+			    	    {
+			    	    	    j++;
+			    	    	    
+			    	    	    if(i + j < number_of_segments - 1)
+			    	    	        next_bin = bin_number[i + j];
+			    	    	    else
+			    	    	    	    break;
+			    	    }
+			    	   
+			    	    int merged_bytelength  = (segment_bytelength - 1) * j + 1;
+			    	    byte [] merged_segment = new byte[merged_bytelength];
+			    	    int m                 = 0;
+			    	    for(int k = 0; k < j; k++)
+			    	    {
+			    	    	    byte [] segment = segments.get(i + k);   
+			    	    	    for(int n = 0; n < segment.length - 1; n++)
+			    	    	    	    merged_segment[m + n] = segment[n];  
+			    	    	    m += segment.length - 1;
+			    	    }
+			    	    
+			    	    if(i + j == number_of_segments - 1)
+			    	    	    merged_segment[merged_bytelength - 1] = last_extra_bits; 
+			    	    if(current_bin < bin_divider)
+			    	    	    merged_segment[merged_bytelength - 1] |= 16;
+			    	    
+			    	    i += j - 1;
+			    	    merged_segments2.add(merged_segment);
+			    }
+			    else
+			    {
+			    	    byte [] segment = segments.get(i);
+			    	    merged_segments2.add(segment);
+			    }
+			}
+			else
+			{
+				byte [] segment = segments.get(i);
+	    	        merged_segments2.add(segment);   	
+			}
+		}
+		
+		int number_of_merged2_segments = merged_segments2.size();
+		
+		System.out.println("Number of segments produced by bin numbers is " + number_of_merged2_segments);
+		
+				
+		ArrayList compressed_segments = new ArrayList();
+		
+		 
+		for(int i = 0; i < number_of_segments; i++)
+		{
+			byte [] segment            = (byte [])segments.get(i);
 			byte [] compressed_segment = StringMapper.compressStrings(segment);
 			compressed_segments.add(compressed_segment);
 		}
