@@ -332,8 +332,9 @@ public class SegmentMapper
 				segments.add(segment);	
 		    }
 		}
+	
+		int number_of_unmerged_segments = segments.size();
 		
-		System.out.println("Unmerged number of segments is " + segments.size());
 		
 		
 		ArrayList <byte []> merged_segments = new ArrayList <byte []>();
@@ -348,18 +349,18 @@ public class SegmentMapper
 			int j           = 1;
 			int next_bin    = bin_number[i + j];
 			
+			//if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
+			if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
 			//if(current_bin == next_bin)
-			//if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 			{
-			    //while((current_bin == next_bin) && i + j < number_of_segments - 1)
-			    	//while(((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1 )
-				while(((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference)) && i + j < number_of_segments - 1 )
-			    {
+				//while(((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference)) && i + j < number_of_segments - 1 )
+				while(((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1 )
+			    	//while((current_bin == next_bin) && i + j < number_of_segments - 1)
+			    	{
 			    	    next_bin = bin_number[i + j + 1];
-			    	    //if(current_bin == next_bin)
-			    	    //if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			    	    	if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
+			    	    	//if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
+			    	    	if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
+			    	    	//if(current_bin == next_bin)
 			    	    	    j++;
 			    }
 			    
@@ -411,24 +412,68 @@ public class SegmentMapper
 		}
 		
 		int number_of_merged_segments = merged_segments.size();
-		System.out.println("Number of merged segments is " + number_of_merged_segments);
+		
 		
 		ArrayList <byte []> compressed_segments = new ArrayList <byte []>();
-		
-		byte [] initial_segment            = merged_segments.get(0); 
-		byte [] initial_compressed_segment = StringMapper.compressStrings(initial_segment);
-		max_segment_bytelength = initial_compressed_segment.length - 1;
-		compressed_segments.add(initial_compressed_segment);
-		
-		
-		for(i = 1; i < number_of_merged_segments; i++)
+	
+		for(i = 0; i < number_of_merged_segments; i++)
 		{
 			byte [] segment            = merged_segments.get(i);
 			byte [] compressed_segment = StringMapper.compressStrings(segment);
-			if(max_segment_bytelength < compressed_segment.length - 1)
-				max_segment_bytelength = compressed_segment.length - 1;
 			compressed_segments.add(compressed_segment);
 		}
+		
+		byte [] initial_segment = compressed_segments.get(0); 
+		max_segment_bytelength  = initial_segment.length - 1;
+		for(i = 1; i < number_of_merged_segments; i++)
+		{
+			byte [] segment            = merged_segments.get(i);
+			if(max_segment_bytelength < segment.length - 1)
+				max_segment_bytelength = segment.length - 1;
+		}
+		
+		int number_of_compressed_segments = compressed_segments.size();
+		int number_of_uncompressed_segments = 0;
+		int number_of_uncompressed_adjacent_segments = 0;
+		
+		int []    compressed_iterations = new int[number_of_compressed_segments];
+		double [] compressed_ratio      = new double[number_of_compressed_segments];
+		int []   compressed_number      = new int[number_of_compressed_segments];
+		
+		for(i = 0; i < number_of_compressed_segments - 1; i++)
+		{
+			byte [] current_segment  = compressed_segments.get(i);   
+			compressed_iterations[i] = StringMapper.getIterations(current_segment);
+			compressed_ratio[i]      = StringMapper.getZeroRatio(current_segment, (current_segment.length - 1) * 8, bit_table);
+			compressed_number[i]     = getBinNumber(compressed_ratio[i], bin);
+			
+			int current_iterations = StringMapper.getIterations(current_segment);
+			System.out.println("Segment " + i + " has tranform iterations " + current_iterations + ", and bin number " + compressed_number[i]);
+			if(current_iterations == 0 || current_iterations == 16)
+			{
+				//System.out.println("Segment " + i + " was uncompressed.");
+				number_of_uncompressed_segments++;
+			}
+	
+			byte [] next_segment   = compressed_segments.get(i + 1);
+			int next_iterations    = StringMapper.getIterations(next_segment);
+			if((current_iterations == 0 || current_iterations == 16) && (next_iterations == 0 || next_iterations == 16))
+			{
+				//System.out.println("Adjacent segments were uncompressed.");
+			    number_of_uncompressed_adjacent_segments++;
+			}
+			//System.out.println();
+		}
+		byte [] current_segment  = compressed_segments.get(i);   
+		compressed_iterations[i] = StringMapper.getIterations(current_segment);
+		compressed_ratio[i]      = StringMapper.getZeroRatio(current_segment, (current_segment.length - 1) * 8, bit_table);
+		compressed_number[i]     = getBinNumber(compressed_ratio[i], bin);
+		
+		System.out.println();
+		System.out.println("Unmerged number of segments is " + number_of_unmerged_segments);
+		System.out.println("Number of merged segments is " + number_of_merged_segments);
+		System.out.println("Number of uncompressed segments was " + number_of_uncompressed_segments);
+		System.out.println("Number of uncompressed adjacent segments was " + number_of_uncompressed_adjacent_segments);
 		
 		result.add(compressed_segments);
 		result.add(max_segment_bytelength);
@@ -1242,6 +1287,4 @@ public class SegmentMapper
 			string[byte_offset] |= mask;
 		}
 	}
-	
-	
 }
