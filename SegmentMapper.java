@@ -333,11 +333,14 @@ public class SegmentMapper
 		    }
 		}
 		
+		System.out.println("Unmerged number of segments is " + segments.size());
+		
+		
 		ArrayList <byte []> merged_segments = new ArrayList <byte []>();
 		
 		int number_of_bins = (int)(1. / bin);
 		int bin_divider    = number_of_bins / 2;
-		
+		int difference     = bin_divider / 2;
 		int i = 0;
 		for(i = 0; i < number_of_segments - 1; i++)
 		{
@@ -345,12 +348,18 @@ public class SegmentMapper
 			int j           = 1;
 			int next_bin    = bin_number[i + j];
 			
-			if(current_bin == next_bin)
+			//if(current_bin == next_bin)
+			//if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
+			if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 			{
-			    while(current_bin == next_bin && i + j < number_of_segments - 1)	
+			    //while((current_bin == next_bin) && i + j < number_of_segments - 1)
+			    	//while(((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1 )
+				while(((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference)) && i + j < number_of_segments - 1 )
 			    {
 			    	    next_bin = bin_number[i + j + 1];
-			    	    if(current_bin == next_bin)
+			    	    //if(current_bin == next_bin)
+			    	    //if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
+			    	    	if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 			    	    	    j++;
 			    }
 			    
@@ -382,8 +391,10 @@ public class SegmentMapper
 			    }
 			    catch(Exception e)
 			    {
+			    	    System.out.println();
+			      	System.out.println(e.toString());
 			    	    System.out.println("i = " + i + ", j = " + j + ", number of segments = " + number_of_segments);
-			    	    System.out.println(e.toString());
+			    	    System.out.println();
 			    }
 			}
 			else
@@ -397,99 +408,18 @@ public class SegmentMapper
 		{
 			byte [] segment = segments.get(i);
 			merged_segments.add(segment);
-			System.out.println("Added unmerged set to end of list.");
 		}
-		
-		System.out.println("i = " + i);
-		System.out.println();
-		
-		
-		
-		
-		
-		/*
-		for(int i = 0; i < number_of_segments; i++)
-		{
-			if(i < number_of_segments - 1)
-			{
-			    int current_bin = bin_number[i];
-			    int j           = 1;
-			    int next_bin    = bin_number[i + j];
-			    if(current_bin == next_bin)
-			    //if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			    {
-			    	    while(current_bin == next_bin) 
-			    	    //while((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			    	    {
-			    	    	    j++;
-			    	    	    
-			    	    	    if(i + j < number_of_segments - 1)
-			    	    	        next_bin = bin_number[i + j];
-			    	    	    else
-			    	    	    	    break;
-			    	    }
-			    	   
-			    	    if(i + j == number_of_segments)
-			    	    	    j--;
-			    	    //int merged_bytelength  = (segment_bytelength - 1) * j + 1;
-			    	    int merged_bytelength  = (segment_bytelength - 1) * (j - 1) + 1;
-			    	    if(i + j == number_of_segments - 1)
-			    	    	    merged_bytelength += last_segment_bytelength - 1;
-			    	    else
-			    	    	    merged_bytelength += segment_bytelength - 1; 
-			    	    byte [] merged_segment = new byte[merged_bytelength];
-			    	    
-			    	    try
-			    	    {
-			    	    int m                  = 0;
-			    	    for(int k = 0; k < j; k++)
-			    	    {
-			    	    	    byte [] segment = segments.get(i + k);   
-			    	    	    for(int n = 0; n < segment.length - 1; n++)
-			    	    	    	    merged_segment[m + n] = segment[n];  
-			    	    	    m += segment.length - 1;
-			    	    }
-			    	    
-			    	    if(i + j == number_of_segments - 1)
-			    	    	    merged_segment[merged_bytelength - 1] = last_extra_bits; 
-			    	    if(current_bin < bin_divider)
-			    	    	    merged_segment[merged_bytelength - 1] |= 16;
-			    	    
-			    	    i += j - 1;
-			    	    merged_segments.add(merged_segment);
-			    	    }
-			    	    catch(Exception e)
-			    	    {
-			    	    	    System.out.println("Exception merging segments.");
-			    	    	    System.out.println("Index i is " + i);
-			    	    	    System.out.println("Index j is " + j);
-			    	    	    System.out.println("Number of segments is " + number_of_segments);
-			    	    }
-			    }
-			    else
-			    {
-			    	    byte [] segment = segments.get(i);
-			    	    merged_segments.add(segment);
-			    }
-			}
-			else
-			{
-				byte [] segment = segments.get(i);
-	    	        merged_segments.add(segment);   	
-			}
-		}
-		*/
 		
 		int number_of_merged_segments = merged_segments.size();
+		System.out.println("Number of merged segments is " + number_of_merged_segments);
 		
-		System.out.println("Number of segments produced by bin numbers is " + number_of_merged_segments);
-				
 		ArrayList <byte []> compressed_segments = new ArrayList <byte []>();
 		
 		byte [] initial_segment            = merged_segments.get(0); 
 		byte [] initial_compressed_segment = StringMapper.compressStrings(initial_segment);
 		max_segment_bytelength = initial_compressed_segment.length - 1;
 		compressed_segments.add(initial_compressed_segment);
+		
 		
 		for(i = 1; i < number_of_merged_segments; i++)
 		{
