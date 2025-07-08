@@ -242,6 +242,21 @@ public class SegmentMapper
 		    }  
 		}
 		
+		// When we divide up the original string, we don't account for transform
+		// iteration of the entire string if all the segments merge into one
+		// so we need to copy the last byte of the string to the single
+		// merged segment.
+		if(compressed_segments.size() == 1)
+		{
+			byte [] segment = compressed_segments.get(0);
+			if(segment.length != string.length)
+				System.out.println("Single segment not same length as original string.");
+			else
+			{
+			   
+			    segment[segment.length - 1] = string[string.length - 1];
+			}
+		}
 		result.add(compressed_segments);
 		result.add(max_segment_bytelength);
 		return result;
@@ -474,6 +489,19 @@ public class SegmentMapper
 		System.out.println("Number of merged segments is " + number_of_merged_segments);
 		System.out.println("Number of uncompressed segments was " + number_of_uncompressed_segments);
 		System.out.println("Number of uncompressed adjacent segments was " + number_of_uncompressed_adjacent_segments);
+		
+		// When we divide up the original string, we don't account for transform
+		// iteration of the entire string if all the segments merge into one
+		// so we need to copy the last byte of the string to the single
+		// merged segment.
+		if(compressed_segments.size() == 1)
+		{
+			byte [] segment = compressed_segments.get(0);
+			if(segment.length != string.length)
+				System.out.println("Single segment not same length as original string.");
+			else
+			    segment[segment.length - 1] = string[string.length - 1];
+		}
 		
 		result.add(compressed_segments);
 		result.add(max_segment_bytelength);
