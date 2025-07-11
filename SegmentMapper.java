@@ -659,17 +659,19 @@ public class SegmentMapper
 		    				
 		    				int max_index = 0;
 		    				
-		    				
-		    				for(int j = 1; j <= current_decompressed_segment.length - 1; j++)
+		    				// We don't want to check if we can add the whole segment because it's too time consuming.
+		    				// We don't want to set an arbitrary limit in case we're working with short segments.
+		    				int limit = 5;
+		    				if(limit > current_decompressed_segment.length - 1)
+		    					limit = current_decompressed_segment.length - 1;
+		    				for(int j = 1; j < limit; j++)
 		    				{
 		    				    byte [] merged_segment = new byte[next_decompressed_segment.length + j];
 		    				    int m = current_decompressed_segment.length - 1 - j;
 		    				    int k = 0;
 		    				    
 		    				    for(k = 0; k < j; k++)
-		    				    {
 		    				      	merged_segment[k] = current_decompressed_segment[k + m];
-		    				    }
 		    				    m++;
 		    				    
 		    				    
@@ -693,17 +695,49 @@ public class SegmentMapper
 		    				    
 		    				    byte [] compressed_merged_segment = StringMapper.compressStrings(merged_segment);
 		    				    if(compressed_merged_segment.length < merged_segment.length)
-		    				    	    max_index = j;    	
+		    				    	    max_index = j; 
 		    				}
-		    				
-		    				System.out.println("The maximum number of bytes that could be taken from the current segment and added to the next one and still have it compress is " + max_index);
+		    				System.out.println("i = 0");
+		    				System.out.println("The maximum number of bytes is " + max_index);
+		    				System.out.println();
 		    	    	    }
-		    	    	    /*
 		    	    	    else if(i == number_of_combined_segments - 1)
 		    	    	    {
 		    	    	    	    byte [] previous_segment = combined_segments.get(i - 1);  
-			    			byte [] current_segment  = compressed_segments.get(i);
+			    			byte [] current_segment  = combined_segments.get(i);
+			    			
+			    			byte [] previous_decompressed_segment = StringMapper.decompressStrings(previous_segment);
+			    			byte [] current_decompressed_segment  = StringMapper.decompressStrings(current_segment);
+		    				
+			    			int max_index = 0;
+			    			
+			    			int limit = 5;
+		    				if(limit > current_decompressed_segment.length - 1)
+		    					limit = current_decompressed_segment.length - 1;
+		    				for(int j = 1; j < limit; j++)
+		    				{
+		    					byte [] merged_segment = new byte[previous_decompressed_segment.length + j];	
+		    					for(int k = 0; k < previous_decompressed_segment.length - 1; k++)
+	    				    	        merged_segment[k] = previous_decompressed_segment[k];
+		    					int m = previous_decompressed_segment.length - 1;
+		    					for(int k = 0; k < j; k++)
+    				    	            merged_segment[k + m] = current_decompressed_segment[k];
+		    					int merged_bitlength = (merged_segment.length - 1) * 8;
+		    					
+		    					double zero_ratio = StringMapper.getZeroRatio(merged_segment, merged_bitlength, bit_table);
+		    				    if(zero_ratio < .5)
+		    				    	     merged_segment[merged_segment.length - 1] |= 16; 
+		    				    
+		    				    byte [] compressed_merged_segment = StringMapper.compressStrings(merged_segment);
+		    				    if(compressed_merged_segment.length < merged_segment.length)
+		    				    	    max_index = j; 
+		    				}
+		    				System.out.println("i = " + (number_of_combined_segments - 1));
+		    				System.out.println("The maximum number of bytes is " + max_index);
+		    				System.out.println();
 		    	    	    }
+		    	    	    
+		    	    	    /*
 		    	    	    else
 		    	    	    {
 		    	    	    	    byte [] previous_segment = combined_segments.get(i - 1);  
