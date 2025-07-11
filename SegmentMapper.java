@@ -666,35 +666,36 @@ public class SegmentMapper
 		    					limit = current_decompressed_segment.length - 1;
 		    				for(int j = 1; j < limit; j++)
 		    				{
-		    				    byte [] merged_segment = new byte[next_decompressed_segment.length + j];
+		    				    byte [] swapped_segment = new byte[next_decompressed_segment.length + j];
+		    				    
+		    				    // Start by adding end bytes from current segment.
 		    				    int m = current_decompressed_segment.length - 1 - j;
 		    				    int k = 0;
-		    				    
 		    				    for(k = 0; k < j; k++)
-		    				      	merged_segment[k] = current_decompressed_segment[k + m];
+		    				      	swapped_segment[k] = current_decompressed_segment[k + m];
 		    				    m++;
 		    				    
-		    				    
+		    				    // Then add entire length of next segment.
 		    				    for(k = 0; k < next_decompressed_segment.length - 1; k++)
-		    				    	    merged_segment[k + j] = next_decompressed_segment[k];
+		    				    	    swapped_segment[k + j] = next_decompressed_segment[k];
 		    				    
-		    				   
-		    				    int merged_bitlength = (merged_segment.length - 1) * 8;
+		    				    int swapped_bitlength = (swapped_segment.length - 1) * 8;
 		    				    
+		    				    // If there are only two segments.
 		    				    if(i + 1 == number_of_combined_segments - 1)
 		    				    {
-		    				    	    merged_segment[merged_segment.length - 1] = last_extra_bits;
+		    				    	    swapped_segment[swapped_segment.length - 1] = last_extra_bits;
 		    				    	    int n                = last_extra_bits >> 5;
 		    						n                   &= 7;
-		    						merged_bitlength    -= n;
+		    						swapped_bitlength    -= n;
 		    				    }
 		    				    
-		    				    double zero_ratio = StringMapper.getZeroRatio(merged_segment, merged_bitlength, bit_table);
+		    				    double zero_ratio = StringMapper.getZeroRatio(swapped_segment, swapped_bitlength, bit_table);
 		    				    if(zero_ratio < .5)
-		    				    	     merged_segment[merged_segment.length - 1] |= 16; 
+		    				    	    swapped_segment[swapped_segment.length - 1] |= 16; 
 		    				    
-		    				    byte [] compressed_merged_segment = StringMapper.compressStrings(merged_segment);
-		    				    if(compressed_merged_segment.length < merged_segment.length)
+		    				    byte [] compressed_swapped_segment = StringMapper.compressStrings(swapped_segment);
+		    				    if(compressed_swapped_segment.length < swapped_segment.length)
 		    				    	    max_index = j; 
 		    				}
 		    				System.out.println("i = 0");
@@ -716,22 +717,27 @@ public class SegmentMapper
 		    					limit = current_decompressed_segment.length - 1;
 		    				for(int j = 1; j < limit; j++)
 		    				{
-		    					byte [] merged_segment = new byte[previous_decompressed_segment.length + j];	
+		    					byte [] swapped_segment = new byte[previous_decompressed_segment.length + j];	
+		    					
+		    					// Add the entire length of the previous segment.
 		    					for(int k = 0; k < previous_decompressed_segment.length - 1; k++)
-	    				    	        merged_segment[k] = previous_decompressed_segment[k];
+	    				    	        swapped_segment[k] = previous_decompressed_segment[k];
+		    					// Then add starting bytes from current segment.
 		    					int m = previous_decompressed_segment.length - 1;
 		    					for(int k = 0; k < j; k++)
-    				    	            merged_segment[k + m] = current_decompressed_segment[k];
-		    					int merged_bitlength = (merged_segment.length - 1) * 8;
+    				    	            swapped_segment[k + m] = current_decompressed_segment[k];
+		    					int swapped_bitlength = (swapped_segment.length - 1) * 8;
 		    					
-		    					double zero_ratio = StringMapper.getZeroRatio(merged_segment, merged_bitlength, bit_table);
+		    					double zero_ratio = StringMapper.getZeroRatio(swapped_segment, swapped_bitlength, bit_table);
 		    				    if(zero_ratio < .5)
-		    				    	     merged_segment[merged_segment.length - 1] |= 16; 
+		    				    	     swapped_segment[swapped_segment.length - 1] |= 16; 
 		    				    
-		    				    byte [] compressed_merged_segment = StringMapper.compressStrings(merged_segment);
-		    				    if(compressed_merged_segment.length < merged_segment.length)
+		    				    byte [] compressed_swapped_segment = StringMapper.compressStrings(swapped_segment);
+		    				    if(compressed_swapped_segment.length < swapped_segment.length)
 		    				    	    max_index = j; 
 		    				}
+		    				// The swapped segment will always precede the current segment, so we don't need to account for last extra bits.
+		    				
 		    				System.out.println("i = " + (number_of_combined_segments - 1));
 		    				System.out.println("The maximum number of bytes is " + max_index);
 		    				System.out.println();
@@ -795,7 +801,6 @@ public class SegmentMapper
 	/**
 	* Segments a byte string and then merges the segments back together,
 	* depending on how it affects the rate of compression.
-	* We don't parameterize the list because we want to add random types.
 	*
 	* @param src the input byte string
 	* @param minimum_bitlength original segment length
