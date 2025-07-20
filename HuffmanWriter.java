@@ -595,7 +595,7 @@ public class HuffmanWriter
 			    int [] frequency = new int[n];
 			    for(int k = 0; k < n; k++)
 			    	frequency[k] = (int)frequency_list.get(k);
-			    byte [] huffman_length   = CodeMapper.getHuffmanLength(frequency);
+			    byte [] huffman_length   = CodeMapper.getHuffmanLength2(frequency);
 			    int [] huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
 			    int [] rank_table       = StringMapper.getRankTable(histogram);
 			    
@@ -646,14 +646,14 @@ public class HuffmanWriter
 		        int number_unpacked  =  CodeMapper.unpackCode(packed_delta, table, code, code_length, channel_length[j], delta);
 		        for(int k = 1; k < delta.length; k++)
 		        {
-		        	delta[k] += channel_delta_min[j];
+		          	delta[k] += channel_delta_min[j];
 		        }
 		        
 		        int [] channel = new int[0];
 		    
 		        if(delta_type == 0)
 		        {
-		    	    channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim , new_ydim, channel_init[j]);
+		    	        channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim , new_ydim, channel_init[j]);
 		        }
 		        else if(delta_type == 1)
 		        {
@@ -669,11 +669,11 @@ public class HuffmanWriter
 		        }
 		        else if(delta_type == 4)
 		        {
-		    	    channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
+		    	        channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim , new_ydim, channel_init[j]);   	
 		        }
 		        else if(delta_type == 5)
 		        {
-		    	    byte [] map = (byte[])map_list.get(i);
+		    	        byte [] map = (byte[])map_list.get(i);
 		    	    
 		    	
 		    	    ArrayList map_histogram_list = StringMapper.getHistogram(map);
