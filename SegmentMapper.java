@@ -1049,7 +1049,7 @@ public class SegmentMapper
 					isCompressed[i] = true;	
 			}
 
-			ArrayList<byte[]> swapped_segments = new ArrayList<byte[]>();
+			ArrayList<byte[]> spliced_segments = new ArrayList<byte[]>();
 
 			for(i = 0; i < number_of_combined_segments; i++)
 			{
@@ -1058,20 +1058,22 @@ public class SegmentMapper
 				// Ignore special cases for now.
 				if(i == 0 || i == number_of_combined_segments - 1 || i == number_of_combined_segments - 2)
                 {
-					swapped_segments.add(current_segment);   
+					spliced_segments.add(current_segment);   
                 }
 				else
 				{
 					if(isCompressed[i])
-					    swapped_segments.add(current_segment);	
+					    spliced_segments.add(current_segment);	
 					else
 					{
 						// The current segment is uncompressed.
 						// For now we just add the current segment.
-						swapped_segments.add(current_segment);	
+						spliced_segments.add(current_segment);	
+						
+						int current_bitlength = StringMapper.getBitlength(current_segment);
 					    
-						// Collect some information about what happens when we just try 
-						// swapping end bytes.
+						// Collect some information about what happens when we try 
+						// splicing bits from end bytes.
 						
 						// This shouldn't happen because we combined adjacent uncompressed segments.
 						if(!isCompressed[i - 1])
@@ -1081,7 +1083,7 @@ public class SegmentMapper
 						
 						// We get the previous segment from the swapped list instead of the combined list
 						// because it could have been modified as a following segment.
-						byte[] previous_segment     = swapped_segments.get(i - 1);
+						byte[] previous_segment     = spliced_segments.get(i - 1);
 						byte[] decompressed_segment = StringMapper.decompressStrings(previous_segment);
 						
 						int previous_bitlength = StringMapper.getBitlength(previous_segment);
@@ -1093,6 +1095,31 @@ public class SegmentMapper
 						augmented_segment[decompressed_segment.length - 1] = current_segment[0];
 						
 						System.out.println("Original bit length was " + previous_bitlength);
+						
+						for(int j = 0; j < 8; j ++)
+						{
+							int spliced_bits = (j + 1) % 8;
+							int odd_bits     = 0;
+							if(spliced_bits == 0)
+								spliced_bits = 8;
+							else
+							    odd_bits = 8 - spliced_bits;	 	
+						    odd_bits    <<= 5;
+							
+							augmented_segment[decompressed_segment.length]  = (byte)odd_bits;
+							augmented_segment[decompressed_segment.length] |= previous_segment[previous_segment.length - 1];
+							
+							byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
+							int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
+							
+							System.out.println("Bit length after adding " + spliced_bits + " bits is " + compressed_bitlength);
+						}
+						//System.out.println("Bit reduction after splicing " + (index + 1) + " bits is " + max_reduction);
+						System.out.println();
+						
+						/*
+						int min_bitlength = previous_bitlength;
+						int min_index     = -1;
 						for(int j = 0; j < 8; j ++)
 						{
 							int odd_bits          = (j + 1) % 8;	
@@ -1111,9 +1138,28 @@ public class SegmentMapper
 							byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
 							int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 							
+							
+							
+							if(compressed_bitlength < min_bitlength)
+							{
+								min_index = j;
+								min_bitlength = compressed_bitlength;
+								
+							}
+							
 							System.out.println("Bit length after adding " + (j + 1) + " bits is " + compressed_bitlength);
 						}
+					
+						int number_of_bits = min_index + 1;
+						System.out.println("Number of bits spliced is " + number_of_bits);
 						System.out.println();
+						*/
+						
+						
+						
+						
+						
+						
 						
 						
 						/*
@@ -1190,7 +1236,7 @@ public class SegmentMapper
 			}
 			
 			
-			result.add(swapped_segments);
+			result.add(spliced_segments);
 			result.add(max_segment_bytelength);
 			result.add(min_segment_bytelength);
 			return result;
