@@ -1127,7 +1127,7 @@ public class SegmentMapper
 						}
 						
 						System.out.println("Max bit reduction is " + max_reduction + " after splicing " + max_bits);
-						System.out.println();
+						
 						
 						// Get the following segment from the combined list.
 						byte[] next_segment  = combined_segments.get(i + 1);
@@ -1141,7 +1141,7 @@ public class SegmentMapper
 							augmented_segment[j + 1] = decompressed_segment[j];
 						
 						
-						if(max_bits == 0)
+						if(max_bits == 0 || max_reduction == 0)
 						{
 							// Simple case:  the current uncompressed segment did not swap any of
 							// its bits out to the previous segment.  We just copy the last byte
@@ -1150,6 +1150,8 @@ public class SegmentMapper
 						    
 						    // We can then shift the whole segment right 0->8 to see what
 						    // compresses the most.
+						    
+						    System.out.println();
 						}
 						else
 						{
@@ -1159,18 +1161,42 @@ public class SegmentMapper
 							byte [] clipped_segment = new byte[current_segment.length - 1];
 							for(int j = 0; j < clipped_segment.length; j++)
 								clipped_segment[j] = current_segment[j];
-							byte [] shifted_segment = shiftRight(clipped_segment, max_bits);
+							
+							
+							byte [] right_shifted_segment = shiftRight(clipped_segment, max_bits);
+							byte [] left_shifted_segment  = shiftLeft(right_shifted_segment, max_bits);
+							
+							System.out.println("Clipped segment length is "       + clipped_segment.length);
+							System.out.println("Right shifted segment length is " + right_shifted_segment.length);
+							System.out.println("Left shifted segment length is "  + left_shifted_segment.length);
+							
+							int number_of_bytes = max_bits / 8;
+							if(max_bits % 8 != 0)
+								number_of_bytes++;
+							
+							for(int j = 0; j < number_of_bytes; j++)
+							    left_shifted_segment[j] |= clipped_segment[j];
+							
+							boolean isSame = true;
+							for(int j = 0; j < clipped_segment.length; j++)
+								if(clipped_segment[j] != left_shifted_segment[j])
+									isSame = false;
+							if(isSame)
+								System.out.println("Shifted segment is the same as original segment.");
+							else
+								System.out.println("Shifted segment is not the same as original segment.");
+							System.out.println();
 							
 							// Changing the contents of the current uncompressed segment.
 							// Might do this again if we swap bits out to the next compressed segment.
 							// For now the byte length remains the same.
-							/*
-							for(int j = 0; j < shifted_segment.length; j++)
-							    current_segment[j] = shifted_segment[j];	
-							int odd_bits = 8 - max_bits;
-							odd_bits   <<= 5;
-							current_segment[current_segment.length - 1] |= odd_bits;
-							*/
+							
+							// for(int j = 0; j < shifted_segment.length; j++)
+							//    current_segment[j] = shifted_segment[j];	
+							// int odd_bits = 8 - max_bits;
+							// odd_bits   <<= 5;
+							// current_segment[current_segment.length - 1] |= odd_bits;
+							
 							
 							// We have to shift the augmented segment left and then logically or
 							// the initial byte with the right shifted last byte of the current
@@ -2292,7 +2318,7 @@ public class SegmentMapper
 		return result;
 	}
 
-	
+	/*
 	public static byte[] shiftRight(byte[] src, int bit_length)
 	{
 		int offset = bit_length / 8;
@@ -2325,12 +2351,103 @@ public class SegmentMapper
 
 		return dst;
 	}
+    */
+	
+	public static byte[] shiftRight(byte[] src, int bit_length)
+	{
+		int byte_length = bit_length / 8;
+		byte[] dst = new byte[src.length - byte_length];
 
+		int j = 0;
+		for(int i = byte_length; i < src.length; i++)
+			dst[j++] = src[i];
+
+		int shift = bit_length % 8;
+		if(shift != 0)
+		{
+			int reverse_shift = 8 - shift;
+			
+			for(int i = 0; i < dst.length - 1; i++)
+			{
+				dst[i] >>>= shift;
+				byte extra_bits = (byte) (dst[i + 1] << reverse_shift);
+				dst[i] |= extra_bits;
+			}
+
+			int i = dst.length - 1;
+			dst[i] >>>= shift;
+		}
+
+		return dst;
+	}
+	
+	
+	public static ArrayList shiftRight2(byte[] src, int bitlength)
+	{
+		ArrayList result = new ArrayList();
+		
+		int original_bitlength  = 8 * src.length;
+		int remainder_bitlength = original_bitlength - bitlength;
+		int fragment_bitlength  = original_bitlength - remainder_bitlength;
+		
+		int remainder_bytelength = remainder_bitlength / 8;
+		if(remainder_bitlength % 8 != 0)
+			remainder_bytelength++;
+		
+		int fragment_bytelength = fragment_bitlength / 8;
+		if(fragment_bitlength % 8 != 0)
+			fragment_bytelength++;
+
+		byte[] remainder = new byte[remainder_bytelength];
+
+		int j = 0;
+		for(int i = bitlength / 8; i < src.length; i++)
+			remainder[j++] = src[i];
+
+		int shift = bitlength % 8;
+		if(shift != 0)
+		{
+			int reverse_shift = 8 - shift;
+			
+			for(int i = 0; i < remainder.length - 1; i++)
+			{
+				remainder[i] >>>= shift;
+				byte extra_bits = (byte) (remainder[i + 1] << reverse_shift);
+				remainder[i] |= extra_bits;
+			}
+
+			int i = remainder.length - 1;
+			remainder[i] >>>= shift;
+		}
+
+		result.add(remainder);
+		result.add(remainder_bitlength);
+		
+		byte[] fragment = new byte[fragment_bytelength];
+		for(int i = 0; i < fragment.length; i++)
+			fragment[i] = src[i];
+		if(fragment_bitlength % 8 != 0)
+		{
+			byte mask = getTrailingMask(fragment_bitlength % 8);
+			fragment[fragment.length - 1] &= mask;
+		}
+		
+		return result;	
+	}
+	
+	
 	public static byte[] shiftLeft(byte[] src, int bit_length)
 	{
 		int byte_length = bit_length / 8;
-		if(byte_length % 8 != 0)
-			byte_length++;
+		
+		// Assume the most significant bits are empty bits
+		// produced by a previous right shift so we don't
+		// need to account for them.
+		
+		
+		// if(bit_length % 8 != 0)
+		// 	byte_length++;
+		
 		
 		byte[] dst = new byte[src.length + byte_length];
 	
@@ -2358,7 +2475,50 @@ public class SegmentMapper
 
 		return dst;
 	}
+	
+	/*
+	public static byte[] shiftLeft(byte[] src, int bit_length)
+	{
+		int byte_length = bit_length / 8;
+		
+		// Assume the most significant bits are empty bits
+		// produced by a previous right shift so we don't
+		// need to account for them.
+		
+		
+		// if(bit_length % 8 != 0)
+		// 	byte_length++;
+		
+		
+		byte[] dst = new byte[src.length + byte_length];
+	
+		int bit_shift = bit_length % 8;
+		if(bit_shift != 0)
+		{
+		    byte mask = getTrailingMask(bit_shift); 
+		    for(int i = 0; i < src.length - 1; i++)
+		    {
+		    	    byte current_bits        = (byte)(src[i] << bit_shift);
+		    	    byte next_bits           = (byte)(mask & src[i]);
+		    	    next_bits              >>= 8 - bit_shift;
+		    	    dst[i + byte_length]    |= current_bits;
+		    	    dst[i + 1 + byte_length] = next_bits;
+		    }
+		    byte next_bits = (byte)(mask & src[src.length - 1]);
+		    next_bits    >>= 8 - bit_shift;
+		    dst[dst.length - 1] = next_bits;
+		}
+		else
+		{
+			for(int i = 0; i < src.length; i++)
+				dst[i + byte_length] = src[i];
+		}
 
+		return dst;
+	}
+    */
+	
+	
 	
 	public static int getBinNumber(double ratio, double bin)
 	{
