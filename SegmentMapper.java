@@ -1168,9 +1168,12 @@ public class SegmentMapper
 							byte []   right_shifted_fragment = (byte [])right_shifted_list.get(2);
 							int       fragment_bit_length    = (int)right_shifted_list.get(1);
 							byte []   left_shifted_segment   = shiftLeft(right_shifted_segment, max_bits);
+							for(int j = 0; j < right_shifted_fragment.length; j++)
+						        left_shifted_segment[j] |= right_shifted_fragment[j];
 							
+							
+							/*
 							byte [] positive_mask = getPositiveMask();
-							//System.out.println("Clipped segment length is "       + clipped_segment.length);
 							System.out.println("Clipped segment:");
 							for(int j = clipped_segment.length - 1; j >= 0; j--)
 							{
@@ -1185,92 +1188,6 @@ public class SegmentMapper
 								System.out.print(" ");
 							}
 							System.out.println();
-							
-							byte leading_mask = -1;
-							if(max_bits != 0 && max_bits != 8)
-							    leading_mask = getLeadingMask(8 - max_bits);
-							for(int j = 0; j < clipped_segment.length - 1; j++)
-							{
-							    	byte next_bits     = (byte)(leading_mask & clipped_segment[j]);
-							    	clipped_segment[j] = next_bits;
-								//clipped_segment[j] = -1;
-								//clipped_segment[j] <<= 4;
-							    //clipped_segment[j] &= trailing_mask;
-								//clipped_segment[j] &= leading_mask;
-								//clipped_segment[j] >>>= 4;
-								//clipped_segment[j] <<= 4;
-							}
-							clipped_segment[clipped_segment.length - 1] = 0;
-							System.out.println("Clipped segment after left shift:");
-							for(int j = clipped_segment.length - 1; j >= 0; j--)
-							{
-								byte current_byte = clipped_segment[j];
-								for(int k = 7; k >= 0; k--)
-								{
-									if((current_byte & positive_mask[k]) == 0)
-									    System.out.print("0 ");
-									else
-										System.out.print("1 ");
-								}
-								System.out.print(" ");
-							}
-							System.out.println();
-							System.out.println();
-							
-							
-							
-							
-							
-							/*
-							System.out.println("Right shifted segment:");
-							for(int j = right_shifted_segment.length - 1; j >= 0; j--)
-							{
-								byte current_byte = right_shifted_segment[j];
-								for(int k = 7; k >= 0; k--)
-								{
-									if((current_byte & positive_mask[k]) == 0)
-									    System.out.print("0 ");
-									else
-										System.out.print("1 ");
-								}
-								System.out.print(" ");
-							}
-							System.out.println();
-							
-							System.out.println("Right shifted fragment:");
-							for(int j = right_shifted_fragment.length - 1; j >= 0; j--)
-							{
-								byte current_byte = right_shifted_fragment[j];
-								for(int k = 7; k >= 0; k--)
-								{
-									if((current_byte & positive_mask[k]) == 0)
-									    System.out.print("0 ");
-									else
-										System.out.print("1 ");
-								}
-								System.out.print(" ");
-							}
-							System.out.println();
-							
-							System.out.println("Left shifted segment:");
-							for(int j = left_shifted_segment.length - 1; j >= 0; j--)
-							{
-								byte current_byte = left_shifted_segment[j];
-								for(int k = 7; k >= 0; k--)
-								{
-									if((current_byte & positive_mask[k]) == 0)
-									    System.out.print("0 ");
-									else
-										System.out.print("1 ");
-								}
-								System.out.print(" ");
-							}
-							System.out.println();
-							
-							//System.out.println("Right shifted segment length is " + right_shifted_segment.length);
-							//System.out.println("Left shifted segment length is "  + left_shifted_segment.length);
-							for(int j = 0; j < right_shifted_fragment.length; j++)
-						        left_shifted_segment[j] |= right_shifted_fragment[j];
 							
 							System.out.println("Left shifted segment after or operation with fragment:");
 							for(int j = left_shifted_segment.length - 1; j >= 0; j--)
@@ -1289,14 +1206,6 @@ public class SegmentMapper
 							System.out.println();
 							*/
 							
-							/*
-							int number_of_bytes = max_bits / 8;
-							if(max_bits % 8 != 0)
-								number_of_bytes++;
-							
-							for(int j = 0; j < number_of_bytes; j++)
-							    left_shifted_segment[j] |= clipped_segment[j];
-							*/
 							
 							/*
 							boolean isSame = true;
@@ -2542,60 +2451,40 @@ public class SegmentMapper
 		int byte_length = bit_length / 8;
 		
 		// We don't do this because we assume the odd 
-		// most significant bits
-		// were emptied by a previous right shift.
+		// most significant bits were emptied by a previous right shift.
 		// Otherwise we would allocate another byte
-		// to contain the most significant bits.
+		// to contain the most significant bits shifted out.
 		//
 		// if(bit_length % 8 != 0)
 		//  	   byte_length++;
-		
 		
 		byte[] dst = new byte[src.length + byte_length];
 	
 		int bit_shift = bit_length % 8;
 		if(bit_shift != 0)
 		{
-			
+			int reverse_shift = 8 - bit_shift;
 			if(src.length == 1)
 				 dst[0] = (byte)(src[0] << bit_shift);	
 			else
 			{
-				byte mask = getLeadingMask(bit_shift);
+				byte mask = getTrailingMask(bit_shift);
 				for(int i = 0; i < src.length - 1; i++)
 			    {
 			    	    byte current_bits        = (byte)(src[i] << bit_shift);
-			    	    byte next_bits           = (byte)(mask & src[i]);
-			    	    next_bits              >>= 8 - bit_shift;
+			    	    byte next_bits           = (byte)(src[i] >> reverse_shift);
+			    	    next_bits               &= mask;
 			    	    dst[i + byte_length]    |= current_bits;
 			    	    dst[i + 1 + byte_length] = next_bits;
 			    }
-				/*
-			    byte next_bits = (byte)(mask & src[src.length - 1]);
-			    next_bits    >>= 8 - bit_shift;
-			    dst[dst.length - 1] = next_bits;	
-			    */
+				
+				// Not worrying about most significant bits from final src byte,
+				// as stated above.
+				int i = src.length - 1;
+				int j = dst.length - 1;
+				byte current_bits = (byte)(src[i] << bit_shift);
+				dst[j] |= current_bits;
 			}
-			
-			
-			
-			
-			/*
-		     
-		    for(int i = 0; i < src.length - 1; i++)
-		    {
-		    	    byte current_bits        = (byte)(src[i] << bit_shift);
-		    	    byte next_bits           = (byte)(mask & src[i]);
-		    	    next_bits              >>= 8 - bit_shift;
-		    	    dst[i + byte_length]    |= current_bits;
-		    	    dst[i + 1 + byte_length] = next_bits;
-		    }
-		    byte next_bits = (byte)(mask & src[src.length - 1]);
-		    next_bits    >>= 8 - bit_shift;
-		    dst[dst.length - 1] = next_bits;
-		    */
-			
-			
 		}
 		else
 		{
