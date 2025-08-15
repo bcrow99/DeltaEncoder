@@ -300,91 +300,6 @@ public class DeltaReader
 						}
 					}
 					
-					
-					/*
-					// Slightly faster and slightly less compression.
-					int zipped_length = in.readInt();
-					int cat_length    = in.readInt();
-					byte []concatenated_segments = new byte[cat_length];
-					
-					if(zipped_length == 0)
-					{
-					    in.read(concatenated_segments, 0, cat_length);
-					}
-					else
-					{
-						byte[] zipped_data = new byte[zipped_length];
-						in.read(zipped_data, 0, zipped_length);
-						Inflater inflater = new Inflater();
-						inflater.setInput(zipped_data, 0, zipped_length);
-						int unzipped_length = inflater.inflate(concatenated_segments);
-						if(unzipped_length != cat_length)
-							System.out.println("Unzipped segments not expected length.");		
-					}
-					
-					ArrayList <byte []> original_segments = new ArrayList <byte []>();
-					int offset = 0; 
-					for(int k = 0; k < number_of_segments; k++) 
-					{ 
-						int byte_length = segment_length[k];
-					    byte [] segment = new byte[byte_length + 1]; 
-					    int n = 0; 
-					    for(int m = offset; m < offset + byte_length; m++) 
-					    	    segment[n++] = concatenated_segments[m]; 
-					    segment[byte_length] = segment_info[k];
-					    original_segments.add(segment); 
-					    offset += byte_length; 
-					}
-					
-					ArrayList <byte []> decompressed_segments = new ArrayList <byte []>();
-					for (int k = 0; k < number_of_segments; k++)
-					{
-						byte[] segment = original_segments.get(k);
-						int iterations = StringMapper.getIterations(segment);
-						if (iterations == 0 || iterations == 16)
-							decompressed_segments.add(segment);
-						else
-						{
-							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
-							decompressed_segments.add(decompressed_segment);
-						}
-					}
-
-					// Create buffer to put concatenated strings.
-					int string_length = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
-					{
-						byte[] current_string = decompressed_segments.get(k);
-						string_length += current_string.length - 1;
-					}
-					// Add byte for odd bits.
-					string_length++;
-					byte[] string = new byte[string_length];
-
-					// Concatenate strings less trailing byte with individual string information.
-					offset = 0;
-					int total_bitlength = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
-					{
-						byte[] segment = decompressed_segments.get(k);
-						for (int m = 0; m < segment.length - 1; m++)
-							string[offset + m] = segment[m];
-						offset += segment.length - 1;
-						int segment_bitlength = StringMapper.getBitlength(segment);
-						total_bitlength += segment_bitlength;
-					}
-
-					if (total_bitlength % 8 != 0)
-					{
-						int modulus = total_bitlength % 8;
-						byte extra_bits = (byte) (8 - modulus);
-						extra_bits <<= 5;
-						string[string.length - 1] = extra_bits;
-					}
-					string[string.length - 1] |= channel_iterations[i];
-					string_list.add(string);
-					*/
-					
 					int zipped_length = in.readInt();
 					int packed_length = in.readInt();
 					byte [] packed_segments = new byte[packed_length];
@@ -416,30 +331,66 @@ public class DeltaReader
 						}
 					}
 
-					// Create buffer to put concatenated strings.
-					int string_length = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
-					{
-						byte[] current_string = decompressed_segments.get(k);
-						string_length += current_string.length - 1;
-					}
-					// Add byte for odd bits.
-					string_length++;
-					byte[] string = new byte[string_length];
-
-					// Concatenate strings less trailing byte with individual string information.
-					int offset = 0;
 					int total_bitlength = 0;
-					for (int k = 0; k < decompressed_segments.size(); k++)
+					for (int k = 0; k < number_of_segments; k++)
 					{
-						byte[] segment = decompressed_segments.get(k);
-						for (int m = 0; m < segment.length - 1; m++)
-							string[offset + m] = segment[m];
-						offset += segment.length - 1;
-						int segment_bitlength = StringMapper.getBitlength(segment);
-						total_bitlength += segment_bitlength;
+						byte[] segment = (byte[]) decompressed_segments.get(k);
+						int iterations = StringMapper.getIterations(segment);
+						if(iterations == 0 || iterations == 16)
+						{
+							int current_bitlength = StringMapper.getBitlength(segment);
+							total_bitlength += current_bitlength;
+						}
+						else
+						{
+							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
+							decompressed_segments.add(decompressed_segment);
+							int current_bitlength = StringMapper.getBitlength(decompressed_segment);
+							total_bitlength += current_bitlength;
+						}
 					}
-
+					
+					int bytelength = total_bitlength / 8;
+					if(total_bitlength % 8 != 0)
+						bytelength++;
+					
+					// Add byte for string information.
+					bytelength++;
+					byte[] string = new byte[bytelength];
+					
+					// Concatenate segments less trailing byte with segment information.
+				    // Not assuming even segment lengths.
+                    int bit_offset  = 0;
+                    int byte_offset = 0;
+                    for(int k = 0; k < decompressed_segments.size(); k++)
+					{
+                    	    byte[] segment = decompressed_segments.get(k); 
+                    	    int bitlength  = StringMapper.getBitlength(segment);
+                    	    int bit_shift = bit_offset % 8;
+                    	    if(bit_shift == 0)
+                    	    {
+                    	    	    for(int m = 0; m < segment.length - 1; m++)
+        						    string[byte_offset + m] = segment[m];   
+                    	    }
+                    	    else
+                    	    {
+                    	      	byte [] clipped_segment = new byte[segment.length - 1];
+							for(int m = 0; m < clipped_segment.length; m++)
+								clipped_segment[m] = segment[m];
+								
+							byte [] shifted_segment = SegmentMapper.shiftLeft(clipped_segment, bit_shift);
+							string[byte_offset] |= shifted_segment[0]; 
+							
+							for(int m = 1; m < shifted_segment.length; m++)
+							{
+								string[byte_offset + m] = shifted_segment[m];
+							}
+                    	    }
+                    	    
+                    	    bit_offset += bitlength;
+                    	    byte_offset = bit_offset / 8;
+					}
+                    
 					if(total_bitlength % 8 != 0)
 					{
 						int modulus = total_bitlength % 8;

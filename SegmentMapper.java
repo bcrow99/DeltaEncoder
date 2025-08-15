@@ -1076,8 +1076,8 @@ public class SegmentMapper
 							odd_bits         = 8 - spliced_bits;
 							odd_bits       <<= 5;
 							
-							System.out.println("Bit reduction is " + max_reduction + " splicing " + max_bits + " bits.");
-							System.out.println();
+							//System.out.println("Bit reduction is " + max_reduction + " splicing " + max_bits + " bits.");
+							//System.out.println();
 							//System.out.println("Odd bits for augmented segment is " + odd_bits);
 							
 							// Clear bits from previous iterations and set bit type.
