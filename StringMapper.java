@@ -1215,8 +1215,8 @@ public class StringMapper
 				    
 				    for(int i = 0; i < 10; i++)
 				    {
-				    	double current_ratio = getZeroRatio(dst, offset, length);
-				    	offset += increment;
+				      	double current_ratio = getZeroRatio(dst, offset, length);
+				     	offset += increment;
 				        System.out.print(String.format("%.2f", current_ratio) + " ");
 				    }
 				    
@@ -2029,6 +2029,7 @@ public class StringMapper
 		}
 	}
 	
+	
 	public static byte[] compressStrings(byte[] string)
 	{
 		int type = getType(string);
@@ -2045,7 +2046,43 @@ public class StringMapper
 		else
 			return string;
 	}
-
+	
+	// This version resets the bit type if the string
+	// is uncompressed and the bit type does not
+	// correspond with the zero ratio.
+	public static byte[] compressStrings2(byte[] string)
+	{
+		int bitlength  = StringMapper.getBitlength(string);
+		double ratio   = StringMapper.getZeroRatio(string, bitlength);
+		int type       = StringMapper.getType(string);
+		int iterations = StringMapper.getIterations(string);
+		
+		if(type == 0 && ratio < .5)
+		{
+		    string[string.length - 1] |= 16;
+		    byte[] compressed_string = compressOneStrings(string);
+			return compressed_string;
+		}
+		else if(type == 1 && ratio >= .5)
+		{
+		    byte mask = SegmentMapper.getLeadingMask(3);
+		    string[string.length - 1] &= mask;
+		    byte[] compressed_string = compressZeroStrings(string);
+			return compressed_string;
+		} 
+		else if(type == 0)
+		{
+			byte[] compressed_string = compressZeroStrings(string);
+			return compressed_string;	
+		}
+		else if(type == 1)
+		{
+			byte[] compressed_string = compressOneStrings(string);
+			return compressed_string;
+		} 
+		else
+			return string;
+	}
 
 	public static byte[] decompressStrings(byte[] string)
 	{
@@ -2331,7 +2368,7 @@ public class StringMapper
 			current_length += segment_length;
 			
 			//System.out.println("Searching forwards.");
-			// Keep looking forward until a dSegmentMapper.isSimilar number is reached.
+			// Keep looking forward until a similar bin number is reached.
 			while(SegmentMapper.isSimilar(current_number, next_number, lower_limit, upper_limit))
 			{
 				next_index    = current_index + current_length;
@@ -2713,9 +2750,6 @@ public class StringMapper
 			    delta_list.add(delta);
 			}
 		}
-		
-		
-		
 		
 		return delta_list;
 	}
