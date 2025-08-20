@@ -1336,17 +1336,61 @@ public class SegmentMapper
 							
 						if(bit_reduction > max_reduction)
 						{
-								max_reduction = bit_reduction;
-								max_bits      = spliced_bits;
+							max_reduction = bit_reduction;
+							max_bits      = spliced_bits;
 						}
 					}
-					if(max_reduction > 0)   
-					   System.out.println("Max reduction is " + max_reduction + " with " + max_bits);
-				    //System.out.println();
+					
+					if(max_reduction > 0)  
+					{
+					    System.out.println("Max reduction is " + max_reduction + " with " + max_bits);
+					    current_bitlength -= max_bits;
+					   
+					    number_of_bits = current_bitlength & 8;
+					    byte mask = getTrailingMask(number_of_bits);
+					    current_segment[0] &= mask;
+					   
+					    byte extra_bits = (byte)(8 - current_bitlength);
+					    extra_bits    <<= 5;
+					    current_segment[1] = extra_bits;
+					   
+					    respliced_segments.add(current_segment);
+					   
+					    byte [] augmented_segment  = new byte[clipped_segment.length + 1];
+					    if(max_bits < number_of_bits)
+					    {
+							byte [] shifted_segment = shiftRight(clipped_segment, 8 - max_bits);
+						    for(int k = 0; k < shifted_segment.length; k++)
+						    	    augmented_segment[k]  = shifted_segment[k];
+						}
+						else
+						{
+							for(int k = 0; k < clipped_segment.length; k++)
+					    	        augmented_segment[k]  = clipped_segment[k];	
+						}
+					    
+					    int augmented_bitlength = next_bitlength + max_bits;
+					    int odd_bits            = augmented_bitlength % 8;
+					    extra_bits              = (byte)(8 - odd_bits);
+					    augmented_segment[augmented_segment.length - 1] = extra_bits;
+					    byte [] compressed_segment   = StringMapper.compressStrings2(augmented_segment);
+					    if((compressed_segment.length - 1) < max_segment_bytelength)
+					    	    max_segment_bytelength  = compressed_segment.length - 1;  
+					    
+					    respliced_segments.add(compressed_segment);
+					    
+					}
+					else
+					{
+						respliced_segments.add(current_segment);
+						respliced_segments.add(current_segment);
+				        //System.out.println();
+					}
 			    }
 			}
 			
-			result.add(spliced_segments);
+			
+			result.add(respliced_segments);
 			result.add(max_segment_bytelength);
 			result.add(min_segment_bytelength);
 			return result;
