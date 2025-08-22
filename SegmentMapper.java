@@ -1231,6 +1231,7 @@ public class SegmentMapper
 			ArrayList<byte[]> respliced_segments = new ArrayList<byte[]>();
 			
 			int number_of_spliced_segments = spliced_segments.size();
+			byte [] positive_mask = getPositiveMask();
 			
 			for(i = 0; i < number_of_spliced_segments - 1; i++)
 			{
@@ -1246,47 +1247,108 @@ public class SegmentMapper
 			    {
 					int current_bitlength = StringMapper.getBitlength(current_segment);
 					       
-					byte [] next_segment  = spliced_segments.get(i + 1);
-					byte []decompressed_segment = StringMapper.decompressStrings(next_segment);
-						
-					int next_bitlength     = StringMapper.getBitlength(next_segment);
-					int	decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
+					byte [] next_segment           = spliced_segments.get(i + 1);
+					int     next_bitlength         = StringMapper.getBitlength(next_segment);
+					byte [] decompressed_segment   = StringMapper.decompressStrings(next_segment);
+					int	    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
+					
+					int original_pair_bitlength = current_bitlength + decompressed_bitlength;
 				
 					byte init_byte    = 0;
 					if(current_bitlength % 8 != 0)
 					{
 						if(current_bitlength < 8)
 						{
-							// If there is only one byte and it's only partially filled,
-					    	    // we need to fill it with bits from the next segment.
-							System.out.println("The length of the current uncompressed segment is less than a byte.");
+							// There is only one partially filled byte.
+					    	    // we will need to fill the init byte with bits from the next segment.
+							//System.out.println("The length of the current uncompressed segment is less than a byte.");
 							init_byte     = current_segment[current_segment.length - 2];
 							
-							// Make sure the trailing bits are zero (check this).
-							byte mask = getTrailingMask(current_bitlength);
-							init_byte &= mask;
-							
+							// We'll do a left shift now to left justify the byte, and then a right 
+							// shift later when the byte is prepended to the next segment.
+							int extra_bits = 8 - current_bitlength;
+							init_byte <<= extra_bits;
 						}
 						else
 						{
-							// We need to construct a byte from two current segment bytes.
-							System.out.println("The length of the current uncompressed segment is uneven.");
+							
+							// We need to construct the init byte from two current segment bytes.
+							// System.out.println("The length of the current uncompressed segment is uneven.");
+							
+							// System.out.println("Last two segment bytes:");
+						
 			    	    	        byte first_byte    = current_segment[current_segment.length - 3];
 			    	    	        byte second_byte   = current_segment[current_segment.length - 2];
-			    	    	        int  bit_shift     = current_bitlength % 8;
-			    	          	int  reverse_shift = 8 - bit_shift;
-			    	    	        first_byte       >>= bit_shift;
-			    	            byte mask          = getTrailingMask(reverse_shift);
-			    	            first_byte        &= mask;
-			    	            second_byte      <<= reverse_shift;
+			    	    	        
+			    	    	        /*
+			    	    	        for(int j = 7; j >= 0; j--)
+							{
+								if((second_byte & positive_mask[j]) == 0)
+									System.out.print("0 ");
+								else
+									System.out.print("1 ");
+						    }
+			    	    	        System.out.print(" ");
+			    	    	        for(int j = 7; j >= 0; j--)
+							{
+							    if((first_byte & positive_mask[j]) == 0)
+									System.out.print("0 ");
+								else
+									System.out.print("1 ");
+						    }
+			    	    	        System.out.println();
+			    	    	        */
+			    	    	        
+			    	    	        int  odd_bits   = current_bitlength % 8;
+			    	    	        int  extra_bits = 8 - odd_bits;
+			    	          	
+			    	            first_byte  >>= odd_bits;
+							byte mask     = getTrailingMask(extra_bits);
+							first_byte   &= mask;
+							
+							second_byte <<= extra_bits;
+						
+							/*
+							System.out.println("Last two segment bytes after shifting and masking:");
+							for(int j = 7; j >= 0; j--)
+							{	
+								if((second_byte & positive_mask[j]) == 0)
+									System.out.print("0 ");
+								else
+									System.out.print("1 ");
+							}
+							System.out.print(" ");    
+				    	    	    for(int j = 7; j >= 0; j--)
+						    {
+								if((first_byte & positive_mask[j]) == 0)
+								    System.out.print("0 ");
+								else
+									System.out.print("1 ");
+							}
+				    	    	    System.out.println();
+				    	    	    */
+							
 			    	            init_byte  = first_byte;
 			    	            init_byte |= second_byte;
+			    	            
+			    	            /*
+			    	            System.out.println("Init byte constructed from segment bytes:");
+			    	            for(int j = 7; j >= 0; j--)
+							{
+								if((init_byte & positive_mask[j]) == 0)
+									System.out.print("0 ");
+									else
+										System.out.print("1 ");
+						    }
+			    	            System.out.println();
+			    	            System.out.println();
+			    	            */
 						}
 					}
 					else
 					{
 						// The current bitlength is even, we can just use the last segment byte.
-			    	        System.out.println("The length of the current uncompressed segment is even.");
+			    	        //System.out.println("The length of the current uncompressed segment is even.");
 			    	        init_byte = current_segment[current_segment.length - 2];	
 					}
 					
@@ -1294,10 +1356,14 @@ public class SegmentMapper
 					byte [] clipped_segment = new byte[decompressed_segment.length];
 					for(int j = 0; j < decompressed_segment.length - 1; j++)
 						clipped_segment[j + 1] = decompressed_segment[j];
+					
+					clipped_segment[0] = init_byte;
+					// Since the init byte contains empty bits.
 					if(current_bitlength < 8)
 					    clipped_segment = shiftRight(clipped_segment, 8 - current_bitlength);
-					clipped_segment[0] |= init_byte;
 					
+					
+			        
 					int number_of_bits = 8;
 					if(number_of_bits > current_bitlength)
 						number_of_bits = current_bitlength;
@@ -1343,52 +1409,146 @@ public class SegmentMapper
 					
 					if(max_reduction > 0)  
 					{
-					    System.out.println("Max reduction is " + max_reduction + " with " + max_bits);
-					    current_bitlength -= max_bits;
-					   
-					    number_of_bits = current_bitlength & 8;
-					    byte mask = getTrailingMask(number_of_bits);
-					    current_segment[0] &= mask;
-					   
-					    byte extra_bits = (byte)(8 - current_bitlength);
-					    extra_bits    <<= 5;
-					    current_segment[1] = extra_bits;
-					   
-					    respliced_segments.add(current_segment);
-					   
-					    byte [] augmented_segment  = new byte[clipped_segment.length + 1];
-					    if(max_bits < number_of_bits)
-					    {
-							byte [] shifted_segment = shiftRight(clipped_segment, 8 - max_bits);
-						    for(int k = 0; k < shifted_segment.length; k++)
-						    	    augmented_segment[k]  = shifted_segment[k];
-						}
-						else
-						{
-							for(int k = 0; k < clipped_segment.length; k++)
-					    	        augmented_segment[k]  = clipped_segment[k];	
-						}
+					    //System.out.println("Bit reduction is " + max_reduction + " with " + max_bits + " spliced bits.");
+					    //System.out.println("Current uncompressed bitlength is " + current_bitlength);
 					    
-					    int augmented_bitlength = next_bitlength + max_bits;
-					    int odd_bits            = augmented_bitlength % 8;
-					    extra_bits              = (byte)(8 - odd_bits);
+					    //current_bitlength -= max_bits;
+					    //System.out.println("Reduced bitlength is " + current_bitlength);
+					    
+	                    /*
+					    System.out.println("Current segment:");
+						for(int j = current_segment.length - 1; j >= 0; j--)
+						{
+							byte current_byte = current_segment[j];
+							for(int k = 7; k >= 0; k--)
+							{
+								if((current_byte & positive_mask[k]) == 0)
+								    System.out.print("0 ");
+								else
+									System.out.print("1 ");
+							}
+							System.out.print(" ");
+						}
+						System.out.println();
+						*/
+						
+						/*
+						
+						System.out.println("Next segment:");
+						for(int j = decompressed_segment.length - 1; j >= 0; j--)
+						{
+							byte current_byte = decompressed_segment[j];
+							for(int k = 7; k >= 0; k--)
+							{
+								if((current_byte & positive_mask[k]) == 0)
+								    System.out.print("0 ");
+								else
+									System.out.print("1 ");
+							}
+							System.out.print(" ");
+						}
+						System.out.println();
+						*/
+						
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    
+					    int spliced_pair_bitlength = current_bitlength;
+					    
+					    if(current_bitlength != 0)
+					    {
+					        int odd_bits    = current_bitlength % 8;
+					        byte extra_bits = 0;
+					        if(odd_bits != 0)
+					            extra_bits = (byte)(8 - odd_bits);
+					        extra_bits    <<= 5;
+					        
+					        if(odd_bits != 0)
+					        {
+					            byte mask = getTrailingMask(odd_bits);
+					            // There should always be at least two bytes in a segment.
+						        current_segment[current_segment.length - 2] &= mask;
+						         // We won't worry about the bit type for now.
+					            current_segment[current_segment.length - 1] = extra_bits;
+					        }
+					        
+					        /*
+					        System.out.println("Current segment:");
+							for(int j = current_segment.length - 1; j >= 0; j--)
+							{
+								byte current_byte = current_segment[j];
+								for(int k = 7; k >= 0; k--)
+								{
+									if((current_byte & positive_mask[k]) == 0)
+									    System.out.print("0 ");
+									else
+										System.out.print("1 ");
+								}
+								System.out.print(" ");
+							}
+							System.out.println();
+							System.out.println();
+					        */
+					      
+					        respliced_segments.add(current_segment);
+					    }
+					    else
+					    {
+					    	    System.out.println("Eliminated uncompressed segment.");
+					    }
+					    
+					    
+					    
+					    
+					    byte [] augmented_segment  = new byte[clipped_segment.length + 1];
+					    for(int k = 0; k < clipped_segment.length; k++)
+		    	                augmented_segment[k] = clipped_segment[k];
+					   
+					    
+					    int augmented_bitlength = decompressed_bitlength + max_bits;
+					    
+					    int odd_bits   = augmented_bitlength % 8;
+					    byte extra_bits = 0;
+					    if(odd_bits != 0)
+					        extra_bits = (byte)(8 - odd_bits);
+					    extra_bits    <<= 5;
 					    augmented_segment[augmented_segment.length - 1] = extra_bits;
 					    byte [] compressed_segment   = StringMapper.compressStrings2(augmented_segment);
-					    if((compressed_segment.length - 1) < max_segment_bytelength)
+					    if((compressed_segment.length - 1) > max_segment_bytelength)
 					    	    max_segment_bytelength  = compressed_segment.length - 1;  
 					    
+					    byte [] processed_segment = StringMapper.decompressStrings(compressed_segment);
+					    
+					    int processed_bitlength = StringMapper.getBitlength(processed_segment);
+					    spliced_pair_bitlength += processed_bitlength;
+					    
+					    if(spliced_pair_bitlength != original_pair_bitlength)
+					    {
+					    	    System.out.println("Spliced pair bitlength does not agree with original pair bitlength at index " + i);
+					    	    System.out.println("Original pair bitlength was " + original_pair_bitlength + ", spliced length was " + spliced_pair_bitlength);
+					    	    System.out.println("Original uncompressed length was " + (current_bitlength + max_bits));
+					    	    System.out.println();
+					    }
+					    
 					    respliced_segments.add(compressed_segment);
+					    i++;
 					    
 					}
 					else
 					{
 						respliced_segments.add(current_segment);
-						respliced_segments.add(current_segment);
-				        //System.out.println();
 					}
 			    }
 			}
-			
 			
 			result.add(respliced_segments);
 			result.add(max_segment_bytelength);
