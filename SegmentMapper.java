@@ -102,25 +102,12 @@ public class SegmentMapper
 			int j = 1;
 			int next_bin = bin_number[i + j];
 
-			// if((current_bin < bin_divider && next_bin < bin_divider &&
-			// Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider
-			// && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 			if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			// if(current_bin == next_bin)
 			{
-				// while(((current_bin < bin_divider && next_bin < bin_divider &&
-				// Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider
-				// && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
-				// && i + j < number_of_segments - 1 )
 				while (((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1)
-				// while((current_bin == next_bin) && i + j < number_of_segments - 1)
 				{
 					next_bin = bin_number[i + j + 1];
-					// if((current_bin < bin_divider && next_bin < bin_divider &&
-					// Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider
-					// && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 					if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-						// if(current_bin == next_bin)
 						j++;
 				}
 
@@ -182,7 +169,6 @@ public class SegmentMapper
 			previous_iterations = compressed_iterations[i];
 		}
 
-		// This should be the same as the number of merged segments.
 		int number_of_compressed_segments = compressed_segments.size();
 
 		// When we divide up the original string, we don't account for transform
@@ -198,7 +184,8 @@ public class SegmentMapper
 				segment[segment.length - 1] = string[string.length - 1];
 			result.add(compressed_segments);
 			result.add(max_segment_bytelength);
-		} else
+		} 
+		else
 		{
 			// We want to combine uncompressed segments to reduce overhead
 			// and create a pattern where any uncompressed segment is
@@ -422,21 +409,12 @@ public class SegmentMapper
 			int j = 1;
 			int next_bin = bin_number[i + j];
 			
-			// if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider)))
-			// if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 			if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			// if(current_bin == next_bin)
 			{
-				//while(((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider))) && i + j < number_of_segments - 1)
-				// while(((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference)) && i + j < number_of_segments - 1 )
 				while (((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1)
-				// while((current_bin == next_bin) && i + j < number_of_segments - 1)
 				{
 					next_bin = bin_number[i + j + 1];
-					//if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider)))
-					//if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
 					if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-					// if(current_bin == next_bin)
 					    j++;
 				}
 
@@ -641,6 +619,9 @@ public class SegmentMapper
 		return result;
 	}
 	
+	// This method allows for merging segments with more or less inclusiveness.  Merging
+	// as many segments of the same bit type as possible seems to work the best, but
+	// this offers an easy way to make comparisons.
 	public static ArrayList getSegmentedData2(byte[] string, int minimum_bitlength, int lambda)
 	{
 		ArrayList result = new ArrayList();
@@ -730,51 +711,69 @@ public class SegmentMapper
 		for(i = 0; i < number_of_segments - 1; i++)
 		{
 			int current_bin = bin_number[i];
-			int j = 1;
-			int next_bin = bin_number[i + j];
-
-            boolean isTrue = false;
+			int j           = 1;
+			int next_bin    = bin_number[i + j];
+            boolean similar = false;
 
 			// From least to most exclusive.
 			if(lambda == 0)
 			{
 				if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-					isTrue = true;
+					similar = true;
 			}
 			else if(lambda == 1)
 			{
 				if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1))
-					isTrue = true;   
+					similar = true;   
 			}
 			else if(lambda == 2)
 			{
-				if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1))
-					isTrue = true;   
+				if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
+					similar = true;   
 			}
 			else if(lambda == 3)
 			{
 				if(current_bin == next_bin)
-					isTrue = true;	
+					similar = true;	
 			}
 			
-			// if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider)))
-			// if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
-			if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			// if(current_bin == next_bin)
+			if(similar)
 			{
-				//while(((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider))) && i + j < number_of_segments - 1)
-				// while(((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference)) && i + j < number_of_segments - 1 )
-				while (((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1)
-				// while((current_bin == next_bin) && i + j < number_of_segments - 1)
+				while(similar && i + j < number_of_segments - 1)
 				{
 					next_bin = bin_number[i + j + 1];
-					//if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1)  || ((current_bin == bin_divider - 1 || current_bin == bin_divider) && (next_bin == bin_divider - 1 || next_bin == bin_divider)))
-					//if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
-					if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-					// if(current_bin == next_bin)
-					    j++;
+					if(lambda == 0)
+					{
+						if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
+							similar = true;
+						else
+							similar = false;
+					}
+					else if(lambda == 1)
+					{
+						if((current_bin < bin_divider - 1 && next_bin < bin_divider - 1) || (current_bin > bin_divider + 1 && next_bin > bin_divider + 1))
+							similar = true;  
+						else
+							similar = false;
+					}
+					else if(lambda == 2)
+					{
+						if((current_bin < bin_divider && next_bin < bin_divider && Math.abs(current_bin - next_bin) < difference) || (current_bin >= bin_divider && next_bin >= bin_divider && Math.abs(current_bin - next_bin) < difference))
+							similar = true; 
+						else
+							similar = false;
+					}
+					else if(lambda == 3)
+					{
+						if(current_bin == next_bin)
+							similar = true;	
+						else
+							similar = false;
+					}
+					if(similar)
+						j++;
 				}
-
+			
 				int merged_bytelength = j * (segment_bytelength - 1);
 				if(i + j == number_of_segments - 1)
 					merged_bytelength += last_segment_bytelength - 1;
