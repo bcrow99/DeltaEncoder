@@ -2028,10 +2028,10 @@ public class SegmentMapper
 								byte extra_bits = (byte)(8 - odd_bits);
 								extra_bits <<= 5;
 								reduced_segment[reduced_segment.length - 1] |= extra_bits;
-								/*
+							
 								byte mask = getTrailingMask(odd_bits);
 								reduced_segment[reduced_segment.length - 2] &= mask;
-								*/
+								
 							}
 							
 							spliced_segments.add(reduced_segment);
