@@ -851,7 +851,8 @@ public class DeltaWriter
 					minimum_segment_length         -= remainder;
 					
 					long start = System.nanoTime();
-					ArrayList merged_list = SegmentMapper.getSegmentedData3(compression_string, minimum_segment_length);
+					ArrayList merged_list = SegmentMapper.getSegmentedData(compression_string, minimum_segment_length);
+
 					long stop = System.nanoTime();
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to segment data.");
@@ -860,7 +861,7 @@ public class DeltaWriter
 					int      number_of_segments = segments.size();
 					
 					max_bytelength[i]           = (int) merged_list.get(1); 
-					
+	
 					segment_list.add(segments);
 					
 					ArrayList packed_list   = SegmentMapper.packSegments(segments);
@@ -903,142 +904,17 @@ public class DeltaWriter
 				} 
 				else
 				{
-					ArrayList<byte[]> decompressed_segments = new ArrayList<byte[]>();
-					
-					// Keep track of byte length so we can create a buffer 
-					// for the reconstructed string.
-					
-					/*
-					int bytelength = 0;
-					for (int k = 0; k < number_of_segments; k++)
-					{
-						byte[] segment = (byte[]) segments.get(k);
-						int iterations = StringMapper.getIterations(segment);
-						if(iterations == 0 || iterations == 16)
-						{
-							bytelength += segment.length - 1;
-							decompressed_segments.add(segment);
-						}
-						else
-						{
-							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
-							bytelength                 += decompressed_segment.length - 1;
-							decompressed_segments.add(decompressed_segment);
-							
-						}
-					}
-					// Add byte for string information.
-					bytelength++;
-					*/
-					
-					int total_bitlength = 0;
-					for (int k = 0; k < number_of_segments; k++)
-					{
-						byte[] segment = (byte[]) segments.get(k);
-						int iterations = StringMapper.getIterations(segment);
-						if(iterations == 0 || iterations == 16)
-						{
-							decompressed_segments.add(segment);
-							int current_bitlength = StringMapper.getBitlength(segment);
-							total_bitlength += current_bitlength;
-						}
-						else
-						{
-							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
-							decompressed_segments.add(decompressed_segment);
-							int current_bitlength = StringMapper.getBitlength(decompressed_segment);
-							total_bitlength += current_bitlength;
-						}
-					}
-					
-					int bytelength = total_bitlength / 8;
-					if(total_bitlength % 8 != 0)
-						bytelength++;
-					// Add byte for string information.
-					bytelength++;
-					byte[] reconstructed_string = new byte[bytelength];
-                    byte[] original_string = (byte [])string_list.get(i);
-                    
-                    /*
-                    if(reconstructed_string.length != original_string.length)
-                    {
-                    	    System.out.println("Original string length is " + original_string.length);
-                    	    System.out.println("Reconstructed string length is " + reconstructed_string.length);
-                    }   
-                    else
-                    	    System.out.println("Original string is same length as reconstructed string.");
-                    	*/
-					
-					// Concatenate segments less trailing byte with segment information.
-					// This assumes even segment lengths except for the last one.
-                    /*
-					int offset = 0;
-					int total_bitlength = 0;
-					for(int k = 0; k < decompressed_segments.size(); k++)
-					{
-						byte[] segment = decompressed_segments.get(k);
-						for (int m = 0; m < segment.length - 1; m++)
-							reconstructed_string[offset + m] = segment[m];
-						offset += segment.length - 1;
-						int bitlength = StringMapper.getBitlength(segment);
-						total_bitlength += bitlength;
-					}
-                    */
-                    
-                    // Concatenate segments less trailing byte with segment information.
-				    // Not assuming even segment lengths.
-                    int bit_offset  = 0;
-                    int byte_offset = 0;
-                    for(int k = 0; k < decompressed_segments.size(); k++)
-					{
-                    	    byte[] segment = decompressed_segments.get(k); 
-                    	    int bitlength  = StringMapper.getBitlength(segment);
-                    	    int bit_shift = bit_offset % 8;
-                    	    if(bit_shift == 0)
-                    	    {
-                    	    	    for(int m = 0; m < segment.length - 1; m++)
-        						    reconstructed_string[byte_offset + m] = segment[m];   
-                    	    }
-                    	    else
-                    	    {
-                    	      	byte [] clipped_segment = new byte[segment.length - 1];
-							for(int m = 0; m < clipped_segment.length; m++)
-								clipped_segment[m] = segment[m];
-								
-							byte [] shifted_segment = SegmentMapper.shiftLeft(clipped_segment, bit_shift);
-							reconstructed_string[byte_offset] |= shifted_segment[0]; 
-							
-							for(int m = 1; m < shifted_segment.length; m++)
-							{
-								reconstructed_string[byte_offset + m] = shifted_segment[m];
-							}
-                    	    }
-                    	    
-                    	    bit_offset += bitlength;
-                    	    byte_offset = bit_offset / 8;
-					}
-                    
-					// Set the data byte for the reconstructed string.
-					if(total_bitlength % 8 != 0)
-					{
-						int modulus = total_bitlength % 8;
-						byte extra_bits = (byte) (8 - modulus);
-						extra_bits <<= 5;
-						reconstructed_string[reconstructed_string.length - 1] = extra_bits;
-					}
-					reconstructed_string[reconstructed_string.length - 1] |= channel_iterations[i];
-                    
-					
-					
-					
-					boolean same            = true;
-					int current_index       = 0;
+					byte[]  original_string      = (byte [])string_list.get(i);
+					byte [] reconstructed_string = SegmentMapper.restore(segments, original_string[original_string.length - 1]);
+					boolean same                 = true;
+					int current_index            = 0;
 					while(same && current_index < original_string.length)
 					{
 					    if(original_string[current_index] != reconstructed_string[current_index])
 					    {
 					        	same = false;
 					    	    System.out.println("Reconstructed string differs from original string at index " + current_index);
+					    	    System.out.println("Reconstructed string length is " + reconstructed_string.length);
 					    	    System.out.println("Original value is " + original_string[current_index]);
 					    	    System.out.println("Reconstructed value is " + reconstructed_string[current_index]);
 					    	    System.out.println("Previous value is " + original_string[current_index - 1]);
@@ -1621,7 +1497,7 @@ public class DeltaWriter
 				if(iterations != 0 && iterations != 16)
 					string = StringMapper.decompressStrings(string);	
 				// Optionally zip segment data.
-				//Deflater deflater = new Deflater();
+				// Deflater deflater = new Deflater();
 				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
 				deflater.setInput(string);
 				byte[] zipped_data = new byte[2 * string.length];
@@ -1649,7 +1525,7 @@ public class DeltaWriter
 				int iterations = StringMapper.getIterations(string);	
 				
 				// Optionally zip segment data.
-				//Deflater deflater = new Deflater();
+				// Deflater deflater = new Deflater();
 				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
 				deflater.setInput(string);
 				byte[] zipped_data = new byte[2 * string.length];

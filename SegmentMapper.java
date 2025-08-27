@@ -307,6 +307,79 @@ public class SegmentMapper
 		}
 	}
 	
+	
+	public static byte [] restore(ArrayList<byte[]> segments, byte string_data)
+	{
+		
+	    int number_of_segments = segments.size();
+	    
+	    int total_bitlength = 0;
+	    for(int i = 0; i < number_of_segments; i++)
+	    {
+	    	    byte [] segment    = segments.get(i);
+	    	    int     iterations = StringMapper.getIterations(segment);
+	    	    
+	    	    if(iterations == 0 || iterations == 16)
+	    	    {
+	    	        int     bitlength  = StringMapper.getBitlength(segment);
+	    	        total_bitlength   += bitlength;
+	    	    }
+	    	    else
+	    	    {
+	    	    	    byte [] decompressed_segment = StringMapper.decompressStrings(segment);
+	    	    	    int     bitlength            = StringMapper.getBitlength(decompressed_segment);
+		    	    total_bitlength             += bitlength;
+	    	    }
+	    }
+	    
+	    int bytelength  = total_bitlength / 8;
+	    if(total_bitlength % 8 != 0)
+	    	    bytelength++;
+	    bytelength++;
+	    byte [] dst     = new byte[bytelength]; 
+	    int bit_offset  = 0;
+        int byte_offset = 0;
+        for(int i = 0; i < number_of_segments; i++)
+		{
+        	    byte[] segment    = segments.get(i); 
+        	    int    iterations = StringMapper.getIterations(segment);
+        	    if(iterations != 0 && iterations != 16)
+        	    {
+        	    	    segment = StringMapper.decompressStrings(segment);
+        	    	    iterations = StringMapper.getIterations(segment);
+        	    }
+        	    
+        	    
+        	    int bitlength  = StringMapper.getBitlength(segment);
+        	    int bit_shift  = bit_offset % 8;
+        	    if(bit_shift == 0)
+        	    {
+        	    	    for(int j = 0; j < segment.length - 1; j++)
+					    dst[byte_offset + j] = segment[j];   
+        	    }
+        	    else
+        	    {
+        	      	byte [] clipped_segment = new byte[segment.length - 1];
+				for(int j = 0; j < clipped_segment.length; j++)
+					clipped_segment[j] = segment[j];
+					
+				byte [] shifted_segment = SegmentMapper.shiftLeft(clipped_segment, bit_shift);
+				dst[byte_offset] |= shifted_segment[0]; 
+				
+				for(int j = 1; j < shifted_segment.length; j++)
+				{
+					dst[byte_offset + j] = shifted_segment[j];
+				}
+        	    }
+        	    
+        	    bit_offset += bitlength;
+        	    byte_offset = bit_offset / 8;
+		}
+	    
+        dst[dst.length - 1] = string_data;
+		return dst;
+	}
+	
 	public static ArrayList getSegmentedData(byte[] string, int minimum_bitlength)
 	{
 		ArrayList result = new ArrayList();
