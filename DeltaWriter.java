@@ -91,9 +91,6 @@ public class DeltaWriter
 			image_xdim = original_image.getWidth();
 			image_ydim = original_image.getHeight();
 
-			//System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
-			//System.out.println();
-
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
 			string_list  = new ArrayList<Object>();
@@ -688,7 +685,6 @@ public class DeltaWriter
 				}
 			}
 			
-			
 			// Get the set of channels with deltas that have a minimum sum, including difference channels.
 			int[] quantized_blue = quantized_channel_list.get(0);
 			int[] quantized_green = quantized_channel_list.get(1);
@@ -850,29 +846,32 @@ public class DeltaWriter
 					int remainder                   = minimum_segment_length % 8;
 					minimum_segment_length         -= remainder;
 					
+					int segment_type = 0;
+					int merge_type   = 0;
+					double bin       = .05;
+					
 					long start = System.nanoTime();
-					ArrayList merged_list = SegmentMapper.getSegmentedData(compression_string, minimum_segment_length);
-
+					ArrayList segmented_list = SegmentMapper.getSegmentedData(compression_string, minimum_segment_length, segment_type, merge_type, bin);
 					long stop = System.nanoTime();
 					long time = stop - start;
+					
 					System.out.println("It took " + (time / 1000000) + " ms to segment data.");
 					
-					ArrayList <byte[]> segments = (ArrayList <byte[]>) merged_list.get(0);
-					int      number_of_segments = segments.size();
-					
-					max_bytelength[i]           = (int) merged_list.get(1); 
+					ArrayList <byte[]> segments = (ArrayList <byte[]>) segmented_list.get(0);
+					max_bytelength[i]           = (int) segmented_list.get(1); 
 	
 					segment_list.add(segments);
 					
 					ArrayList packed_list   = SegmentMapper.packSegments(segments);
 					byte [] packed_segments = (byte [])packed_list.get(0);
-					zero_ratio =  StringMapper.getZeroRatio2(packed_segments, packed_segments.length * 8);
+					zero_ratio              =  StringMapper.getZeroRatio2(packed_segments, packed_segments.length * 8);
 					System.out.println("The segments zero ratio is " + String.format("%.2f", zero_ratio));
 					System.out.println();
 				}
 			}
 
 			// Decompressing the data and displaying it.
+			// Helps us know when something is broken without using DeltaReader.
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
@@ -904,34 +903,35 @@ public class DeltaWriter
 				} 
 				else
 				{
-					byte[]  original_string      = (byte [])string_list.get(i);
-					byte [] reconstructed_string = SegmentMapper.restore(segments, original_string[original_string.length - 1]);
+					byte[]  original_string = (byte [])string_list.get(i);
+					byte [] restored_string = SegmentMapper.restore(segments, original_string[original_string.length - 1]);
+					
 					boolean same                 = true;
 					int current_index            = 0;
 					while(same && current_index < original_string.length)
 					{
-					    if(original_string[current_index] != reconstructed_string[current_index])
+					    if(original_string[current_index] != restored_string[current_index])
 					    {
 					        	same = false;
-					    	    System.out.println("Reconstructed string differs from original string at index " + current_index);
-					    	    System.out.println("Reconstructed string length is " + reconstructed_string.length);
+					    	    System.out.println("Restored string differs from original string at index " + current_index);
+					    	    System.out.println("Restored string length is " + restored_string.length);
 					    	    System.out.println("Original value is " + original_string[current_index]);
-					    	    System.out.println("Reconstructed value is " + reconstructed_string[current_index]);
+					    	    System.out.println("Restored value is " + restored_string[current_index]);
 					    	    System.out.println("Previous value is " + original_string[current_index - 1]);
 					    }
 					    current_index++;
 					}
 					
-					int reconstructed_iterations = StringMapper.getIterations(reconstructed_string);
-					if (reconstructed_iterations == 0 || reconstructed_iterations == 16)
+					int restored_iterations = StringMapper.getIterations(restored_string);
+					if (restored_iterations == 0 || restored_iterations == 16)
 					{
-						int number_unpacked = StringMapper.unpackStrings2(reconstructed_string, table, delta);
+						int number_unpacked = StringMapper.unpackStrings2(restored_string, table, delta);
 						if(number_unpacked != delta.length)
 							System.out.println("Did not unpack expected number of values.");
 					}
 					else
 					{
-						byte[] decompressed_string = StringMapper.decompressStrings(reconstructed_string);
+						byte[] decompressed_string = StringMapper.decompressStrings(restored_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if(number_unpacked != delta.length)
 							System.out.println("Did not unpack expected number of values.");

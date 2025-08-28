@@ -84,7 +84,7 @@ public class DeltaReader
 				int table_length = in.readShort();
 				int[] table = new int[table_length];
 				int max_byte_value = Byte.MAX_VALUE * 2 + 1;
-				if (table.length <= max_byte_value)
+				if(table.length <= max_byte_value)
 				{
 					for (int k = 0; k < table_length; k++)
 					{
@@ -317,89 +317,18 @@ public class DeltaReader
 					}
 					
 					ArrayList <byte []> original_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_info);
-					ArrayList <byte []> decompressed_segments = new ArrayList <byte []>();
-					for (int k = 0; k < number_of_segments; k++)
+					
+					byte string_data = channel_iterations[i];
+					int odd_bits = compressed_length[i] % 8;
+					if(odd_bits != 0)
 					{
-						byte[] segment = original_segments.get(k);
-						int iterations = StringMapper.getIterations(segment);
-						if (iterations == 0 || iterations == 16)
-							decompressed_segments.add(segment);
-						else
-						{
-							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
-							decompressed_segments.add(decompressed_segment);
-						}
-					}
-
-					int total_bitlength = 0;
-					for (int k = 0; k < number_of_segments; k++)
-					{
-						byte[] segment = (byte[]) decompressed_segments.get(k);
-						int iterations = StringMapper.getIterations(segment);
-						if(iterations == 0 || iterations == 16)
-						{
-							int current_bitlength = StringMapper.getBitlength(segment);
-							total_bitlength += current_bitlength;
-						}
-						else
-						{
-							byte[] decompressed_segment = StringMapper.decompressStrings(segment);
-							decompressed_segments.add(decompressed_segment);
-							int current_bitlength = StringMapper.getBitlength(decompressed_segment);
-							total_bitlength += current_bitlength;
-						}
+						byte extra_bits = (byte)(8 - odd_bits);
+						extra_bits    <<= 5;
+						string_data    |= extra_bits;
 					}
 					
-					int bytelength = total_bitlength / 8;
-					if(total_bitlength % 8 != 0)
-						bytelength++;
-					
-					// Add byte for string information.
-					bytelength++;
-					byte[] string = new byte[bytelength];
-					
-					// Concatenate segments less trailing byte with segment information.
-				    // Not assuming even segment lengths.
-                    int bit_offset  = 0;
-                    int byte_offset = 0;
-                    for(int k = 0; k < decompressed_segments.size(); k++)
-					{
-                    	    byte[] segment = decompressed_segments.get(k); 
-                    	    int bitlength  = StringMapper.getBitlength(segment);
-                    	    int bit_shift = bit_offset % 8;
-                    	    if(bit_shift == 0)
-                    	    {
-                    	    	    for(int m = 0; m < segment.length - 1; m++)
-        						    string[byte_offset + m] = segment[m];   
-                    	    }
-                    	    else
-                    	    {
-                    	      	byte [] clipped_segment = new byte[segment.length - 1];
-							for(int m = 0; m < clipped_segment.length; m++)
-								clipped_segment[m] = segment[m];
-								
-							byte [] shifted_segment = SegmentMapper.shiftLeft(clipped_segment, bit_shift);
-							string[byte_offset] |= shifted_segment[0]; 
-							
-							for(int m = 1; m < shifted_segment.length; m++)
-							{
-								string[byte_offset + m] = shifted_segment[m];
-							}
-                    	    }
-                    	    
-                    	    bit_offset += bitlength;
-                    	    byte_offset = bit_offset / 8;
-					}
-                    
-					if(total_bitlength % 8 != 0)
-					{
-						int modulus = total_bitlength % 8;
-						byte extra_bits = (byte) (8 - modulus);
-						extra_bits <<= 5;
-						string[string.length - 1] = extra_bits;
-					}
-					string[string.length - 1] |= channel_iterations[i];
-					string_list.add(string);
+				    byte [] restored_string = SegmentMapper.restore(original_segments, string_data);
+					string_list.add(restored_string);
 				}
 			}
 
@@ -416,7 +345,7 @@ public class DeltaReader
 			Thread [] decompression_thread = new Thread[3]; for(int i = 0; i < 3; i++) 
 			{
 			    decompression_thread[i] = new Thread(new Decompressor(i));
-			   decompression_thread[i].start(); 
+			    decompression_thread[i].start(); 
 			} 
 			for(int i = 0; i < 3; i++)
 			    decompression_thread[i].join();

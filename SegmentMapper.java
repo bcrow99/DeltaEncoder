@@ -80,122 +80,6 @@ public class SegmentMapper
 	    return result;
 	}
 	
-	public static ArrayList merge(ArrayList<byte[]> segments, int [] bin_number, double bin, int min_segment_bytelength, int max_segment_bytelength, byte extra_bits, byte string_data)
-	{
-		ArrayList<byte[]> merged_segments    = new ArrayList<byte[]>();
-        int               number_of_segments = segments.size();
-        int               number_of_bins     = (int)(1. / bin);
-        int               bin_divider        = number_of_bins / 2;
-        int i = 0;
-       
-		for(i = 0; i < number_of_segments - 1; i++)
-		{
-			int current_bin = bin_number[i];
-			int j = 1;
-			int next_bin = bin_number[i + j];
-
-			if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-			{
-				while (((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider)) && i + j < number_of_segments - 1)
-				{
-					next_bin = bin_number[i + j + 1];
-					if((current_bin < bin_divider && next_bin < bin_divider) || (current_bin >= bin_divider && next_bin >= bin_divider))
-						j++;
-				}
-
-				int merged_bytelength = j * (min_segment_bytelength - 1);
-				if(i + j == number_of_segments - 1)
-					merged_bytelength += max_segment_bytelength - 1;
-				else
-					merged_bytelength += min_segment_bytelength - 1;
-				merged_bytelength++;
-				byte[] merged_segment = new byte[merged_bytelength];
-				int m = 0;
-				for(int k = 0; k < j + 1; k++)
-				{
-					byte[] segment = segments.get(i + k);
-					for(int n = 0; n < segment.length - 1; n++)
-						merged_segment[m + n] = segment[n];
-					m += segment.length - 1;
-				}
-				if(i + j == number_of_segments - 1)
-					merged_segment[merged_bytelength - 1] = extra_bits;
-				if(current_bin < bin_divider)
-					merged_segment[merged_bytelength - 1] |= 16;
-				merged_segments.add(merged_segment);
-
-				i += j;
-
-			} 
-			else
-			{
-				byte[] segment = segments.get(i);
-				merged_segments.add(segment);
-			}
-		}
-
-		if(i == number_of_segments - 1)
-		{
-			byte[] segment = segments.get(i);
-			merged_segments.add(segment);
-		}
-
-		int number_of_merged_segments = merged_segments.size();
-		
-		ArrayList<byte[]> compressed_segments = new ArrayList<byte[]>();
-
-		max_segment_bytelength                       = 0;
-		min_segment_bytelength                       = Integer.MAX_VALUE;
-		int number_of_uncompressed_segments          = 0;
-		int number_of_uncompressed_adjacent_segments = 0;
-		int previous_iterations                      = 1;
-		for(i = 0; i < number_of_merged_segments; i++)
-		{
-			byte[] segment            = merged_segments.get(i);
-			byte[] compressed_segment = StringMapper.compressStrings(segment);
-			compressed_segments.add(compressed_segment);
-			
-			if(compressed_segment.length - 1 > max_segment_bytelength)
-				max_segment_bytelength = compressed_segment.length - 1;
-			if(compressed_segment.length - 1 < min_segment_bytelength)
-				min_segment_bytelength = compressed_segment.length - 1;
-			
-			int current_iterations = StringMapper.getIterations(compressed_segment);
-			if(current_iterations == 0 || current_iterations == 16)
-				number_of_uncompressed_segments++;	
-				
-			if((previous_iterations == 0 || previous_iterations == 16) && (current_iterations == 0 || current_iterations == 16))
-				number_of_uncompressed_adjacent_segments++;
-			previous_iterations = current_iterations;
-		}
-
-		ArrayList result = new ArrayList();
-		int number_of_compressed_segments = compressed_segments.size();
-		// When we divide up the original string, we don't account for transform
-		// iterations on the original string so if all the segments merge into one
-		// we need to copy the string data byte back to the restored string.
-		if(number_of_compressed_segments == 1)
-		{
-			byte [] segment             = compressed_segments.get(0);
-			segment[segment.length - 1] = string_data;
-			compressed_segments.set(0, segment);
-			result.add(compressed_segments);
-			return result;
-		}
-		else
-		{
-			result.add(compressed_segments);	
-			result.add(min_segment_bytelength);
-			result.add(max_segment_bytelength);
-			result.add(extra_bits);
-			result.add(string_data);
-			result.add(number_of_uncompressed_segments);
-			result.add(number_of_uncompressed_adjacent_segments);
-			
-		    return result;
-		}
-	}
-	
 	public static ArrayList merge(ArrayList<byte[]> segments, int [] bin_number, double bin, int min_segment_bytelength, int max_segment_bytelength, byte extra_bits, byte string_data, int merge_type)
 	{
 		ArrayList<byte[]> merged_segments    = new ArrayList<byte[]>();
@@ -324,12 +208,10 @@ public class SegmentMapper
 			byte[] segment            = merged_segments.get(i);
 			byte[] compressed_segment = StringMapper.compressStrings(segment);
 			compressed_segments.add(compressed_segment);
-			
 			if(compressed_segment.length - 1 > max_segment_bytelength)
 				max_segment_bytelength = compressed_segment.length - 1;
 			if(compressed_segment.length - 1 < min_segment_bytelength)
 				min_segment_bytelength = compressed_segment.length - 1;
-			
 			int current_iterations = StringMapper.getIterations(compressed_segment);
 			if(current_iterations == 0 || current_iterations == 16)
 				number_of_uncompressed_segments++;
@@ -667,7 +549,6 @@ public class SegmentMapper
 							int j = spliced_segments.size();
 							spliced_segments.set(j - 1, compressed_segment);
 							
-							
 							byte [] decompressed_clipped_segment = StringMapper.decompressStrings(clipped_segment);
 							
 							int clipped_segment_bitlength = StringMapper.getBitlength(decompressed_clipped_segment);
@@ -713,6 +594,7 @@ public class SegmentMapper
 		}
 	
 		// Breaks very badly when the segmentation gets fine enough.
+		// Might have something to do with short uneven segments.
 		/*
 		int number_of_spliced_segments = spliced_segments.size();
 		isCompressed                   = new boolean[number_of_spliced_segments];
@@ -1031,7 +913,7 @@ public class SegmentMapper
 		return dst;
 	}
 	
-	public static ArrayList getSegmentedData(byte[] string, int minimum_bitlength, int segment_type)
+	public static ArrayList getSegmentedData(byte[] string, int minimum_bitlength, int segment_type, int merge_type, double bin)
 	{
 		ArrayList result = new ArrayList();
 		if(minimum_bitlength % 8 != 0)
@@ -1047,7 +929,7 @@ public class SegmentMapper
 		}
 		else
 		{
-			double bin                     = .02;
+			//double bin                     = .02;
 			ArrayList segmented_list       = segment(string, minimum_bitlength, bin);
 
 			ArrayList<byte[]> segments     = (ArrayList<byte[]>)segmented_list.get(0);
@@ -1070,7 +952,7 @@ public class SegmentMapper
 				return result;
 			}
 			
-			ArrayList         merged_list     = merge(segments, bin_number, bin, min_segment_bytelength, max_segment_bytelength, extra_bits, string_data);
+			ArrayList         merged_list     = merge(segments, bin_number, bin, min_segment_bytelength, max_segment_bytelength, extra_bits, string_data, merge_type);
 			ArrayList<byte[]> merged_segments = (ArrayList<byte[]>)merged_list.get(0);
 			
 			int number_of_merged_segments = merged_segments.size();
@@ -1163,7 +1045,8 @@ public class SegmentMapper
 						ArrayList spliced_list             = splice(combined_segments, min_segment_bytelength, max_segment_bytelength, string_data);
 						ArrayList<byte[]> spliced_segments = (ArrayList<byte[]>)spliced_list.get(0);
 						
-						// It's very unlikely and maybe impossible for the segments to splice down to one segment.
+						// It's probably impossible for the segments to splice down to one segment, at least with
+						// this chain of processing.
 						// Not bothering to check, although still passing the original string data to splice().
 						// Not passing the extra bits information because it never gets used and after this step
 						// the segments are no longer regular, meaning any of the uncompressed segments might have
