@@ -23,15 +23,19 @@ public class DeltaWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant = 4;
-	int pixel_shift = 3;
+	int pixel_quant    = 4;
+	int pixel_shift    = 3;
 	int segment_length = 20;
-	int correction = 0;
-	int min_set_id = 0;
-	int delta_type = 2;
+	int segment_type   = 2;
+	int merge_type     = 0;
+	double merge_bin   = .05;
+	
+	int correction     = 0;
+	int min_set_id     = 0;
+	int delta_type     = 2;
 	int histogram_type = 0;
-
-	double scale = 1.;
+	
+	double scale       = 1.;
 
 	int[] set_sum, channel_sum;
 	String[] set_string;
@@ -90,6 +94,9 @@ public class DeltaWriter
 			int raster_type = original_image.getType();
 			image_xdim = original_image.getWidth();
 			image_ydim = original_image.getHeight();
+
+			//System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
+			//System.out.println();
 
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
@@ -477,9 +484,12 @@ public class DeltaWriter
 				shift_dialog.add(shift_panel);
 				settings_menu.add(shift_item);
 
-				JMenuItem segment_item = new JMenuItem("Segmentation");
-				JDialog segment_dialog = new JDialog(frame, "Segmentation");
-				ActionListener segment_handler = new ActionListener()
+				JMenu segmentation_menu = new JMenu("Segmentation");
+				
+				
+				JMenuItem segment_length_item   = new JMenuItem("Segment Length");
+				JDialog   segment_length_dialog = new JDialog(frame, "Segment Length");
+				ActionListener segment_length_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
@@ -487,20 +497,20 @@ public class DeltaWriter
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
 
-						segment_dialog.setLocation(x, y - 150);
-						segment_dialog.pack();
-						segment_dialog.setVisible(true);
+						segment_length_dialog.setLocation(x, y - 150);
+						segment_length_dialog.pack();
+						segment_length_dialog.setVisible(true);
 					}
 				};
-				segment_item.addActionListener(segment_handler);
+				segment_length_item.addActionListener(segment_length_handler);
 
-				JPanel segment_panel = new JPanel(new BorderLayout());
+				JPanel segment_length_panel = new JPanel(new BorderLayout());
 				JSlider segment_slider = new JSlider();
 				segment_slider.setMinimum(0);
 				segment_slider.setMaximum(20);
 				segment_slider.setValue(segment_length);
-				JTextField segment_value = new JTextField(3);
-				segment_value.setText(" " + segment_length + " ");
+				JTextField segment_length_value = new JTextField(3);
+				segment_length_value.setText(" " + segment_length + " ");
 				ChangeListener segment_slider_handler = new ChangeListener()
 				{
 					public void stateChanged(ChangeEvent e)
@@ -510,16 +520,215 @@ public class DeltaWriter
 						if (slider.getValueIsAdjusting() == false)
 						{
 							apply_item.doClick();
-							segment_value.setText(" " + segment_length + " ");
+							segment_length_value.setText(" " + segment_length + " ");
 						}
 					}
 				};
 				segment_slider.addChangeListener(segment_slider_handler);
-				segment_panel.add(segment_slider, BorderLayout.CENTER);
-				segment_panel.add(segment_value, BorderLayout.EAST);
-				segment_dialog.add(segment_panel);
-				settings_menu.add(segment_item);
+				segment_length_panel.add(segment_slider, BorderLayout.CENTER);
+				segment_length_panel.add(segment_length_value, BorderLayout.EAST);
+				segment_length_dialog.add(segment_length_panel);
+				segmentation_menu.add(segment_length_item);
+				
+				JMenuItem segment_type_item   = new JMenuItem("Segment Type");
+				JDialog   segment_type_dialog = new JDialog(frame, "Segment Type");
+				ActionListener segment_type_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
 
+						segment_type_dialog.setLocation(x, y - 150);
+						segment_type_dialog.pack();
+						segment_type_dialog.setVisible(true);
+					}
+				};
+				segment_type_item.addActionListener(segment_type_handler);
+				
+				JTextField segment_type_value = new JTextField();
+			    segment_type_value.setHorizontalAlignment(JTextField.CENTER);
+			    
+			    segment_type_value.setText("" + segment_type);
+				JButton segment_type_button = new JButton("Set Segment Type");
+				ActionListener button_type_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						String input_string = segment_type_value.getText();
+						int new_segment_type = segment_type;
+						try
+						{
+						    new_segment_type = Integer.parseInt(input_string);	
+						}
+						catch(Exception e2)
+						{
+						    System.out.println("Invalid input.");
+						    System.out.println(e2.toString());
+						    System.out.println("Must input a number from 0 to 3.");
+						    segment_type_value.setText("" + segment_type);
+						} 
+						
+						if(new_segment_type >= 0 && new_segment_type <= 3 && new_segment_type != segment_type)
+						{
+						    segment_type = new_segment_type;
+						    apply_item.doClick();
+						}
+						else
+						{
+							System.out.println("Invalid input.");	
+							System.out.println("Must input a number from 0 to 3.");
+							segment_type_value.setText("" + segment_type);
+						}
+					}
+				};
+				segment_type_button.addActionListener(button_type_handler);
+				
+				JPanel segment_type_panel = new JPanel(new GridLayout(2, 1));
+				segment_type_panel.add(segment_type_value);
+				segment_type_panel.add(segment_type_button);
+				segment_type_dialog.add(segment_type_panel);
+				segmentation_menu.add(segment_type_item);
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				JMenuItem merge_type_item   = new JMenuItem("Merge Type");
+				JDialog   merge_type_dialog = new JDialog(frame, "Merge Type");
+				ActionListener merge_type_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						merge_type_dialog.setLocation(x, y - 150);
+						merge_type_dialog.pack();
+						merge_type_dialog.setVisible(true);
+					}
+				};
+				merge_type_item.addActionListener(merge_type_handler);
+				
+				
+				JTextField merge_type_value = new JTextField();
+			    merge_type_value.setHorizontalAlignment(JTextField.CENTER);
+			    merge_type_value.setText("" + merge_type);
+				JButton merge_type_button = new JButton("Set Merge Type");
+				ActionListener button_merge_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						String input_string = merge_type_value.getText();
+						int new_merge_type = merge_type;
+						try
+						{
+						    new_merge_type = Integer.parseInt(input_string);	
+						}
+						catch(Exception e2)
+						{
+						    System.out.println("Invalid input.");
+						    System.out.println(e2.toString());
+						    System.out.println("Must input a number from 0 to 3.");
+						    merge_type_value.setText("" + merge_type);
+						} 
+						
+						if(new_merge_type >= 0 && new_merge_type <= 3 && new_merge_type != merge_type)
+						{
+						    merge_type = new_merge_type;
+						    apply_item.doClick();
+						}
+						else
+						{
+							System.out.println("Invalid input.");	
+							System.out.println("Must input a number from 0 to 3.");
+							merge_type_value.setText("" + merge_type);
+						}
+					}
+				};
+				merge_type_button.addActionListener(button_merge_handler);
+				
+				JPanel merge_type_panel = new JPanel(new GridLayout(2, 1));
+				merge_type_panel.add(merge_type_value);
+				merge_type_panel.add(merge_type_button);
+				merge_type_dialog.add(merge_type_panel);
+				segmentation_menu.add(merge_type_item);
+				
+				
+	
+				
+				
+				
+				JMenuItem merge_bin_item   = new JMenuItem("Merge Bin");
+				JDialog   merge_bin_dialog = new JDialog(frame, "Merge Bin");
+				ActionListener merge_bin_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						merge_bin_dialog.setLocation(x, y - 150);
+						merge_bin_dialog.pack();
+						merge_bin_dialog.setVisible(true);
+					}
+				};
+				merge_bin_item.addActionListener(merge_bin_handler);
+				
+				
+				JTextField merge_bin_value = new JTextField();
+			    merge_bin_value.setHorizontalAlignment(JTextField.CENTER);
+			    merge_bin_value.setText(String.format("%.2f", merge_bin));
+				JButton merge_bin_button = new JButton("Set Merge Bin");
+				ActionListener button_bin_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						String input_string = merge_bin_value.getText();
+						double new_merge_bin = merge_bin;
+						try
+						{
+						    new_merge_bin = Double.parseDouble(input_string);	
+						}
+						catch(Exception e2)
+						{
+						    System.out.println("Invalid input.");
+						    System.out.println(e2.toString());
+						    System.out.println("Must input a double between 0 and 1.");
+						    merge_bin_value.setText("" + merge_type);
+						} 
+						
+						if(new_merge_bin > 0 && new_merge_bin < 1 && new_merge_bin != merge_bin)
+						{
+						    merge_bin = new_merge_bin;
+						    apply_item.doClick();
+						}
+						else
+						{
+							System.out.println("Invalid input.");	
+							System.out.println("Must input a number between 0 and 1.");
+							merge_bin_value.setText(String.format("%.2f", merge_bin));
+						}
+					}
+				};
+				merge_bin_button.addActionListener(button_bin_handler);
+				
+				JPanel merge_bin_panel = new JPanel(new GridLayout(2, 1));
+				merge_bin_panel.add(merge_bin_value);
+				merge_bin_panel.add(merge_bin_button);
+				merge_bin_dialog.add(merge_bin_panel);
+				segmentation_menu.add(merge_bin_item);
+				
+				
 				// The correction value is a convenience to help see what
 				// quantizing does to the original image. Instead of
 				// simply switching back and forth between the original
@@ -615,6 +824,7 @@ public class DeltaWriter
 				menu_bar.add(delta_menu);
 				menu_bar.add(histogram_menu);
 				menu_bar.add(settings_menu);
+				menu_bar.add(segmentation_menu);
 
 				frame.setJMenuBar(menu_bar);
 
@@ -846,12 +1056,8 @@ public class DeltaWriter
 					int remainder                   = minimum_segment_length % 8;
 					minimum_segment_length         -= remainder;
 					
-					int segment_type = 0;
-					int merge_type   = 0;
-					double bin       = .05;
-					
 					long start = System.nanoTime();
-					ArrayList segmented_list = SegmentMapper.getSegmentedData(compression_string, minimum_segment_length, segment_type, merge_type, bin);
+					ArrayList segmented_list = SegmentMapper.getSegmentedData(compression_string, minimum_segment_length, segment_type, merge_type, merge_bin);
 					long stop = System.nanoTime();
 					long time = stop - start;
 					
