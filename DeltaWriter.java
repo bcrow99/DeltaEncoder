@@ -69,7 +69,6 @@ public class DeltaWriter
 		}
 
 		String prefix = new String("");
-		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -398,7 +397,7 @@ public class DeltaWriter
 				histogram_menu.add(histogram_item);
 				
 		     	
-				JMenu settings_menu = new JMenu("Settings");
+				JMenu settings_menu = new JMenu("Quantization");
 
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
 				JDialog quant_dialog = new JDialog(frame, "Pixel Resolution");
@@ -547,20 +546,55 @@ public class DeltaWriter
 				};
 				segment_type_item.addActionListener(segment_type_handler);
 				
+				
+				
 				JTextField segment_type_value = new JTextField();
 			    segment_type_value.setHorizontalAlignment(JTextField.CENTER);
-			    
 			    segment_type_value.setText("" + segment_type);
+			    
+			    segment_type_value.addActionListener(new ActionListener()
+			    	{
+			    	    public void actionPerformed(ActionEvent e) 
+			    	    {
+				        String input = segment_type_value.getText();   
+				        int new_segment_type = segment_type;
+						try
+						{
+						    new_segment_type = Integer.parseInt(input);	
+						}
+						catch(Exception e2)
+						{
+						    System.out.println("Invalid input.");
+						    System.out.println(e2.toString());
+						    System.out.println("Must input a number from 0 to 3.");
+						    segment_type_value.setText("" + segment_type);
+						} 
+						
+						if(new_segment_type >= 0 && new_segment_type <= 3 && new_segment_type != segment_type)
+						{
+						    segment_type = new_segment_type;
+						    apply_item.doClick();
+						}
+						else
+						{
+							System.out.println("Invalid input.");	
+							System.out.println("Must input a number from 0 to 3.");
+							segment_type_value.setText("" + segment_type);
+						}
+			    	    }
+			    	});
+			    
+			    
 				JButton segment_type_button = new JButton("Set Segment Type");
 				ActionListener button_type_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
-						String input_string = segment_type_value.getText();
+						String input = segment_type_value.getText();
 						int new_segment_type = segment_type;
 						try
 						{
-						    new_segment_type = Integer.parseInt(input_string);	
+						    new_segment_type = Integer.parseInt(input);	
 						}
 						catch(Exception e2)
 						{
@@ -622,6 +656,39 @@ public class DeltaWriter
 				JTextField merge_type_value = new JTextField();
 			    merge_type_value.setHorizontalAlignment(JTextField.CENTER);
 			    merge_type_value.setText("" + merge_type);
+			    
+			    merge_type_value.addActionListener(new ActionListener()
+		      	{
+			    	    public void actionPerformed(ActionEvent e) 
+		    	        {
+			            String input = merge_type_value.getText();   
+			            int new_merge_type = merge_type;
+					    try
+					    {
+					        new_merge_type = Integer.parseInt(input);	
+					    }
+					    catch(Exception e2)
+					    {
+					        System.out.println("Invalid input.");
+					        System.out.println(e2.toString());
+					        System.out.println("Must input a number from 0 to 3.");
+					        merge_type_value.setText("" + merge_type);
+					    } 
+					
+					    if(new_merge_type >= 0 && new_merge_type <= 3 && new_merge_type != merge_type)
+					    {
+					        merge_type = new_merge_type;
+					        apply_item.doClick();
+					    }
+					    else
+					    {
+						    System.out.println("Invalid input.");	
+						    System.out.println("Must input a number from 0 to 3.");
+						    segment_type_value.setText("" + segment_type);
+					    }
+		    	        }
+		    	    });
+			    
 				JButton merge_type_button = new JButton("Set Merge Type");
 				ActionListener button_merge_handler = new ActionListener()
 				{
@@ -644,7 +711,8 @@ public class DeltaWriter
 						if(new_merge_type >= 0 && new_merge_type <= 3 && new_merge_type != merge_type)
 						{
 						    merge_type = new_merge_type;
-						    apply_item.doClick();
+						    if(segment_type > 0)
+						        apply_item.doClick();
 						}
 						else
 						{
@@ -662,11 +730,7 @@ public class DeltaWriter
 				merge_type_dialog.add(merge_type_panel);
 				segmentation_menu.add(merge_type_item);
 				
-				
-	
-				
-				
-				
+			
 				JMenuItem merge_bin_item   = new JMenuItem("Merge Bin");
 				JDialog   merge_bin_dialog = new JDialog(frame, "Merge Bin");
 				ActionListener merge_bin_handler = new ActionListener()
@@ -688,6 +752,41 @@ public class DeltaWriter
 				JTextField merge_bin_value = new JTextField();
 			    merge_bin_value.setHorizontalAlignment(JTextField.CENTER);
 			    merge_bin_value.setText(String.format("%.2f", merge_bin));
+			    
+			    
+			    merge_bin_value.addActionListener(new ActionListener()
+		      	{
+			    	    public void actionPerformed(ActionEvent e) 
+		    	        {
+			            String input         = merge_bin_value.getText();   
+			            double new_merge_bin = merge_bin;
+					    try
+					    {
+					        new_merge_bin = Double.parseDouble(input);	
+					    }
+					    catch(Exception e2)
+					    {
+					        System.out.println("Invalid input.");
+					        System.out.println(e2.toString());
+					        System.out.println("Must input a decimal number between 0 and 1.");
+					        merge_bin_value.setText(String.format("%.2f", merge_bin));
+					    } 
+					
+					    if(new_merge_bin > 0 && new_merge_bin < 1 && new_merge_bin != merge_bin)
+					    {
+					        merge_bin = new_merge_bin;
+					        if(segment_type > 0)
+					            apply_item.doClick();
+					    }
+					    else
+					    {
+						    System.out.println("Invalid input.");	
+						    System.out.println("Must input a decimal number between 0 and 1.");
+						    segment_type_value.setText(String.format("%.2f", merge_bin));
+					    }
+		    	        }
+		    	    });
+			  
 				JButton merge_bin_button = new JButton("Set Merge Bin");
 				ActionListener button_bin_handler = new ActionListener()
 				{
@@ -703,19 +802,20 @@ public class DeltaWriter
 						{
 						    System.out.println("Invalid input.");
 						    System.out.println(e2.toString());
-						    System.out.println("Must input a double between 0 and 1.");
+						    System.out.println("Must input a decimal number between 0 and 1.");
 						    merge_bin_value.setText("" + merge_type);
 						} 
 						
 						if(new_merge_bin > 0 && new_merge_bin < 1 && new_merge_bin != merge_bin)
 						{
 						    merge_bin = new_merge_bin;
-						    apply_item.doClick();
+						    if(segment_type > 0)
+						        apply_item.doClick();
 						}
 						else
 						{
 							System.out.println("Invalid input.");	
-							System.out.println("Must input a number between 0 and 1.");
+							System.out.println("Must input a decimal number between 0 and 1.");
 							merge_bin_value.setText(String.format("%.2f", merge_bin));
 						}
 					}
