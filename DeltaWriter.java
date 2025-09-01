@@ -24,9 +24,9 @@ public class DeltaWriter
 	int[] pixel;
 
 	int pixel_quant    = 4;
-	int pixel_shift    = 3;
-	int segment_length = 20;
-	int segment_type   = 2;
+	int pixel_shift    = 2;
+	int segment_length = 15;
+	int segment_type   = 3;
 	int merge_type     = 0;
 	double merge_bin   = .05;
 	
@@ -69,6 +69,7 @@ public class DeltaWriter
 		}
 
 		String prefix = new String("");
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -624,15 +625,6 @@ public class DeltaWriter
 				segment_type_panel.add(segment_type_button);
 				segment_type_dialog.add(segment_type_panel);
 				segmentation_menu.add(segment_type_item);
-				
-				
-				
-				
-				
-				
-				
-				
-				
 				
 				
 				JMenuItem merge_type_item   = new JMenuItem("Merge Type");
