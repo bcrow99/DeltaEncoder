@@ -369,6 +369,12 @@ public class SegmentMapper
 				isCompressed[i] = true;	
 		}
 		
+		int overhead = 16;
+		if(max_segment_bytelength > Short.MAX_VALUE * 2 + 1)
+			overhead = 40;
+		else if(max_segment_bytelength > Byte.MAX_VALUE * 2 + 1)
+			overhead = 24;
+		
 		int   total_spliced_bits = 0;
 		int   max_spliced_bits   = 0;
 		int[] bit_table          = StringMapper.getBitTable();
@@ -451,7 +457,8 @@ public class SegmentMapper
 					byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
 					int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 					int     spliced_bits         = current_bitlength;
-					int     bit_reduction        = spliced_bits - (compressed_bitlength - next_bitlength);
+					//      bit_reduction        = spliced_bits - (compressed_bitlength - next_bitlength);
+					int     bit_reduction        = (spliced_bits + overhead) - (compressed_bitlength - next_bitlength);
 					int     max_reduction        = bit_reduction;
 				
 					for(int j = 1; j < current_bitlength; j ++)
@@ -477,8 +484,7 @@ public class SegmentMapper
 						ratio                                       = StringMapper.getZeroRatio(shifted_segment, shifted_bitlength, bit_table);
 						if(ratio < .5)
 							shifted_segment[shifted_segment.length - 1] = 16;
-						else
-							shifted_segment[shifted_segment.length - 1] = 0;
+						
 						int shifted_odd_bits            = shifted_bitlength % 8;
 						if(shifted_odd_bits != 0)
 						{
@@ -489,7 +495,7 @@ public class SegmentMapper
 							shifted_segment[shifted_segment.length - 2] &= mask;
 						}
 					
-						compressed_segment   = StringMapper.compressStrings2(shifted_segment);
+						compressed_segment   = StringMapper.compressStrings(shifted_segment);
 						compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 						
 						int current_bits  = current_bitlength - j;
@@ -509,8 +515,18 @@ public class SegmentMapper
 						
 						if(spliced_bits == current_bitlength)
 						{
-						    System.out.println("Eliminated uncompressed segment.");	
-						    spliced_segments.add(augmented_segment);
+						    //System.out.println("Eliminated uncompressed segment 1.");	
+							compressed_segment   = StringMapper.compressStrings(augmented_segment);
+							if(compressed_segment.length - 1 > max_segment_bytelength)
+							{
+								max_segment_bytelength = compressed_segment.length - 1;
+								if(max_segment_bytelength > Short.MAX_VALUE * 2 + 1)
+									overhead = 40;
+								else if(max_segment_bytelength > Byte.MAX_VALUE * 2 + 1)
+									overhead = 24;
+							}
+							
+							spliced_segments.add(compressed_segment);
 						    i++;
 						}
 						else
@@ -621,7 +637,6 @@ public class SegmentMapper
 		result.add(total_spliced_bits);
 		result.add(max_spliced_bits);
 		return result;	
-	
 	}
 	
 	public static ArrayList splice2(ArrayList<byte[]> segments, int min_segment_bytelength, int max_segment_bytelength)
@@ -636,6 +651,12 @@ public class SegmentMapper
 			if(iterations != 0 && iterations != 16)
 				isCompressed[i] = true;	    	
 		}
+		
+		int overhead = 16;
+		if(max_segment_bytelength > Short.MAX_VALUE * 2 + 1)
+			overhead = 40;
+		else if(max_segment_bytelength > Byte.MAX_VALUE * 2 + 1)
+			overhead = 24;
 		
 		int   total_spliced_bits = 0;
 		int   max_spliced_bits   = 0;
@@ -658,7 +679,8 @@ public class SegmentMapper
 				}
 				else
 				{
-					byte[] previous_segment       = spliced_segments.get(i - 1);
+					//byte[] previous_segment     = spliced_segments.get(i - 1);
+					byte[] previous_segment       = spliced_segments.getLast();
 				    byte[] decompressed_segment   = StringMapper.decompressStrings(previous_segment);
 				    int    previous_bitlength     = StringMapper.getBitlength(previous_segment);
 				    int    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
@@ -673,8 +695,8 @@ public class SegmentMapper
 				    for(int j = 0; j < decompressed_segment.length - 1; j++)
 					    augmented_segment[j] = decompressed_segment[j];
 				
-				    int odd_bits = decompressed_bitlength % 8;
-				    if(odd_bits == 0)
+				    int decompressed_odd_bits = decompressed_bitlength % 8;
+				    if(decompressed_odd_bits == 0)
 				    {
 					    int k = 0;
 					    for(int j = decompressed_segment.length - 1; j < augmented_segment.length - 1; j++)
@@ -682,11 +704,11 @@ public class SegmentMapper
 				    }
 				    else
 				    {
-					    int  extra_bits  = 8 - odd_bits;
+					    int  extra_bits  = 8 - decompressed_odd_bits;
 					    byte splice_byte = current_segment[0];
 					    byte mask        = getTrailingMask(extra_bits);
 					    splice_byte     &= mask;
-					    splice_byte    <<= odd_bits;
+					    splice_byte    <<= decompressed_odd_bits;
 					
 					    augmented_segment[decompressed_segment.length - 2] |= splice_byte;
 					
@@ -705,21 +727,22 @@ public class SegmentMapper
 					    augmented_segment[augmented_segment.length - 1] = 16;
 				    else 
 					    augmented_segment[augmented_segment.length - 1] = 0;
-				    odd_bits     = augmented_bitlength % 8;
-				    if(odd_bits != 0)
+				    int augmented_odd_bits     = augmented_bitlength % 8;
+				    if(augmented_odd_bits != 0)
 				    {   
-					    byte extra_bits = (byte)(8 - odd_bits);
+					    byte extra_bits = (byte)(8 - augmented_odd_bits);
 					    extra_bits <<= 5;
 					    augmented_segment[augmented_segment.length - 1] |= extra_bits;
 					
-					    byte mask = getTrailingMask(odd_bits);
+					    byte mask = getTrailingMask(augmented_odd_bits);
 					    augmented_segment[augmented_segment.length - 2] &= mask;
 				    }
 				
 				    byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
 				    int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 				    int     spliced_bits         = current_bitlength;
-				    int     bit_reduction        = spliced_bits - (compressed_bitlength - previous_bitlength);
+				    //int   bit_reduction        = spliced_bits - (compressed_bitlength - previous_bitlength);
+				    int     bit_reduction        = (spliced_bits + overhead) - (compressed_bitlength - previous_bitlength);
 				    int     max_reduction        = bit_reduction;
 			
 				    for(int j = 1; j < current_bitlength; j ++)
@@ -739,14 +762,14 @@ public class SegmentMapper
 						    clipped_segment[clipped_segment.length - 1] = 16;
 					    else
 						    clipped_segment[clipped_segment.length - 1] = 0;
-					    odd_bits            = clipped_bitlength % 8;
-					    if(odd_bits != 0)
+					    int clipped_odd_bits            = clipped_bitlength % 8;
+					    if(clipped_odd_bits != 0)
 					    {
-						    byte extra_bits = (byte)(8 - odd_bits);
+						    byte extra_bits = (byte)(8 - clipped_odd_bits);
 						    extra_bits <<= 5;
 						    clipped_segment[clipped_segment.length - 1] |= extra_bits;
 						
-						    byte mask = getTrailingMask(odd_bits);
+						    byte mask = getTrailingMask(clipped_odd_bits);
 						    clipped_segment[clipped_segment.length - 2] &= mask;
 					    }
 					
@@ -770,12 +793,18 @@ public class SegmentMapper
 					
 				        if(spliced_bits == current_bitlength)
 				        {
-				            System.out.println("Eliminated uncompressed segment.");
+				            //System.out.println("Eliminated uncompressed segment 2.");
 				            compressed_segment   = StringMapper.compressStrings(augmented_segment);
 				            int j = spliced_segments.size();
 				            spliced_segments.set(j - 1, compressed_segment);
 				            if(compressed_segment.length - 1 > max_segment_bytelength)
-				            	    max_segment_bytelength = compressed_segment.length - 1;
+							{
+								max_segment_bytelength = compressed_segment.length - 1;
+								if(max_segment_bytelength > Short.MAX_VALUE * 2 + 1)
+									overhead = 40;
+								else if(max_segment_bytelength > Byte.MAX_VALUE * 2 + 1)
+									overhead = 24;
+							}
 				        }
 				        else
 				        {
@@ -795,14 +824,14 @@ public class SegmentMapper
 				                clipped_segment[clipped_segment.length - 1] = 16;
 				            else
 				                clipped_segment[clipped_segment.length - 1] = 0;
-				            odd_bits            = clipped_bitlength % 8;
-				            if(odd_bits != 0)
+				            int clipped_odd_bits            = clipped_bitlength % 8;
+				            if(clipped_odd_bits != 0)
 				            {
-							    byte extra_bits = (byte)(8 - odd_bits);
+							    byte extra_bits = (byte)(8 - clipped_odd_bits);
 							    extra_bits <<= 5;
 							    clipped_segment[clipped_segment.length - 1] |= extra_bits;
 							
-							    byte mask = getTrailingMask(odd_bits);
+							    byte mask = getTrailingMask(clipped_odd_bits);
 							    clipped_segment[clipped_segment.length - 2] &= mask;
 						    }
 				            compressed_segment = StringMapper.compressStrings(clipped_segment);
@@ -839,10 +868,10 @@ public class SegmentMapper
 								reduced_segment[reduced_segment.length - 1] = 16;
 							else
 								reduced_segment[reduced_segment.length - 1] = 0;
-							odd_bits            = reduced_bitlength % 8;
-							if(odd_bits != 0)
+							int reduced_odd_bits  = reduced_bitlength % 8;
+							if(reduced_odd_bits != 0)
 							{
-								byte extra_bits = (byte)(8 - odd_bits);
+								byte extra_bits = (byte)(8 - reduced_odd_bits);
 								extra_bits    <<= 5;
 								reduced_segment[reduced_segment.length - 1] |= extra_bits;
 							}
@@ -1121,6 +1150,10 @@ public class SegmentMapper
 						int total_spliced_bits              = (int) spliced_list.get(3);
 						int max_spliced_bits1               = (int) spliced_list.get(4);
 						
+						System.out.println("Number of combined segments is " + number_of_combined_segments);
+						System.out.println("Number of spliced segments is "  + number_of_spliced_segments);
+						
+						
 						ArrayList spliced_list2             = splice2(combined_segments, min_segment_bytelength, max_segment_bytelength);
 						ArrayList<byte[]> spliced_segments2 = (ArrayList<byte[]>)spliced_list2.get(0);
 						number_of_spliced_segments          = spliced_segments2.size();
@@ -1132,11 +1165,12 @@ public class SegmentMapper
 						int max_spliced_bits = max_spliced_bits1;
 						if(max_spliced_bits1 < max_spliced_bits2)
 							max_spliced_bits = max_spliced_bits2;
+						/*
 						System.out.println("Number of regular segments is "  + number_of_regular_segments);
 					    System.out.println("Number of merged segments is "   + number_of_merged_segments);
 					    System.out.println("Number of combined segments is " + number_of_combined_segments);
 						System.out.println("Number of spliced segments is "  + number_of_spliced_segments);
-						
+						*/
 						int total_bitlength = 0;
 						int final_number_of_segments = spliced_segments2.size();
 						for(int i = 0; i < final_number_of_segments; i++)
