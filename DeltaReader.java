@@ -12,28 +12,26 @@ import javax.swing.event.ChangeListener;
 
 public class DeltaReader
 {
-	int xdim = 0;
-	int ydim = 0;
-	int intermediate_xdim = 0;
-	int intermediate_ydim = 0;
-	int pixel_shift = 0;
-	int pixel_quant = 0;
-	int set_id = 0;
-	byte delta_type = 0;
+	int  xdim              = 0;
+	int  ydim              = 0;
+	int  intermediate_xdim = 0;
+	int  intermediate_ydim = 0;
+	int  pixel_shift       = 0;
+	int  pixel_quant       = 0;
+	int  set_id            = 0;
+	byte delta_type        = 0;
 
 	ArrayList string_list = new ArrayList();
-	ArrayList table_list = new ArrayList();
-	ArrayList map_list = new ArrayList();
-
+	ArrayList table_list  = new ArrayList();
+	ArrayList map_list    = new ArrayList();
 	int[][] channel_array = new int[3][0];
-
-	int min[] = new int[3];
-	int init[] = new int[3];
-	int delta_min[] = new int[3];
-	byte type[] = new byte[3];
-	byte compressed[] = new byte[3];
-	int length[] = new int[3];
-	int compressed_length[] = new int[3];
+	int  min[]            = new int[3];
+	int  init[]           = new int[3];
+	int  delta_min[]      = new int[3];
+	byte type[]           = new byte[3];
+	byte compressed[]     = new byte[3];
+	int  length[]         = new int[3];
+	int  compressed_length[] = new int[3];
 	byte channel_iterations[] = new byte[3];
 
 	public static void main(String[] args)
@@ -51,15 +49,15 @@ public class DeltaReader
 	{
 		try
 		{
-			File file = new File(filename);
+			File file          = new File(filename);
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
-			xdim = in.readShort();
-			ydim = in.readShort();
-			pixel_shift = in.readByte();
-			pixel_quant = in.readByte();
-			set_id = in.readByte();
-			delta_type = in.readByte();
-			int[] channel_id = DeltaMapper.getChannels(set_id);
+			xdim               = in.readShort();
+			ydim               = in.readShort();
+			pixel_shift        = in.readByte();
+			pixel_quant        = in.readByte();
+			set_id             = in.readByte();
+			delta_type         = in.readByte();
+			int[] channel_id   = DeltaMapper.getChannels(set_id);
 
 			if (delta_type > 7)
 			{
@@ -72,15 +70,14 @@ public class DeltaReader
 			for (int i = 0; i < 3; i++)
 			{
 				// System.out.println("Getting channel " + i);
-				int j = channel_id[i];
-				min[i] = in.readInt();
-				init[i] = in.readInt();
-				delta_min[i] = in.readInt();
-				length[i] = in.readInt();
-				compressed_length[i] = in.readInt();
+				int j                 = channel_id[i];
+				min[i]                = in.readInt();
+				init[i]               = in.readInt();
+				delta_min[i]          = in.readInt();
+				length[i]             = in.readInt();
+				compressed_length[i]  = in.readInt();
 				channel_iterations[i] = in.readByte();
 
-				// System.out.println("Got channel parameters.");
 				int table_length = in.readShort();
 				int[] table = new int[table_length];
 				int max_byte_value = Byte.MAX_VALUE * 2 + 1;
@@ -317,17 +314,15 @@ public class DeltaReader
 					}
 					
 					ArrayList <byte []> original_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_info);
-					
-					byte string_data = channel_iterations[i];
-					int odd_bits = compressed_length[i] % 8;
+					byte string_data                      = channel_iterations[i];
+					int odd_bits                          = compressed_length[i] % 8;
 					if(odd_bits != 0)
 					{
 						byte extra_bits = (byte)(8 - odd_bits);
 						extra_bits    <<= 5;
 						string_data    |= extra_bits;
 					}
-					
-				    byte [] restored_string = SegmentMapper.restore(original_segments, string_data);
+				    byte [] restored_string               = SegmentMapper.restore(original_segments, string_data);
 					string_list.add(restored_string);
 				}
 			}
@@ -351,19 +346,15 @@ public class DeltaReader
 			    decompression_thread[i].join();
 
 			
-			 // This higher level abstraction makes the program more opaque and
+			// This higher level abstraction makes the program more opaque and
 			// does not improve the performance.
-			/*
-			ExecutorService executorService = Executors.newFixedThreadPool(3);
-
-			for (int i = 0; i < 3; i++)
-			{
-				executorService.submit(new Decompressor(i));
-			}
-
-			executorService.shutdown();
-			executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-            */
+			//ExecutorService executorService = Executors.newFixedThreadPool(3);
+			//for (int i = 0; i < 3; i++)
+			//{
+			//	executorService.submit(new Decompressor(i));
+			//}
+			//executorService.shutdown();
+			//executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 			
 			
 			stop = System.nanoTime();
@@ -642,10 +633,10 @@ public class DeltaReader
 
 			if (delta_type < 8)
 			{
-				byte[] string = (byte[]) string_list.get(i);
-				int[] table = (int[]) table_list.get(i);
+				byte[] string  = (byte[]) string_list.get(i);
+				int[] table    = (int[]) table_list.get(i);
 				int iterations = StringMapper.getIterations(string);
-				int bitlength = StringMapper.getBitlength(string);
+				int bitlength  = StringMapper.getBitlength(string);
 
 				if (channel_iterations[i] != iterations)
 					System.out.println(
@@ -659,10 +650,11 @@ public class DeltaReader
 				else if (iterations > 16)
 					string = StringMapper.decompressOneStrings(string);
 
-				int number_unpacked = 0;
 				int[] delta;
-				int current_xdim = 0;
-				int current_ydim = 0;
+				int   number_unpacked = 0;
+				int   current_xdim    = 0;
+				int   current_ydim    = 0;
+				
 				if (pixel_quant == 0)
 				{
 					delta = new int[xdim * ydim];
