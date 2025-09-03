@@ -5,15 +5,6 @@ import java.math.*;
 
 public class DeltaMapper
 {
-	/**
-	 * Produces an array of ints that is the difference
-	 * between two arrays of ints.  
-	 *
-	 * @param src1 the array of ints being subtracted from (minuend)
-	 * @param src2 the array of ints being subtracted (subatrahend)
-	 *            
-	 * @return an array of ints that is the difference between them
-	 */
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -27,15 +18,6 @@ public class DeltaMapper
 		return(difference);
 	}
 	
-	/**
-	 * Produces an array of ints that is the sum
-	 * of two arrays of ints.  
-	 *
-	 * @param src1 the array of ints being added to (augend)
-	 * @param src2 the array of ints being added (addend)
-	 *            
-	 * @return an array of ints that is the sum of the two
-	 */
 	public static int[] getSum(int src1[], int src2[])
 	{
 		int length = src1.length;
@@ -49,15 +31,6 @@ public class DeltaMapper
 		return(sum);
 	}
 	
-	/**
-	 * Does a left shift or right shift on an array of ints.
-	 * If the shift is positive the shift is left,
-	 * if the shift is negative the shift is right.
-	 *
-	 * @param src input int of arrays
-	 *            
-	 * @return an array of shifted ints 
-	 */
 	public static int[] shift(int src[], int shift)
 	{
 		int    length        = src.length;
@@ -77,47 +50,6 @@ public class DeltaMapper
 		return(shifted_value);
 	}
 	
-	/**
-	 * Produces an array of ints in a java pixel format.
-	 * The assumption is that they are 3 b-g-r channels.
-	 *
-	 * @param blue 
-	 * @param green
-	 * @param red
-	 * @param xdim the xdim of the channel
-	 *            
-	 * @return an array of ints in a java pixel format
-	 */
-	public static int[] getPixel(int[] blue, int[] green, int[] red, int xdim)
-	{
-        int ydim     = blue.length / xdim;
-        int [] pixel = new int[blue.length];
-       
-		int k = 0;
-		for(int i = 0; i < ydim; i++)
-		{
-			for(int j = 0; j < xdim; j++)
-			{
-				pixel[k] = blue[k]  + (green[k] << 8) + (red[k] << 16);
-			    k++;
-			}
-		}
-		
-		return pixel;
-	}
-	
-	/**
-	 * Produces an array of ints in a java pixel format.
-	 * The assumption is that they are 3 b-g-r channels.
-	 *
-	 * @param blue 
-	 * @param green
-	 * @param red
-	 * @param xdim the xdim of the channel
-	 * @param pixel_shift the amount each channel is quantized (>> pixel_shift)
-	 *            
-	 * @return an array of ints in a java pixel format
-	 */
 	public static int[] getPixel(int[] blue, int[] green, int[] red, int xdim, int pixel_shift)
 	{
         int ydim = blue.length / xdim;
@@ -310,13 +242,15 @@ public class DeltaMapper
         int value = init_value;
         for(int i = 0; i < ydim; i++)
         {
-        	if(i != 0)
+        	    if(i != 0)
                 value += src[k];
-        	else
-        	{
-        		if(src[k] != 0)
-        			System.out.println("Wrong code.");
-        	}
+        	    else
+        	    {
+        	    	    /*
+        		    if(src[k] != 0)
+        			    System.out.println("Wrong code.");
+        			*/
+        	    }
             int current_value = value;
             dst[k++]          = current_value;
             for(int j = 1; j < xdim; j++)
@@ -342,24 +276,24 @@ public class DeltaMapper
         {
             for(int j = 0; j < xdim; j++)
             {
-            	if(i == 0)
-            	{
-            		if(j == 0)
-            			dst[k++] = 0;
-            		else
-            		{
-            		    delta    = src[k] - value;
-                        value    += delta;
-                        dst[k++]  = delta;
-                        sum      += Math.abs(delta);
-            		}
-            	}
-            	else
-            	{
+             	if(i == 0)
+            	    {
+            		    if(j == 0)
+            			    dst[k++] = 0;
+            		    else
+            		    {
+            		        delta    = src[k] - value;
+                         value    += delta;
+                         dst[k++]  = delta;
+                         sum      += Math.abs(delta);
+            		    }
+              	}
+             	else
+            	    {
                     delta    = src[k]  - src[k - xdim];
                     dst[k++] = delta;
                     sum     += Math.abs(delta);
-            	}
+            	    }
             }
         }
         
@@ -372,12 +306,14 @@ public class DeltaMapper
 
     public static int[] getValuesFromVerticalDeltas(int src[], int xdim, int ydim, int init_value)
     {
-    	int[] dst = new int[xdim * ydim];
+      	int[] dst = new int[xdim * ydim];
         dst[0] = init_value;
         int value = init_value;
         
+        /*
         if(src[0] != 0)
             System.out.println("Wrong code.");
+        */
         
         for(int i = 1; i < xdim; i++)
         {
@@ -408,23 +344,23 @@ public class DeltaMapper
         dst[k++] = 0;
         for(int i = 1; i < xdim; i++)
         {
-        	int delta   = src[k] - src[k - 1];
-        	dst[k++]    = delta;   
-        	sum        += Math.abs(delta);
+        	    int delta   = src[k] - src[k - 1];
+          	dst[k++]    = delta;   
+        	    sum        += Math.abs(delta);
         }
         
         for(int i = 1; i < ydim; i++)
         {
-        	int delta   = src[k] - src[k - xdim];
-        	dst[k++]    = delta;
-        	sum        += Math.abs(delta);
+        	    int delta   = src[k] - src[k - xdim];
+        	    dst[k++]    = delta;
+        	    sum        += Math.abs(delta);
         	
-        	for(int j = 1; j < xdim; j++)
-        	{
+           for(int j = 1; j < xdim; j++)
+        	   {
                 delta       = src[k]  - (src[k - 1] + src[k - xdim]) / 2;
                 dst[k++]    = delta;
                 sum        += Math.abs(delta);    	
-        	}
+        	   }
         }
         
         ArrayList result = new ArrayList();
@@ -436,29 +372,31 @@ public class DeltaMapper
     
     public static int[] getValuesFromAverageDeltas(int src[], int xdim, int ydim, int init_value)
     {
-    	int k = 0;
-    	//if(src[k] != 0)
-		//	System.out.println("Wrong code " + src[k]);
+    	    int k = 0;
+    	    /*
+      	    if(src[k] != 0)
+			    System.out.println("Wrong code " + src[k]);
+		    */
     	
-    	int[] dst = new int[xdim * ydim];
-    	dst[k++]  = init_value;
+    	    int[] dst = new int[xdim * ydim];
+    	    dst[k++]  = init_value;
     	
-    	for(int i = 1; i < xdim; i++)
-    	{
-    	    int value = dst[k - 1] + src[k];
-    	    dst[k++]  = value;
-    	}
-    	
-    	for(int i = 1; i < ydim; i++)
-    	{
-    	    int value = dst[k - xdim] + src[k];
-    	    dst[k++]  = value;
-    	    for(int j = 1; j < xdim; j++)
+    	    for(int i = 1; i < xdim; i++)
     	    {
+    	        int value = dst[k - 1] + src[k];
+    	        dst[k++]  = value;
+    	    }
+    	
+    	    for(int i = 1; i < ydim; i++)
+    	    {
+    	        int value = dst[k - xdim] + src[k];
+    	        dst[k++]  = value;
+    	        for(int j = 1; j < xdim; j++)
+    	        {
                 value    = (dst[k - 1] + dst[k - xdim]) / 2 + src[k];
                 dst[k++] = value;	
+    	        }
     	    }
-    	}
     	
         return dst;
     }
@@ -472,7 +410,7 @@ public class DeltaMapper
     // compressed ideal deltas.
     public static ArrayList getPaethDeltasFromValues(int src[], int xdim, int ydim)
     {
-    	int[] dst          = new int[xdim * ydim];
+    	    int[] dst          = new int[xdim * ydim];
         int init_value     = src[0];
         int value          = init_value;
         int delta          = 0;
@@ -560,8 +498,10 @@ public class DeltaMapper
         dst[0]    = init_value;
         int value = init_value;
 
+        /*
         if(src[0] != 0)
-        	System.out.println("Wrong code at beginning of delta array.");
+        	    System.out.println("Wrong code at beginning of delta array.");
+        	*/
         
         for(int i = 1; i < xdim; i++)
         {
@@ -610,7 +550,7 @@ public class DeltaMapper
     
     public static ArrayList getGradientDeltasFromValues(int src[], int xdim, int ydim)
     {
-    	int[] dst      = new int[xdim * ydim];
+    	    int[] dst      = new int[xdim * ydim];
         int init_value = src[0];
         
         int sum   = 0;
@@ -621,9 +561,9 @@ public class DeltaMapper
         dst[k++] = 0;
         for(int i = 1; i < xdim; i++)
         {
-        	delta   = src[k] - src[k - 1];
-        	dst[k++]    = delta;   
-        	sum        += Math.abs(delta);
+        	    delta   = src[k] - src[k - 1];
+          	dst[k++]    = delta;   
+        	    sum        += Math.abs(delta);
         }
         
         // This gradient filter requires two preceding rows,
@@ -635,22 +575,21 @@ public class DeltaMapper
         
         // Process the leading pixel with the vertical delta.
         delta   = src[k] - init_value;
-    	dst[k++]    = delta;
-    	init_value += delta;
-    	sum        += Math.abs(delta);
+    	    dst[k++]    = delta;
+    	    init_value += delta;
+    	    sum        += Math.abs(delta);
     	
-    	// Get horizontal deltas for the second row.
-    	for(int i = 1; i < xdim; i++)
+      	// Get horizontal deltas for the second row.
+    	    for(int i = 1; i < xdim; i++)
         {
-        	delta   = src[k] - src[k - 1];
-        	dst[k++]    = delta;   
-        	sum        += Math.abs(delta);
+        	    delta   = src[k] - src[k - 1];
+          	dst[k++]    = delta;   
+        	    sum        += Math.abs(delta);
         }
     	
         // Process the other rows using the gradient filter.
         for(int i = 2; i < ydim; i++)
         {
-        	
         	delta   = src[k] - init_value;
         	dst[k++]    = delta;
         	init_value += delta;
@@ -710,10 +649,12 @@ public class DeltaMapper
 
     public static int[] getValuesFromGradientDeltas(int src[], int xdim, int ydim, int init_value)
     {
-    	int[] dst       = new int[xdim * ydim];
-    	int [] gradient = new int[4];
+      	int[] dst       = new int[xdim * ydim];
+     	int [] gradient = new int[4];
+     	/*
         if(src[0] != 0)
         	System.out.println("Wrong code.");
+        	*/
         
         int k = 0;
         dst[k++] = init_value;
@@ -721,56 +662,56 @@ public class DeltaMapper
         // Get the first two rows with horizontal deltas.
         for(int i = 1; i < xdim; i++)
         {
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+          	k++;
         }
         
         init_value += src[k];
-    	dst[k++]    = init_value;
+    	    dst[k++]    = init_value;
         
-    	for(int i = 1; i < xdim; i++)
+    	    for(int i = 1; i < xdim; i++)
         {
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+          	k++;
         }
     	
         for(int i = 2; i < ydim; i++)
         {
-        	init_value += src[k];
-        	dst[k++]    = init_value;
+        	    init_value += src[k];
+        	    dst[k++]    = init_value;
         	
             for(int j = 1; j < xdim - 1; j++)	
             {
-            	int a = dst[k - 1];
-        	    int b = dst[k - xdim];
-        	    int c = dst[k - xdim - 1];
-        	    int d = dst[k - xdim + 1];
-        	    int e = dst[k - 2 * xdim - 1];
+            	    int a = dst[k - 1];
+        	        int b = dst[k - xdim];
+        	        int c = dst[k - xdim - 1];
+        	        int d = dst[k - xdim + 1];
+        	        int e = dst[k - 2 * xdim - 1];
         	  
-    	    	gradient[0] = Math.abs(a - e);
-    	    	gradient[1] = Math.abs(c - d);
-    	    	gradient[2] = Math.abs(a - d);
-    	    	gradient[3] = Math.abs(b - e);
+    	    	        gradient[0] = Math.abs(a - e);
+    	    	        gradient[1] = Math.abs(c - d);
+    	         	gradient[2] = Math.abs(a - d);
+    	    	        gradient[3] = Math.abs(b - e);
         	    
-        	    int max_value = gradient[0];
-        	    int max_index = 0;
-        	    for(int m = 1; m < 4; m++)
-        	    {
-        	    	if(gradient[m] > max_value)
-        	    	{
-        	    		max_value = gradient[m];
-        	    		max_index = m;
-        	    	}
-        	    }
-        	    if(max_index == 0)
-        	    	dst[k] = dst[k - 1] + src[k];
-        	    else if(max_index == 1)
-        	    	dst[k] = dst[k - xdim] + src[k];
-        	    else if(max_index == 2)
-        	    	dst[k] = dst[k - xdim - 1] + src[k];
-        	    else
-        	    	dst[k] = dst[k - xdim + 1] + src[k];  
-        	    k++;
+        	        int max_value = gradient[0];
+        	        int max_index = 0;
+        	        for(int m = 1; m < 4; m++)
+        	        {
+        	    	        if(gradient[m] > max_value)
+        	    	        {
+        	    		        max_value = gradient[m];
+        	    		        max_index = m;
+        	    	        }
+        	        }
+        	        if(max_index == 0)
+        	      	dst[k] = dst[k - 1] + src[k];
+        	        else if(max_index == 1)
+        	    	        dst[k] = dst[k - xdim] + src[k];
+        	        else if(max_index == 2)
+        	    	        dst[k] = dst[k - xdim - 1] + src[k];
+        	        else
+        	    	    dst[k] = dst[k - xdim + 1] + src[k];  
+        	        k++;
             }
             
             // Get trailing pixel with horizontal delta.
@@ -784,7 +725,7 @@ public class DeltaMapper
     // the filter above.
     public static ArrayList getGradientDeltasFromValues2(int src[], int xdim, int ydim)
     {
-    	int[] dst          = new int[xdim * ydim];
+      	int[] dst          = new int[xdim * ydim];
         int init_value     = src[0];
         
         int sum  = 0;
@@ -864,11 +805,12 @@ public class DeltaMapper
 
     public static int[] getValuesFromGradientDeltas2(int src[], int xdim, int ydim, int init_value)
     {
-    	int[] dst       = new int[xdim * ydim];
-    	int [] gradient = new int[4];
+    	    int[] dst       = new int[xdim * ydim];
+    	    int [] gradient = new int[4];
+    	    /*
         if(src[0] != 0)
-        	System.out.println("Wrong code.");
-        
+          	System.out.println("Wrong code.");
+        */
         int k = 0;
         dst[k++] = init_value;
         
@@ -1074,8 +1016,10 @@ public class DeltaMapper
    
     public static int[] getValuesFromMixedDeltas(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
+    	    /*
         if(src[0] != 0)
-        	System.out.println("Wrong code.");
+        	    System.out.println("Wrong code.");
+        	*/
         
         int[] dst = new int[xdim * ydim];
         int k     = 0;
@@ -1243,17 +1187,20 @@ public class DeltaMapper
    
     public static int[] getValuesFromMixedDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
-    	int[] dst = new int[xdim * ydim];
+    	    int[] dst = new int[xdim * ydim];
         dst[0]    = init_value;
         int value = init_value;
         
+        
+        /*
         if(src[0] != 0)
-        	System.out.println("Wrong code.");
+        	    System.out.println("Wrong code.");
+        */
         
         for(int i = 1; i < xdim; i++)
         {
-        	value   += src[i];
-        	dst[i] = value;
+        	    value   += src[i];
+            dst[i] = value;
         }
         
         for(int i = 1; i < ydim; i++)
@@ -1525,7 +1472,7 @@ public class DeltaMapper
         }
         
         // Then use both maps to get the deltas.
-    	int[] dst = new int[xdim * ydim];
+    	    int[] dst = new int[xdim * ydim];
      
         int init_value = src[0];
         int value      = init_value;
@@ -1653,31 +1600,33 @@ public class DeltaMapper
    
     public static int[] getValuesFromMixedDeltas3(int [] src, int xdim, int ydim, int init_value, byte [] line_map, byte [] pixel_map)
     {
-    	int[] dst = new int[xdim * ydim];
+    	    int[] dst = new int[xdim * ydim];
         dst[0]    = init_value;
         int value = init_value;
         
+        /*
         if(src[0] != 0)
-        	System.out.println("Wrong code.");
+        	    System.out.println("Wrong code.");
+        	*/
         
         for(int i = 1; i < xdim; i++)
         {
-        	value   += src[i];
-        	dst[i] = value;
+        	    value   += src[i];
+        	    dst[i] = value;
         }
         
         int p = 0;
         for(int i = 1; i < ydim; i++)
         {
-        	byte m = line_map[i - 1];
+        	    byte m = line_map[i - 1];
             for(int j = 0; j < xdim; j++)	
             {
-            	int k = i * xdim + j;
-            	if(j == 0)
-            	{
-            	    init_value += src[k];
-            	    dst[k]      = init_value;
-            	}
+            	    int k = i * xdim + j;
+            	    if(j == 0)
+            	    {
+            	        init_value += src[k];
+            	        dst[k]      = init_value;
+            	    }
             	else if(j < xdim - 1)
             	{
             	    int n = pixel_map[p++];
@@ -1848,17 +1797,19 @@ public class DeltaMapper
     
     public static int[] getValuesFromIdealDeltas2(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
-    	if(src[0] != 0)
-        	System.out.println("Wrong code.");
- 
-    	int[] dst = new int[xdim * ydim];
-    	int k     = 0;
-        dst[k++]  = init_value;
+      	/*
+    	   if(src[0] != 0)
+        	   System.out.println("Wrong code.");
+        */
+    	
+    	   int[] dst = new int[xdim * ydim];
+    	   int k     = 0;
+        dst[k++] = init_value;
         
         for(int i = 1; i < xdim; i++)
         {
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+        	    k++;
         }
         
         int m = 0;
@@ -1867,7 +1818,7 @@ public class DeltaMapper
             init_value += src[k];
             dst[k++]    = init_value;
             
-        	for(int j = 1; j < xdim - 1; j++)	
+        	   for(int j = 1; j < xdim - 1; j++)	
            {
                 int n = map[m++];
                 if(n == 0)
@@ -1971,8 +1922,10 @@ public class DeltaMapper
      
      public static int[] getValuesFromIdealDeltas3(int [] src, int xdim, int ydim, int init_value, byte [] map)
      {
+    	    /*
      	if(src[0] != 0)
          	System.out.println("Wrong code.");
+         */
   
      	int[] dst = new int[xdim * ydim];
      	int k     = 0;
@@ -2097,9 +2050,11 @@ public class DeltaMapper
      
      public static int[] getValuesFromIdealDeltas4(int [] src, int xdim, int ydim, int init_value, byte [] map)
      {
+    	    /*
      	if(src[0] != 0)
          	System.out.println("Wrong code.");
-  
+        */
+    	 
      	int[] dst = new int[xdim * ydim];
      	int k     = 0;
          dst[k++]  = init_value;
@@ -2228,8 +2183,10 @@ public class DeltaMapper
      
      public static int[] getValuesFromIdealDeltas5(int [] src, int xdim, int ydim, int init_value, byte [] map)
      {
+    	    /*
      	if(src[0] != 0)
          	System.out.println("Wrong code.");
+         */
   
      	int[] dst = new int[xdim * ydim];
      	int k     = 0;
@@ -2375,17 +2332,19 @@ public class DeltaMapper
     
     public static int[] getValuesFromIdealDeltas6(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
-    	if(src[0] != 0)
-        	System.out.println("Wrong code.");
+    	    /*
+    	    if(src[0] != 0)
+         	System.out.println("Wrong code.");
+         */
  
-    	int[] dst = new int[xdim * ydim];
-    	int k     = 0;
+    	    int[] dst = new int[xdim * ydim];
+    	    int k     = 0;
         dst[k++]  = init_value;
         
         for(int i = 1; i < xdim; i++)
         {
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+          	k++;
         }
         
         int m = 0;
@@ -2394,7 +2353,7 @@ public class DeltaMapper
             init_value += src[k];
             dst[k++]    = init_value;
             
-        	for(int j = 1; j < xdim - 1; j++)	
+            for(int j = 1; j < xdim - 1; j++)	
             {
                 int n = map[m++];
                 if(n == 0)
@@ -2411,8 +2370,8 @@ public class DeltaMapper
                 	dst[k] = (dst[k - 1] + dst[k - xdim + 1]) / 2 + src[k];
                 k++;
             }
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+          	dst[k] = dst[k - 1] + src[k];
+          	k++;
         }
         return dst;
     }
@@ -2528,17 +2487,19 @@ public class DeltaMapper
     
     public static int[] getValuesFromIdealDeltas8(int [] src, int xdim, int ydim, int init_value, byte [] map)
     {
-    	if(src[0] != 0)
-        	System.out.println("Wrong code.");
+    	    /*
+    	    if(src[0] != 0)
+        	    System.out.println("Wrong code.");
+        	*/
  
-    	int[] dst = new int[xdim * ydim];
-    	int k     = 0;
+        	int[] dst = new int[xdim * ydim];
+    	    int k     = 0;
         dst[k++]  = init_value;
         
         for(int i = 1; i < xdim; i++)
         {
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+        	    k++;
         }
         
         int m = 0;
@@ -2547,7 +2508,7 @@ public class DeltaMapper
             init_value += src[k];
             dst[k++]    = init_value;
             
-        	for(int j = 1; j < xdim - 1; j++)	
+        	    for(int j = 1; j < xdim - 1; j++)	
             {
                 int n = map[m++];
                 if(n == 0)
@@ -2568,8 +2529,8 @@ public class DeltaMapper
                 	dst[k] = (dst[k - xdim + 1] + dst[k - 1]) / 2 + src[k];
                 k++;
             }
-        	dst[k] = dst[k - 1] + src[k];
-        	k++;
+        	    dst[k] = dst[k - 1] + src[k];
+           	k++;
         }
         return dst;
     }
