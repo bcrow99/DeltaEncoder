@@ -25,7 +25,7 @@ public class DeltaWriter
 
 	int pixel_quant    = 4;
 	int pixel_shift    = 2;
-	int segment_length = 15;
+	int segment_length = 20;
 	int segment_type   = 3;
 	int merge_type     = 0;
 	double merge_bin   = .05;
@@ -68,8 +68,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("");
-		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix = new String("");
+		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -94,9 +94,6 @@ public class DeltaWriter
 			int raster_type = original_image.getType();
 			image_xdim = original_image.getWidth();
 			image_ydim = original_image.getHeight();
-
-			//System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
-			//System.out.println();
 
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
@@ -285,28 +282,25 @@ public class DeltaWriter
 
 				JMenu histogram_menu = new JMenu("Histogram");
 				
-				 // A modeless dialog box that shows up if Histogram->Show Histogram is selected.
 		     	JPanel histogram_panel = new JPanel(new BorderLayout());
 		     	Canvas histogram_canvas = new HistogramCanvas();
-		     	//histogram_canvas.setSize(256, 100);
 		     	histogram_canvas.setSize(522, 100);
 		     	
-		     	/*
-		     	JScrollBar histogram_scrollbar = new JScrollBar(JScrollBar.HORIZONTAL, 0, 1, 0, 101);
-		     	AdjustmentListener histogram_scrollbar_handler = new AdjustmentListener()
-		     	{
-		     	    public void adjustmentValueChanged(AdjustmentEvent event)
-		     		{
-		     			int position = event.getValue();
-		     			if (event.getValueIsAdjusting() == false)
-		     			{
-		     				System.out.println("Position is " + position);
-		     			}
-		     		}
-		     	};
-		     	histogram_scrollbar.addAdjustmentListener(histogram_scrollbar_handler);
-		     	histogram_panel.add(histogram_scrollbar, BorderLayout.SOUTH);
-                */
+		     	
+		     	// JScrollBar histogram_scrollbar = new JScrollBar(JScrollBar.HORIZONTAL, 0, 1, 0, 101);
+		        // AdjustmentListener histogram_scrollbar_handler = new AdjustmentListener()
+		     	//{
+		     	//    public void adjustmentValueChanged(AdjustmentEvent event)
+		     	//	{
+		     	//		int position = event.getValue();
+		     	//		if (event.getValueIsAdjusting() == false)
+		     	//		{
+		     	//			System.out.println("Position is " + position);
+		     	//		}
+		     	//	}
+		     	//};
+		     	//histogram_scrollbar.addAdjustmentListener(histogram_scrollbar_handler);
+		     	//histogram_panel.add(histogram_scrollbar, BorderLayout.SOUTH);
 		     	
 		     	
 		     	histogram_panel.add(histogram_canvas, BorderLayout.CENTER);
@@ -315,10 +309,10 @@ public class DeltaWriter
 		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
 		     	histogram_dialog.add(histogram_panel);
 		     	
-		     	/*
-		     	JPanel type_panel = new JPanel(new GridLayout(1, 6));	
-		     	JPanel channel_panel = new JPanel(new GridLayout(1, 3));
-                */
+		    
+		     	//JPanel type_panel = new JPanel(new GridLayout(1, 6));	
+		     	//JPanel channel_panel = new JPanel(new GridLayout(1, 3));
+           
 		     	
 		     	
 				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[18];
@@ -1299,9 +1293,7 @@ public class DeltaWriter
 				{
 				    int [] shifted_channel = DeltaMapper.shift(channel, pixel_shift);	
 				    if(pixel_quant == 0)
-				    {
 				    	    dequantized_channel_list.add(shifted_channel);	
-				    }
 				    else
 				    {
 				    	    int [] resized_channel = ResizeMapper.resize(shifted_channel, new_xdim, image_xdim, image_ydim);	
@@ -1587,8 +1579,6 @@ public class DeltaWriter
 							byte[] current_segment = (byte[]) segments.get(k);
 							segment_data[k]        = current_segment[current_segment.length - 1];
 						}
-						
-						// Optionally zip segment data.
 						
 						//Deflater deflater = new Deflater(Deflater.FILTERED);
 						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
