@@ -986,8 +986,6 @@ public class StringMapper
 
 		if(zero_amount > 0)
 		{
-			// We only print a message that the string didn't compress if the inverse
-			// transform would produce compression.
 			if(one_amount < 0)
 			{
 				int iterations = getIterations(src);
@@ -1036,22 +1034,18 @@ public class StringMapper
 				
 				if(one_amount < 0)
 				{
-					/*
-					System.out.println("Anomalous 0 string behavior.");
-					System.out.println("Zero ratios segmented by byte:");
+					byte [] further_compressed_segment = compressOneStrings(dst);
+					int     further_compressed_length  = getBitlength(further_compressed_segment);
+					System.out.println("Anomalous stop bit string behavior.");
+					System.out.println("Compressed length was " + compressed_length);
+					System.out.println("Further compressed length was " + further_compressed_length);
+					System.out.println("Zero ratio segmented by byte.");
 					for(int i = 0; i < dst.length - 1; i++)
 					{
 						double ratio = getZeroRatio(dst, i * 8, 8, bit_table);
 						System.out.print(String.format("%.2f", ratio) + " ");
 					}
 					System.out.println();
-					System.out.println();
-					*/
-					byte [] further_compressed_segment = compressOneStrings(dst);
-					int further_compressed_length = getBitlength(further_compressed_segment);
-					System.out.println("Anomalous 0 string behavior.");
-					System.out.println("Compressed length was " + compressed_length);
-					System.out.println("Further compressed length was " + further_compressed_length);
 					System.out.println();
 				}
 				
@@ -1119,15 +1113,7 @@ public class StringMapper
 					System.out.println("Anomalous 0 string behavior.");
 					System.out.println("Compressed length was " + compressed_length);
 					System.out.println("Further compressed length was " + further_compressed_length);
-					System.out.println();
-				}
-
-				/*
-				if(one_amount < 0)
-				{
-					System.out.println("Anomalous 0 string behavior.");
-					System.out.println("Zero ratios segmented by byte:");
-					
+					System.out.println("Zero ratio segmented by byte.");
 					for(int i = 0; i < dst.length - 1; i++)
 					{
 						double ratio = getZeroRatio(dst, i * 8, 8, bit_table);
@@ -1136,9 +1122,6 @@ public class StringMapper
 					System.out.println();
 					System.out.println();
 				}
-				*/
-				
-				
 				return dst;
 			}
 		}
@@ -1148,11 +1131,6 @@ public class StringMapper
 	// recursive decompression.
 	public static byte[] compressZeroStrings2(byte[] src)
 	{
-		ArrayList bitlength_list   = new ArrayList();
-		ArrayList zero_ratio_list  = new ArrayList();
-		ArrayList zero_amount_list = new ArrayList();
-		ArrayList one_amount_list  = new ArrayList();
-		
 		int [] bit_table = getBitTable();
 
 		int bit_length    = getBitlength(src);
@@ -1160,15 +1138,8 @@ public class StringMapper
 		int zero_amount   = getCompressionAmount(src, bit_length, 0);
 		int one_amount    = getCompressionAmount(src, bit_length, 1);
 
-		bitlength_list.add(bit_length);
-		zero_ratio_list.add(zero_ratio);
-		zero_amount_list.add(zero_amount);
-		one_amount_list.add(one_amount);
-
 		if(zero_amount > 0)
 		{
-			// We only print a message that the string didn't compress if the inverse
-			// transform would produce compression.
 			if(one_amount < 0)
 			{
 				int iterations = getIterations(src);
@@ -1200,45 +1171,8 @@ public class StringMapper
 			zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
 			one_amount  = getCompressionAmount(buffer1, compressed_length, 1);
 
-			bitlength_list.add(compressed_length);
-			zero_ratio_list.add(zero_ratio);
-			zero_amount_list.add(zero_amount);
-			one_amount_list.add(one_amount);
-
 			if(zero_amount >= 0 || result[1] == 1)
 			{
-				/*
-				boolean isAnomalous = false;
-				if(one_amount < 0)
-				{
-
-					System.out.println("Anomalous 0 string behavior:");
-					int size = zero_ratio_list.size();
-					for(int i = 0; i < size; i++)
-					{
-						int current_length = (int) bitlength_list.get(i);
-						double current_ratio = (double) zero_ratio_list.get(i);
-						int current_zero_amount = (int) zero_amount_list.get(i);
-						int current_one_amount = (int) one_amount_list.get(i);
-						System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
-					}
-					int increment = bit_length / 10;
-					int offset = 0;
-					int length = increment;
-					System.out.print("Segmented zero ratios: ");
-					for(int i = 0; i < 10; i++)
-					{
-						double current_ratio = getZeroRatio(src, offset, length);
-						offset += increment;
-						System.out.print(String.format("%.2f", current_ratio) + " ");
-					}
-
-					System.out.println();
-					isAnomalous = true;
-
-				}
-                */
-				
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
 					byte_length++;
@@ -1251,26 +1185,24 @@ public class StringMapper
 				System.arraycopy(buffer1, 0, dst, 0, byte_length);
 				dst[byte_length] = 1;
 				dst[byte_length] |= extra_bits;
-
-				/*
-				if(isAnomalous)
-				{
-					if(isAnomalous)
-					{
-						int increment = compressed_length / 10;
-						int offset = 0;
-						int length = increment;
-
-						for(int i = 0; i < 10; i++)
-						{
-							double current_ratio = getZeroRatio(dst, offset, length);
-							offset += increment;
-							// System.out.print(String.format("%.2f", current_ratio) + " ");
-						}
-					}
-				}
-				*/
 				
+				if(one_amount < 0)
+				{
+					byte [] further_compressed_segment = compressOneStrings(dst);
+					int     further_compressed_length  = getBitlength(further_compressed_segment);
+					System.out.println("Anomalous 0 string behavior.");
+					System.out.println("Compressed length was " + compressed_length);
+					System.out.println("Further compressed length was " + further_compressed_length);
+					System.out.println("Zero ratio segmented by byte.");
+					for(int i = 0; i < dst.length - 1; i++)
+					{
+						double ratio = getZeroRatio(dst, i * 8, 8, bit_table);
+						System.out.print(String.format("%.2f", ratio) + " ");
+					}
+					System.out.println();
+					System.out.println();
+				}
+
 				return dst;
 			} 
 			else
@@ -1294,10 +1226,6 @@ public class StringMapper
 						zero_ratio  = getZeroRatio(buffer2, compressed_length, bit_table);
 						zero_amount = getCompressionAmount(buffer2, compressed_length, 0);
 						one_amount  = getCompressionAmount(buffer2, compressed_length, 1);
-						bitlength_list.add(compressed_length);
-						zero_ratio_list.add(zero_ratio);
-						zero_amount_list.add(zero_amount);
-						one_amount_list.add(one_amount);
 					} 
 					else
 					{
@@ -1310,50 +1238,11 @@ public class StringMapper
 							System.out.println("Actual amount " + (compressed_length - previous_length) + " was not equal to predicted amount " + zero_amount + " after  iteration " + iterations);
 							System.out.println();
 						}
-
 						zero_ratio = getZeroRatio(buffer1, compressed_length, bit_table);
 						zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
 						one_amount = getCompressionAmount(buffer1, compressed_length, 1);
-						bitlength_list.add(compressed_length);
-						zero_ratio_list.add(zero_ratio);
-						zero_amount_list.add(zero_amount);
-
-						one_amount_list.add(one_amount);
 					}
 				}
-
-				/*
-				boolean isAnomalous = false;
-				if(one_amount < 0)
-				{
-					System.out.println("Anomalous 0 string behavior:");
-					int size = zero_ratio_list.size();
-					for(int i = 0; i < size; i++)
-					{
-						int current_length = (int) bitlength_list.get(i);
-						double current_ratio = (double) zero_ratio_list.get(i);
-						int current_zero_amount = (int) zero_amount_list.get(i);
-						int current_one_amount = (int) one_amount_list.get(i);
-						System.out.println(current_length + "\t" + String.format("%.2f", current_ratio) + "\t" + current_zero_amount + "\t" + current_one_amount);
-					}
-
-					System.out.print("Segmented zero ratios: ");
-					int increment = bit_length / 10;
-					int offset = 0;
-					int length = increment;
-
-					for(int i = 0; i < 10; i++)
-					{
-						double current_ratio = getZeroRatio(src, offset, length);
-						offset += increment;
-						System.out.print(String.format("%.2f", current_ratio) + " ");
-					}
-
-					System.out.println();
-					isAnomalous = true;
-
-				}
-                */
 				
 				int byte_length = compressed_length / 8;
 				if(compressed_length % 8 != 0)
@@ -1370,24 +1259,23 @@ public class StringMapper
 				extra_bits <<= 5;
 				dst[byte_length] |= extra_bits;
 
-				/*
-				if(isAnomalous)
+				if(one_amount < 0)
 				{
-					int increment = compressed_length / 10;
-					int offset = 0;
-					int length = increment;
-
-					for(int i = 0; i < 10; i++)
+					byte [] further_compressed_segment = compressOneStrings(dst);
+					int     further_compressed_length  = getBitlength(further_compressed_segment);
+					System.out.println("Anomalous 0 string behavior.");
+					System.out.println("Compressed length was " + compressed_length);
+					System.out.println("Further compressed length was " + further_compressed_length);
+					System.out.println("Zero ratio segmented by byte.");
+					for(int i = 0; i < dst.length - 1; i++)
 					{
-						double current_ratio = getZeroRatio(dst, offset, length);
-						offset += increment;
-						System.out.print(String.format("%.2f", current_ratio) + " ");
+						double ratio = getZeroRatio(dst, i * 8, 8, bit_table);
+						System.out.print(String.format("%.2f", ratio) + " ");
 					}
-
 					System.out.println();
 					System.out.println();
 				}
-                */
+				
 				return dst;
 			}
 		}
@@ -1888,8 +1776,7 @@ public class StringMapper
 
 		if(one_amount > 0)
 		{
-			// This never seems to happen with one (or run) strings,
-			// which is why there's a print statement in the rare case it does.
+			// This never seems to happen with one or run bit strings.
 			if(zero_amount < 0)
 			{
 				int iterations = getIterations(src);
@@ -1909,7 +1796,8 @@ public class StringMapper
 			byte[] buffer2 = new byte[src.length];
 
 			// The result contains the length of the bit string contained in the buffer,
-			// and a number signifying whether the original string was well formed or not.
+			// and a number signifying whether the original string was well formed or not 
+			// (all valid last inputs in recursive process).
 			int[] result          = compressOneBits(src, bit_length, buffer1);
 			int compressed_length = result[0];
 
@@ -1956,7 +1844,7 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while (one_amount < 0 && iterations < 15)
+				while(one_amount < 0 && iterations < 15)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
