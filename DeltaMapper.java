@@ -84,70 +84,58 @@ public class DeltaMapper
         k = 0;
         for(int i = 0; i < ydim; i++)
         {
-        	if(i == 0)
-        	{
+          	if(i == 0)
+        	    {
                 for(int j = 0; j < xdim; j++)
                 {
-            	    if(j == 0)
-            	    {
-            			k++;
-            	    }
-            		else
-            		{
-            		    delta     = src[k] - value;
+            	        if(j == 0)
+            			    k++;
+            		    else
+            		    {
+            		        delta     = src[k] - value;
                         value     += delta;
                         k++;
                         sum      += Math.abs(delta);
-            		}
-            	}
+            		    }
+            	    }
             }
-        	else
-        	{
-        		for(int j = 0; j < xdim; j++)
+          	else
+        	    {
+        		    for(int j = 0; j < xdim; j++)
                 {
-            	    if(j == 0)
-            	    {
-            	    	delta      = src[k] - init_value;
-            	    	init_value = src[k];
-            	    	k++;
-            	        sum += Math.abs(delta);
-            	    }
-            	    else
-            	    {
-            	    	int a = src[k - 1];
-            	    	int b = src[k - xdim];
-            	    	int c = src[k - xdim - 1];
-            	    	int d = src[k - xdim + 1];
-            	    	int e = src[k];
+            	        if(j == 0)
+            	        {
+            	    	        delta      = src[k] - init_value;
+            	    	        init_value = src[k];
+            	    	        k++;
+            	            sum += Math.abs(delta);
+            	        }
+            	        else
+            	        {
+            	    	        int a = src[k - 1];
+            	    	        int b = src[k - xdim];
+            	    	        int c = src[k - xdim - 1];
+            	    	        int d = src[k - xdim + 1];
+            	         	int e = src[k];
             	    	
-            	    	int delta_a = Math.abs(a - e);
-            	    	int delta_b = Math.abs(b - e);
-            	    	int delta_c = Math.abs(c - e);
-            	    	int delta_d = Math.abs(d - e);
+            	    	        int delta_a = Math.abs(a - e);
+            	    	        int delta_b = Math.abs(b - e);
+            	          	int delta_c = Math.abs(c - e);
+            	    	        int delta_d = Math.abs(d - e);
             	    	
-            	    	
-            	    	if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
-            	    	{
-            	    	    delta = delta_a;
-            	    	
-            	    	}
-            	    	else if(delta_b <= delta_c && delta_b <= delta_d)
-            	    	{
-            	    	    delta = delta_b;
-            	    	}
-            	    	else if(delta_c <= delta_d)
-            	    	{
-            	    	    delta = delta_c;
-            	    	}
-            	    	else
-            	    	{
-            	    		delta = delta_d;
-            	    	}
-            	    	k++;
-            	    	sum += Math.abs(delta);
-            	    }
+            	    	        if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+            	    	            delta = delta_a;
+            	          	else if(delta_b <= delta_c && delta_b <= delta_d)
+            	    	            delta = delta_b;
+            	    	        else if(delta_c <= delta_d)
+            	    	            delta = delta_c;
+            	    	        else
+            	    		        delta = delta_d;
+            	         	k++;
+            	         	sum += Math.abs(delta);
+            	        }
                 }
-        	}
+        	    }
         }
         return sum;
     }
@@ -158,39 +146,31 @@ public class DeltaMapper
         int delta = 0;
         for(int i = 1; i < ydim; i++)
         {
-        	int k = i * xdim + 1;
-        	for(int j = 1; j < xdim - 1; j += interval)
+        	    int k = i * xdim + 1;
+        	    for(int j = 1; j < xdim - 1; j += interval)
             {
                 int a = src[k - 1];
-            	int b = src[k - xdim];
-            	int c = src[k - xdim - 1];
-            	int d = src[k - xdim - 1];
-            	int e = src[k];
+            	    int b = src[k - xdim];
+            	    int c = src[k - xdim - 1];
+            	    int d = src[k - xdim - 1];
+            	    int e = src[k];
             	
-            	int delta_a = Math.abs(a - e);
-            	int delta_b = Math.abs(b - e);
-            	int delta_c = Math.abs(c - e);
-            	int delta_d = Math.abs(d - e);
+            	    int delta_a = Math.abs(a - e);
+            	    int delta_b = Math.abs(b - e);
+            	    int delta_c = Math.abs(c - e);
+            	    int delta_d = Math.abs(d - e);
             	    	   	
-            	if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
-    	    	{
-    	    	    delta = delta_a;
-    	    	}
-    	    	else if(delta_b <= delta_c && delta_b <= delta_d)
-    	    	{
-    	    	    delta = delta_b;
-    	    	}
-    	    	else if(delta_c <= delta_d)
-    	    	{
-    	    	    delta = delta_c;
-    	    	}
-    	    	else
-    	    	{
-    	    		delta = delta_d;
-    	    	}
-            	sum += delta;
-            	k += interval;  	
-        	}
+            	    if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+    	    	            delta = delta_a;
+    	    	        else if(delta_b <= delta_c && delta_b <= delta_d)
+    	    	            delta = delta_b;
+    	    	        else if(delta_c <= delta_d)
+    	    	            delta = delta_c;
+    	         	else
+    	    		        delta = delta_d;
+              	sum += delta;
+            	    k += interval;  	
+        	    }
         }
         return sum;
     }
@@ -234,9 +214,12 @@ public class DeltaMapper
         return result;
     }
     
+    // Going back and forth between setting the first delta value to 0 or a code.
+    // The code can be a useful debugging tool but is an extra complication, and
+    // reduces the compression by a miniscule amount.
     public static int[] getValuesFromHorizontalDeltas(int src[],int xdim, int ydim, int init_value)
     {
-    	int[] dst = new int[xdim * ydim];
+    	    int[] dst = new int[xdim * ydim];
     	
         int k     = 0;
         int value = init_value;
@@ -317,11 +300,10 @@ public class DeltaMapper
         
         for(int i = 1; i < xdim; i++)
         {
-        	value   += src[i];
-        	dst[i] = value;
+            	value   += src[i];
+        	    dst[i] = value;
         }
         
-        // Now we can use values from the destination data to get the rest of the values. 
         for(int i = 1; i < ydim; i++)
         {
             for(int j = 0; j < xdim; j++)
@@ -374,12 +356,12 @@ public class DeltaMapper
     {
     	    int k = 0;
     	    /*
-      	    if(src[k] != 0)
-			    System.out.println("Wrong code " + src[k]);
-		    */
+      	if(src[k] != 0)
+			System.out.println("Wrong code " + src[k]);
+		*/
     	
     	    int[] dst = new int[xdim * ydim];
-    	    dst[k++]  = init_value;
+      	dst[k++]  = init_value;
     	
     	    for(int i = 1; i < xdim; i++)
     	    {
@@ -494,7 +476,7 @@ public class DeltaMapper
 
     public static int[] getValuesFromPaethDeltas(int src[], int xdim, int ydim, int init_value)
     {
-    	int[] dst = new int[xdim * ydim];
+      	int[] dst = new int[xdim * ydim];
         dst[0]    = init_value;
         int value = init_value;
 
@@ -505,44 +487,38 @@ public class DeltaMapper
         
         for(int i = 1; i < xdim; i++)
         {
-        	value   += src[i];
-        	dst[i] = value;
+        	    value   += src[i];
+        	    dst[i] = value;
         }
         
         for(int i = 1; i < ydim; i++)
         {
             for(int j = 0; j < xdim; j++)	
             {
-            	if(j == 0)
-            	{
-            	    init_value   += src[i * xdim];
-            	    dst[i * xdim] = init_value;
-            	    value         = init_value;
-            	}
-            	else
-            	{
-            	    int a = dst[i * xdim + j - 1];
-            	    int b = dst[(i - 1) * xdim + j];
-            	    int c = dst[(i - 1) * xdim + j - 1];
-            	    int d = a + b - c;
+            	    if(j == 0)
+            	    {
+            	        init_value   += src[i * xdim];
+            	        dst[i * xdim] = init_value;
+            	        value         = init_value;
+            	    }
+            	    else
+            	    {
+            	        int a = dst[i * xdim + j - 1];
+            	        int b = dst[(i - 1) * xdim + j];
+            	        int c = dst[(i - 1) * xdim + j - 1];
+            	        int d = a + b - c;
             	    
-            	    int delta_a = Math.abs(a - d);
-        	    	int delta_b = Math.abs(b - d);
-        	    	int delta_c = Math.abs(c - d);
+            	        int delta_a = Math.abs(a - d);
+        	    	        int delta_b = Math.abs(b - d);
+        	    	        int delta_c = Math.abs(c - d);
         	    	
-        	    	if(delta_a <= delta_b && delta_a <= delta_c)
-        	    	{
-        	    	    dst[i * xdim + j] = a + src[i * xdim + j];
-        	    	}
-        	    	else if(delta_b <= delta_c)
-        	    	{
-        	    		dst[i * xdim + j] = b + src[i * xdim + j];
-        	    	}
-        	    	else
-        	    	{
-        	    		dst[i * xdim + j] = c + src[i * xdim + j];
-        	    	}
-            	}
+        	    	        if(delta_a <= delta_b && delta_a <= delta_c)
+        	    	            dst[i * xdim + j] = a + src[i * xdim + j];
+        	    	        else if(delta_b <= delta_c)
+        	    		        dst[i * xdim + j] = b + src[i * xdim + j];
+        	            else
+        	    		        dst[i * xdim + j] = c + src[i * xdim + j];
+            	    }
             }
         }
         return dst;
