@@ -68,8 +68,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		//String prefix = new String("");
-		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix = new String("");
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -280,116 +280,6 @@ public class DeltaWriter
 				save_item.addActionListener(save_handler);
 				file_menu.add(save_item);
 
-				JMenu histogram_menu = new JMenu("Histogram");
-				
-		     	JPanel histogram_panel = new JPanel(new BorderLayout());
-		     	Canvas histogram_canvas = new HistogramCanvas();
-		     	histogram_canvas.setSize(522, 100);
-		     	
-		     	
-		     	// JScrollBar histogram_scrollbar = new JScrollBar(JScrollBar.HORIZONTAL, 0, 1, 0, 101);
-		        // AdjustmentListener histogram_scrollbar_handler = new AdjustmentListener()
-		     	//{
-		     	//    public void adjustmentValueChanged(AdjustmentEvent event)
-		     	//	{
-		     	//		int position = event.getValue();
-		     	//		if (event.getValueIsAdjusting() == false)
-		     	//		{
-		     	//			System.out.println("Position is " + position);
-		     	//		}
-		     	//	}
-		     	//};
-		     	//histogram_scrollbar.addAdjustmentListener(histogram_scrollbar_handler);
-		     	//histogram_panel.add(histogram_scrollbar, BorderLayout.SOUTH);
-		     	
-		     	
-		     	histogram_panel.add(histogram_canvas, BorderLayout.CENTER);
-		     	
-				
-		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
-		     	histogram_dialog.add(histogram_panel);
-		     	
-		    
-		     	//JPanel type_panel = new JPanel(new GridLayout(1, 6));	
-		     	//JPanel channel_panel = new JPanel(new GridLayout(1, 3));
-           
-		     	
-		     	
-				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[18];
-
-				histogram_button[0]  = new JRadioButtonMenuItem("0");
-				histogram_button[1]  = new JRadioButtonMenuItem("0*");
-				histogram_button[2]  = new JRadioButtonMenuItem("0^");
-				histogram_button[3]  = new JRadioButtonMenuItem("0*^");
-				histogram_button[4]  = new JRadioButtonMenuItem("0**");
-				histogram_button[5]  = new JRadioButtonMenuItem("0**^");
-				
-				histogram_button[6]  = new JRadioButtonMenuItem("1");
-				histogram_button[7]  = new JRadioButtonMenuItem("1*");
-				histogram_button[8]  = new JRadioButtonMenuItem("1^");
-				histogram_button[9]  = new JRadioButtonMenuItem("1*^");
-				histogram_button[10] = new JRadioButtonMenuItem("1**");
-				histogram_button[11] = new JRadioButtonMenuItem("1**^");
-				
-				histogram_button[12] = new JRadioButtonMenuItem("2");
-				histogram_button[13] = new JRadioButtonMenuItem("2*");
-				histogram_button[14] = new JRadioButtonMenuItem("2^");
-				histogram_button[15] = new JRadioButtonMenuItem("2*^");
-				histogram_button[16] = new JRadioButtonMenuItem("2**");
-				histogram_button[17] = new JRadioButtonMenuItem("2**^");
-				
-				histogram_button[histogram_type].setSelected(true);
-
-				class HistogramButtonHandler implements ActionListener
-				{
-					int index;
-
-					HistogramButtonHandler(int index)
-					{
-						this.index = index;
-					}
-
-					public void actionPerformed(ActionEvent e)
-					{
-						if (histogram_type != index)
-						{
-							histogram_button[histogram_type].setSelected(false);
-							histogram_type = index;
-							histogram_button[histogram_type].setSelected(true);
-							histogram_canvas.repaint();
-						} 
-						else
-							histogram_button[histogram_type].setSelected(true);
-					}
-				}
-
-				for (int i = 0; i < 18; i++)
-				{
-					histogram_button[i].addActionListener(new HistogramButtonHandler(i));
-					histogram_menu.add(histogram_button[i]);
-				}
-		     	
-				JMenuItem histogram_item = new JMenuItem("Show Histogram");
-				ActionListener histogram_handler = new ActionListener()
-				{
-					public void actionPerformed(ActionEvent e)
-					{
-						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
-
-						Dimension canvas_dimension = histogram_canvas.getSize();
-						double    canvas_xdim      = canvas_dimension.getWidth();
-						double    canvas_ydim      = canvas_dimension.getHeight();
-						
-						y += image_ydim + 60;
-						histogram_dialog.setLocation(x, y);
-						histogram_dialog.pack();
-						histogram_dialog.setVisible(true);
-					}
-				};
-				histogram_item.addActionListener(histogram_handler);
-				histogram_menu.add(histogram_item);
 				
 		     	
 				JMenu settings_menu = new JMenu("Quantization");
@@ -906,11 +796,124 @@ public class DeltaWriter
 					delta_menu.add(delta_button[i]);
 				}
 
+				
+				
+JMenu histogram_menu = new JMenu("Histogram");
+				
+		     	JPanel histogram_panel = new JPanel(new BorderLayout());
+		     	Canvas histogram_canvas = new HistogramCanvas();
+		     	histogram_canvas.setSize(522, 100);
+		     	
+		     	
+		     	// JScrollBar histogram_scrollbar = new JScrollBar(JScrollBar.HORIZONTAL, 0, 1, 0, 101);
+		        // AdjustmentListener histogram_scrollbar_handler = new AdjustmentListener()
+		     	//{
+		     	//    public void adjustmentValueChanged(AdjustmentEvent event)
+		     	//	{
+		     	//		int position = event.getValue();
+		     	//		if (event.getValueIsAdjusting() == false)
+		     	//		{
+		     	//			System.out.println("Position is " + position);
+		     	//		}
+		     	//	}
+		     	//};
+		     	//histogram_scrollbar.addAdjustmentListener(histogram_scrollbar_handler);
+		     	//histogram_panel.add(histogram_scrollbar, BorderLayout.SOUTH);
+		     	
+		     	
+		     	histogram_panel.add(histogram_canvas, BorderLayout.CENTER);
+		     	
+				
+		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
+		     	histogram_dialog.add(histogram_panel);
+		     	
+		    
+		     	//JPanel type_panel = new JPanel(new GridLayout(1, 6));	
+		     	//JPanel channel_panel = new JPanel(new GridLayout(1, 3));
+           
+		     	
+		     	
+				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[18];
+
+				histogram_button[0]  = new JRadioButtonMenuItem("0");
+				histogram_button[1]  = new JRadioButtonMenuItem("0*");
+				histogram_button[2]  = new JRadioButtonMenuItem("0^");
+				histogram_button[3]  = new JRadioButtonMenuItem("0*^");
+				histogram_button[4]  = new JRadioButtonMenuItem("0**");
+				histogram_button[5]  = new JRadioButtonMenuItem("0**^");
+				
+				histogram_button[6]  = new JRadioButtonMenuItem("1");
+				histogram_button[7]  = new JRadioButtonMenuItem("1*");
+				histogram_button[8]  = new JRadioButtonMenuItem("1^");
+				histogram_button[9]  = new JRadioButtonMenuItem("1*^");
+				histogram_button[10] = new JRadioButtonMenuItem("1**");
+				histogram_button[11] = new JRadioButtonMenuItem("1**^");
+				
+				histogram_button[12] = new JRadioButtonMenuItem("2");
+				histogram_button[13] = new JRadioButtonMenuItem("2*");
+				histogram_button[14] = new JRadioButtonMenuItem("2^");
+				histogram_button[15] = new JRadioButtonMenuItem("2*^");
+				histogram_button[16] = new JRadioButtonMenuItem("2**");
+				histogram_button[17] = new JRadioButtonMenuItem("2**^");
+				
+				histogram_button[histogram_type].setSelected(true);
+
+				class HistogramButtonHandler implements ActionListener
+				{
+					int index;
+
+					HistogramButtonHandler(int index)
+					{
+						this.index = index;
+					}
+
+					public void actionPerformed(ActionEvent e)
+					{
+						if (histogram_type != index)
+						{
+							histogram_button[histogram_type].setSelected(false);
+							histogram_type = index;
+							histogram_button[histogram_type].setSelected(true);
+							histogram_canvas.repaint();
+						} 
+						else
+							histogram_button[histogram_type].setSelected(true);
+					}
+				}
+
+				for (int i = 0; i < 18; i++)
+				{
+					histogram_button[i].addActionListener(new HistogramButtonHandler(i));
+					histogram_menu.add(histogram_button[i]);
+				}
+		     	
+				JMenuItem histogram_item = new JMenuItem("Show Histogram");
+				ActionListener histogram_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						//Dimension canvas_dimension = histogram_canvas.getSize();
+						//double    canvas_xdim      = canvas_dimension.getWidth();
+						//double    canvas_ydim      = canvas_dimension.getHeight();
+						
+						y += image_ydim + 60;
+						histogram_dialog.setLocation(x, y);
+						histogram_dialog.pack();
+						histogram_dialog.setVisible(true);
+					}
+				};
+				histogram_item.addActionListener(histogram_handler);
+				histogram_menu.add(histogram_item);
+				
 				menu_bar.add(file_menu);
 				menu_bar.add(delta_menu);
-				menu_bar.add(histogram_menu);
 				menu_bar.add(settings_menu);
 				menu_bar.add(segmentation_menu);
+				menu_bar.add(histogram_menu);
 
 				frame.setJMenuBar(menu_bar);
 
@@ -1123,6 +1126,7 @@ public class DeltaWriter
 				channel_string_type[i]       = StringMapper.getType(compression_string);
 				channel_iterations[i]        = StringMapper.getIterations(compression_string);
 
+				int [] bit_table = StringMapper.getBitTable();
 				if(segment_length == 0)
 				{
 					ArrayList<byte[]> segments = new ArrayList<byte[]>();
@@ -1133,7 +1137,7 @@ public class DeltaWriter
 				{
 					int bitlength = StringMapper.getBitlength(compression_string);
 					
-					double zero_ratio = StringMapper.getZeroRatio2(compression_string, bitlength);
+					double zero_ratio = StringMapper.getZeroRatio(compression_string, bitlength, bit_table);
 					
 					int original_number_of_segments = (int) Math.pow(2, segment_length);
 					int minimum_segment_length      = bitlength / original_number_of_segments;
@@ -1156,7 +1160,7 @@ public class DeltaWriter
 					
 					ArrayList packed_list   = SegmentMapper.packSegments(segments);
 					byte [] packed_segments = (byte [])packed_list.get(0);
-					zero_ratio              =  StringMapper.getZeroRatio2(packed_segments, packed_segments.length * 8);
+					zero_ratio              =  StringMapper.getZeroRatio(packed_segments, packed_segments.length * 8, bit_table);
 					System.out.println("The segments zero ratio is " + String.format("%.2f", zero_ratio));
 					System.out.println();
 				}
