@@ -180,18 +180,16 @@ public class SegmentMapper
 					merged_segment[merged_bytelength - 1] = extra_bits;
 				
 				// This almost works, but fails sometimes when the bin divider is odd.
-				/*
-				if(current_bin < bin_divider)
-				    merged_segment[merged_bytelength - 1] |= 16;
-				*/
+				// if(current_bin < bin_divider)
+				//    merged_segment[merged_bytelength - 1] |= 16;
 				
 				// Do it the hard way.
 				int bitlength = StringMapper.getBitlength(merged_segment);
 				double ratio  = StringMapper.getZeroRatio(merged_segment, bitlength, bit_table);
 				if(ratio < .5)
 					merged_segment[merged_bytelength - 1] |= 16;	
+				
 				merged_segments.add(merged_segment);
-
 				i += j;
 
 			} 
@@ -1194,11 +1192,9 @@ public class SegmentMapper
 						}
 						System.out.println("Total bitlength is " + total_bitlength);
 						
-						/*
-						System.out.println("Maximum segment byte length is " + max_segment_bytelength);
-						System.out.println("Maximum number of spliced bits is " + max_spliced_bits);
-						System.out.println("Total number of spliced bits is " + total_spliced_bits);
-						*/
+						//System.out.println("Maximum segment byte length is " + max_segment_bytelength);
+						//System.out.println("Maximum number of spliced bits is " + max_spliced_bits);
+						//System.out.println("Total number of spliced bits is " + total_spliced_bits);
 						
 						result.add(spliced_segments2);
 					    result.add(max_segment_bytelength);
@@ -1219,21 +1215,9 @@ public class SegmentMapper
 		if(dst_length % 8 != 0)
 			byte_length++;
 		
-		byte [] dst     = new byte[byte_length];
-		
-		
-		double bit_shift = bit_length;
-		bit_shift       /= 8;
-		
-		/*
-		System.out.println("Src length is " + src.length);
-		System.out.println("Dst length is " + dst.length);
-		System.out.println("Bit shift is " + String.format("%.2f", bit_shift));
-		System.out.println();
-		*/
-		
-		int offset = bit_length / 8;
-		int j = 0;
+		byte [] dst = new byte[byte_length];
+		int offset  = bit_length / 8;
+		int j       = 0;
 		for(int i = offset; i < src.length; i++)
 			dst[j++] = src[i];
 		
@@ -1480,7 +1464,8 @@ public class SegmentMapper
 			{
 				for(int j = 0; j < current_segment.length - 1; j++)
 					string[n + j] = current_segment[j];
-			} else
+			} 
+			else
 			{
 				for(int j = 0; j < current_segment.length - 1; j++)
 				{
@@ -1505,7 +1490,8 @@ public class SegmentMapper
 		{
 			for(int j = 0; j < last_segment.length - 1; j++)
 				string[n + j] = last_segment[j];
-		} else
+		} 
+		else
 		{
 			for(int j = 0; j < last_segment.length - 2; j++)
 			{
@@ -1547,7 +1533,6 @@ public class SegmentMapper
 	{
 		// Returning a list instead of the byte array directly provides
 		// for a simple way of error checking by returning an empty list.
-
 		ArrayList result = new ArrayList();
 		int size = segments.size();
 
@@ -1809,7 +1794,8 @@ public class SegmentMapper
 				{
 					byte high_bits = (byte) (string[n + j + 1]);
 					segment[j] |= high_bits << 8 - m;
-				} else if(j == bytelength[i] - 1)
+				} 
+				else if(j == bytelength[i] - 1)
 				{
 					if(n + j + 1 < string.length)
 					{
@@ -1877,7 +1863,8 @@ public class SegmentMapper
 					{
 						byte high_bits = (byte) (string[n + j + 1]);
 						segment[j] |= high_bits << 8 - m;
-					} else if(j == bytelength - 1)
+					} 
+					else if(j == bytelength - 1)
 					{
 						byte high_bits = (byte) (string[n + j + 1]);
 						segment[j] |= high_bits << 8 - m;
@@ -1887,7 +1874,6 @@ public class SegmentMapper
 					}
 				}
 			}
-
 			unpacked_segments.add(segment);
 			bit_offset += bitlength[i];
 		}
@@ -1906,7 +1892,8 @@ public class SegmentMapper
 		{
 			for(int j = 0; j < bytelength; j++)
 				segment[j] = string[n + j];
-		} else
+		} 
+		else
 		{
 			for(int j = 0; j < bytelength; j++)
 			{
@@ -1918,7 +1905,8 @@ public class SegmentMapper
 				{
 					byte high_bits = (byte) (string[n + j + 1]);
 					segment[j] |= high_bits << 8 - m;
-				} else if(j == bytelength - 1)
+				} 
+				else if(j == bytelength - 1)
 				{
 					if(n + j + 1 < string.length)
 					{
@@ -2171,7 +2159,8 @@ public class SegmentMapper
 		{
 			byte mask = getNegativeMask(bit_offset);
 			string[byte_offset] &= mask;
-		} else
+		} 
+		else
 		{
 			byte mask = getPositiveMask(bit_offset);
 			string[byte_offset] |= mask;
