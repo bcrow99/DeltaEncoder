@@ -92,7 +92,6 @@ public class SegmentMapper
         //System.out.println("Bin divider is " + bin_divider);
         
         int [] bit_table = StringMapper.getBitTable();
-        
         int i = 0;
 		for(i = 0; i < number_of_segments - 1; i++)
 		{
@@ -878,7 +877,7 @@ public class SegmentMapper
 							
 							for(j = 0 ; j < shifted_segment.length; j++)
 								reduced_segment[j] = shifted_segment[j];
-							ratio = StringMapper.getZeroRatio(reduced_segment, reduced_bitlength);
+							ratio = StringMapper.getZeroRatio(reduced_segment, reduced_bitlength, bit_table);
 							if(ratio < .5)
 								reduced_segment[reduced_segment.length - 1] = 16;
 							else
