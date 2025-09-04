@@ -21,7 +21,7 @@ public class StringMapper
 	 */
 	public static ArrayList getHistogram(byte src[])
 	{
-		// This is a test.
+		// This is not a test.
 		int min = src[0];
 		int max = src[0];
 		for(int i = 0; i < src.length; i++)
