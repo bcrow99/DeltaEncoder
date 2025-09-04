@@ -18,7 +18,7 @@ public class SegmentMapper
 			return result;
 		}
 	    
-	    // This is not a test.
+	    // This is a test.
 	    
 	    int string_bitlength   = StringMapper.getBitlength(string);
 		int number_of_segments = string_bitlength / bitlength;
