@@ -929,7 +929,8 @@ public class StringMapper
 							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer2, compressed_length, 0);
-						} else
+						} 
+						else
 						{
 							result = compressZeroBits(buffer2, previous_length, buffer1);
 							compressed_length = result[0];
@@ -943,12 +944,10 @@ public class StringMapper
 						byte_length++;
 					byte[] dst = new byte[byte_length + 1];
 					if(iterations % 2 == 0)
-					{
 						System.arraycopy(buffer2, 0, dst, 0, byte_length);
-					} else
-					{
+					else
 						System.arraycopy(buffer1, 0, dst, 0, byte_length);
-					}
+					
 					dst[byte_length] = (byte) iterations;
 					byte extra_bits = (byte) (compressed_length % 8);
 					if(extra_bits != 0)
@@ -1032,6 +1031,7 @@ public class StringMapper
 				dst[byte_length] = 1;
 				dst[byte_length] |= extra_bits;
 				
+				/*
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
@@ -1048,7 +1048,7 @@ public class StringMapper
 					System.out.println();
 					System.out.println();
 				}
-				
+				*/
 				return dst;
 			} 
 			else
@@ -1106,6 +1106,7 @@ public class StringMapper
 				extra_bits <<= 5;
 				dst[byte_length] |= extra_bits;
 				
+				/*
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
@@ -1122,6 +1123,7 @@ public class StringMapper
 					System.out.println();
 					System.out.println();
 				}
+				*/
 				return dst;
 			}
 		}
@@ -1186,6 +1188,7 @@ public class StringMapper
 				dst[byte_length] = 1;
 				dst[byte_length] |= extra_bits;
 				
+				/*
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
@@ -1202,6 +1205,7 @@ public class StringMapper
 					System.out.println();
 					System.out.println();
 				}
+				*/
 
 				return dst;
 			} 
@@ -2143,6 +2147,22 @@ public class StringMapper
 			return string;
 	}
 
+	// This method modifies the input string.
+	public static void setData(int type, int bitlength, int iterations, byte[] string)
+	{
+	    if(type == 1)
+	    	    iterations += 16;
+	    int odd_bits = bitlength % 8;
+	    byte extra_bits = 0;
+	    if(odd_bits != 0)
+	    	    extra_bits = (byte)(8 - odd_bits);
+	    extra_bits <<= 5;
+	    
+	    string[string.length - 1]  = (byte)iterations;
+	    string[string.length - 1] |= (byte)extra_bits;
+	}
+	
+	
 	// Functions that get information about a string
 	// from the trailing byte.
 	public static int getBitlength(byte[] string)
@@ -2174,48 +2194,7 @@ public class StringMapper
 		return type;
 	}
 
-	/*
-	public static double getZeroRatio(byte[] string, int bit_length)
-	{
-		int byte_length = bit_length / 8;
-		int zero_sum = 0;
-		int one_sum = 0;
-		byte mask = 1;
 
-		int n = byte_length;
-
-		for(int i = 0; i < n; i++)
-		{
-			for(int j = 0; j < 8; j++)
-			{
-				int k = string[i] & mask << j;
-				if(k == 0)
-					zero_sum++;
-				else
-					one_sum++;
-			}
-		}
-
-		int remainder = bit_length % 8;
-		if(remainder != 0)
-		{
-			for(int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & mask << i;
-				if(j == 0)
-					zero_sum++;
-				else
-					one_sum++;
-			}
-		}
-
-		double ratio = zero_sum;
-		ratio /= zero_sum + one_sum;
-		return ratio;
-	}
-    */
-	
-	
 	/**
 	 * Creates a table containing the number of 0 bits in any byte value.
 	 * 
@@ -2280,46 +2259,6 @@ public class StringMapper
 		return ratio;
 	}
 
-	/*
-	public static double getZeroRatio2(byte[] string, int bit_length)
-	{
-		int byte_length = bit_length / 8;
-		int zero_sum = 0;
-		int one_sum = 0;
-		byte mask = 1;
-
-		int n = byte_length;
-
-		int[] bit_table = getBitTable();
-
-		for(int i = 0; i < n; i++)
-		{
-			int j = (int) string[i];
-			if(j < 0)
-				j += 256;
-			zero_sum += bit_table[j];
-			one_sum += 8 - bit_table[j];
-		}
-
-		int remainder = bit_length % 8;
-		if(remainder != 0)
-		{
-			for(int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & mask << i;
-				if(j == 0)
-					zero_sum++;
-				else
-					one_sum++;
-			}
-		}
-
-		double ratio = zero_sum;
-		ratio       /= zero_sum + one_sum;
-		
-		return ratio;
-	}
-    */
 
 	public static double getZeroRatio(byte[] string, int bit_offset, int bit_length, int [] bit_table)
 	{
