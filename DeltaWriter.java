@@ -23,9 +23,9 @@ public class DeltaWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant    = 4;
-	int pixel_shift    = 2;
-	int segment_length = 20;
+	int pixel_quant    = 5;
+	int pixel_shift    = 3;
+	int segment_length = 0;
 	int segment_type   = 3;
 	int merge_type     = 0;
 	double merge_bin   = .05;
@@ -704,7 +704,6 @@ public class DeltaWriter
 				merge_bin_dialog.add(merge_bin_panel);
 				segmentation_menu.add(merge_bin_item);
 				
-				
 				// The correction value is a convenience to help see what
 				// quantizing does to the original image. Instead of
 				// simply switching back and forth between the original
@@ -798,7 +797,7 @@ public class DeltaWriter
 
 				
 				
-JMenu histogram_menu = new JMenu("Histogram");
+                JMenu histogram_menu = new JMenu("Histogram");
 				
 		     	JPanel histogram_panel = new JPanel(new BorderLayout());
 		     	Canvas histogram_canvas = new HistogramCanvas();
@@ -1546,8 +1545,8 @@ JMenu histogram_menu = new JMenu("Histogram");
 							current_iterations -= 16;
 						System.out.println("The unary string compressed " + current_iterations + " time(s).");
 						
-						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
 						//Deflater deflater = new Deflater();
 						deflater.setInput(string);
 						byte[] zipped_string = new byte[2 * string.length];
@@ -1585,8 +1584,8 @@ JMenu histogram_menu = new JMenu("Histogram");
 						}
 						
 						//Deflater deflater = new Deflater(Deflater.FILTERED);
-						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
 						//Deflater deflater = new Deflater();
 						deflater.setInput(segment_data);
 						byte[] zipped_data = new byte[2 * segment_data.length];
@@ -1699,8 +1698,8 @@ JMenu histogram_menu = new JMenu("Histogram");
 						
 						// Optionally zip packed segments.
 						//deflater = new Deflater(Deflater.FILTERED);
-						//deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						//deflater = new Deflater(Deflater.BEST_COMPRESSION);
 						//deflater = new Deflater();
 						deflater.setInput(packed_segments);
 						zipped_data = new byte[2 * packed_length];
@@ -1790,7 +1789,7 @@ JMenu histogram_menu = new JMenu("Histogram");
 					string = StringMapper.decompressStrings(string);	
 				// Optionally zip segment data.
 				// Deflater deflater = new Deflater();
-				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 				deflater.setInput(string);
 				byte[] zipped_data = new byte[2 * string.length];
 				deflater.finish();
@@ -1872,7 +1871,8 @@ JMenu histogram_menu = new JMenu("Histogram");
 					if(compression == 5)
 					{
 						//Deflater deflater = new Deflater();
-						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 						deflater.setInput(string);
 						byte[] zipped_data = new byte[2 * string.length];
 						deflater.finish();
