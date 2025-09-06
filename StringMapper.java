@@ -1002,11 +1002,30 @@ public class StringMapper
 				System.arraycopy(buffer1, 0, dst, 0, bytelength);
 				setData(0, 1, compressed_length, dst);
 				
-				/*
+				
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
-					int     further_compressed_length  = getBitlength(further_compressed_segment);
+					int     dst_iterations             = getIterations(dst);
+					int     further_iterations         = getIterations(further_compressed_segment);
+					System.out.println("Anomalous stop bit string behavior.");
+					System.out.println("Further iterations is " + further_iterations);
+					byte [] further_decompressed_segment = decompressOneStrings(further_compressed_segment);
+					System.out.println("Original length is " + dst.length);
+					System.out.println("Further compressed/decompressed length is " + further_decompressed_segment.length);
+					further_iterations         = getIterations(further_decompressed_segment);
+					System.out.println("Further decompressed iterations is " + further_iterations);
+					int     further_length  = getBitlength(further_decompressed_segment);
+					int     dst_length      = getBitlength(dst);
+					System.out.println("Bitlength of further decompressed segment is " + further_length);
+					System.out.println("Bitlength of original segment is " + dst_length);
+					byte segment_data = dst[dst.length - 1];
+					further_decompressed_segment[dst.length - 1] = segment_data;
+					further_iterations         = getIterations(further_decompressed_segment);
+					System.out.println("Further decompressed iterations after resetting data byte is " + further_iterations);
+					System.out.println();
+					
+					/*
 					System.out.println("Anomalous stop bit string behavior.");
 					System.out.println("Compressed length was " + compressed_length);
 					System.out.println("Further compressed length was " + further_compressed_length);
@@ -1018,8 +1037,9 @@ public class StringMapper
 					}
 					System.out.println();
 					System.out.println();
+					*/
 				}
-				*/
+				
 				
 				return dst;
 			} 
