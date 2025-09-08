@@ -865,7 +865,7 @@ public class StringMapper
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string. It does not expect information in the trailing byte, which can
-	 * be useful.
+	 * be useful in the recursive process.
 	 * 
 	 * @param src  input bytes
 	 * @param size original bit length
@@ -873,6 +873,7 @@ public class StringMapper
 	 */
 	public static byte[] compressZeroStrings(byte[] src, int bitlength)
 	{
+		int limit = 15;
 		try
 		{
 			int amount = getCompressionAmount(src, bitlength, 0);
@@ -880,7 +881,7 @@ public class StringMapper
 			{
 				// No compression, add a data byte.
 				int bytelength = getBytelength(bitlength);
-				byte[] dst    = new byte[bytelength];
+				byte[] dst     = new byte[bytelength];
 				System.arraycopy(src, 0, dst, 0, bytelength - 1);
 				setData(0, 0, bitlength, dst);
 				return dst;
@@ -906,19 +907,19 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15)
+					while (amount < 0 && iterations < limit)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
 						{
-							result = compressZeroBits(buffer1, previous_length, buffer2);
+							result            = compressZeroBits(buffer1, previous_length, buffer2);
 							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer2, compressed_length, 0);
 						} 
 						else
 						{
-							result = compressZeroBits(buffer2, previous_length, buffer1);
+							result            = compressZeroBits(buffer2, previous_length, buffer1);
 							compressed_length = result[0];
 							iterations++;
 							amount = getCompressionAmount(buffer1, compressed_length, 0);
@@ -962,6 +963,7 @@ public class StringMapper
 		int    zero_amount = getCompressionAmount(src, bit_length, 0);
 		int    one_amount  = getCompressionAmount(src, bit_length, 1);
 
+		int limit = 15;
 		if(zero_amount > 0)
 		{
 			if(one_amount < 0)
@@ -1001,10 +1003,68 @@ public class StringMapper
 				byte[] dst        = new byte[bytelength];
 				System.arraycopy(buffer1, 0, dst, 0, bytelength);
 				setData(0, 1, compressed_length, dst);
-				
-				
+			
 				if(one_amount < 0)
 				{
+					byte [] further_compressed_segment = compressOneStrings(dst);
+					int further_bitlength              = getBitlength(further_compressed_segment);
+					
+					
+					int     dst_iterations     = getIterations(dst);
+					int     further_iterations = getIterations(further_compressed_segment);
+					
+					System.out.println("Zero iterations is " + dst_iterations);
+					System.out.println("Further iterations is " + further_iterations);
+					
+					
+					
+					
+					
+					
+					
+					
+					
+					
+					//StringMapper.setIterations(dst_iterations, further_compressed_segment);
+					
+					/*
+					byte [] further_decompressed_segment = decompressOneStrings(further_compressed_segment);
+					
+					byte [] decompressed_segment         = decompressOneStrings(dst);
+					
+					boolean same = true;
+					
+					if(further_decompressed_segment.length != decompressed_segment.length)
+					{
+						//System.out.println("Decompressed length is " + decompressed_segment.length + ", further decompressed length is " + further_decompressed_segment.length);
+						same = false;
+					}
+					else
+					{
+						//System.out.println("Got here.");
+						for(int i = 0; i < decompressed_segment.length; i++)
+							if(further_decompressed_segment[i] != decompressed_segment[i])
+								same = false;
+					}
+					
+					
+					if(!same)
+                  	    System.out.println("Segments are different.");
+					*/
+					
+					
+					/*
+					int further_zero_amount = getCompressionAmount(buffer1, compressed_length, 0);
+					int further_one_amount  = getCompressionAmount(buffer1, compressed_length, 1);
+					double ratio = getZeroRatio(further_compressed_segment, further_bitlength, bit_table);
+					System.out.println("Ratio is " + String.format("%.2f", ratio));
+			
+					if(further_one_amount < further_zero_amount)
+						System.out.println("Further one amount is less than zero amount.");
+					else
+						System.out.println("Further zero amount is less than zero amount.");
+					
+					
 					byte [] further_compressed_segment = compressOneStrings(dst);
 					int     dst_iterations             = getIterations(dst);
 					int     further_iterations         = getIterations(further_compressed_segment);
@@ -1024,7 +1084,7 @@ public class StringMapper
 					further_iterations         = getIterations(further_decompressed_segment);
 					System.out.println("Further decompressed iterations after resetting data byte is " + further_iterations);
 					System.out.println();
-					
+					*/
 					/*
 					System.out.println("Anomalous stop bit string behavior.");
 					System.out.println("Compressed length was " + compressed_length);
@@ -1039,6 +1099,18 @@ public class StringMapper
 					System.out.println();
 					*/
 				}
+				else
+				{
+					/*
+					double ratio = getZeroRatio(dst, compressed_length, bit_table);
+					System.out.println("Ratio is " + String.format("%.2f", ratio));
+					if(one_amount < zero_amount)
+						System.out.println("One amount is less than zero amount.");
+					else
+						System.out.println("Zero amount is less than one amount.");	
+					System.out.println();
+					*/	
+				}
 				
 				
 				return dst;
@@ -1046,7 +1118,7 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while(zero_amount < 0 && iterations < 15)
+				while(zero_amount < 0 && iterations < limit)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
@@ -1091,10 +1163,11 @@ public class StringMapper
 					System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
 				setData(0, iterations, compressed_length, dst);
 				
-				/*
+				
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
+					/*
 					int further_compressed_length = getBitlength(further_compressed_segment);
 					System.out.println("Anomalous 0 string behavior.");
 					System.out.println("Compressed length was " + compressed_length);
@@ -1107,8 +1180,9 @@ public class StringMapper
 					}
 					System.out.println();
 					System.out.println();
+					*/
 				}
-				*/
+				
 				
 				return dst;
 			}
@@ -1126,6 +1200,7 @@ public class StringMapper
 		int zero_amount   = getCompressionAmount(src, bit_length, 0);
 		int one_amount    = getCompressionAmount(src, bit_length, 1);
 
+		int limit = 15;
 		if(zero_amount > 0)
 		{
 			if(one_amount < 0)
@@ -1189,7 +1264,7 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while(zero_amount < 0 && iterations < 15 && result[1] == 0)
+				while(zero_amount < 0 && iterations < limit && result[1] == 0)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
@@ -1232,7 +1307,7 @@ public class StringMapper
 				else
 					System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
 				setData(0, iterations, compressed_length, dst);
-				/*
+				
 				if(one_amount < 0)
 				{
 					byte [] further_compressed_segment = compressOneStrings(dst);
@@ -1249,7 +1324,7 @@ public class StringMapper
 					System.out.println();
 					System.out.println();
 				}
-				*/
+				
 				
 				return dst;
 			}
@@ -1269,13 +1344,12 @@ public class StringMapper
 	 */
 	public static byte[] decompressZeroStrings(byte[] src)
 	{
-		// int last_byte = src.length - 1;
 		int iterations = getIterations(src);
 		int bitlength  = getBitlength(src);
 		int type       = getType(src);
 		
 		// If it's not a zero type string, we'll still process it.
-		// This will compress a one type string.
+		// This will compress most one type strings.
 		if(type == 1)
 		{
 			System.out.println("decompressZeroStrings(): Not zero type string.");
@@ -1439,6 +1513,7 @@ public class StringMapper
 				// This works for a single recursion but might fail in the other recursive
 				// cases.
 				// It actually fails more rarely than we expect.
+				// Open question if it fails at all.
 				current_bit++;
 				if(current_bit == 8)
 				{
@@ -1590,24 +1665,21 @@ public class StringMapper
 		return(number_of_bits);
 	}
 
+	// This version does not expect a trailing data byte, useful
+	// in the recursive process.
 	public static byte[] compressOneStrings(byte[] src, int bitlength)
 	{
-		byte[] dst = new byte[1];
+		int limit = 15;
+		
 		try
 		{
 			int amount = getCompressionAmount(src, bitlength, 1);
 			if(amount > 0)
 			{
 				// 0 iterations
-				int bytelength = bitlength / 8;
-				if(bitlength % 8 != 0)
-					bytelength++;
-				dst = new byte[bytelength + 1];
-
-				System.arraycopy(src, 0, dst, 0, bytelength);
-                
-				setData(1, 0, bitlength, dst);
-				
+				byte [] dst = new byte[src.length];
+				System.arraycopy(src, 0, dst, 0, src.length);
+            
 				return dst;
 			} 
 			else
@@ -1622,7 +1694,7 @@ public class StringMapper
 				{
 					// 1 iteration
 					int bytelength = getBytelength(compressed_length);
-					dst            = new byte[bytelength];
+					byte [] dst    = new byte[bytelength];
 					System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
 					setData(1, 1, bitlength, dst);
                     
@@ -1631,7 +1703,7 @@ public class StringMapper
 				else
 				{
 					int iterations = 1;
-					while (amount < 0 && iterations < 15)
+					while (amount < 0 && iterations < limit)
 					{
 						int previous_length = compressed_length;
 						if(iterations % 2 == 1)
@@ -1651,7 +1723,7 @@ public class StringMapper
 					}
 
 					int bytelength = getBytelength(compressed_length);
-					dst            = new byte[bytelength];
+					byte [] dst    = new byte[bytelength];
 					if(iterations % 2 == 0)
 						System.arraycopy(buffer2, 0, dst, 0, bytelength - 1);
 					else
@@ -1666,6 +1738,7 @@ public class StringMapper
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressOneStrings with an exception.");
+			byte[] dst = new byte[0];
 			return dst;
 		}
 	}
@@ -1684,7 +1757,11 @@ public class StringMapper
 		double zero_ratio  = getZeroRatio(src, bit_length, bit_table);
 		int    zero_amount = getCompressionAmount(src, bit_length, 0);
 		int    one_amount  = getCompressionAmount(src, bit_length, 1);
-
+		int    type        = getType(src);
+		if(type == 0)
+         	System.out.println("Trying to compress zero type string.");
+		
+		int limit = 15;
 		if(one_amount > 0)
 		{
 			// This never seems to happen with one or run bit strings.
@@ -1745,7 +1822,7 @@ public class StringMapper
 			else
 			{
 				int iterations = 1;
-				while(one_amount < 0 && iterations < 15)
+				while(one_amount < 0 && iterations < limit)
 				{
 					int previous_length = compressed_length;
 					if(iterations % 2 == 1)
@@ -1807,7 +1884,6 @@ public class StringMapper
 					System.out.println();
 				}
 
-				
 				return dst;
 			}
 		}
@@ -1823,67 +1899,74 @@ public class StringMapper
 	 */
 	public static byte[] decompressOneStrings(byte[] src)
 	{
-		int last_byte = src.length - 1;
-		int iterations = src[last_byte] & (byte) 31;
-		byte extra_bits = (byte) (src[last_byte] >> 5);
-		extra_bits &= 7;
-		int bit_length = (src.length - 1) * 8 - extra_bits;
-
-		// If it's not a one type string, we'll still process it.
-		// This will compress a zero type string.
-		if(iterations < 16)
+		int iterations = getIterations(src);
+		if(iterations == 0 || iterations == 16)
 		{
-			System.out.println("decompressOneStrings(): Not one type string.");
-			System.out.println();
+			byte [] dst = src.clone();
+			return  dst;
+		}
+		
+		int bitlength  = getBitlength(src);
+		
+		// Number of one iterations that is possible.
+		// Also the floor value, since 0 - 15 are
+		// reserved for zero iterations.
+		int limit            = 16;
+		boolean isZeroString = false;
+		int zero_iterations  = 0;
+		
+		if(iterations < limit)
+		{
+			// Assume we are processing an anomalous string.
+			isZeroString    = true;
+			zero_iterations = iterations;
+			iterations      = 1;
 		} 
 		else
-			iterations -= 16;
-
-		// If it was not compressable, we copy src to dst.
-		if(iterations == 0)
-		{
-			byte[] dst = new byte[src.length];
-			System.arraycopy(src, 0, dst, 0, src.length);
-
-			return dst;
-		}
+		    iterations -= limit;
 
 		if(iterations == 1)
 		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
-			byte_length *= 2;
-			byte[] buffer = new byte[byte_length];
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer);
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-			byte[] dst = new byte[byte_length + 1];
-			System.arraycopy(buffer, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
+			//System.out.println("Got here 1.");
+			int bytelength = getBytelength(bitlength);
+			bytelength    *= 2;
+			byte[] buffer = new byte[bytelength];
+			
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer);
+			bytelength              = getBytelength(uncompressed_length);
+			
+			if(isZeroString)
 			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
+				/*
+				byte[] buffer2 = new byte[bytelength];
+				System.arraycopy(buffer, 0, buffer2, 0, bytelength - 1);
+				*/
+				
+				byte [] buffer2 = buffer.clone();
+				setIterations(zero_iterations, buffer2);
+				
+				byte [] dst = decompressZeroStrings(buffer2);
+				return  dst;
 			}
-			dst[byte_length] |= 16;
-			return dst;
+			else
+			{
+				byte[] dst = new byte[bytelength];
+				System.arraycopy(buffer, 0, dst, 0, bytelength - 1);
+				setData(1, 0, uncompressed_length, dst);
+				return dst;	
+			}
 		} 
 		else if(iterations % 2 == 0)
 		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
+			int bytelength = getBytelength(bitlength);
+			
 			double factor = Math.pow(2, iterations);
-			byte_length *= factor;
+			bytelength *= factor;
 
-			byte[] buffer1 = new byte[byte_length * 2];
-			byte[] buffer2 = new byte[byte_length * 2];
+			byte[] buffer1 = new byte[bytelength];
+			byte[] buffer2 = new byte[bytelength];
 
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer1);
 			iterations--;
 			while (iterations > 0)
 			{
@@ -1894,34 +1977,23 @@ public class StringMapper
 					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
 				iterations--;
 			}
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-
-			byte[] dst = new byte[byte_length + 1];
-			System.arraycopy(buffer2, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
-			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
-			}
-			dst[byte_length] |= 16;
+			
+			bytelength = getBytelength(uncompressed_length);
+			byte[] dst = new byte[bytelength];
+			System.arraycopy(buffer2, 0, dst, 0, bytelength - 1);
+			setData(1, 0, uncompressed_length, dst);
+			
 			return dst;
 		} 
 		else
 		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
+			int bytelength = getBytelength(bitlength);
 			double factor  = Math.pow(2, iterations);
-			byte_length   *= factor;
-			byte[] buffer1 = new byte[byte_length * 2];
-			byte[] buffer2 = new byte[byte_length * 2];
+			bytelength    *= factor;
+			byte[] buffer1 = new byte[bytelength];
+			byte[] buffer2 = new byte[bytelength ];
 
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer1);
 			iterations--;
 			while (iterations > 0)
 			{
@@ -1932,25 +2004,135 @@ public class StringMapper
 					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
 				iterations--;
 			}
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-
-			byte[] dst = new byte[byte_length + 1];
-
-			System.arraycopy(buffer1, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
-			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
-			}
-			dst[byte_length] |= 16;
+			
+			bytelength = getBytelength(uncompressed_length);
+			byte[] dst = new byte[bytelength];
+			System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
+			setData(1, 0, uncompressed_length, dst);
+			
 			return dst;
 		}
 	}
+	
+	/*
+	public static byte[] decompressOneStrings(byte[] src)
+	{
+		int iterations = getIterations(src);
+		int bitlength  = getBitlength(src);
+
+		
+		int limit = 16;
+		if(iterations < limit)
+		{
+			// System.out.println("decompressOneStrings(): Not one type string.");
+		    // System.out.println();
+			
+			// Assume we are processing an anomalous string that compresses in two directions.
+			// The current iterations is 17.  The current bitlength is bitlength;
+			// The iterations of the decompressed zero string is iterations.
+			// The bitlength of the decompressed zero string is produced by decompressOneStrings().
+			
+			System.out.println("Got here.");
+			setIterations(limit + 1, src);
+			
+			
+			// Seems like this should work, but results in a stack overflow.
+			// Might be interaction with garbage collection.
+			// byte [] decompressed_src = decompressOneStrings(src);
+		    
+			
+			setIterations(iterations, decompressed_src);
+			byte [] dst = decompressZeroStrings(decompressed_src);
+			
+			return dst;
+		} 
+		
+		iterations -= limit;
+
+		// If it did not compress, we copy src to dst.
+		if(iterations == 0)
+		{
+			byte[] dst = new byte[src.length];
+			System.arraycopy(src, 0, dst, 0, src.length);
+
+			return dst;
+		}
+
+		if(iterations == 1)
+		{
+			int bytelength = getBytelength(bitlength);
+			bytelength    *= 2;
+			byte[] buffer = new byte[bytelength];
+			
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer);
+			bytelength              = getBytelength(uncompressed_length);
+			
+			byte[] dst = new byte[bytelength];
+			System.arraycopy(buffer, 0, dst, 0, bytelength - 1);
+			setData(1, 0, uncompressed_length, dst);
+			
+			return dst;
+		} 
+		else if(iterations % 2 == 0)
+		{
+			int bytelength = getBytelength(bitlength);
+			
+			double factor = Math.pow(2, iterations);
+			bytelength *= factor;
+
+			byte[] buffer1 = new byte[bytelength];
+			byte[] buffer2 = new byte[bytelength];
+
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer1);
+			iterations--;
+			while (iterations > 0)
+			{
+				int previous_length = uncompressed_length;
+				if(iterations % 2 == 1)
+					uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2);
+				else
+					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
+				iterations--;
+			}
+			
+			bytelength = getBytelength(uncompressed_length);
+			byte[] dst = new byte[bytelength];
+			System.arraycopy(buffer2, 0, dst, 0, bytelength - 1);
+			setData(1, 0, uncompressed_length, dst);
+			
+			return dst;
+		} 
+		else
+		{
+			int bytelength = getBytelength(bitlength);
+			double factor  = Math.pow(2, iterations);
+			bytelength    *= factor;
+			byte[] buffer1 = new byte[bytelength];
+			byte[] buffer2 = new byte[bytelength ];
+
+			int uncompressed_length = decompressOneBits(src, bitlength, buffer1);
+			iterations--;
+			while (iterations > 0)
+			{
+				int previous_length = uncompressed_length;
+				if(iterations % 2 == 0)
+					uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2); 
+				else
+					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
+				iterations--;
+			}
+			
+			bytelength = getBytelength(uncompressed_length);
+			byte[] dst = new byte[bytelength];
+			System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
+			setData(1, 0, uncompressed_length, dst);
+			
+			return dst;
+		}
+	}
+    */
+	
+	
 
 	public static byte[] compressStrings(byte[] string)
 	{
@@ -2050,6 +2232,15 @@ public class StringMapper
 		byte iterations = (byte) (last_byte & 31);
 
 		return iterations;
+	}
+	
+	public static void setIterations(int iterations, byte[] string)
+	{
+		byte mask = SegmentMapper.getLeadingMask(3);
+		string[string.length - 1] &= mask;
+		
+		byte _iterations = (byte)iterations;
+		string[string.length - 1] &= _iterations;
 	}
 
 	public static byte getType(byte[] string)
