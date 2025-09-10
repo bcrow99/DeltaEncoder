@@ -1017,36 +1017,50 @@ public class StringMapper
 					
 					
 					setIterations(dst_iterations, further_compressed_segment);
-					int dst_iterations2 = getIterations(further_compressed_segment);
+					
 					byte [] further_decompressed_segment = decompressOneStrings(further_compressed_segment);
 					
-					//System.out.println("Further decompressed length is " + further_decompressed_segment.length);
-					//System.out.println("Original length is " + dst.length);
+					byte [] further_compressed_segment2 = compressOneStrings(further_decompressed_segment);
 					
-					boolean same = true;
-					for(int i = 0; i < further_decompressed_segment.length; i++)
-						if(further_decompressed_segment[i] != src[i])
-							same = false;
-					if(!same)
-						System.out.println("Src and twice decompressed segment are not the same.");
-					else
-						System.out.println("Src and twice decompressed segment are the same.");
-				
+					
+					// In some way we don't understand, the compressed segment changes lengths
+					// when it's decompressed and then recompressed, but only when starting off with 
+					// an anomalous string.  This is a useful property for distinguishing
+					// anomalous strings, if our observation is accurate.  Odd that cycling
+					// data thru the exact same steps seems to produce different results.
+					// Won't really trust this until we actually compress/decompress an
+					// image with an improved compression rate.
+					
+					int bitlength              = getBitlength(further_compressed_segment);
+					int decompressed_bitlength = getBitlength(further_decompressed_segment);
+					int compressed_bitlength   = getBitlength(further_compressed_segment2);
+					
+					
+					System.out.println("Anomalous string:");
+					System.out.println("Original length is "     + bitlength);
+					System.out.println("Decompressed length is " + decompressed_bitlength);
+					System.out.println("Compressed length is "   + compressed_bitlength);
 					System.out.println();
 				}
 				else
 				{
-					// Not an anomalous string.
-					/*
-					if(one_amount < zero_amount)
-					{
-						System.out.println("One amount is less than zero amount for an ordinary zero string.");
-					}
-					else
-					{
-						System.out.println("Zero amount is less than one amount for an ordinary zero string.");	
-					}
-					*/
+					
+					
+					byte [] dst2 = dst.clone();
+					setIterations(17, dst2);
+					
+					byte [] decompressed_dst = decompressOneStrings(dst2);
+					byte [] compressed_dst   = compressOneStrings(decompressed_dst);
+					
+					int bitlength = getBitlength(dst2);
+					int decompressed_bitlength = getBitlength(decompressed_dst);
+					int compressed_bitlength = getBitlength(compressed_dst);
+					
+					System.out.println("Ordinary string:");
+					System.out.println("Original bit length is " + bitlength);
+					System.out.println("Decompressed length is " + decompressed_bitlength);
+					System.out.println("Compressed length is "   + compressed_bitlength);
+                    System.out.println();
 				}
 				
 				
@@ -1694,10 +1708,12 @@ public class StringMapper
 		double zero_ratio  = getZeroRatio(src, bit_length, bit_table);
 		int    zero_amount = getCompressionAmount(src, bit_length, 0);
 		int    one_amount  = getCompressionAmount(src, bit_length, 1);
-		int    type        = getType(src);
 		
+		/*
+		int    type        = getType(src);
 		if(type == 0)
          	System.out.println("Trying to compress zero type string.");
+		*/
 		
 		int limit = 15;
 		if(one_amount > 0)
@@ -1835,140 +1851,6 @@ public class StringMapper
 	 * @param src input bytes
 	 * @return byte array containing the result with a trailing data byte.
 	 */
-	/*
-	public static byte[] decompressOneStrings(byte[] src)
-	{
-		int last_byte = src.length - 1;
-		int iterations = src[last_byte] & (byte) 31;
-		byte extra_bits = (byte) (src[last_byte] >> 5);
-		extra_bits &= 7;
-		int bit_length = (src.length - 1) * 8 - extra_bits;
-
-		// If it's not a one type string, we'll still process it.
-		if(iterations < 16)
-		{
-			System.out.println("decompressOneStrings(): Not one type string.");
-			System.out.println();
-		} 
-		else
-			iterations -= 16;
-
-		// If it was not compressable, we copy src to dst.
-		if(iterations == 0)
-		{
-			byte[] dst = new byte[src.length];
-			System.arraycopy(src, 0, dst, 0, src.length);
-
-			return dst;
-		}
-
-		if(iterations == 1)
-		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
-			byte_length *= 2;
-			byte[] buffer = new byte[byte_length];
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer);
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-			byte[] dst = new byte[byte_length + 1];
-			System.arraycopy(buffer, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
-			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
-			}
-			dst[byte_length] |= 16;
-			return dst;
-		} 
-		else if(iterations % 2 == 0)
-		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
-			double factor = Math.pow(2, iterations);
-			byte_length *= factor;
-
-			byte[] buffer1 = new byte[byte_length * 2];
-			byte[] buffer2 = new byte[byte_length * 2];
-
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
-			iterations--;
-			while (iterations > 0)
-			{
-				int previous_length = uncompressed_length;
-				if(iterations % 2 == 1)
-					uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2);
-				else
-					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
-				iterations--;
-			}
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-
-			byte[] dst = new byte[byte_length + 1];
-			System.arraycopy(buffer2, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
-			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
-			}
-			dst[byte_length] |= 16;
-			return dst;
-		} 
-		else
-		{
-			int byte_length = bit_length / 8;
-			if(bit_length % 8 != 0)
-				byte_length++;
-			double factor = Math.pow(2, iterations);
-			byte_length *= factor;
-
-			byte[] buffer1 = new byte[byte_length * 2];
-			byte[] buffer2 = new byte[byte_length * 2];
-
-			int uncompressed_length = decompressOneBits(src, bit_length, buffer1);
-			iterations--;
-			while (iterations > 0)
-			{
-				int previous_length = uncompressed_length;
-				if(iterations % 2 == 0)
-					uncompressed_length = decompressOneBits(buffer1, previous_length, buffer2); 
-				else
-					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
-				iterations--;
-			}
-			byte_length = uncompressed_length / 8;
-			if(uncompressed_length % 8 != 0)
-				byte_length++;
-
-			byte[] dst = new byte[byte_length + 1];
-
-			System.arraycopy(buffer1, 0, dst, 0, byte_length);
-
-			extra_bits = (byte) (uncompressed_length % 8);
-			if(extra_bits != 0)
-			{
-				extra_bits = (byte) (8 - extra_bits);
-				extra_bits <<= 5;
-				dst[byte_length] = extra_bits;
-			}
-			dst[byte_length] |= 16;
-			return dst;
-		}
-	}
-	*/
-	
-	
 	public static byte[] decompressOneStrings(byte[] src)
 	{
 		int iterations = getIterations(src);
@@ -1993,7 +1875,7 @@ public class StringMapper
 			isZeroString    = true;
 			zero_iterations = iterations;
 			iterations      = 1;
-			System.out.println("DecompressOneStrings: Is a zero string.");
+			//System.out.println("DecompressOneStrings: Is a zero string.");
 		} 
 		else
 		    iterations -= limit;
@@ -2009,8 +1891,8 @@ public class StringMapper
 			
 			if(isZeroString)
 			{
-				System.out.println("Length after decompressing one strings is " + uncompressed_length);
-				System.out.println("Decompressing zero strings.");
+				//System.out.println("Length after decompressing one strings is " + uncompressed_length);
+				//System.out.println("Decompressing zero strings.");
 				byte[] buffer2 = new byte[bytelength];
 				System.arraycopy(buffer, 0, buffer2, 0, bytelength - 1);
 				setData(0, zero_iterations, uncompressed_length, buffer2);
