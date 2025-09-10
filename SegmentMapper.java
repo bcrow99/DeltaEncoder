@@ -174,8 +174,9 @@ public class SegmentMapper
 						merged_segment[m + n] = segment[n];
 					m += segment.length - 1;
 				}
+				
 				if(i + j == number_of_segments - 1)
-					merged_segment[merged_bytelength - 1] = extra_bits;
+					merged_segment[merged_bytelength - 1] |= extra_bits;
 				
 				// This almost works, but fails sometimes when the bin divider is odd.
 				// if(current_bin < bin_divider)
@@ -203,8 +204,45 @@ public class SegmentMapper
 			byte[] segment = segments.get(i);
 			merged_segments.add(segment);
 		}
-
+		
 		int number_of_merged_segments = merged_segments.size();
+		
+		/*
+		byte [] segment1 = merged_segments.get(number_of_merged_segments - 2);
+		byte [] segment2 = merged_segments.get(number_of_merged_segments - 1);
+		
+		int type       = StringMapper.getType(segment1);
+		int iterations = StringMapper.getIterations(segment1);
+		int bitlength  = StringMapper.getBitlength(segment1);
+		double ratio   = StringMapper.getZeroRatio(segment1, bitlength, bit_table);
+		System.out.println("Second to last merged segment has type " + type + ", iterations " + iterations + ", and bit length " + bitlength);
+		System.out.println("Second to last merged segment has length " + segment1.length);
+		
+		System.out.println("Ratio is " + ratio);
+		
+
+		for(int k = 0; k < segment1.length; k++)
+		{
+			int value = segment1[k];
+			if(value < 0)
+				value += 256;
+			System.out.println("Byte " + k + " is " + value);
+		}
+		
+		System.out.println();
+		
+		
+		type       = StringMapper.getType(segment2);
+		iterations = StringMapper.getIterations(segment2);
+		bitlength  = StringMapper.getBitlength(segment2);
+		System.out.println("Last merged segment has type " + type + ", iterations " + iterations + ", and bit length " + bitlength);
+		System.out.println("Last merged segment has length " + segment2.length);
+		System.out.println();
+		*/
+		
+		
+		
+		
 		
 		ArrayList<byte[]> compressed_segments = new ArrayList<byte[]>();
 
@@ -218,10 +256,9 @@ public class SegmentMapper
 		for(i = 0; i < number_of_merged_segments; i++)
 		{
 			byte[] segment = merged_segments.get(i);
-			int type       = StringMapper.getType(segment);
-			int bitlength  = StringMapper.getBitlength(segment);
-			double ratio   = StringMapper.getZeroRatio(segment, bitlength, bit_table);
-			
+			int type      = StringMapper.getType(segment);
+			int bitlength = StringMapper.getBitlength(segment);
+			double ratio     = StringMapper.getZeroRatio(segment, bitlength, bit_table);
 			
 			byte[] compressed_segment = StringMapper.compressStrings(segment);
 			compressed_segments.add(compressed_segment);
@@ -866,9 +903,6 @@ public class SegmentMapper
 				            
 							int j = spliced_segments.size();
 							spliced_segments.set(j - 1, compressed_segment);
-							
-							//byte [] decompressed_clipped_segment = StringMapper.decompressStrings(clipped_segment);
-							
 		
 							clipped_segment = new byte[current_segment.length - 1];
 							for(j = 0; j < clipped_segment.length; j++)
@@ -1215,8 +1249,8 @@ public class SegmentMapper
                          System.out.println("Number of spliced segments is "  + number_of_spliced_segments);
                          System.out.println("Maximum iterations for spliced segments is " + max_iterations);
                          System.out.println("Maximum iterations for merged segments is " + merged_max_iterations);
-						System.out.println("Total bitlength is " + total_bitlength);
-						System.out.println();
+						 System.out.println("Total bitlength is " + total_bitlength);
+						 System.out.println();
 						
 						//System.out.println("Maximum segment byte length is " + max_segment_bytelength);
 						//System.out.println("Maximum number of spliced bits is " + max_spliced_bits);
