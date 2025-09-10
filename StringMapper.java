@@ -968,11 +968,19 @@ public class StringMapper
 		{
 			if(one_amount < 0)
 			{
+				/*
 				int iterations = getIterations(src);
 				System.out.println("String with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
 				System.out.println("The amount expected from the zero transform is " + zero_amount);
 				System.out.println("The amount expected from the one transform is " + one_amount);
 				System.out.println();
+				*/
+				
+				System.out.println("Compressing zero string with run bit transform.");
+				byte [] dst   = compressOneStrings(src);
+				int iterations = getIterations(src);
+				System.out.println("Iterations is " + iterations);
+				return dst;		
 			}
 
 			byte[] dst = new byte[src.length];
@@ -1006,6 +1014,7 @@ public class StringMapper
 			
 				if(one_amount < 0)
 				{
+					
 					byte [] further_compressed_segment = compressOneStrings(dst);
 					int further_bitlength              = getBitlength(further_compressed_segment);
 					
@@ -1022,30 +1031,31 @@ public class StringMapper
 					
 					byte [] further_compressed_segment2 = compressOneStrings(further_decompressed_segment);
 					
-					
-					// In some way we don't understand, the compressed segment changes lengths
-					// when it's decompressed and then recompressed, but only when starting off with 
-					// an anomalous string.  This is a useful property for distinguishing
-					// anomalous strings, if our observation is accurate.  Odd that cycling
-					// data thru the exact same steps seems to produce different results.
-					// Won't really trust this until we actually compress/decompress an
-					// image with an improved compression rate.
+					// The compressed segment changes lengths when it's decompressed and 
+					// then recompressed, but only when starting off with an anomalous
+					// string, since we are not compressing the one strings when we
+					// recompress.  This is a useful property for distinguishing
+					// anomalous strings.  Not too expensive computationally with small 
+					// segments and  lower number of number of iterations, but with longer
+					// segments and larger number of iterations, the processing could take 
+					// almost twice as long.  We could make the processing more efficient if
+					// we kept information about whether the string is anomalous in the data byte, 
+					// but we would reduce the compression rate.
 					
 					int bitlength              = getBitlength(further_compressed_segment);
 					int decompressed_bitlength = getBitlength(further_decompressed_segment);
 					int compressed_bitlength   = getBitlength(further_compressed_segment2);
 					
 					
-					System.out.println("Anomalous string:");
-					System.out.println("Original length is "     + bitlength);
-					System.out.println("Decompressed length is " + decompressed_bitlength);
-					System.out.println("Compressed length is "   + compressed_bitlength);
-					System.out.println();
+					// System.out.println("Anomalous string:");
+					// System.out.println("Original length is "     + bitlength);
+					// System.out.println("Decompressed length is " + decompressed_bitlength);
+					// System.out.println("Compressed length is "   + compressed_bitlength);
+					// System.out.println();
 				}
 				else
 				{
-					
-					
+
 					byte [] dst2 = dst.clone();
 					setIterations(17, dst2);
 					
@@ -1056,11 +1066,11 @@ public class StringMapper
 					int decompressed_bitlength = getBitlength(decompressed_dst);
 					int compressed_bitlength = getBitlength(compressed_dst);
 					
-					System.out.println("Ordinary string:");
-					System.out.println("Original bit length is " + bitlength);
-					System.out.println("Decompressed length is " + decompressed_bitlength);
-					System.out.println("Compressed length is "   + compressed_bitlength);
-                    System.out.println();
+					//System.out.println("Ordinary string:");
+					//System.out.println("Original bit length is " + bitlength);
+					//System.out.println("Decompressed length is " + decompressed_bitlength);
+					//System.out.println("Compressed length is "   + compressed_bitlength);
+                    //System.out.println();
 				}
 				
 				
@@ -1156,6 +1166,7 @@ public class StringMapper
 		{
 			if(one_amount < 0)
 			{
+				System.out.println("Got here 3.");
 				int iterations = getIterations(src);
 				System.out.println("String with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
 				System.out.println("The amount expected from the zero transform is " + zero_amount);
@@ -1718,14 +1729,20 @@ public class StringMapper
 		int limit = 15;
 		if(one_amount > 0)
 		{
-			// This never seems to happen with one or run bit strings.
+			// This only seems to happen when processing anomalous strings.
 			if(zero_amount < 0)
 			{
+				/*
 				int iterations = getIterations(src);
 				System.out.println("String with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
 				System.out.println("The amount expected from the zero transform is " + zero_amount);
 				System.out.println("The amount expected from the one transform is " + one_amount);
 				System.out.println();
+				*/
+				// This causes a stack overflow. 
+				//System.out.println("CompressOneStrings: compressing zero strings.");
+				//byte [] dst = compressZeroStrings(src);
+				//return dst;
 			}
 
 			byte[] dst = new byte[src.length];
