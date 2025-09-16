@@ -260,7 +260,43 @@ public class SegmentMapper
 			int bitlength = StringMapper.getBitlength(segment);
 			double ratio     = StringMapper.getZeroRatio(segment, bitlength, bit_table);
 			
-			byte[] compressed_segment = StringMapper.compressStrings(segment);
+			byte[]  compressed_segment   = StringMapper.compressStrings(segment);
+			byte [] decompressed_segment = StringMapper.decompressStrings(segment);
+			
+			
+			if(segment.length != decompressed_segment.length)
+			{
+				int iterations = StringMapper.getIterations(compressed_segment);
+				System.out.println("Original bytelength " + segment.length + " is not equal to decompressed length " + decompressed_segment.length + " at index " + i);
+				System.out.println("Compressed segment had " + iterations + " iterations.");
+			}
+			else
+			{
+				/*
+			    boolean same = true;
+	    	        int first_index = 0;
+	    	        for(int j = 0; j < segment.length; j++)
+	    	        {
+	    	    	        if(segment[j] != decompressed_segment[j])
+	    	    	        {
+	    	    	    	        if(same)
+	    	    	    	        {
+	    	    	    	    	        same = false;
+	    	    	    	    	        first_index = j;
+	    	    	    	        }
+	    	    	        }
+	    	        }
+	    	        
+	    	        if(same)
+	    	    	        System.out.println("Original segment and decompressed segment are the same.");
+	    	        else
+	    	    	        System.out.println("Original segment and decompressed segment differ at index " + first_index);
+	    	 
+	    	        System.out.println();
+	    	        */
+			}
+	    	    
+			
 			compressed_segments.add(compressed_segment);
 			if(compressed_segment.length - 1 > max_segment_bytelength)
 				max_segment_bytelength = compressed_segment.length - 1;
