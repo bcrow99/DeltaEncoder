@@ -1957,12 +1957,12 @@ public class StringMapper
 			
 			byte [] recompressed_string = compressZeroStrings(decompressed_string);
 			
-			if(recompressed_string.length != compressed_string.length)
+			int recompressed_bitlength  = getBitlength(recompressed_string);
+			if(recompressed_bitlength != bitlength)
 			{
-				System.out.println("Recompressed length is " + recompressed_string.length + ", compressed length is " + compressed_string.length);
+				System.out.println("Recompressed bitlength is " + recompressed_bitlength + ", compressed bitlength is " + bitlength);
+				return recompressed_string;
 			}
-			
-			
 			
 			return compressed_string;
 		} 
@@ -1991,14 +1991,16 @@ public class StringMapper
 			
 			if(bitlength != recompressed_bitlength)
 			{
+				/*
 				System.out.println("decompressStrings: anomalous string.");
 				System.out.println("Original bitlength " + bitlength + ", recompressed bitlength " + recompressed_bitlength);
 				System.out.println("Original bytelength " + string.length + ", recompressed bytelength " +  recompressed_string.length);
 				System.out.println("Decompressed bytelength from original is  " + decompressed_string1.length + ", decompressed bytelength from recompressed is " +  decompressed_string2.length);
 				System.out.println();
+				*/
 			}
 				
-			return decompressed_string1;
+			return decompressed_string2;
 		} 
 		else if(type == 1)
 		{
