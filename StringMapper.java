@@ -1000,15 +1000,35 @@ public class StringMapper
 				byte[] dst        = new byte[bytelength];
 				System.arraycopy(buffer1, 0, dst, 0, bytelength);
 				setData(0, 1, compressed_length, dst);
-				/*
+			
 				if(one_amount < 0)
 				{
+					/*
 				    byte [] dst2 = compressOneStrings(dst);
 				    compressed_length = getBitlength(dst2);
-				    setData(0, 1, compressed_length, dst2);
-				    return dst2; 
+				    byte [] decompressed_string = decompressOneStrings(dst2);
+			      	int     decompressed_length = getBitlength(decompressed_string);	
+			    		
+			    	    setData(0, 1, decompressed_length, decompressed_string);	
+			    	    byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
+			    	    
+			    	    byte [] recompressed_string = compressZeroStrings(decompressed_string2);
+			    	
+			      	int recompressed_length = getBitlength(recompressed_string);
+			    	
+			      	if(recompressed_length != compressed_length)
+			    	    {
+			    	        System.out.println("Recompressed length " + recompressed_length + ", not equal to original length " + compressed_length);
+			    	        return dst;
+			    	    }
+			    	    else
+			    	    {
+			    		    setData(0, 1, compressed_length, dst2);	
+			    		    return dst2;
+			    	    } 
+			    	    */
 				}
-				*/
+				
 				return dst;
 			} 
 			else
@@ -1061,16 +1081,37 @@ public class StringMapper
 				setData(0, iterations, compressed_length, dst);
 				one_amount  = getCompressionAmount(dst, compressed_length, 1);
 				
-				/*
+				
 				if(one_amount < 0)
 				{
 					//System.out.println("compressZeroStrings: anomalous string after " + iterations + " iterations.");
+					/*
 					byte [] dst2 = compressOneStrings(dst);
 				    compressed_length = getBitlength(dst2);
-				    setData(0, iterations, compressed_length, dst2);
-				    return dst2;
+				    
+				    byte [] decompressed_string = decompressOneStrings(dst2);
+			      	int     decompressed_length = getBitlength(decompressed_string);	
+			    		
+			    	    setData(0, iterations, decompressed_length, decompressed_string);	
+			    	    byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
+			    	    
+			    	    byte [] recompressed_string = compressZeroStrings(decompressed_string2);
+			    	
+			      	int recompressed_length = getBitlength(recompressed_string);
+			    	
+			      	if(recompressed_length != compressed_length)
+			    	    {
+			    	        System.out.println("Recompressed length " + recompressed_length + ", not equal to original length " + compressed_length);
+			    	        return dst;
+			    	    }
+			    	    else
+			    	    {
+			    		    setData(0, iterations, compressed_length, dst2);	
+			    		    return dst2;
+			    	    } 
+			    	    */
 				}
-				*/
+				
 				return dst;
 			}
 		}
@@ -1911,6 +1952,18 @@ public class StringMapper
 		if(type == 0)
 		{
 			byte[] compressed_string = compressZeroStrings(string);
+			
+			byte [] decompressed_string = decompressZeroStrings(string);
+			
+			byte [] recompressed_string = compressZeroStrings(decompressed_string);
+			
+			if(recompressed_string.length != compressed_string.length)
+			{
+				System.out.println("Recompressed length is " + recompressed_string.length + ", compressed length is " + compressed_string.length);
+			}
+			
+			
+			
 			return compressed_string;
 		} 
 		else if(type == 1)
@@ -1921,7 +1974,43 @@ public class StringMapper
 		else
 			return string;
 	}
-
+	
+	public static byte[] decompressStrings(byte[] string)
+	{
+		int type = getType(string);
+		if(type == 0)
+		{
+			byte [] decompressed_string1 = decompressZeroStrings(string);
+			byte [] recompressed_string  = compressZeroStrings(decompressed_string1);
+			
+			int bitlength               = getBitlength(string);
+			int recompressed_bitlength  = getBitlength(recompressed_string);
+			
+			byte [] decompressed_string2 = decompressZeroStrings(recompressed_string);
+			
+			
+			if(bitlength != recompressed_bitlength)
+			{
+				System.out.println("decompressStrings: anomalous string.");
+				System.out.println("Original bitlength " + bitlength + ", recompressed bitlength " + recompressed_bitlength);
+				System.out.println("Original bytelength " + string.length + ", recompressed bytelength " +  recompressed_string.length);
+				System.out.println("Decompressed bytelength from original is  " + decompressed_string1.length + ", decompressed bytelength from recompressed is " +  decompressed_string2.length);
+				System.out.println();
+			}
+				
+			return decompressed_string1;
+		} 
+		else if(type == 1)
+		{
+			byte[] decompressed_string = decompressOneStrings(string);
+			return decompressed_string;
+		} 
+		else
+			return string;
+	}
+	
+	
+	/*
 	public static byte[] decompressStrings(byte[] string)
 	{
 		int type = getType(string);
@@ -1935,14 +2024,15 @@ public class StringMapper
 			
 			if(bitlength != recompressed_bitlength)
 			{
-				System.out.println("decompressStrings: processing anomalous string.");
+				System.out.println("decompressStrings: anomalous string.");
 				
+			
 			    int zero_iterations = getIterations(string);
 			    byte [] string2     = string.clone();
 			    
 			    boolean foundIterations = false;
 			    int iterations = 17;
-			    while(iterations < 19)
+			    while(iterations < 20)
                 {
 			        setIterations(iterations, string2);
 				    decompressed_string = decompressOneStrings(string2);
@@ -1965,7 +2055,7 @@ public class StringMapper
 				    	    //System.out.println("Original string and recompressed string have bitlengths " + bitlength);
 				    	    //System.out.println("Original string has bytelength " + string.length + ", recompressed string has bytelength " + recompressed_string2.length);
 				    	    
-				    	    /*
+				    	   
 				    	    boolean same = true;
 				    	    int first_index = 0;
 				    	    for(int i = 0; i < string.length; i++)
@@ -1984,7 +2074,7 @@ public class StringMapper
 				    	    	    System.out.println("Original string and recompressed string are the same.");
 				    	    else
 				    	    	    System.out.println("Original string and recompressed string differ at index " + first_index);
-				    	     */
+				    	     
 				    	    System.out.println();
 				    	   
 				    	    decompressed_string = decompressed_string2;
@@ -2037,12 +2127,13 @@ public class StringMapper
 					
 					System.out.println("Original bitlength is " + bitlength + ", recompressed bitlength with 1 run bit transform is " + recompressed_bitlength);
 			    	    System.out.println();
+			    	    
+			    	    return decompressed_string;
+			    	    
 			    }
 			    
 			    return decompressed_string;
 			}
-			
-			return decompressed_string;
 		} 
 		else if(type == 1)
 		{
@@ -2052,7 +2143,7 @@ public class StringMapper
 		else
 			return string;
 	}
-
+    */
 	
 	// Functions that get information about a string
 	// from the trailing byte.
