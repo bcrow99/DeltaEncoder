@@ -2380,6 +2380,76 @@ public class StringMapper
 
 		return string_list;
 	}
+	
+	public static ArrayList getStringList(int[] value, boolean compress)
+	{
+		ArrayList string_list    = new ArrayList();
+
+		ArrayList histogram_list = getHistogram(value);
+		int       min_value      = (int) histogram_list.get(0);
+		int[]     histogram      = (int[]) histogram_list.get(1);
+		int value_range          = (int) histogram_list.get(2);
+		int[] string_table       = getRankTable(histogram);
+
+		// Pack the delta values as unary strings.
+		value[0] = value_range / 2;
+		for(int i = 1; i < value.length; i++)
+			value[i] -= min_value;
+		byte[] string = new byte[value.length * 16];
+		int bitlength = packStrings2(value, string_table, string);
+
+		string_list.add(min_value);
+		string_list.add(bitlength);
+		string_list.add(string_table);
+
+		// We can calculate the zero ratio of unmodified unary
+		// strings from their histogram.
+		double zero_ratio = value.length;
+		if(histogram.length > 1)
+		{
+			int min_histogram_value = Integer.MAX_VALUE;
+			for(int k = 0; k < histogram.length; k++)
+				if(histogram[k] < min_histogram_value)
+					min_histogram_value = histogram[k];
+			zero_ratio -= min_histogram_value;
+		}
+		zero_ratio /= bitlength;
+		
+		if(compress)
+		{
+			if(zero_ratio >= .5)
+			{
+				// Since this is an unclipped string in a buffer,
+				// we use the method that does not use a trailing byte.
+				byte[] compression_string = compressZeroStrings(string, bitlength);
+				string_list.add(compression_string);
+			} 
+			else
+			{
+				byte[] compression_string = compressOneStrings(string, bitlength);
+				string_list.add(compression_string);
+			}
+		}
+		else
+		{
+		    // There might be a scenario where a compressable string will compress more 
+			// when it's segmented if it isn't compressed to start with, so we
+			// have an option where we do not attempt to compress the string.
+			int bytelength             = getBytelength(bitlength);
+			byte [] compression_string = new byte[bytelength];
+			for(int i = 0; i < bytelength - 1; i++)
+				compression_string[i] = string[i];
+			if(zero_ratio >= .5)
+				setData(0, 0, bitlength, compression_string);
+			else
+				setData(1, 0, bitlength, compression_string);
+			string_list.add(compression_string);
+		}
+
+		return string_list;
+	}
+	
+	
 
 	// Packing and compressing arrays where the first value
 	// is not a code.

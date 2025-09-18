@@ -23,17 +23,19 @@ public class DeltaWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant    = 5;
+	int pixel_quant    = 4;
 	int pixel_shift    = 3;
-	int segment_length = 0;
-	int segment_type   = 3;
+	int segment_length = 20;
+	int segment_type   = 2;
 	int merge_type     = 0;
+	int deflate_type   = 0;
 	double merge_bin   = .05;
 	
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
 	int histogram_type = 0;
+	boolean compress   = false;
 	
 	double scale       = 1.;
 
@@ -68,10 +70,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("");
-		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
-		String filename = new String(args[0]);
-
+		String filename    = new String(args[0]);
+		String prefix      = new String("");
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
 		writer.init();
 	}
@@ -280,8 +280,6 @@ public class DeltaWriter
 				save_item.addActionListener(save_handler);
 				file_menu.add(save_item);
 
-				
-		     	
 				JMenu settings_menu = new JMenu("Quantization");
 
 				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
@@ -468,7 +466,6 @@ public class DeltaWriter
 						}
 			    	    }
 			    	});
-			    
 			    
 				JButton segment_type_button = new JButton("Set Segment Type");
 				ActionListener button_type_handler = new ActionListener()
@@ -1112,7 +1109,7 @@ public class DeltaWriter
 
 				int[] delta = (int[]) result.get(1);
 
-				ArrayList delta_string_list = StringMapper.getStringList(delta);
+				ArrayList delta_string_list = StringMapper.getStringList(delta, compress);
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
 				int[] string_table          = (int[]) delta_string_list.get(2);
@@ -1213,6 +1210,8 @@ public class DeltaWriter
 					    	    System.out.println("Original value is " + original_string[current_index]);
 					    	    System.out.println("Restored value is " + restored_string[current_index]);
 					    	    System.out.println("Previous value is " + original_string[current_index - 1]);
+					    	    System.out.println("Channel is " + i);
+					    	    System.out.println();
 					    }
 					    current_index++;
 					}
@@ -1523,6 +1522,8 @@ public class DeltaWriter
 					int number_of_segments = segments.size();
 					out.writeInt(number_of_segments);
 
+					Deflater deflater;
+					
 					if(number_of_segments == 1)
 					{
 						byte[] string = (byte[]) string_list.get(i);
@@ -1545,9 +1546,12 @@ public class DeltaWriter
 							current_iterations -= 16;
 						System.out.println("The unary string compressed " + current_iterations + " time(s).");
 						
-						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						//Deflater deflater = new Deflater();
+						if(deflate_type == 0)
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						else if(deflate_type == 1)
+							deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						else
+							deflater = new Deflater(Deflater.FILTERED);
 						deflater.setInput(string);
 						byte[] zipped_string = new byte[2 * string.length];
 						deflater.finish();
@@ -1583,16 +1587,19 @@ public class DeltaWriter
 							segment_data[k]        = current_segment[current_segment.length - 1];
 						}
 						
-						//Deflater deflater = new Deflater(Deflater.FILTERED);
-						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						//Deflater deflater = new Deflater();
+						if(deflate_type == 0)
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						else if(deflate_type == 1)
+							deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						else
+							deflater = new Deflater(Deflater.FILTERED);
 						deflater.setInput(segment_data);
 						byte[] zipped_data = new byte[2 * segment_data.length];
 						deflater.finish();
 						int zipped_length = deflater.deflate(zipped_data);
 						deflater.end();
 
+						
 						if (zipped_length < segment_data.length)
 						{
 							//System.out.println("Zipped channel " + i + " data.");
@@ -1605,6 +1612,7 @@ public class DeltaWriter
 							out.writeInt(0);
 							out.write(segment_data, 0, number_of_segments);
 						}
+						
 						
 						out.writeInt(max_bytelength[i]);
 						
@@ -1668,11 +1676,12 @@ public class DeltaWriter
 							}
 						}
 						
-						// Optionally zip segment lengths.
-						//deflater = new Deflater(Deflater.FILTERED);
-						//deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						//deflater = new Deflater();
+						if(deflate_type == 0)
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						else if(deflate_type == 1)
+							deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						else
+							deflater = new Deflater(Deflater.FILTERED);
 						deflater.setInput(segment_length);
 						zipped_data = new byte[2 * segment_length.length];
 						deflater.finish();
@@ -1695,12 +1704,13 @@ public class DeltaWriter
 						ArrayList packed_list = SegmentMapper.packSegments(segments);
 						byte [] packed_segments = (byte [])packed_list.get(0);
 						int packed_length = packed_segments.length;
-						
-						// Optionally zip packed segments.
-						//deflater = new Deflater(Deflater.FILTERED);
-						deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						//deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						//deflater = new Deflater();
+					
+						if(deflate_type == 0)
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						else if(deflate_type == 1)
+							deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						else
+							deflater = new Deflater(Deflater.FILTERED);
 						deflater.setInput(packed_segments);
 						zipped_data = new byte[2 * packed_length];
 						deflater.finish();
@@ -1789,7 +1799,8 @@ public class DeltaWriter
 					string = StringMapper.decompressStrings(string);	
 				// Optionally zip segment data.
 				// Deflater deflater = new Deflater();
-				Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+				//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
 				deflater.setInput(string);
 				byte[] zipped_data = new byte[2 * string.length];
 				deflater.finish();
@@ -1871,8 +1882,8 @@ public class DeltaWriter
 					if(compression == 5)
 					{
 						//Deflater deflater = new Deflater();
-						//Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 						deflater.setInput(string);
 						byte[] zipped_data = new byte[2 * string.length];
 						deflater.finish();
