@@ -25,17 +25,24 @@ public class DeltaWriter
 
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
-	int segment_length = 20;
-	int segment_type   = 2;
-	int merge_type     = 0;
-	int deflate_type   = 0;
-	double merge_bin   = .05;
 	
+	int segment_length = 0;
+	int segment_type   = 1;
+	int merge_type     = 0;
+	
+	double merge_bin   = .05;
 	int correction     = 0;
 	int min_set_id     = 0;
-	int delta_type     = 2;
-	int histogram_type = 0;
-	boolean compress   = false;
+	
+	int delta_type      = 2;
+	
+	boolean precompress = false;
+	int deflate_type    = 0;
+	
+	int histogram_type    = 0;
+	int histogram_channel = 0;
+	boolean histogram_visible = false;
+	
 	
 	double scale       = 1.;
 
@@ -52,11 +59,15 @@ public class DeltaWriter
 	int[] channel_string_type;
 	int[] number_of_segments;
 	byte[] channel_iterations;
+	
+	JTextField[] channel_text;
 
 	int[] max_bytelength;
 
 	long file_length;
 	double file_compression_rate;
+	
+	Canvas histogram_canvas;
 
 	ArrayList <Object>channel_list, table_list, string_list, cat_string_list, map_list, segment_list;
 
@@ -70,8 +81,9 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		String filename    = new String(args[0]);
-		String prefix      = new String("");
+		String prefix = new String("");
+		String filename = new String(args[0]);
+
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
 		writer.init();
 	}
@@ -189,7 +201,7 @@ public class DeltaWriter
 				Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 				screen_xdim = (int) screenSize.getWidth();
 				screen_ydim = (int) screenSize.getHeight();
-				if (image_xdim <= (screen_xdim - 20) && image_ydim <= (screen_ydim - 60))
+				if(image_xdim <= (screen_xdim - 20) && image_ydim <= (screen_ydim - 200))
 				{
 					canvas_xdim = image_xdim;
 					canvas_ydim = image_ydim;
@@ -197,12 +209,12 @@ public class DeltaWriter
 				} 
 				else if (image_xdim <= (screen_xdim - 20))
 				{
-					canvas_ydim = screen_ydim - 60;
+					canvas_ydim = screen_ydim - 200;
 					scale = canvas_ydim;
 					scale /= image_ydim;
 					canvas_xdim = (int) (scale * image_xdim);
 				} 
-				else if (image_ydim <= (screen_ydim - 60))
+				else if (image_ydim <= (screen_ydim - 200))
 				{
 					canvas_xdim = screen_xdim - 20;
 					scale = canvas_ydim;
@@ -212,7 +224,7 @@ public class DeltaWriter
 				{
 					double xscale = screen_xdim - 20;
 					xscale /= image_xdim;
-					double yscale = screen_ydim - 60;
+					double yscale = screen_ydim - 200;
 					yscale /= image_ydim;
 
 					if (xscale <= yscale)
@@ -366,8 +378,55 @@ public class DeltaWriter
 				shift_dialog.add(shift_panel);
 				settings_menu.add(shift_item);
 
-				JMenu segmentation_menu = new JMenu("Segmentation");
 				
+				// The correction value is a convenience to help see what
+				// quantizing does to the original image. Instead of
+				// simply switching back and forth between the original
+				// image and the quantized image, the user can slowly
+				// move back and forth between the two images.
+				JMenuItem correction_item = new JMenuItem("Error Correction");
+				JDialog correction_dialog = new JDialog(frame, "Error Correction");
+				ActionListener correction_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						correction_dialog.setLocation(x, y - 150);
+						correction_dialog.pack();
+						correction_dialog.setVisible(true);
+					}
+				};
+				correction_item.addActionListener(correction_handler);
+
+				JPanel correction_panel = new JPanel(new BorderLayout());
+				JSlider correction_slider = new JSlider();
+				correction_slider.setMinimum(0);
+				correction_slider.setMaximum(10);
+				correction_slider.setValue(correction);
+				JTextField correction_value = new JTextField(3);
+				correction_value.setText(" " + correction + " ");
+				ChangeListener correction_slider_handler = new ChangeListener()
+				{
+					public void stateChanged(ChangeEvent e)
+					{
+						JSlider slider = (JSlider) e.getSource();
+						correction = slider.getValue();
+						correction_value.setText(" " + correction + " ");
+						if (slider.getValueIsAdjusting() == false)
+							apply_item.doClick();
+					}
+				};
+				correction_slider.addChangeListener(correction_slider_handler);
+				correction_panel.add(correction_slider, BorderLayout.CENTER);
+				correction_panel.add(correction_value, BorderLayout.EAST);
+				correction_dialog.add(correction_panel);
+
+				settings_menu.add(correction_item);
+				
+				JMenu segmentation_menu = new JMenu("Segmentation");
 				
 				JMenuItem segment_length_item   = new JMenuItem("Segment Length");
 				JDialog   segment_length_dialog = new JDialog(frame, "Segment Length");
@@ -701,14 +760,12 @@ public class DeltaWriter
 				merge_bin_dialog.add(merge_bin_panel);
 				segmentation_menu.add(merge_bin_item);
 				
-				// The correction value is a convenience to help see what
-				// quantizing does to the original image. Instead of
-				// simply switching back and forth between the original
-				// image and the quantized image, the user can slowly
-				// move back and forth between the two images.
-				JMenuItem correction_item = new JMenuItem("Error Correction");
-				JDialog correction_dialog = new JDialog(frame, "Error Correction");
-				ActionListener correction_handler = new ActionListener()
+				
+				// Looks like something we mostly don't want to do,
+				// but this makes it easy to double check.
+				JMenuItem precompress_item   = new JMenuItem("Precompress");
+				JDialog   precompress_dialog = new JDialog(frame, "Precompress");
+				ActionListener precompress_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
@@ -716,37 +773,43 @@ public class DeltaWriter
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
 
-						correction_dialog.setLocation(x, y - 200);
-						correction_dialog.pack();
-						correction_dialog.setVisible(true);
+						precompress_dialog.setLocation(x, y - 150);
+						precompress_dialog.pack();
+						precompress_dialog.setVisible(true);
 					}
 				};
-				correction_item.addActionListener(correction_handler);
-
-				JPanel correction_panel = new JPanel(new BorderLayout());
-				JSlider correction_slider = new JSlider();
-				correction_slider.setMinimum(0);
-				correction_slider.setMaximum(10);
-				correction_slider.setValue(correction);
-				JTextField correction_value = new JTextField(3);
-				correction_value.setText(" " + correction + " ");
-				ChangeListener correction_slider_handler = new ChangeListener()
+				precompress_item.addActionListener(precompress_handler);
+				
+				JToggleButton precompress_button = new JToggleButton("Precompress", precompress);
+				ActionListener precompress_button_handler = new ActionListener()
 				{
-					public void stateChanged(ChangeEvent e)
+					public void actionPerformed(ActionEvent e)
 					{
-						JSlider slider = (JSlider) e.getSource();
-						correction = slider.getValue();
-						correction_value.setText(" " + correction + " ");
-						if (slider.getValueIsAdjusting() == false)
-							apply_item.doClick();
+						if(precompress)
+						{
+						    precompress = false;
+						    precompress_button.setSelected(false);
+						    apply_item.doClick();
+						}
+						else
+						{
+							precompress = true;
+						    precompress_button.setSelected(true);	
+						    apply_item.doClick();
+						}
 					}
 				};
-				correction_slider.addChangeListener(correction_slider_handler);
-				correction_panel.add(correction_slider, BorderLayout.CENTER);
-				correction_panel.add(correction_value, BorderLayout.EAST);
-				correction_dialog.add(correction_panel);
-
-				settings_menu.add(correction_item);
+				precompress_button.addActionListener(precompress_button_handler);
+				
+				JPanel precompress_panel  = new JPanel();
+				precompress_panel.add(precompress_button);
+				precompress_dialog.add(precompress_panel);
+				
+				
+				segmentation_menu.add(precompress_item);
+				
+				
+				
 
 				JMenu delta_menu = new JMenu("Delta");
 
@@ -795,7 +858,10 @@ public class DeltaWriter
 				
 				
                 JMenu histogram_menu = new JMenu("Histogram");
-				
+                
+                
+                
+        		
 		     	JPanel histogram_panel = new JPanel(new BorderLayout());
 		     	Canvas histogram_canvas = new HistogramCanvas();
 		     	histogram_canvas.setSize(522, 100);
@@ -819,46 +885,170 @@ public class DeltaWriter
 		     	
 		     	histogram_panel.add(histogram_canvas, BorderLayout.CENTER);
 		     	
-				
+		     	
+		     	
+		     	
+		     	
+		     	
 		     	JDialog histogram_dialog = new JDialog(frame, "Histogram");
 		     	histogram_dialog.add(histogram_panel);
 		     	
-		    
-		     	//JPanel type_panel = new JPanel(new GridLayout(1, 6));	
-		     	//JPanel channel_panel = new JPanel(new GridLayout(1, 3));
-           
-		     	
-		     	
-				JRadioButtonMenuItem[] histogram_button = new JRadioButtonMenuItem[18];
+		     	ActionListener histogram_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
 
-				histogram_button[0]  = new JRadioButtonMenuItem("0");
-				histogram_button[1]  = new JRadioButtonMenuItem("0*");
-				histogram_button[2]  = new JRadioButtonMenuItem("0^");
-				histogram_button[3]  = new JRadioButtonMenuItem("0*^");
-				histogram_button[4]  = new JRadioButtonMenuItem("0**");
-				histogram_button[5]  = new JRadioButtonMenuItem("0**^");
-				
-				histogram_button[6]  = new JRadioButtonMenuItem("1");
-				histogram_button[7]  = new JRadioButtonMenuItem("1*");
-				histogram_button[8]  = new JRadioButtonMenuItem("1^");
-				histogram_button[9]  = new JRadioButtonMenuItem("1*^");
-				histogram_button[10] = new JRadioButtonMenuItem("1**");
-				histogram_button[11] = new JRadioButtonMenuItem("1**^");
-				
-				histogram_button[12] = new JRadioButtonMenuItem("2");
-				histogram_button[13] = new JRadioButtonMenuItem("2*");
-				histogram_button[14] = new JRadioButtonMenuItem("2^");
-				histogram_button[15] = new JRadioButtonMenuItem("2*^");
-				histogram_button[16] = new JRadioButtonMenuItem("2**");
-				histogram_button[17] = new JRadioButtonMenuItem("2**^");
-				
-				histogram_button[histogram_type].setSelected(true);
-
-				class HistogramButtonHandler implements ActionListener
+						//histogram_dialog.setLocation(x, y - 150);
+						histogram_dialog.setLocation(x, y - 100);
+						histogram_dialog.pack();
+						histogram_dialog.setVisible(true);
+					}
+				};
+		   
+                JMenuItem channel_item  = new JMenuItem("Channel");
+               
+                JPanel    channel_panel = new JPanel(new BorderLayout());
+                
+                JPanel channel_button_panel = new JPanel(new GridLayout(3, 1)); 
+                
+                JRadioButtonMenuItem[] channel_button = new JRadioButtonMenuItem[3];
+                
+                class HistogramChannelHandler implements ActionListener
 				{
 					int index;
 
-					HistogramButtonHandler(int index)
+					HistogramChannelHandler(int index)
+					{
+						this.index = index;
+					}
+
+					public void actionPerformed(ActionEvent e)
+					{
+						if (histogram_channel != index)
+						{
+							channel_button[histogram_channel].setSelected(false);
+							histogram_channel = index;
+							channel_button[histogram_channel].setSelected(true);
+							histogram_canvas.repaint();
+						} 
+					}
+				}
+
+				for (int i = 0; i < 3; i++)
+				{
+					channel_button[i] = new JRadioButtonMenuItem();
+					if(i == histogram_channel)
+						channel_button[i].setSelected(true);
+					channel_button[i].addActionListener(new HistogramChannelHandler(i));
+					channel_button_panel.add(channel_button[i]);
+				}
+                
+                JPanel channel_text_panel = new JPanel(new GridLayout(3, 1));
+                channel_text = new JTextField[3];
+                for(int i = 0; i < 3; i++)
+            	        channel_text[i] = new JTextField("           ");
+                if(min_set_id == 0)
+                {
+                	    channel_text[0].setText("blue");
+                	    channel_text[1].setText("green");
+                	    channel_text[2].setText("red");
+                }
+                else if(min_set_id == 1)
+                {
+                	    channel_text[0].setText("blue");
+            	        channel_text[1].setText("red");
+            	        channel_text[2].setText("red - green");
+                }
+                else if(min_set_id == 2)
+                {
+                	    channel_text[0].setText("blue");
+            	        channel_text[1].setText("red");
+            	        channel_text[2].setText("blue - green");
+                }
+                else if(min_set_id == 3)
+                {
+                	    channel_text[0].setText("blue");
+            	        channel_text[1].setText("blue - green");
+            	        channel_text[2].setText("red - green");
+                }
+                else if(min_set_id == 4)
+                {
+                	    channel_text[0].setText("blue");
+            	        channel_text[1].setText("blue - green");
+            	        channel_text[2].setText("red - blue");
+                }
+                else if(min_set_id == 5)
+                {
+                	    channel_text[0].setText("green");
+            	        channel_text[1].setText("red");
+            	        channel_text[2].setText("blue - green");
+                }
+                else if(min_set_id == 6)
+                {
+                	    channel_text[0].setText("red");
+            	        channel_text[1].setText("blue - green");
+            	        channel_text[2].setText("red - green");
+                }
+                else if(min_set_id == 7)
+                {
+                	    channel_text[0].setText("green");
+        	            channel_text[1].setText("blue - green");
+        	            channel_text[2].setText("red - green");
+                }
+                else if(min_set_id == 8)
+                {
+                	    channel_text[0].setText("green");
+        	            channel_text[1].setText("red - green");
+        	            channel_text[2].setText("red - blue");
+                }
+                else if(min_set_id == 9)
+                {
+                	    channel_text[0].setText("red");
+        	            channel_text[1].setText("red - green");
+        	            channel_text[2].setText("red - blue");
+                }
+    			
+                for(int i = 0; i < 3; i++)
+                	    channel_text_panel.add(channel_text[i]);
+                channel_panel.add(BorderLayout.WEST, channel_button_panel);
+                channel_panel.add(BorderLayout.CENTER, channel_text_panel);
+                
+                JDialog channel_dialog = new JDialog(frame, "Channel");
+                channel_dialog.add(channel_panel);
+				ActionListener channel_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						channel_dialog.setLocation(x + 530, y - 150);
+						channel_dialog.pack();
+						channel_dialog.setVisible(true);
+					}
+				};
+				channel_item.addActionListener(channel_handler);
+                
+                	histogram_menu.add(channel_item);   
+                	
+                	
+                JMenuItem type_item  = new JMenuItem("Datatype");
+              
+                JPanel    type_panel = new JPanel(new BorderLayout());
+                
+                JPanel type_button_panel = new JPanel(new GridLayout(6, 1)); 
+                
+                JRadioButtonMenuItem[] type_button = new JRadioButtonMenuItem[6];
+                
+                class HistogramTypeHandler implements ActionListener
+				{
+					int index;
+
+					HistogramTypeHandler(int index)
 					{
 						this.index = index;
 					}
@@ -867,24 +1057,39 @@ public class DeltaWriter
 					{
 						if (histogram_type != index)
 						{
-							histogram_button[histogram_type].setSelected(false);
+							type_button[histogram_type].setSelected(false);
 							histogram_type = index;
-							histogram_button[histogram_type].setSelected(true);
-							histogram_canvas.repaint();
+							type_button[histogram_type].setSelected(true);
 						} 
-						else
-							histogram_button[histogram_type].setSelected(true);
 					}
 				}
 
-				for (int i = 0; i < 18; i++)
+				for (int i = 0; i < 6; i++)
 				{
-					histogram_button[i].addActionListener(new HistogramButtonHandler(i));
-					histogram_menu.add(histogram_button[i]);
+					type_button[i] = new JRadioButtonMenuItem();
+					if(i == histogram_type)
+						type_button[i].setSelected(true);
+					type_button[i].addActionListener(new HistogramTypeHandler(i));
+					type_button_panel.add(type_button[i]);
 				}
-		     	
-				JMenuItem histogram_item = new JMenuItem("Show Histogram");
-				ActionListener histogram_handler = new ActionListener()
+                
+                JPanel type_text_panel = new JPanel(new GridLayout(6, 1));
+                JTextField [] type_text = new JTextField[6];
+                type_text[0] = new JTextField("Delta strings                   ");
+                type_text[1] = new JTextField("Delta strings compressed        ");
+                type_text[2] = new JTextField("Delta strings zipped            ");
+                type_text[3] = new JTextField("Delta strings compressed zipped ");
+                type_text[4] = new JTextField("Delta strings segmented         ");
+                type_text[5] = new JTextField("Delta strings segmented zipped  ");
+                for(int i = 0; i < 6; i++)
+                	    type_text_panel.add(type_text[i]);
+                
+                type_panel.add(BorderLayout.WEST, type_button_panel);
+                type_panel.add(BorderLayout.CENTER, type_text_panel);
+                
+                JDialog type_dialog = new JDialog(frame, "Histogram Datatype");
+                type_dialog.add(type_panel);
+				ActionListener type_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
@@ -892,18 +1097,48 @@ public class DeltaWriter
 						int x = (int) location_point.getX();
 						int y = (int) location_point.getY();
 
-						//Dimension canvas_dimension = histogram_canvas.getSize();
-						//double    canvas_xdim      = canvas_dimension.getWidth();
-						//double    canvas_ydim      = canvas_dimension.getHeight();
-						
-						y += image_ydim + 60;
-						histogram_dialog.setLocation(x, y);
-						histogram_dialog.pack();
-						histogram_dialog.setVisible(true);
+						type_dialog.setLocation(x + 680, y - 150);
+						type_dialog.pack();
+						type_dialog.setVisible(true);
 					}
 				};
-				histogram_item.addActionListener(histogram_handler);
-				histogram_menu.add(histogram_item);
+				type_item.addActionListener(type_handler);
+                
+                	histogram_menu.add(type_item);   
+                	
+		
+		     	JToggleButton show_histogram_button = new JToggleButton("Show Histogram", histogram_visible);
+				ActionListener show_button_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						if(histogram_visible)
+						{
+						    histogram_visible = false;
+						    show_histogram_button.setSelected(false);
+						   
+						    histogram_dialog.pack();
+						    histogram_dialog.setVisible(false);
+						}
+						else
+						{
+							histogram_visible = true;
+							show_histogram_button.setSelected(true);	
+						
+							histogram_dialog.pack();
+							histogram_dialog.setVisible(true);
+						}
+					}
+				};
+				show_histogram_button.addActionListener(show_button_handler);
+				
+				histogram_menu.add(show_histogram_button);
+				
+			
+				
+				
+				
+				
 				
 				menu_bar.add(file_menu);
 				menu_bar.add(delta_menu);
@@ -1046,6 +1281,68 @@ public class DeltaWriter
 				}
 			}
 			min_set_id = min_index;
+			
+			if(min_set_id == 0)
+            {
+            	    channel_text[0].setText("blue");
+            	    channel_text[1].setText("green");
+            	    channel_text[2].setText("red");
+            }
+            else if(min_set_id == 1)
+            {
+            	    channel_text[0].setText("blue");
+        	        channel_text[1].setText("red");
+        	        channel_text[2].setText("red - green");
+            }
+            else if(min_set_id == 2)
+            {
+            	    channel_text[0].setText("blue");
+        	        channel_text[1].setText("red");
+        	        channel_text[2].setText("blue - green");
+            }
+            else if(min_set_id == 3)
+            {
+            	    channel_text[0].setText("blue");
+        	        channel_text[1].setText("blue - green");
+        	        channel_text[2].setText("red - green");
+            }
+            else if(min_set_id == 4)
+            {
+            	    channel_text[0].setText("blue");
+        	        channel_text[1].setText("blue - green");
+        	        channel_text[2].setText("red - blue");
+            }
+            else if(min_set_id == 5)
+            {
+            	    channel_text[0].setText("green");
+        	        channel_text[1].setText("red");
+        	        channel_text[2].setText("blue - green");
+            }
+            else if(min_set_id == 6)
+            {
+            	    channel_text[0].setText("red");
+        	        channel_text[1].setText("blue - green");
+        	        channel_text[2].setText("red - green");
+            }
+            else if(min_set_id == 7)
+            {
+            	    channel_text[0].setText("green");
+    	            channel_text[1].setText("blue - green");
+    	            channel_text[2].setText("red - green");
+            }
+            else if(min_set_id == 8)
+            {
+            	    channel_text[0].setText("green");
+    	            channel_text[1].setText("red - green");
+    	            channel_text[2].setText("red - blue");
+            }
+            else if(min_set_id == 9)
+            {
+            	    channel_text[0].setText("red");
+    	            channel_text[1].setText("red - green");
+    	            channel_text[2].setText("red - blue");
+            }
+			
 			file_compression_rate = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
@@ -1109,7 +1406,11 @@ public class DeltaWriter
 
 				int[] delta = (int[]) result.get(1);
 
-				ArrayList delta_string_list = StringMapper.getStringList(delta, compress);
+	
+				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
+				System.out.println();
+				
+				
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
 				int[] string_table          = (int[]) delta_string_list.get(2);
@@ -1768,8 +2069,10 @@ public class DeltaWriter
 			g2.setColor(java.awt.Color.WHITE);
 			g2.fillRect(0, 0, xdim, ydim);
 			
-			int channel     = histogram_type / 6;
-			int compression = histogram_type % 6;
+			int channel     = histogram_channel;
+			
+			System.out.println("Histogramming channel " + histogram_channel);
+			int compression = histogram_type;
 			int [] count    = new int[256];
 			byte[] string   = (byte[]) string_list.get(channel);
 			int number_of_segments = 1;

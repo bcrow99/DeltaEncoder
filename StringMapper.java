@@ -2449,8 +2449,6 @@ public class StringMapper
 		return string_list;
 	}
 	
-	
-
 	// Packing and compressing arrays where the first value
 	// is not a code.
 	public static ArrayList getStringList2(int[] value)
