@@ -1308,6 +1308,10 @@ public class StringMapper
 		}
 	}
 
+	
+	
+	
+	
 	// One bit/one string functions.
 	// One bits correspond to run bits in this implementation.
 	public static int[] compressOneBits(byte src[], int size, byte dst[])
@@ -1952,16 +1956,19 @@ public class StringMapper
 		if(type == 0)
 		{
 			byte[] compressed_string = compressZeroStrings(string);
+			int compressed_bitlength = getBitlength(compressed_string);
 			
 			byte [] decompressed_string = decompressZeroStrings(string);
 			
 			byte [] recompressed_string = compressZeroStrings(decompressed_string);
 			
 			int recompressed_bitlength  = getBitlength(recompressed_string);
-			if(recompressed_bitlength != bitlength)
+			if(recompressed_bitlength != compressed_bitlength)
 			{
+				System.out.println("compressStrings: anomalous string.");
 				System.out.println("Recompressed bitlength is " + recompressed_bitlength + ", compressed bitlength is " + bitlength);
-				return recompressed_string;
+				System.out.println();
+				//return recompressed_string;
 			}
 			
 			return compressed_string;
@@ -1980,27 +1987,24 @@ public class StringMapper
 		int type = getType(string);
 		if(type == 0)
 		{
-			byte [] decompressed_string1 = decompressZeroStrings(string);
-			byte [] recompressed_string  = compressZeroStrings(decompressed_string1);
-			
-			int bitlength               = getBitlength(string);
-			int recompressed_bitlength  = getBitlength(recompressed_string);
-			
+			byte [] decompressed_string = decompressZeroStrings(string);
+			byte [] recompressed_string  = compressZeroStrings(decompressed_string);
 			byte [] decompressed_string2 = decompressZeroStrings(recompressed_string);
 			
 			
-			if(bitlength != recompressed_bitlength)
+			
+			int decompressed_length  = getBitlength(decompressed_string);
+			int decompressed_length2 = getBitlength(decompressed_string2);
+					
+			
+			if(decompressed_length != decompressed_length2)
 			{
-				/*
 				System.out.println("decompressStrings: anomalous string.");
-				System.out.println("Original bitlength " + bitlength + ", recompressed bitlength " + recompressed_bitlength);
-				System.out.println("Original bytelength " + string.length + ", recompressed bytelength " +  recompressed_string.length);
-				System.out.println("Decompressed bytelength from original is  " + decompressed_string1.length + ", decompressed bytelength from recompressed is " +  decompressed_string2.length);
+				System.out.println("Decompressed length " + decompressed_length + ", recompressed/decompressed length " + decompressed_length2);
 				System.out.println();
-				*/
 			}
 				
-			return decompressed_string2;
+			return decompressed_string;
 		} 
 		else if(type == 1)
 		{
