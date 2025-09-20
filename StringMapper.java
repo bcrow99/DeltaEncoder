@@ -1904,10 +1904,18 @@ public class StringMapper
 			
 			int recompressed_length = getBitlength(recompressed_string);
 			
+			if(compressed_length != recompressed_length && string.length < 3)
+			{
+				System.out.println("compressStrings: printing bits from anomalous string.");
+				printBits(string, compressed_length);
+				printBits(recompressed_string, recompressed_length);
+			}
+			
 			if(compressed_length > recompressed_length)
 				return recompressed_string;
 			else
 			    return compressed_string;
+			
 		} 
 		else if(type == 1)
 		{
@@ -1932,7 +1940,7 @@ public class StringMapper
 			
 			if(compressed_length != recompressed_length)
 			{
-				System.out.println("decompressStrings: anomalous string, compressed length is " + compressed_length + ", recompressed length is " + recompressed_length);
+				//System.out.println("decompressStrings: anomalous string, compressed length is " + compressed_length + ", recompressed length is " + recompressed_length);
 				/*
 				int zero_iterations = getIterations(string);
 				int compressed_bitlength = getBitlength(string);
@@ -2148,6 +2156,44 @@ public class StringMapper
 	}
     */
 	
+	public static void printBits(byte[] string, int bitlength)
+	{
+	    int bytelength = bitlength / 8;
+	    if(bitlength % 8 != 0)
+	    	    bytelength++;
+	    
+	    byte [] mask = SegmentMapper.getPositiveMask();
+	    int i = bytelength - 1;
+	    if(bitlength % 8 != 0)
+	    {
+	    	    for(int j = bitlength % 8 - 1; j < 0; j++)
+	    	    {
+	    	    	    if((string[i] & mask[j]) != 0)
+	    	    	    	    System.out.print("1");
+	    	    	    else
+	    	    	    	    System.out.print("0");	    	    
+	    	    }
+	    	    System.out.print(" ");
+	    	    i--;
+	    }
+	    
+	    while(i >= 0)
+	    {
+	    	    for(int j = 7; j >= 0; j--)
+	    	    {
+	    	    	    if((string[i] & mask[j]) != 0)
+	    	    	        System.out.print("1");
+	    	        else
+	    	    	        System.out.print("0");	
+	    	    }
+	    	    System.out.print(" ");
+	    	    i--;
+	    }
+	    System.out.println();
+	}
+	
+	
+	
 	// Functions that get information about a string
 	// from the trailing byte.
 	public static int getBitlength(byte[] string)
@@ -2212,6 +2258,7 @@ public class StringMapper
 	    string[string.length - 1]  = (byte)iterations;
 	    string[string.length - 1] |= (byte)extra_bits;
 	}	
+	
 		
 
 	/**
@@ -2493,7 +2540,8 @@ public class StringMapper
 
 		return string_list;
 	}
-
+ 
+	
 	public static ArrayList getStringList2(byte[] value)
 	{
 		ArrayList string_list = new ArrayList();
@@ -2535,7 +2583,8 @@ public class StringMapper
 
 		return string_list;
 	}
-
+   
+	
 	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
 	{
 		int positive = 0;
