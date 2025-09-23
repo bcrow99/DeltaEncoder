@@ -26,8 +26,8 @@ public class DeltaWriter
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
 	
-	int segment_length = 0;
-	int segment_type   = 1;
+	int segment_length = 20;
+	int segment_type   = 2;
 	int merge_type     = 0;
 	
 	double merge_bin   = .05;
@@ -42,7 +42,6 @@ public class DeltaWriter
 	int histogram_type    = 0;
 	int histogram_channel = 0;
 	boolean histogram_visible = false;
-	
 	
 	double scale       = 1.;
 
@@ -81,6 +80,7 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
 		String prefix = new String("");
 		String filename = new String(args[0]);
 
@@ -1133,13 +1133,7 @@ public class DeltaWriter
 				show_histogram_button.addActionListener(show_button_handler);
 				
 				histogram_menu.add(show_histogram_button);
-				
 			
-				
-				
-				
-				
-				
 				menu_bar.add(file_menu);
 				menu_bar.add(delta_menu);
 				menu_bar.add(settings_menu);
