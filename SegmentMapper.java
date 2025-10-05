@@ -240,10 +240,6 @@ public class SegmentMapper
 		System.out.println();
 		*/
 		
-		
-		
-		
-		
 		ArrayList<byte[]> compressed_segments = new ArrayList<byte[]>();
 
 		max_segment_bytelength                       = 0;
@@ -510,7 +506,7 @@ public class SegmentMapper
 					int     current_bitlength      = StringMapper.getBitlength(current_segment); 
 					byte [] next_segment           = segments.get(i + 1);
 					int     next_bitlength         = StringMapper.getBitlength(next_segment);
-					byte [] decompressed_segment   = StringMapper.decompressStrings(next_segment);
+					byte [] decompressed_segment   = StringMapper.decompressStrings2(next_segment);
 					int	    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
 					
 					int augmented_bitlength        = current_bitlength + decompressed_bitlength;
@@ -1009,7 +1005,7 @@ public class SegmentMapper
 	    	    }
 	    	    else
 	    	    {
-	    	    	    byte [] decompressed_segment = StringMapper.decompressStrings(segment);
+	    	    	    byte [] decompressed_segment = StringMapper.decompressStrings2(segment);
 	    	    	    int     bitlength            = StringMapper.getBitlength(decompressed_segment);
 		    	    total_bitlength             += bitlength;
 	    	    }
@@ -1028,7 +1024,7 @@ public class SegmentMapper
         	    int    iterations = StringMapper.getIterations(segment);
         	    if(iterations != 0 && iterations != 16)
         	    {
-        	    	    segment = StringMapper.decompressStrings(segment);
+        	    	    segment = StringMapper.decompressStrings2(segment);
         	    	    iterations = StringMapper.getIterations(segment);
         	    }
         	    
@@ -1045,7 +1041,7 @@ public class SegmentMapper
 				for(int j = 0; j < clipped_segment.length; j++)
 					clipped_segment[j] = segment[j];
 					
-				byte [] shifted_segment = SegmentMapper.shiftLeft(clipped_segment, bit_shift);
+				byte [] shifted_segment = shiftLeft(clipped_segment, bit_shift);
 				dst[byte_offset] |= shifted_segment[0]; 
 				
 				for(int j = 1; j < shifted_segment.length; j++)
@@ -1078,7 +1074,6 @@ public class SegmentMapper
 		}
 		else
 		{
-			//double bin                     = .02;
 			ArrayList segmented_list       = segment(string, minimum_bitlength, bin);
 
 			ArrayList<byte[]> segments     = (ArrayList<byte[]>)segmented_list.get(0);
@@ -1759,8 +1754,8 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper.getBit(current_segment, j);
-				SegmentMapper.setBit(string, k++, value);
+				int value = SegmentMapper2.getBit(current_segment, j);
+				SegmentMapper2.setBit(string, k++, value);
 			}
 		}
 
@@ -1804,8 +1799,8 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper.getBit(current_segment, j);
-				SegmentMapper.setBit(string, k++, value);
+				int value = SegmentMapper2.getBit(current_segment, j);
+				SegmentMapper2.setBit(string, k++, value);
 			}
 		}
 
@@ -2055,8 +2050,8 @@ public class SegmentMapper
 			byte[] segment = new byte[bytelength[i] + 1];
 			for(int j = 0; j < bitlength; j++)
 			{
-				int value = SegmentMapper.getBit(string, k++);
-				SegmentMapper.setBit(segment, j, value);
+				int value = SegmentMapper2.getBit(string, k++);
+				SegmentMapper2.setBit(segment, j, value);
 			}
 			segment[bytelength[i]] = data[i];
 			unpacked_segments.add(segment);
@@ -2087,8 +2082,8 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper.getBit(string, k++);
-				SegmentMapper.setBit(segment, j, value);
+				int value = SegmentMapper2.getBit(string, k++);
+				setBit(segment, j, value);
 			}
 
 			unpacked_segments.add(segment);

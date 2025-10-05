@@ -27,7 +27,7 @@ public class DeltaWriter2
 	int pixel_shift    = 3;
 	
 	int segment_length = 20;
-	int segment_type   = 2;
+	int segment_type   = 3;
 	int merge_type     = 0;
 	
 	double merge_bin   = .05;
@@ -1481,6 +1481,7 @@ public class DeltaWriter2
 					} 
 					else
 					{
+						//byte[] decompressed_string = StringMapper.decompressStrings(current_string);
 						byte[] decompressed_string = StringMapper.decompressStrings(current_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if(number_unpacked != new_xdim * new_ydim)
