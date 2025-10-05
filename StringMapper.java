@@ -1996,40 +1996,8 @@ public class StringMapper
 				
 				int adjusted_iterations = iterations + 8;
 				
-				//System.out.println("compressStrings2: adjusting iterations to " + adjusted_iterations);
-				//System.out.println("One iterations was " + one_iterations);
-				setIterations(adjusted_iterations, compressed_string2);
 				
-				/*
-				byte [] decompressed_string = decompressStrings2(compressed_string2);
-				System.out.println("compressStrings2: Processing anomalous string.");
-				if(string.length != decompressed_string.length)
-				{
-				    System.out.println("Decompressed string not same length as original string.");
-				    System.out.println();
-				}
-				else
-				{
-					boolean same = true;
-			    	    
-			    	    for(int i = 0; i < string.length; i++)
-			    	    {
-			    	    	    if(string[i] != decompressed_string[i])
-			    	    	    {
-			    	    	    	    same = false;
-			    	    	    	    System.out.println("String and decompressed string are the same length " + string.length + " but differ at index " + i);
-			    	    	    	    System.out.println();
-			    	    	    }
-			    	    }
-			    	        
-			    	    if(same)
-			    	    {
-			    	    	    System.out.println("String and decompressed string are the same.");
-			    	    	    System.out.println();
-			    	    }
-			    	     
-				}
-				*/
+				setIterations(adjusted_iterations, compressed_string2);
 				
 				return compressed_string2;
 			}

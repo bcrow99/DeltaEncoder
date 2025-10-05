@@ -80,7 +80,8 @@ public class DeltaWriter2
 			System.exit(0);
 		}
 
-		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix = new String("");
 		String filename = new String(args[0]);
 
 		DeltaWriter2 writer = new DeltaWriter2(prefix + filename);

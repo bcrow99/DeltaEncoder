@@ -702,23 +702,6 @@ public class SegmentMapper
 							compressed_segment  = StringMapper.compressStrings(shifted_segment);
 							if(compressed_segment.length - 1 > max_segment_bytelength)
 								max_segment_bytelength = compressed_segment.length - 1;
-							/*
-							byte [] processed_segment = StringMapper.decompressStrings(compressed_segment);
-							
-							int processed_bitlength = StringMapper.getBitlength(processed_segment);
-							processed_bitlength    += StringMapper.getBitlength(reduced_segment);
-							
-							if(processed_bitlength != augmented_bitlength)
-							{
-								System.out.println("Bit lengths do not agree.");
-								System.out.println("Current bit length is " + current_bitlength);
-								System.out.println("Decompressed bit length of next segment is " + decompressed_bitlength);
-								System.out.println("Reduced bit length is " + reduced_bitlength);
-								System.out.println("Decompressed bit length of augmented segment is " + processed_bitlength);
-								
-								System.out.println();
-							}
-						    */
 							
 							spliced_segments.add(reduced_segment);
 							spliced_segments.add(compressed_segment);
