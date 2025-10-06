@@ -1656,8 +1656,8 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper2.getBit(current_segment, j);
-				SegmentMapper2.setBit(string, k++, value);
+				int value = getBit(current_segment, j);
+				setBit(string, k++, value);
 			}
 		}
 
@@ -1701,8 +1701,8 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper2.getBit(current_segment, j);
-				SegmentMapper2.setBit(string, k++, value);
+				int value = getBit(current_segment, j);
+				setBit(string, k++, value);
 			}
 		}
 
@@ -1952,8 +1952,8 @@ public class SegmentMapper
 			byte[] segment = new byte[bytelength[i] + 1];
 			for(int j = 0; j < bitlength; j++)
 			{
-				int value = SegmentMapper2.getBit(string, k++);
-				SegmentMapper2.setBit(segment, j, value);
+				int value = getBit(string, k++);
+				setBit(segment, j, value);
 			}
 			segment[bytelength[i]] = data[i];
 			unpacked_segments.add(segment);
@@ -1984,7 +1984,7 @@ public class SegmentMapper
 
 			for(int j = 0; j < bitlength[i]; j++)
 			{
-				int value = SegmentMapper2.getBit(string, k++);
+				int value = getBit(string, k++);
 				setBit(segment, j, value);
 			}
 
