@@ -644,11 +644,14 @@ public class DeltaReader
 				if (compressed_length[i] != bitlength)
 					System.out.println(
 							"Bit length appended to string does not agree with channel " + i + " information.");
-
+                /*
 				if (iterations < 16 && iterations != 0)
 					string = StringMapper.decompressZeroStrings(string);
 				else if (iterations > 16)
 					string = StringMapper.decompressOneStrings(string);
+				*/
+				
+				string =  StringMapper.decompressStrings2(string);
 
 				int[] delta;
 				int   number_unpacked = 0;

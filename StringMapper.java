@@ -1973,6 +1973,8 @@ public class StringMapper
 			return string;
 	}
 	
+	
+	/*
 	public static byte[] compressStrings2(byte[] string)
 	{
 		int [] bit_table = getBitTable();
@@ -2032,24 +2034,13 @@ public class StringMapper
 			else
 			{
 				int one_iterations  = 17;
-				int zero_iterations = iterations - 8;
-				
-				
-				/*
-				setIterations(17, string);
-				byte [] decompressed_string = decompressOneStrings(string);
-				
-				setIterations(iterations - 8, decompressed_string);
-			    byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
-			    */
 				setIterations(one_iterations, original_string);
 				byte [] decompressed_string = decompressOneStrings(original_string);
+				
+				int zero_iterations = iterations - 8;
 				setIterations(zero_iterations, decompressed_string);
 				byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
 				
-				System.out.println("decompressStrings2: processing anomalous string.");
-				System.out.println("Zero iterations was " + zero_iterations);
-				System.out.println();
 			    return decompressed_string2;
 				
 			}
@@ -2062,7 +2053,109 @@ public class StringMapper
 		else
 			return string;
 	}
+	*/
+	
+	public static byte[] compressStrings2(byte[] string)
+	{
+		int [] bit_table = getBitTable();
 		
+		int type        = getType(string);
+		if(type == 0)
+		{
+			byte[] compressed_string = compressZeroStrings2(string, 7);
+			int    iterations        = getIterations(compressed_string);
+			if(iterations == 0)
+				return compressed_string;
+			
+			int bitlength = getBitlength(compressed_string);
+			int amount    = getCompressionAmount(compressed_string, bitlength, 1);
+			if(amount < 0)
+			{
+				byte [] compressed_string2  = compressOneStrings2(compressed_string, 1);
+				int     adjusted_iterations = iterations + 8;
+				setIterations(adjusted_iterations, compressed_string2);
+				return compressed_string2;
+			}
+			
+			return compressed_string;
+		} 
+		else if(type == 1)
+		{
+			byte[] compressed_string = compressOneStrings2(string, 7);
+			int    iterations        = getIterations(compressed_string);
+			if(iterations == 16)
+				return compressed_string;
+			
+			int bitlength = getBitlength(compressed_string);
+			int amount    = getCompressionAmount(compressed_string, bitlength, 0);
+			if(amount < 0)
+			{
+				byte [] compressed_string2  = compressZeroStrings2(compressed_string, 1);
+				int     adjusted_iterations = iterations + 8;
+				setIterations(adjusted_iterations, compressed_string2);
+				return compressed_string2;
+			}
+			
+			return compressed_string;
+		} 
+		else
+			return string;
+	}
+	
+	public static byte[] decompressStrings2(byte[] string)
+	{
+		byte [] original_string = string.clone();
+		
+		int iterations = getIterations(string);
+		if(iterations == 0 || iterations == 16)
+			return original_string;
+		
+		int type  = getType(string);
+		if(type == 0)
+		{
+			if(iterations < 8)
+			{
+				byte [] decompressed_string = decompressZeroStrings(string);
+				return  decompressed_string;
+			}
+			else
+			{
+				int one_iterations  = 17;
+				setIterations(one_iterations, original_string);
+				byte [] decompressed_string = decompressOneStrings(original_string);
+				
+				int zero_iterations = iterations - 8;
+				setIterations(zero_iterations, decompressed_string);
+				byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
+				
+			    return decompressed_string2;
+				
+			}
+		}  
+		else if(type == 1)
+		{
+			if(iterations < 24)
+			{
+			    byte[] decompressed_string = decompressOneStrings(string);
+			    return decompressed_string;
+			}
+			else
+			{
+				int zero_iterations  = 1;
+				setIterations(zero_iterations, original_string);
+				byte [] decompressed_string = decompressZeroStrings(original_string);
+				
+				int one_iterations = iterations - 8;
+				setIterations(one_iterations, decompressed_string);
+				byte [] decompressed_string2 = decompressOneStrings(decompressed_string);
+				
+			    return decompressed_string2;
+				
+			}
+		} 
+		else
+			return string;
+	}
 	
 	
 	/**************************************************************************************/

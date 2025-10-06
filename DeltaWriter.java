@@ -27,7 +27,7 @@ public class DeltaWriter
 	int pixel_shift    = 3;
 	
 	int segment_length = 20;
-	int segment_type   = 2;
+	int segment_type   = 3;
 	int merge_type     = 0;
 	
 	double merge_bin   = .05;
@@ -1482,7 +1482,7 @@ public class DeltaWriter
 					} 
 					else
 					{
-						byte[] decompressed_string = StringMapper.decompressStrings(current_string);
+						byte[] decompressed_string = StringMapper.decompressStrings2(current_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if(number_unpacked != new_xdim * new_ydim)
 							System.out.println("Number of values unpacked does not agree with image dimensions.");
@@ -1520,7 +1520,7 @@ public class DeltaWriter
 					}
 					else
 					{
-						byte[] decompressed_string = StringMapper.decompressStrings(restored_string);
+						byte[] decompressed_string = StringMapper.decompressStrings2(restored_string);
 						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
 						if(number_unpacked != delta.length)
 							System.out.println("Did not unpack expected number of values.");
@@ -2075,7 +2075,7 @@ public class DeltaWriter
 			{
 				int iterations = StringMapper.getIterations(string);	
 				if(iterations != 0 && iterations != 16)
-					string = StringMapper.decompressStrings(string);	
+					string = StringMapper.decompressStrings2(string);	
 				System.out.println("Displaying packed deltas.");
 			}
 			else if(compression == 1)
@@ -2093,7 +2093,7 @@ public class DeltaWriter
 			{
 				int iterations = StringMapper.getIterations(string);	
 				if(iterations != 0 && iterations != 16)
-					string = StringMapper.decompressStrings(string);	
+					string = StringMapper.decompressStrings2(string);	
 				// Optionally zip segment data.
 				// Deflater deflater = new Deflater();
 				//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
