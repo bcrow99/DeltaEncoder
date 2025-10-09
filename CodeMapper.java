@@ -46,7 +46,7 @@ public class CodeMapper
 	}
 	
 	// Byte input, integer length codes--sufficient to do deflate-style huffman coding.
-	// Only need byte length codes.
+	// Only need byte length codes?
 	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
 	{
 		int k = 0;
@@ -159,6 +159,7 @@ public class CodeMapper
 		result.add(table);
 		result.add(code);
 		result.add(length);
+		result.add(src.length);
 	    
 		return    result;
 	}
@@ -453,7 +454,97 @@ public class CodeMapper
 			dst[i] = (byte) (buffer[i] - 128);
 		return number_unpacked;
 	}
+	
+	public static int [] unpackCode(ArrayList pack_list)
+	{
+		byte [] src         = (byte [])pack_list.get(0);
+		int     bitlength   = (int)    pack_list.get(1);
+		int  [] table       = (int []) pack_list.get(2);
+		int  [] code        = (int []) pack_list.get(3);
+		byte [] code_length = (byte [])pack_list.get(4);
+		int     n           = (int)    pack_list.get(5);
+		
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+		
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
+		int dst_byte        = 0;
+		
+		int [] dst = new int[n];
+		for(int i = 0; i < n; i++)
+		{
+			int src_word = 0;
 
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
+
+				int masked_src_word  = src_word  & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					current_bit    += code_length[j];
+					current_byte    = current_bit / 8;
+					offset          = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+	    	return dst;
+	}
+	
+	
 	// Byte input, integer output.
 	// This is the method used in HuffmanWriter.
 	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
