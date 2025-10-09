@@ -46,6 +46,7 @@ public class CodeMapper
 	}
 	
 	// Byte input, integer length codes--sufficient to do deflate-style huffman coding.
+	// Only need byte length codes.
 	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
 	{
 		int k = 0;
@@ -86,6 +87,82 @@ public class CodeMapper
 		return bit_length;
 	}
 
+	
+	public static ArrayList packCode(int src[], int table[], int[] code, byte[] length)
+	{
+	    // Assume we are not expanding the source string.
+		byte [] buffer = new byte[src.length * 4];
+		
+		int n = code.length;
+
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			int k = table[j];
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+			{
+				if(current_byte >= buffer.length)
+				{
+					System.out.println("packCode: out of bounds.");
+					System.out.println("Number of bytes is " + number_of_bytes);
+					break;
+				}
+				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
+			}
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					if(current_byte >= buffer.length)
+					{
+						System.out.println("packCode: out of bounds.");
+						System.out.println("Number of bytes is " + number_of_bytes);
+						break;	
+					}
+					buffer[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				buffer[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
+		}
+		
+        // We do an extra copy to clip the string,
+		// but that's less expensive computationally than trying to 
+		// do a bit by bit parse into an exactly sized buffer for 
+		// the last source element and avoids a code-specific solution,
+		// for example, something that only works with Huffman codes.
+		
+		int bitlength = current_bit;
+		int number_of_bytes = bitlength / 8;
+		if(bitlength % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = buffer[i];
+		
+		// Adding code along with length to keep it non-code specific.
+		ArrayList result = new ArrayList();
+		result.add(dst);
+		result.add(bitlength);
+		result.add(table);
+		result.add(code);
+		result.add(length);
+	    
+		return    result;
+	}
+	
 	// Accepts integer input.
 	public static int packCode(int src[], int table[], int[] code, byte[] length, byte dst[])
 	{
@@ -278,6 +355,12 @@ public class CodeMapper
 		return bit_length;
 	}
 
+	
+	
+	
+	
+	
+	
 	/********************************************************************************************************************/
 	// Unpacking routines.
 	
@@ -375,7 +458,7 @@ public class CodeMapper
 	// This is the method used in HuffmanWriter.
 	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
 	{
-		boolean debug = false;
+		boolean debug = true;
 		
 		int[] inverse_table = new int[table.length];
 		for(int i = 0; i < table.length; i++)
@@ -388,7 +471,6 @@ public class CodeMapper
 		int max_bytes = max_length / 8;
 		if(max_length % 8 != 0)
 			max_bytes++;
-		//System.out.println("Maximum bytes to contain a code is " + max_bytes);
 		
 		int current_bit     = 0;
 		int offset          = 0;
@@ -463,6 +545,11 @@ public class CodeMapper
 			// so far that does not seem to be the case.
 			System.out.println("The bit length of the original data was " + bit_length);
 			System.out.println("Bits unpacked was " + current_bit);
+			int number_of_bytes = current_bit / 8;
+			if(current_bit % 8 != 0)
+				number_of_bytes++;
+			System.out.println("Number of bytes scanned is " + number_of_bytes);
+			System.out.println("Source length is " + src.length);
 			System.out.println();
 		}
 		
