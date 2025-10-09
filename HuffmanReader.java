@@ -72,24 +72,24 @@ public class HuffmanReader
 		    long start = System.nanoTime();
 		    for(int i = 0; i < 3; i++)
 		    {
-		    	int j        = channel_id[i];
-		    	min[i]       = in.readInt();
-		    	init[i]      = in.readInt();
-	    	    delta_min[i] = in.readInt();
-	    	    length[i]    = in.readInt();
+		      	int j        = channel_id[i];
+		    	    min[i]       = in.readInt();
+		    	    init[i]      = in.readInt();
+	    	        delta_min[i] = in.readInt();
+	    	        length[i]    = in.readInt();
 			    int table_length = in.readShort();
 			    int [] table = new int[table_length];
 			    
 			    if(table.length <= Byte.MAX_VALUE * 2 + 1)
 			    {
-			    	byte [] buffer = new byte[table.length];
-			    	in.read(buffer, 0, table.length);
-			    	for(int k = 0; k < buffer.length; k++)
-			    	{
-			    		table[k] = buffer[k];
-			    		if(table[k] < 0)
-            			    table[k] += Byte.MAX_VALUE * 2 + 2;
-			    	}
+			    	    byte [] buffer = new byte[table.length];
+			    	    in.read(buffer, 0, table.length);
+			      	for(int k = 0; k < buffer.length; k++)
+			      	{
+			    		    table[k] = buffer[k];
+			    		    if(table[k] < 0)
+            			        table[k] += Byte.MAX_VALUE * 2 + 2;
+			    	    }
 			    }
 			    else
 			    {
@@ -119,13 +119,13 @@ public class HuffmanReader
 				        size = StringMapper.unpackStrings2(map_string, map_table, map);
 				    else if(iterations < 16)
 				    {
-				    	byte [] decompressed_string = StringMapper.decompressZeroStrings(map_string);
-				    	size = StringMapper.unpackStrings2(decompressed_string, map_table, map);		
+				    	    byte [] decompressed_string = StringMapper.decompressZeroStrings(map_string);
+				    	    size = StringMapper.unpackStrings2(decompressed_string, map_table, map);		
 				    }
 				    else
 				    {
-				    	byte [] decompressed_string = StringMapper.decompressOneStrings(map_string);
-				    	size = StringMapper.unpackStrings2(decompressed_string, map_table, map);
+				    	    byte [] decompressed_string = StringMapper.decompressOneStrings(map_string);
+				    	    size = StringMapper.unpackStrings2(decompressed_string, map_table, map);
 				    }
 				    
 				    if(increment != 0)

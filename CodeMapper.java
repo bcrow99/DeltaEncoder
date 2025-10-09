@@ -5,6 +5,47 @@ import java.math.*;
 
 public class CodeMapper
 {
+	public static int getHuffmanBitlength(byte [] src)
+	{
+		ArrayList histogram_list = StringMapper.getHistogram(src);
+		int []    histogram      = (int[])histogram_list.get(1);
+		
+		int n = histogram.length;
+		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	    frequency[k] = frequency_list.get(k);
+	    byte [] huffman_length = getHuffmanLength2(frequency);
+	    int  [] huffman_code   = getCanonicalCode(huffman_length);
+	    
+	    int bitlength = getCost(huffman_length, frequency);
+		return bitlength;
+	}
+	
+	public static int getHuffmanBitlength(int [] src)
+	{
+		ArrayList histogram_list = StringMapper.getHistogram(src);
+		int []    histogram      = (int[])histogram_list.get(1);
+		
+		int n = histogram.length;
+		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	    frequency[k] = frequency_list.get(k);
+	    byte [] huffman_length = getHuffmanLength2(frequency);
+	    int  [] huffman_code   = getCanonicalCode(huffman_length);
+	    
+	    int bitlength = getCost(huffman_length, frequency);
+		return bitlength;
+	}
+	
+	// Byte input, integer length codes--sufficient to do deflate-style huffman coding.
 	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
 	{
 		int k = 0;
@@ -16,16 +57,15 @@ public class CodeMapper
 			j    += 128;
 			k     = table[j];
 
-			int code_word = code[k];
-			int code_length = length[k];
-
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
+			int code_word       = code[k];
+			int code_length     = length[k];
+			int offset          = current_bit % 8;
+			code_word         <<= offset;
+			int or_length       = code_length + offset;
 			int number_of_bytes = or_length / 8;
 			if(or_length % 8 != 0)
 				number_of_bytes++;
-			int current_byte = current_bit / 8;
+			int current_byte    = current_bit / 8;
 			if(number_of_bytes == 1)
 				dst[current_byte] |= (byte) (code_word & 0x00ff);
 			else
@@ -46,6 +86,7 @@ public class CodeMapper
 		return bit_length;
 	}
 
+	// Accepts integer input.
 	public static int packCode(int src[], int table[], int[] code, byte[] length, byte dst[])
 	{
 		int n = code.length;
@@ -65,11 +106,25 @@ public class CodeMapper
 				number_of_bytes++;
 			int current_byte = current_bit / 8;
 			if(number_of_bytes == 1)
-				dst[current_byte] |= (byte) (code_word & 0x00ff);
+			{
+				if(current_byte >= dst.length)
+				{
+					System.out.println("packCode: out of bounds.");
+					System.out.println("Number of bytes is " + number_of_bytes);
+					break;
+				}
+				dst[current_byte] |= (byte) (code_word & 0x00ff);	
+			}
 			else
 			{
 				for(int m = 0; m < number_of_bytes - 1; m++)
 				{
+					if(current_byte >= dst.length)
+					{
+						System.out.println("packCode: out of bounds.");
+						System.out.println("Number of bytes is " + number_of_bytes);
+						break;	
+					}
 					dst[current_byte] |= (byte) (code_word & 0x00ff);
 					current_byte++;
 					code_word >>= 8;
@@ -83,6 +138,7 @@ public class CodeMapper
 		return bit_length;
 	}
 
+	// Method that supports longer lengths.
 	public static int packCode(int src[], int table[], int[] code, int[] length, byte dst[])
 	{
 		int current_bit = 0;
@@ -118,6 +174,9 @@ public class CodeMapper
 		int bit_length = current_bit;
 		return bit_length;
 	}
+
+	/**************************************************************************************/
+	// Methods that support longer codes.
 
 	public static int packCode(int src[], int table[], long[] code, int[] length, byte dst[])
 	{
@@ -182,9 +241,9 @@ public class CodeMapper
 			{
 				BigInteger shifted_code_word = code_word.shiftRight(shift);
 
-				long mask_value = 255;
-				BigInteger mask = BigInteger.ONE;
-				mask = mask.valueOf(mask_value);
+				long mask_value   = 255;
+				BigInteger mask   = BigInteger.ONE;
+				mask              = mask.valueOf(mask_value);
 				shifted_code_word = shifted_code_word.and(mask);
 				try
 				{
@@ -203,7 +262,8 @@ public class CodeMapper
 					}
 					current_byte++;
 					shift += 8;
-				} catch (Exception e)
+				} 
+				catch (Exception e)
 				{
 					System.out.println(e.toString());
 
@@ -218,9 +278,14 @@ public class CodeMapper
 		return bit_length;
 	}
 
-	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int string_length, byte[] dst)
+	/********************************************************************************************************************/
+	// Unpacking routines.
+	
+	
+	
+	// Basic byte input , byte output.
+	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, byte[] dst)
 	{
-
 		int[] inverse_table = new int[table.length];
 		for(int i = 0; i < table.length; i++)
 		{
@@ -284,7 +349,7 @@ public class CodeMapper
 				mask <<= code_length[j];
 				mask = ~mask;
 
-				int masked_src_word = src_word & mask;
+				int masked_src_word  = src_word & mask;
 				int masked_code_word = code_word & mask;
 
 				if(masked_src_word == masked_code_word)
@@ -295,7 +360,8 @@ public class CodeMapper
 					current_byte = current_bit / 8;
 					offset = current_bit % 8;
 					break;
-				} else if(j == code.length - 1)
+				} 
+				else if(j == code.length - 1)
 					System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
@@ -305,9 +371,12 @@ public class CodeMapper
 		return number_unpacked;
 	}
 
-	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int string_length, int[] dst)
+	// Byte input, integer output.
+	// This is the method used in HuffmanWriter.
+	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
 	{
-
+		boolean debug = false;
+		
 		int[] inverse_table = new int[table.length];
 		for(int i = 0; i < table.length; i++)
 		{
@@ -319,12 +388,13 @@ public class CodeMapper
 		int max_bytes = max_length / 8;
 		if(max_length % 8 != 0)
 			max_bytes++;
-
-		int current_bit = 0;
-		int offset = 0;
-		int current_byte = 0;
+		//System.out.println("Maximum bytes to contain a code is " + max_bytes);
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
 		int number_unpacked = 0;
-		int dst_byte = 0;
+		int dst_byte        = 0;
 
 		for(int i = 0; i < dst.length; i++)
 		{
@@ -365,30 +435,44 @@ public class CodeMapper
 			for(int j = 0; j < code.length; j++)
 			{
 				int code_word = code[j];
-				int mask = -1;
-				mask <<= code_length[j];
-				mask = ~mask;
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
 
-				int masked_src_word = src_word & mask;
+				int masked_src_word  = src_word  & mask;
 				int masked_code_word = code_word & mask;
 
 				if(masked_src_word == masked_code_word)
 				{
 					dst[dst_byte++] = inverse_table[j];
 					number_unpacked++;
+					
 					current_bit += code_length[j];
 					current_byte = current_bit / 8;
-					offset = current_bit % 8;
+					offset       = current_bit % 8;
 					break;
-				} else if(j == code.length - 1)
-					System.out.println("No match for prefix-free code at byte " + current_byte);
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
 
+		if(debug)
+		{
+			// It might be that we have to take into account the data bit length, but
+			// so far that does not seem to be the case.
+			System.out.println("The bit length of the original data was " + bit_length);
+			System.out.println("Bits unpacked was " + current_bit);
+			System.out.println();
+		}
+		
 		return number_unpacked;
 	}
 
-	public static int unpackCode(byte src[], int table[], int[] code, int[] code_length, int string_length, int dst[])
+	/***************************************************************************************************************/
+	// Methods that support longer codes.
+	
+	public static int unpackCode(byte src[], int table[], int[] code, int[] code_length, int bit_length, int dst[])
 	{
 		boolean debug = false;
 
@@ -516,14 +600,15 @@ public class CodeMapper
 					current_byte = current_bit / 8;
 					offset = current_bit % 8;
 					break;
-				} else if(j == code.length - 1)
+				} 
+				else if(j == code.length - 1)
 					System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
 
 		if(debug)
 		{
-			System.out.println("The length of the original bit string was " + string_length);
+			System.out.println("The bit length of the original data was " + bit_length);
 			System.out.println("Bits unpacked was " + current_bit);
 			System.out.println();
 		}
@@ -531,7 +616,7 @@ public class CodeMapper
 		return number_unpacked;
 	}
 
-	public static int unpackCode(byte src[], int table[], long[] code, int[] code_length, int string_length, int dst[])
+	public static int unpackCode(byte src[], int table[], long[] code, int[] code_length, int bit_length, int dst[])
 	{
 		int number_of_different_values = table.length;
 		int[] inverse_table = new int[number_of_different_values];
@@ -607,7 +692,7 @@ public class CodeMapper
 		return number_unpacked;
 	}
 
-	public static int unpackCode(byte src[], int table[], BigInteger[] code, int[] code_length, int string_length, int dst[])
+	public static int unpackCode(byte src[], int table[], BigInteger[] code, int[] code_length, int bit_length, int dst[])
 	{
 		boolean debug = false;
 
@@ -714,7 +799,7 @@ public class CodeMapper
 
 		if(debug)
 		{
-			System.out.println("The length of the original bit string was " + string_length);
+			System.out.println("The length of the original bit string was " + bit_length);
 			System.out.println("Bits unpacked was " + current_bit);
 			System.out.println("Number of bytes was " + current_byte);
 			System.out.println();
@@ -1302,7 +1387,8 @@ public class CodeMapper
 				for(int i = 1; i < n; i++)
 					length[i] = (byte) (length[i - 1] + packed_delta[i - 1]);
 			}
-		} else if(max_delta == 1)
+		} 
+		else if(max_delta == 1)
 		{
 			int byte_length = (n - 1) / 8;
 			if((n - 1) % 8 != 0)
@@ -1329,7 +1415,8 @@ public class CodeMapper
 					}
 				}
 			}
-		} else if(max_delta == 2)
+		} 
+		else if(max_delta == 2)
 		{
 			int byte_length = (n - 1) / 4;
 			if((n - 1) % 4 != 0)
@@ -1359,7 +1446,8 @@ public class CodeMapper
 					}
 				}
 			}
-		} else
+		} 
+		else
 		{
 			int byte_length = (n - 1) / 2;
 			if((n - 1) % 2 != 0)

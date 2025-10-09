@@ -467,28 +467,28 @@ public class HuffmanWriter
 		    
 		    for(int i = 0; i < 6; i++)
 		    {
-		    	int min = 256;
-		    	int [] quantized_channel = (int [])quantized_channel_list.get(i);
+		      	int min = 256;
+		    	    int [] quantized_channel = (int [])quantized_channel_list.get(i);
 		    	
-		    	// Find the channel minimums.
-		    	for(int j = 0; j < quantized_channel.length; j++)
-		    		if(quantized_channel[j] < min)
-		    			min = quantized_channel[j];
-		    	channel_min[i] = min;
+		    	    // Find the channel minimums.
+		    	    for(int j = 0; j < quantized_channel.length; j++)
+		    		    if(quantized_channel[j] < min)
+		    			    min = quantized_channel[j];
+		    	    channel_min[i] = min;
 		    	
-		    	// Get rid of the negative numbers in the difference channels.
-		    	if(i > 2)
-		    		for(int j = 0; j < quantized_channel.length; j++)
-		    			quantized_channel[j] -= min;
+		    	    // Get rid of the negative numbers in the difference channels.
+		       	if(i > 2)
+		    		    for(int j = 0; j < quantized_channel.length; j++)
+		    			    quantized_channel[j] -= min;
 		    	
-		    	// Save the initial value.
-		    	channel_init[i] = quantized_channel[0];
+		    	    // Save the initial value.
+		        	channel_init[i] = quantized_channel[0];
 		    	
-		    	// Replace the original data with the modified data.
-		    	quantized_channel_list.set(i, quantized_channel);
+		    	    // Replace the original data with the modified data.
+		    	    quantized_channel_list.set(i, quantized_channel);
 		    	
-		    	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
-		    	//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
+		        	channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
+		    	    //channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
 		    }
 		  
 			// Find the optimal set.  
@@ -577,10 +577,10 @@ public class HuffmanWriter
 				    byte [] map = (byte [])result.get(2);
 				    map_list.add(map);
 				}
-				
-				
-				
+
 				int [] delta             = (int [])result.get(1);
+				
+				
 				ArrayList histogram_list = StringMapper.getHistogram(delta);
 				int delta_min            = (int)histogram_list.get(0);
                 int [] histogram         = (int[])histogram_list.get(1);
@@ -595,7 +595,7 @@ public class HuffmanWriter
 			    int [] frequency = new int[n];
 			    for(int k = 0; k < n; k++)
 			    	frequency[k] = (int)frequency_list.get(k);
-			    byte [] huffman_length   = CodeMapper.getHuffmanLength2(frequency);
+			    byte [] huffman_length  = CodeMapper.getHuffmanLength2(frequency);
 			    int [] huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
 			    int [] rank_table       = StringMapper.getRankTable(histogram);
 			    
@@ -606,29 +606,53 @@ public class HuffmanWriter
 			    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
 			    int byte_length = estimated_bit_length / 8;
 			    if(estimated_bit_length % 8 != 0)
-			    	byte_length++;
-			    byte_length += 2;
+			    	    byte_length++;
+			    int max_length = huffman_length[huffman_length.length - 1];
+			    if(max_length < 0)
+			    	    max_length += 256;
+			    int max_bytes = max_length / 8;
+			    if(max_length % 8 != 0)
+			        max_bytes++;
+			    
+			    byte_length += max_bytes;
+			    System.out.println("Max bytes for a code is " + max_bytes);
 			    byte [] packed_delta = new byte[byte_length];
 			    
-			    
-			    //delta[0] = value_range / 2;
+			    System.out.println("Estimated bit length was " + estimated_bit_length);
+			    //estimated_bit_length = CodeMapper.getHuffmanBitlength(delta);
+			    //System.out.println("Estimated bit length from getHuffmanBitlength() was " + estimated_bit_length);
+			    System.out.println();
+		
 			    delta[0] = 0;
-			    
-			    // Get rid of the negative numbers.
 			    for(int k = 1; k < delta.length; k++)
-			    	delta[k] -= delta_min;
-			    int bit_length               =  CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length, packed_delta);
-			    channel_length[j]            = bit_length;
-			   
+			       	delta[k] -= delta_min;
+			    int bit_length         =  CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length, packed_delta);
+			    channel_length[j]      = bit_length;
 			    channel_string_type[i] = 0;
 		        channel_iterations[i]  = 0;
 			   
 				// Restore the negative numbers and reset the initial value.
 				delta[0] = 0;
 				for(int k = 1; k < delta.length; k++)
-			    	delta[k] += delta_min;
+			    	    delta[k] += delta_min;
 				string_list.add(packed_delta);
 				segment_list.add(packed_delta);
+				 
+				boolean compress = true;
+				ArrayList delta_string_list = StringMapper.getStringList(delta, compress);
+				byte[] compression_string   = (byte[])delta_string_list.get(3);
+				ArrayList string_histogram_list = StringMapper.getHistogram(compression_string);
+				int [] string_histogram = (int[])string_histogram_list.get(1);
+				
+				int bitlength2 = CodeMapper.getHuffmanBitlength(compression_string);
+				
+			    System.out.println("Bit length of packed ints is              " + bit_length);
+			    System.out.println("Estimated bit length of packed strings is " + bitlength2);
+			    int iterations2 = StringMapper.getIterations(compression_string);
+			    if(iterations2 == 0 || iterations2 == 16)
+			    	    System.out.println("String was not compressed.");
+			    else 
+			        	System.out.println("String was compressed.");   
 			}
 			
 			ArrayList resized_channel_list = new ArrayList();
@@ -643,7 +667,14 @@ public class HuffmanWriter
 		        byte [] packed_delta = (byte [])string_list.get(i);
 		     
 		        int  [] delta        = new int[new_xdim * new_ydim]; 
+		        
+		        
+				long start = System.nanoTime();
 		        int number_unpacked  =  CodeMapper.unpackCode(packed_delta, table, code, code_length, channel_length[j], delta);
+		        long stop = System.nanoTime();
+				long time = stop - start;
+				//System.out.println("It took " + (time / 1000) + " usecs to unpack huffman code.");
+		        
 		        for(int k = 1; k < delta.length; k++)
 		        {
 		          	delta[k] += channel_delta_min[j];
@@ -676,8 +707,8 @@ public class HuffmanWriter
 		    	        byte [] map = (byte[])map_list.get(i);
 		    	    
 		    	
-		    	    ArrayList map_histogram_list = StringMapper.getHistogram(map);
-		    	    int map_min                  = (int)map_histogram_list.get(0);
+		    	        ArrayList map_histogram_list = StringMapper.getHistogram(map);
+		    	        int map_min                  = (int)map_histogram_list.get(0);
 			        int [] map_histogram         = (int[])map_histogram_list.get(1);
 			        int value_range              = (int)map_histogram_list.get(2);
 				    int [] map_table             = StringMapper.getRankTable(map_histogram);
@@ -723,7 +754,7 @@ public class HuffmanWriter
 			        if(zero_percentage > .5)
 				        compressed_string   = StringMapper.compressZeroStrings(clipped_map_string);
 			        else
-			        	compressed_string   = StringMapper.compressOneStrings(clipped_map_string);
+			          	compressed_string   = StringMapper.compressOneStrings(clipped_map_string);
 			        
 			        int number_of_iterations = StringMapper.getIterations(compressed_string);
 			        
@@ -732,7 +763,7 @@ public class HuffmanWriter
 			        System.out.println("Number of iterations of strings was " + number_of_iterations);
 			    
 		    	    
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
+		    	        channel = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 6)
 		        {
@@ -796,15 +827,15 @@ public class HuffmanWriter
 			        System.out.println("Combined byte length of packed strings and table is " + combined_unary_bytelength);
 			        System.out.println("Number of iterations of strings was " + number_of_iterations);
 			      
-		    	    channel = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);
+		    	        channel = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim , new_ydim, channel_init[j], map);
 		        }
 		        else if(delta_type == 7)
 		        {
-		    	    byte [] map = (byte[])map_list.get(i);
+		    	        byte [] map = (byte[])map_list.get(i);
 		    	    
 		    	 
-		    	    ArrayList map_histogram_list = StringMapper.getHistogram(map);
-		    	    int map_min                  = (int)map_histogram_list.get(0);
+		    	        ArrayList map_histogram_list = StringMapper.getHistogram(map);
+		    	        int map_min                  = (int)map_histogram_list.get(0);
 			        int [] map_histogram         = (int[])map_histogram_list.get(1);
 			        int value_range              = (int)map_histogram_list.get(2);
 				    int [] map_table             = StringMapper.getRankTable(map_histogram);
@@ -823,7 +854,7 @@ public class HuffmanWriter
 				    
 				    for(int k = 0; k < map_byte_length - 1; k++)
 				    {
-				    	clipped_map_string[k] = map_string[k];
+				      	clipped_map_string[k] = map_string[k];
 				    }
 				    
 				    if(map_bit_length % 8 != 0)
@@ -1028,21 +1059,21 @@ public class HuffmanWriter
 		     
 		        for(int i = 0; i < 3; i++)
 		        {
-		        	int j = channel_id[i];
+		        	    int j = channel_id[i];
 		        	
-		        	out.writeInt(channel_min[j]);
-		        	out.writeInt(channel_init[j]);
-		        	out.writeInt(channel_delta_min[j]);
-	        	    out.writeInt(channel_length[j]);
-	        	    int [] table = (int[])table_list.get(i);
+		           	out.writeInt(channel_min[j]);
+		        	    out.writeInt(channel_init[j]);
+		        	    out.writeInt(channel_delta_min[j]);
+	        	        out.writeInt(channel_length[j]);
+	        	        int [] table = (int[])table_list.get(i);
 	                out.writeShort(table.length);
 	         
 	                if(table.length <= Byte.MAX_VALUE * 2 + 1)
                     {
-	                	byte [] buffer = new byte[table.length];
-	                	for(int k = 0; k < buffer.length; k++)
-	                		buffer[k] = (byte)table[k];
-	                	out.write(buffer, 0, buffer.length);
+	                	    byte [] buffer = new byte[table.length];
+	                	    for(int k = 0; k < buffer.length; k++)
+	                		    buffer[k] = (byte)table[k];
+	                	    out.write(buffer, 0, buffer.length);
                     }
 	                else 
 	                {
@@ -1052,8 +1083,8 @@ public class HuffmanWriter
 		        	
 		            if(delta_type == 5  || delta_type == 6 || delta_type == 7)
 		            {
-		            	byte [] map               = (byte [])map_list.get(i);
-		            	ArrayList map_string_list = StringMapper.getStringList2(map);
+		                	byte [] map               = (byte [])map_list.get(i);
+		            	    ArrayList map_string_list = StringMapper.getStringList2(map);
 						int map_min               = (int)map_string_list.get(0);
 						int map_bit_length        = (int)map_string_list.get(1);
 						int [] string_table       = (int [])map_string_list.get(2);
@@ -1077,18 +1108,18 @@ public class HuffmanWriter
 		            
 		            byte  [] code_length = (byte [])code_length_list.get(i);
 		            ArrayList length_list = CodeMapper.packLengthTable(code_length);
-                	int n                 = (int)length_list.get(0);
-                	byte init_value       = (byte)length_list.get(1);
-                	byte max_delta        = (byte)length_list.get(2);
-                	byte [] packed_delta  = (byte [])length_list.get(3);
+                	    int n                 = (int)length_list.get(0);
+                	    byte init_value       = (byte)length_list.get(1);
+                	    byte max_delta        = (byte)length_list.get(2);
+                	    byte [] packed_delta  = (byte [])length_list.get(3);
                 	
-                	out.writeInt(n);
-            		out.writeByte(init_value);
-            		out.writeByte(max_delta);
-            		out.writeByte(packed_delta.length);
-            		out.write(packed_delta, 0, packed_delta.length);	
+                  	out.writeInt(n);
+            		    out.writeByte(init_value);
+            		    out.writeByte(max_delta);
+            		    out.writeByte(packed_delta.length);
+            		    out.write(packed_delta, 0, packed_delta.length);	
 
-            		byte [] string = (byte [])string_list.get(i);
+            		    byte [] string = (byte [])string_list.get(i);
  		            out.writeInt(string.length);
              		out.write(string, 0, string.length);
 		        }
