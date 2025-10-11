@@ -366,15 +366,15 @@ public class HuffmanWriter
 				    
 				    public void actionPerformed(ActionEvent e) 
 		            {
-				    	if(delta_type != index)
-				    	{
-				    	    delta_button[delta_type].setSelected(false);
-				    	    delta_type = index;
-				    	    delta_button[delta_type].setSelected(true);
-				    	    apply_item.doClick();
-				    	}
-				    	else
-					    	delta_button[delta_type].setSelected(true);
+				    	    if(delta_type != index)
+				    	    {
+				    	        delta_button[delta_type].setSelected(false);
+				    	        delta_type = index;
+				    	        delta_button[delta_type].setSelected(true);
+				    	        apply_item.doClick();
+				    	    }
+				    	    else
+					    	    delta_button[delta_type].setSelected(true);
 		            }  
 				    
 				}
@@ -602,35 +602,18 @@ public class HuffmanWriter
 			    code_list.add(huffman_code);
 			    code_length_list.add(huffman_length);
 			    table_list.add(rank_table);
-			    
-			    int  estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
-			    int byte_length = estimated_bit_length / 8;
-			    if(estimated_bit_length % 8 != 0)
-			    	    byte_length++;
-			    int max_length = huffman_length[huffman_length.length - 1];
-			    if(max_length < 0)
-			    	    max_length += 256;
-			    int max_bytes = max_length / 8;
-			    if(max_length % 8 != 0)
-			        max_bytes++;
-			    
-			    byte_length += max_bytes;
-			    System.out.println("Max bytes for a code is " + max_bytes);
-			    byte [] packed_delta = new byte[byte_length];
-			    
-			    System.out.println("Estimated bit length was " + estimated_bit_length);
-			    //estimated_bit_length = CodeMapper.getHuffmanBitlength(delta);
-			    //System.out.println("Estimated bit length from getHuffmanBitlength() was " + estimated_bit_length);
-			    System.out.println();
-		
+			  
 			    delta[0] = 0;
 			    for(int k = 1; k < delta.length; k++)
 			       	delta[k] -= delta_min;
-			    int bit_length         =  CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length, packed_delta);
-			    channel_length[j]      = bit_length;
+			    
+			    ArrayList pack_list      = CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length);
+			    byte [] packed_delta     = (byte [])pack_list.get(0);
+			    int bit_length            = (int)pack_list.get(1);
+			    channel_length[j]        = bit_length;
 			    channel_string_type[i] = 0;
 		        channel_iterations[i]  = 0;
-			   
+		        
 				// Restore the negative numbers and reset the initial value.
 				delta[0] = 0;
 				for(int k = 1; k < delta.length; k++)
@@ -638,7 +621,7 @@ public class HuffmanWriter
 				string_list.add(packed_delta);
 				segment_list.add(packed_delta);
 				 
-				boolean compress = true;
+				boolean compress = false;
 				ArrayList delta_string_list = StringMapper.getStringList(delta, compress);
 				byte[] compression_string   = (byte[])delta_string_list.get(3);
 				ArrayList string_histogram_list = StringMapper.getHistogram(compression_string);
@@ -648,11 +631,14 @@ public class HuffmanWriter
 				
 			    System.out.println("Bit length of packed ints is              " + bit_length);
 			    System.out.println("Estimated bit length of packed strings is " + bitlength2);
+			    int type = StringMapper.getType(compression_string);
+			    System.out.println("String is type " + type);
 			    int iterations2 = StringMapper.getIterations(compression_string);
 			    if(iterations2 == 0 || iterations2 == 16)
 			    	    System.out.println("String was not compressed.");
 			    else 
 			        	System.out.println("String was compressed.");   
+			    System.out.println();
 			}
 			
 			ArrayList resized_channel_list = new ArrayList();
@@ -726,7 +712,7 @@ public class HuffmanWriter
 				    
 				    for(int k = 0; k < map_byte_length - 1; k++)
 				    {
-				    	clipped_map_string[k] = map_string[k];
+				    	    clipped_map_string[k] = map_string[k];
 				    }
 				    
 				    if(map_bit_length % 8 != 0)

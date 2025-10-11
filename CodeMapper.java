@@ -111,24 +111,12 @@ public class CodeMapper
 			int current_byte = current_bit / 8;
 			if(number_of_bytes == 1)
 			{
-				if(current_byte >= buffer.length)
-				{
-					System.out.println("packCode: out of bounds.");
-					System.out.println("Number of bytes is " + number_of_bytes);
-					break;
-				}
 				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
 			}
 			else
 			{
 				for(int m = 0; m < number_of_bytes - 1; m++)
 				{
-					if(current_byte >= buffer.length)
-					{
-						System.out.println("packCode: out of bounds.");
-						System.out.println("Number of bytes is " + number_of_bytes);
-						break;	
-					}
 					buffer[current_byte] |= (byte) (code_word & 0x00ff);
 					current_byte++;
 					code_word >>= 8;
@@ -153,6 +141,7 @@ public class CodeMapper
 			dst[i] = buffer[i];
 		
 		// Adding code along with length to keep it non-code specific.
+		// Most huffman coding schemes only need the code lengths.
 		ArrayList result = new ArrayList();
 		result.add(dst);
 		result.add(bitlength);
@@ -185,24 +174,12 @@ public class CodeMapper
 			int current_byte = current_bit / 8;
 			if(number_of_bytes == 1)
 			{
-				if(current_byte >= dst.length)
-				{
-					System.out.println("packCode: out of bounds.");
-					System.out.println("Number of bytes is " + number_of_bytes);
-					break;
-				}
 				dst[current_byte] |= (byte) (code_word & 0x00ff);	
 			}
 			else
 			{
 				for(int m = 0; m < number_of_bytes - 1; m++)
 				{
-					if(current_byte >= dst.length)
-					{
-						System.out.println("packCode: out of bounds.");
-						System.out.println("Number of bytes is " + number_of_bytes);
-						break;	
-					}
 					dst[current_byte] |= (byte) (code_word & 0x00ff);
 					current_byte++;
 					code_word >>= 8;
@@ -549,7 +526,7 @@ public class CodeMapper
 	// This is the method used in HuffmanWriter.
 	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
 	{
-		boolean debug = true;
+		boolean debug = false;
 		
 		int[] inverse_table = new int[table.length];
 		for(int i = 0; i < table.length; i++)
