@@ -1739,6 +1739,232 @@ public class DeltaWriter
 		}
 	}
 
+	
+	class HistogramCanvas extends Canvas
+	{
+		public void paint(Graphics g)
+		{
+			if(!initialized)
+				apply_item.doClick();
+			Graphics2D g2 = (Graphics2D) g;
+
+			Rectangle visible_area = g2.getClipBounds();
+
+			int xdim = (int) visible_area.getWidth();
+			int ydim = (int) visible_area.getHeight();
+			g2.setColor(java.awt.Color.WHITE);
+			g2.fillRect(0, 0, xdim, ydim);
+			
+			int channel     = histogram_channel;
+			
+			System.out.println("Histogramming channel " + histogram_channel);
+			int compression = histogram_type;
+			int [] count    = new int[256];
+			byte[] string   = (byte[]) string_list.get(channel);
+			int number_of_segments = 1;
+			
+			if(compression == 0)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations != 0 && iterations != 16)
+					string = StringMapper.decompressStrings2(string);	
+				System.out.println("Displaying packed deltas.");
+			}
+			else if(compression == 1)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations == 0 || iterations == 16)
+				{
+				    System.out.println("String was not compressed.");
+				    System.out.println("Displaying packed deltas.");
+				}
+				else
+					System.out.println("Displaying packed compressed deltas."); 
+			}
+			else if(compression == 2)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				if(iterations != 0 && iterations != 16)
+					string = StringMapper.decompressStrings2(string);	
+				// Optionally zip segment data.
+				// Deflater deflater = new Deflater();
+				//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				deflater.setInput(string);
+				byte[] zipped_data = new byte[2 * string.length];
+				deflater.finish();
+				int zipped_length = deflater.deflate(zipped_data);
+				deflater.end();
+
+				if (zipped_length < string.length)
+				{
+					byte [] clipped_data = new byte[zipped_length];
+					for(int i = 0; i < zipped_length; i++)
+						clipped_data[i] = zipped_data[i];
+					string = clipped_data;
+					System.out.println("Packed deltas compressed when zipped.");
+					System.out.println("Displaying zipped packed deltas.");
+				} 
+				else
+				{
+					System.out.println("Packed deltas did not compress when zipped.");
+					System.out.println("Displaying zipped packed deltas.");	
+				}	
+			}
+			else if(compression == 3)
+			{
+				int iterations = StringMapper.getIterations(string);	
+				
+				// Optionally zip segment data.
+				// Deflater deflater = new Deflater();
+				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+				deflater.setInput(string);
+				byte[] zipped_data = new byte[2 * string.length];
+				deflater.finish();
+				int zipped_length = deflater.deflate(zipped_data);
+				deflater.end();
+
+				if(zipped_length < string.length)
+				{
+					byte [] clipped_data = new byte[zipped_length];
+					for(int i = 0; i < zipped_length; i++)
+						clipped_data[i] = zipped_data[i];
+					string = clipped_data;
+					if(iterations == 0 || iterations == 16)
+					{
+					    System.out.println("Packed deltas compressed when zipped.");
+					    System.out.println("Displaying zipped packed deltas.");
+					}
+					else
+					{
+						System.out.println("Packed compressed deltas compressed when zipped.");
+					    System.out.println("Displaying zipped compressed packed deltas."); 	
+					}
+				} 
+				else
+				{
+					System.out.println("Packed/compressed deltas did not compress when zipped.");
+					System.out.println("Displaying packed/compressed deltas.");	
+				}	
+			}
+			else if(compression == 4 || compression == 5)
+			{
+				ArrayList segments = (ArrayList) segment_list.get(channel);
+				number_of_segments = segments.size();	
+				
+				// We can't use the segment length to determine if the 
+				// string is segmented because it might have been merged
+				// back into an unsegmented string.
+				if(number_of_segments == 1)
+				{
+					// Either the string was never segmented or it merged
+					// back into a single string.
+				    System.out.println("String was not segmented.");	
+				    System.out.println("Displaying packed/compressed deltas.");
+				}
+				else
+				{
+				    ArrayList packed_list       = SegmentMapper.packSegments(segments);
+					byte []   packed_segments = (byte [])packed_list.get(0);
+				    string  = packed_segments;
+				   
+					if(compression == 5)
+					{
+						//Deflater deflater = new Deflater();
+						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
+						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+						deflater.setInput(string);
+						byte[] zipped_data = new byte[2 * string.length];
+						deflater.finish();
+						int zipped_length = deflater.deflate(zipped_data);
+						deflater.end();
+						
+						if(zipped_length < string.length)
+						{
+							byte [] clipped_data = new byte[zipped_length];
+							for(int i = 0; i < zipped_length; i++)
+								clipped_data[i] = zipped_data[i];
+							string = clipped_data;
+							System.out.println("Segmented data compressed when zipped.");
+							System.out.println("Displaying zipped packed segments.");
+						}
+						else
+						{
+							System.out.println("Segmented data did not compress when zipped.");
+							System.out.println("Displaying unzipped packed segments.");
+						}
+					}
+				}
+			}
+			
+			int     j    = string.length - 1;
+			// If the string is concatenated segments, it does not include a trailing data byte.
+			// We are histogramming the entire zipped segment until we can determine the size
+			// and position of the header.
+			if(number_of_segments > 1)
+				j++;
+			
+			for(int i = 0; i < j; i++)
+			{
+				int k = string[i];
+				if(k < 0)
+					k += 256;
+				count[k]++;
+			}
+			
+			int number_of_different_values = 0;
+			for(int i = 0; i < 256; i++)
+			{
+				if(count[i] != 0)
+					number_of_different_values++;  
+			}
+			
+			int max   = count[0];
+			int index = 0;
+			
+			for(int i = 1; i < 256; i++)
+			{
+				if(count[i] > max)
+				{
+				    max   = count[i];
+				    index = i;
+				}
+			}
+			
+			System.out.println("Number of different values is " + number_of_different_values);
+			System.out.println("Max instances is " + max + " out of " + (string.length - 1) + " at index " + index);
+			System.out.println();
+			
+			g2.setColor(java.awt.Color.BLACK);
+			
+			double width = xdim;
+			width    /= 256;
+		
+			int offset = 5;
+			int increment = (int)width;
+			for(int i = 0; i < 256; i++)
+			{
+				double k = count[i];
+				k       /= max;
+				k       *= ydim;
+				
+				int height = (int)k;
+				int delta  = ydim - height;
+				
+				if(height != 0)
+				    g2.fillRect(offset , delta, increment, height);
+				else
+				{
+					g2.setColor(java.awt.Color.RED);
+					g2.drawLine(offset , delta, offset + increment, delta);
+					g2.setColor(java.awt.Color.BLACK);
+				}
+				offset += increment;
+			}
+		}
+	}
+	
+
 	class SaveHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
@@ -2015,6 +2241,9 @@ public class DeltaWriter
 						if(zipped_length < packed_length)
 						{
 							//System.out.println("Zipped packed segments.");
+							int huffman_length = CodeMapper.getHuffmanBitlength(packed_segments);
+							System.out.println("Huffman bit length for packed segments is " + huffman_length + ", zipped bit length including header is " + (zipped_length * 8));
+							System.out.println();
 							out.writeInt(zipped_length);
 							out.writeInt(packed_length);
 							out.write(zipped_data, 0, zipped_length);
@@ -2024,7 +2253,7 @@ public class DeltaWriter
 							out.writeInt(0);
 							out.writeInt(packed_length);	
 							out.write(packed_segments, 0, packed_length);
-							//System.out.println("Did not zip packed segments.");
+							System.out.println("Did not zip packed segments.");
 						}
 					}
 				}
@@ -2044,230 +2273,6 @@ public class DeltaWriter
 			catch (Exception e)
 			{
 				System.out.println(e.toString());
-			}
-		}
-	}
-	
-	class HistogramCanvas extends Canvas
-	{
-		public void paint(Graphics g)
-		{
-			if(!initialized)
-				apply_item.doClick();
-			Graphics2D g2 = (Graphics2D) g;
-
-			Rectangle visible_area = g2.getClipBounds();
-
-			int xdim = (int) visible_area.getWidth();
-			int ydim = (int) visible_area.getHeight();
-			g2.setColor(java.awt.Color.WHITE);
-			g2.fillRect(0, 0, xdim, ydim);
-			
-			int channel     = histogram_channel;
-			
-			System.out.println("Histogramming channel " + histogram_channel);
-			int compression = histogram_type;
-			int [] count    = new int[256];
-			byte[] string   = (byte[]) string_list.get(channel);
-			int number_of_segments = 1;
-			
-			if(compression == 0)
-			{
-				int iterations = StringMapper.getIterations(string);	
-				if(iterations != 0 && iterations != 16)
-					string = StringMapper.decompressStrings2(string);	
-				System.out.println("Displaying packed deltas.");
-			}
-			else if(compression == 1)
-			{
-				int iterations = StringMapper.getIterations(string);	
-				if(iterations == 0 || iterations == 16)
-				{
-				    System.out.println("String was not compressed.");
-				    System.out.println("Displaying packed deltas.");
-				}
-				else
-					System.out.println("Displaying packed compressed deltas."); 
-			}
-			else if(compression == 2)
-			{
-				int iterations = StringMapper.getIterations(string);	
-				if(iterations != 0 && iterations != 16)
-					string = StringMapper.decompressStrings2(string);	
-				// Optionally zip segment data.
-				// Deflater deflater = new Deflater();
-				//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(string);
-				byte[] zipped_data = new byte[2 * string.length];
-				deflater.finish();
-				int zipped_length = deflater.deflate(zipped_data);
-				deflater.end();
-
-				if (zipped_length < string.length)
-				{
-					byte [] clipped_data = new byte[zipped_length];
-					for(int i = 0; i < zipped_length; i++)
-						clipped_data[i] = zipped_data[i];
-					string = clipped_data;
-					System.out.println("Packed deltas compressed when zipped.");
-					System.out.println("Displaying zipped packed deltas.");
-				} 
-				else
-				{
-					System.out.println("Packed deltas did not compress when zipped.");
-					System.out.println("Displaying zipped packed deltas.");	
-				}	
-			}
-			else if(compression == 3)
-			{
-				int iterations = StringMapper.getIterations(string);	
-				
-				// Optionally zip segment data.
-				// Deflater deflater = new Deflater();
-				Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-				deflater.setInput(string);
-				byte[] zipped_data = new byte[2 * string.length];
-				deflater.finish();
-				int zipped_length = deflater.deflate(zipped_data);
-				deflater.end();
-
-				if(zipped_length < string.length)
-				{
-					byte [] clipped_data = new byte[zipped_length];
-					for(int i = 0; i < zipped_length; i++)
-						clipped_data[i] = zipped_data[i];
-					string = clipped_data;
-					if(iterations == 0 || iterations == 16)
-					{
-					    System.out.println("Packed deltas compressed when zipped.");
-					    System.out.println("Displaying zipped packed deltas.");
-					}
-					else
-					{
-						System.out.println("Packed compressed deltas compressed when zipped.");
-					    System.out.println("Displaying zipped compressed packed deltas."); 	
-					}
-				} 
-				else
-				{
-					System.out.println("Packed/compressed deltas did not compress when zipped.");
-					System.out.println("Displaying packed/compressed deltas.");	
-				}	
-			}
-			else if(compression == 4 || compression == 5)
-			{
-				ArrayList segments = (ArrayList) segment_list.get(channel);
-				number_of_segments = segments.size();	
-				
-				// We can't use the segment length to determine if the 
-				// string is segmented because it might have been merged
-				// back into an unsegmented string.
-				if(number_of_segments == 1)
-				{
-					// Either the string was never segmented or it merged
-					// back into a single string.
-				    System.out.println("String was not segmented.");	
-				    System.out.println("Displaying packed/compressed deltas.");
-				}
-				else
-				{
-				    ArrayList packed_list       = SegmentMapper.packSegments(segments);
-					byte []   packed_segments = (byte [])packed_list.get(0);
-				    string  = packed_segments;
-				   
-					if(compression == 5)
-					{
-						//Deflater deflater = new Deflater();
-						Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						//Deflater deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						deflater.setInput(string);
-						byte[] zipped_data = new byte[2 * string.length];
-						deflater.finish();
-						int zipped_length = deflater.deflate(zipped_data);
-						deflater.end();
-						
-						if(zipped_length < string.length)
-						{
-							byte [] clipped_data = new byte[zipped_length];
-							for(int i = 0; i < zipped_length; i++)
-								clipped_data[i] = zipped_data[i];
-							string = clipped_data;
-							System.out.println("Segmented data compressed when zipped.");
-							System.out.println("Displaying zipped packed segments.");
-						}
-						else
-						{
-							System.out.println("Segmented data did not compress when zipped.");
-							System.out.println("Displaying unzipped packed segments.");
-						}
-					}
-				}
-			}
-			
-			int     j    = string.length - 1;
-			// If the string is concatenated segments, it does not include a trailing data byte.
-			// We are histogramming the entire zipped segment until we can determine the size
-			// and position of the header.
-			if(number_of_segments > 1)
-				j++;
-			
-			for(int i = 0; i < j; i++)
-			{
-				int k = string[i];
-				if(k < 0)
-					k += 256;
-				count[k]++;
-			}
-			
-			int number_of_different_values = 0;
-			for(int i = 0; i < 256; i++)
-			{
-				if(count[i] != 0)
-					number_of_different_values++;  
-			}
-			
-			int max   = count[0];
-			int index = 0;
-			
-			for(int i = 1; i < 256; i++)
-			{
-				if(count[i] > max)
-				{
-				    max   = count[i];
-				    index = i;
-				}
-			}
-			
-			System.out.println("Number of different values is " + number_of_different_values);
-			System.out.println("Max instances is " + max + " out of " + (string.length - 1) + " at index " + index);
-			System.out.println();
-			
-			g2.setColor(java.awt.Color.BLACK);
-			
-			double width = xdim;
-			width    /= 256;
-		
-			int offset = 5;
-			int increment = (int)width;
-			for(int i = 0; i < 256; i++)
-			{
-				double k = count[i];
-				k       /= max;
-				k       *= ydim;
-				
-				int height = (int)k;
-				int delta  = ydim - height;
-				
-				if(height != 0)
-				    g2.fillRect(offset , delta, increment, height);
-				else
-				{
-					g2.setColor(java.awt.Color.RED);
-					g2.drawLine(offset , delta, offset + increment, delta);
-					g2.setColor(java.awt.Color.BLACK);
-				}
-				offset += increment;
 			}
 		}
 	}
