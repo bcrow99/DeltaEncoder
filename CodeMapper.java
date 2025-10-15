@@ -46,7 +46,8 @@ public class CodeMapper
 	}
 	
 	// Byte input, integer length codes--sufficient to do deflate-style huffman coding.
-	// Only need byte length codes?
+	// We need integer length code words (longer than original input) to support unary 
+	// string encoding, or any coding that involves longer codes than the input.
 	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
 	{
 		int k = 0;
@@ -55,7 +56,14 @@ public class CodeMapper
 		for(int i = 0; i < src.length; i++)
 		{
 			int j = src[i];
-			j    += 128;
+			// Double check.  Looks like a bug.
+			j += 128;
+			
+			// Probably what we want to do.
+			/*
+			if(j < 0)
+			    j += 256;
+			*/
 			k     = table[j];
 
 			int code_word       = code[k];
@@ -87,6 +95,73 @@ public class CodeMapper
 		return bit_length;
 	}
 
+
+	public static ArrayList packCode(byte src[], int table[], int[] code, byte[] length)
+	{
+	    // Assume we are not expanding the source string.
+		byte [] buffer = new byte[src.length * 4];
+		
+		int n = code.length;
+
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			if(j < 0)
+				j += 256;
+			int k = table[j];
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+			{
+				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
+			}
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					buffer[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				buffer[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
+		}
+		
+        // We do an extra copy to clip the string,
+		// but that's less expensive computationally than trying to 
+		// do a bit by bit parse into an exactly sized buffer for 
+		// the last source element and avoids a code-specific solution,
+		// for example, something that only works with Huffman codes.
+		
+		int bitlength = current_bit;
+		int number_of_bytes = bitlength / 8;
+		if(bitlength % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = buffer[i];
+		
+		// Adding code along with length to keep it non-code specific.
+		// Most huffman coding schemes only need the code lengths.
+		ArrayList result = new ArrayList();
+		result.add(dst);
+		result.add(bitlength);
+		result.add(table);
+		result.add(code);
+		result.add(length);
+		result.add(src.length);
+	    
+		return    result;
+	}
 	
 	public static ArrayList packCode(int src[], int table[], int[] code, byte[] length)
 	{
@@ -335,13 +410,9 @@ public class CodeMapper
 
 	
 	
-	
-	
-	
-	
 	/********************************************************************************************************************/
-	// Unpacking routines.
-	
+	/* Unpacking routines.                                                                                              */
+	/********************************************************************************************************************/
 	
 	
 	// Basic byte input , byte output.
@@ -426,9 +497,18 @@ public class CodeMapper
 					System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
-
+        
+		// Looks like a bug.
 		for(int i = 0; i < dst.length; i++)
-			dst[i] = (byte) (buffer[i] - 128);
+			dst[i] = (byte) (buffer[i - 128]);
+		
+		// Probably what we want to do.
+		/*
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = (byte) (buffer[i]);
+		*/
+		
+		
 		return number_unpacked;
 	}
 	
