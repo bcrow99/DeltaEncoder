@@ -57,13 +57,12 @@ public class CodeMapper
 		{
 			int j = src[i];
 			// Double check.  Looks like a bug.
-			j += 128;
+			//j += 128;
 			
 			// Probably what we want to do.
-			/*
 			if(j < 0)
 			    j += 256;
-			*/
+
 			k     = table[j];
 
 			int code_word       = code[k];
@@ -95,7 +94,6 @@ public class CodeMapper
 		return bit_length;
 	}
 
-
 	public static ArrayList packCode(byte src[], int table[], int[] code, byte[] length)
 	{
 	    // Assume we are not expanding the source string.
@@ -109,7 +107,18 @@ public class CodeMapper
 			int j = src[i];
 			if(j < 0)
 				j += 256;
+			if(j > table.length)
+			{
+				// Don't see how this can happen, but setting it to the least probable
+				// value seems to fix it.
+				System.out.println("Index is larger than rank table length.");
+				System.out.println("Index is " + j + ", rank table length is " + table.length);
+				System.out.println("Source length is " + src.length + ", source index is " + i);
+				j = table.length - 1;
+			}
+			
 			int k = table[j];
+			
 			int code_word = code[k];
 			int code_length = length[k];
 			int offset = current_bit % 8;
@@ -120,9 +129,7 @@ public class CodeMapper
 				number_of_bytes++;
 			int current_byte = current_bit / 8;
 			if(number_of_bytes == 1)
-			{
 				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
-			}
 			else
 			{
 				for(int m = 0; m < number_of_bytes - 1; m++)
@@ -130,7 +137,7 @@ public class CodeMapper
 					buffer[current_byte] |= (byte) (code_word & 0x00ff);
 					current_byte++;
 					code_word >>= 8;
-				}
+			    }
 				buffer[current_byte] = (byte) (code_word & 0x00ff);
 			}
 			current_bit += code_length;
@@ -141,7 +148,6 @@ public class CodeMapper
 		// do a bit by bit parse into an exactly sized buffer for 
 		// the last source element and avoids a code-specific solution,
 		// for example, something that only works with Huffman codes.
-		
 		int bitlength = current_bit;
 		int number_of_bytes = bitlength / 8;
 		if(bitlength % 8 != 0)
@@ -165,7 +171,6 @@ public class CodeMapper
 	
 	public static ArrayList packCode(int src[], int table[], int[] code, byte[] length)
 	{
-	    // Assume we are not expanding the source string.
 		byte [] buffer = new byte[src.length * 4];
 		
 		int n = code.length;
@@ -201,12 +206,7 @@ public class CodeMapper
 			current_bit += code_length;
 		}
 		
-        // We do an extra copy to clip the string,
-		// but that's less expensive computationally than trying to 
-		// do a bit by bit parse into an exactly sized buffer for 
-		// the last source element and avoids a code-specific solution,
-		// for example, something that only works with Huffman codes.
-		
+		// Clip the buffer data.
 		int bitlength = current_bit;
 		int number_of_bytes = bitlength / 8;
 		if(bitlength % 8 != 0)
@@ -215,8 +215,6 @@ public class CodeMapper
 		for(int i = 0; i < dst.length; i++)
 			dst[i] = buffer[i];
 		
-		// Adding code along with length to keep it non-code specific.
-		// Most huffman coding schemes only need the code lengths.
 		ArrayList result = new ArrayList();
 		result.add(dst);
 		result.add(bitlength);
@@ -499,20 +497,108 @@ public class CodeMapper
 		}
         
 		// Looks like a bug.
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = (byte) (buffer[i - 128]);
-		
-		// Probably what we want to do.
 		/*
 		for(int i = 0; i < dst.length; i++)
-			dst[i] = (byte) (buffer[i]);
+			dst[i] = (byte) (buffer[i] - 128);
 		*/
 		
-		
+		// Probably what we want to do.
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = (byte) (buffer[i]);
 		return number_unpacked;
 	}
 	
-	public static int [] unpackCode(ArrayList pack_list)
+
+	public static byte [] unpackCode(ArrayList pack_list)
+	{
+		byte [] src         = (byte [])pack_list.get(0);
+		int     bitlength   = (int)    pack_list.get(1);
+		int  [] table       = (int []) pack_list.get(2);
+		int  [] code        = (int []) pack_list.get(3);
+		byte [] code_length = (byte [])pack_list.get(4);
+		int     n           = (int)    pack_list.get(5);
+		
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+		
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
+		int dst_byte        = 0;
+		
+		byte [] dst = new byte[n];
+		for(int i = 0; i < n; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
+
+				int masked_src_word  = src_word  & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = (byte)inverse_table[j];
+					current_bit    += code_length[j];
+					current_byte    = current_bit / 8;
+					offset          = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+	    	return dst;
+	}
+	
+	public static int [] unpackCode2(ArrayList pack_list)
 	{
 		byte [] src         = (byte [])pack_list.get(0);
 		int     bitlength   = (int)    pack_list.get(1);
@@ -600,6 +686,7 @@ public class CodeMapper
 
 	    	return dst;
 	}
+	
 	
 	
 	// Byte input, integer output.
