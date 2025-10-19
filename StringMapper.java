@@ -21,14 +21,26 @@ public class StringMapper
 	 */
 	public static ArrayList getHistogram(byte src[])
 	{
-		int min = src[0];
-		int max = src[0];
+		// We want a histogram of the unsigned values.
+		
+		int [] value = new int[src.length];
+		
 		for(int i = 0; i < src.length; i++)
 		{
-			if(src[i] > max)
-				max = src[i];
-			if(src[i] < min)
-				min = src[i];
+			if(src[i] < 0)
+				value[i] = src[i] + 256;
+			else
+				value[i] = src[i];
+		}
+		
+		int min = value[0];
+		int max = value[0];
+		for(int i = 0; i < src.length; i++)
+		{
+			if(value[i] > max)
+				max = value[i];
+			if(value[i] < min)
+				min = value[i];
 		}
 		
 		int range = max - min + 1;
@@ -37,7 +49,7 @@ public class StringMapper
 			histogram[i] = 0;
 		for(int i = 0; i < src.length; i++)
 		{
-			int j = src[i] - min;
+			int j = value[i] - min;
 			histogram[j]++;
 		}
 
@@ -71,6 +83,7 @@ public class StringMapper
 		int[] histogram = new int[range];
 		for(int i = 0; i < range; i++)
 			histogram[i] = 0;
+		// Starting the range at 0.
 		for(int i = 0; i < src.length; i++)
 		{
 			int j = src[i] - min;
@@ -1088,9 +1101,6 @@ public class StringMapper
 
 	/*****************************************************************************/
 	
-	
-	
-	
 	/**
 	 * This applies a bitwise substitution iteratively that will expand or contract
 	 * a bit string. It does not expect information in the trailing byte, which can
@@ -1195,13 +1205,6 @@ public class StringMapper
 		int limit = 15;
 		if(zero_amount >= 0)
 		{
-			if(one_amount < 0)
-			{
-				int iterations = getIterations(src);
-				//System.out.println("compressZeroStrings: string with ratio " + String.format("%.4f", zero_ratio) + " and length " + bit_length + " and " + iterations + " previous iterations did not compress.");
-				//System.out.println();
-			}
-
 			byte [] dst = src.clone();
 			return dst;
 		} 
@@ -1974,87 +1977,6 @@ public class StringMapper
 	}
 	
 	
-	/*
-	public static byte[] compressStrings2(byte[] string)
-	{
-		int [] bit_table = getBitTable();
-		
-		int type        = getType(string);
-		if(type == 0)
-		{
-			byte[] compressed_string = compressZeroStrings2(string, 7);
-			int    iterations        = getIterations(compressed_string);
-			
-			if(iterations == 0)
-				return compressed_string;
-			
-			int bitlength = getBitlength(compressed_string);
-			int amount    = getCompressionAmount(compressed_string, bitlength, 1);
-			if(amount < 0)
-			{
-				byte [] compressed_string2 = compressOneStrings2(compressed_string, 1);
-				int one_iterations = getIterations(compressed_string2);
-				
-				
-				int adjusted_iterations = iterations + 8;
-				
-				
-				setIterations(adjusted_iterations, compressed_string2);
-				
-				return compressed_string2;
-			}
-			
-			return compressed_string;
-		} 
-		else if(type == 1)
-		{
-			byte[] compressed_string = compressOneStrings2(string, 7);
-			return compressed_string;
-		} 
-		else
-			return string;
-	}
-	
-	public static byte[] decompressStrings2(byte[] string)
-	{
-		byte [] original_string = string.clone();
-		
-		int iterations = getIterations(string);
-		if(iterations == 0 || iterations == 16)
-			return original_string;
-		
-		int type  = getType(string);
-		if(type == 0)
-		{
-			if(iterations < 8)
-			{
-				byte [] decompressed_string = decompressZeroStrings(string);
-				return  decompressed_string;
-			}
-			else
-			{
-				int one_iterations  = 17;
-				setIterations(one_iterations, original_string);
-				byte [] decompressed_string = decompressOneStrings(original_string);
-				
-				int zero_iterations = iterations - 8;
-				setIterations(zero_iterations, decompressed_string);
-				byte [] decompressed_string2 = decompressZeroStrings(decompressed_string);
-				
-			    return decompressed_string2;
-				
-			}
-		}  
-		else if(type == 1)
-		{
-			byte[] decompressed_string = decompressOneStrings(string);
-			return decompressed_string;
-		} 
-		else
-			return string;
-	}
-	*/
-	
 	public static byte[] compressStrings2(byte[] string)
 	{
 		int [] bit_table = getBitTable();
@@ -2395,7 +2317,6 @@ public class StringMapper
 		int value_range = (int) histogram_list.get(2);
 		int[] string_table = getRankTable(histogram);
 
-		// Get a string list from a set of deltas.
 		value[0] = value_range / 2;
 		for(int i = 1; i < value.length; i++)
 			value[i] -= min_value;
@@ -2406,30 +2327,29 @@ public class StringMapper
 		string_list.add(bit_length);
 		string_list.add(string_table);
 
-		double zero_percentage = value.length;
+		double zero_ratio = value.length;
 		if(histogram.length > 1)
 		{
 			int min_histogram_value = Integer.MAX_VALUE;
 			for(int k = 0; k < histogram.length; k++)
 				if(histogram[k] < min_histogram_value)
 					min_histogram_value = histogram[k];
-			zero_percentage -= min_histogram_value;
+			zero_ratio -= min_histogram_value;
 		}
-		zero_percentage /= bit_length;
-		if(zero_percentage > .5)
-		{
-			// This is an unclipped string, so we do not expect the trailing byte.
-			// This method does not look for a trailing byte.
-			byte[] compression_string = compressZeroStrings(string, bit_length);
-			string_list.add(compression_string);
-		} 
+		zero_ratio /= bit_length;
+		
+		int    bytelength  = getBytelength(bit_length);
+		byte [] string2   = new byte[bytelength];
+		for(int i = 0; i < bytelength - 1; i++)
+			string2[i] = string[i];
+		if(zero_ratio >= .5)
+			setData(0, 0, bit_length, string2);
 		else
-		{
-			// See above.
-			byte[] compression_string = compressOneStrings(string, bit_length);
-			string_list.add(compression_string);
-		}
-
+			setData(1, 0, bit_length, string2);
+		
+	    byte [] string3 = compressStrings2(string2);
+	    string_list.add(string3);
+		
 		return string_list;
 	}
 	
@@ -2443,7 +2363,7 @@ public class StringMapper
 		int value_range          = (int) histogram_list.get(2);
 		int[] string_table       = getRankTable(histogram);
 
-		// Pack the delta values as unary strings.
+		
 		value[0] = value_range / 2;
 		for(int i = 1; i < value.length; i++)
 			value[i] -= min_value;
@@ -2454,8 +2374,6 @@ public class StringMapper
 		string_list.add(bitlength);
 		string_list.add(string_table);
 
-		// We can calculate the zero ratio of unmodified unary
-		// strings from their histogram.
 		double zero_ratio = value.length;
 		if(histogram.length > 1)
 		{
@@ -2467,36 +2385,22 @@ public class StringMapper
 		}
 		zero_ratio /= bitlength;
 		
+		int    bytelength  = getBytelength(bitlength);
+		byte [] string2   = new byte[bytelength];
+		for(int i = 0; i < bytelength - 1; i++)
+			string2[i] = string[i];
+		if(zero_ratio >= .5)
+			setData(0, 0, bitlength, string2);
+		else
+			setData(1, 0, bitlength, string2);
+		
 		if(compress)
 		{
-			if(zero_ratio >= .5)
-			{
-				// Since this is an unclipped string in a buffer,
-				// we use the method that does not use a trailing byte.
-				byte[] compression_string = compressZeroStrings(string, bitlength);
-				string_list.add(compression_string);
-			} 
-			else
-			{
-				byte[] compression_string = compressOneStrings(string, bitlength);
-				string_list.add(compression_string);
-			}
+			byte [] string3 = compressStrings2(string2);
+			string_list.add(string3);
 		}
 		else
-		{
-		    // Sometimes a compressable string will compress more 
-			// when it's segmented if it isn't compressed to start with, so we
-			// have an option where we do not attempt to compress the string.
-			int bytelength             = getBytelength(bitlength);
-			byte [] compression_string = new byte[bytelength];
-			for(int i = 0; i < bytelength - 1; i++)
-				compression_string[i] = string[i];
-			if(zero_ratio >= .5)
-				setData(0, 0, bitlength, compression_string);
-			else
-				setData(1, 0, bitlength, compression_string);
-			string_list.add(compression_string);
-		}
+			string_list.add(string2);
 
 		return string_list;
 	}
@@ -2588,7 +2492,6 @@ public class StringMapper
 		return string_list;
 	}
    
-	
 	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
 	{
 		int positive = 0;
