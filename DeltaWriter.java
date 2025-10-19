@@ -26,7 +26,7 @@ public class DeltaWriter
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
 	
-	int segment_length = 20;
+	int segment_length = 0;
 	int segment_type   = 3;
 	int merge_type     = 0;
 	
@@ -80,7 +80,7 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		
 		String prefix = new String("");
 		String filename = new String(args[0]);
 
@@ -1060,6 +1060,7 @@ public class DeltaWriter
 							type_button[histogram_type].setSelected(false);
 							histogram_type = index;
 							type_button[histogram_type].setSelected(true);
+							histogram_canvas.repaint();
 						} 
 					}
 				}
@@ -1739,7 +1740,6 @@ public class DeltaWriter
 		}
 	}
 
-	
 	class HistogramCanvas extends Canvas
 	{
 		public void paint(Graphics g)
@@ -1867,6 +1867,8 @@ public class DeltaWriter
 				    ArrayList packed_list       = SegmentMapper.packSegments(segments);
 					byte []   packed_segments = (byte [])packed_list.get(0);
 				    string  = packed_segments;
+				    
+				   
 				   
 					if(compression == 5)
 					{
@@ -1881,6 +1883,7 @@ public class DeltaWriter
 						
 						if(zipped_length < string.length)
 						{
+							
 							byte [] clipped_data = new byte[zipped_length];
 							for(int i = 0; i < zipped_length; i++)
 								clipped_data[i] = zipped_data[i];
@@ -2049,54 +2052,56 @@ public class DeltaWriter
 					{
 						byte[] string = (byte[]) string_list.get(i);
 
-						int unary_bit_length = StringMapper.getBitlength(string);
-
-						int unary_length = unary_bit_length + 8 + 256 * 8;
-
-						ArrayList huffman_list = CodeMapper.getHuffmanList(string);
-
-						int huffman_bit_length = (int) huffman_list.get(0);
-						double shannon_limit = (double) huffman_list.get(1);
-
-						//int huffman_length = huffman_bit_length + 256 * 8 + 256 / 8;
-
-						out.writeInt(string.length);
-
-						int current_iterations = StringMapper.getIterations(string);
-						if (current_iterations > 15)
-							current_iterations -= 16;
-						System.out.println("The unary string compressed " + current_iterations + " time(s).");
 						
-						if(deflate_type == 0)
-							deflater = new Deflater(Deflater.BEST_COMPRESSION);
-						else if(deflate_type == 1)
-							deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-						else
-							deflater = new Deflater(Deflater.FILTERED);
-						deflater.setInput(string);
-						byte[] zipped_string = new byte[2 * string.length];
-						deflater.finish();
-						int zipped_length = deflater.deflate(zipped_string);
-						deflater.end();
-
-						if (zipped_length < string.length)
-						{
-							System.out.println("Zipped channel " + i);
-							out.writeInt(zipped_length);
-							out.write(zipped_string, 0, zipped_length);
-						} 
-						else
-						{
-							System.out.println("Did not zip channel " + i);
-							out.writeInt(0);
-							out.write(string, 0, string.length);
-						}
-						
-						System.out.println("Unary length is " + unary_length);
-						System.out.println("Unary huffman length is " + huffman_bit_length);
-						System.out.println("Unary zipped length is " + (zipped_length * 8));
-						System.out.println("Shannon limit is " + String.format("%.1f", shannon_limit));
-						System.out.println();
+						ArrayList histogram_list = StringMapper.getHistogram(string);
+		                int [] histogram         = (int[])histogram_list.get(1);
+					   
+					
+					    int n = histogram.length;
+						ArrayList frequency_list = new ArrayList();
+					    for(int k = 0; k < n; k++)
+					        frequency_list.add(histogram[k]);
+					    Collections.sort(frequency_list, Comparator.reverseOrder());
+					    int [] frequency = new int[n];
+					    for(int k = 0; k < n; k++)
+					    	    frequency[k] = (int)frequency_list.get(k);
+					    byte [] huffman_length  = CodeMapper.getHuffmanLength2(frequency);
+					    int [] huffman_code     = CodeMapper.getCanonicalCode(huffman_length);
+					    int [] rank_table       = StringMapper.getRankTable(histogram);
+					    
+					    ArrayList pack_list   = CodeMapper.packCode(string, rank_table, huffman_code, huffman_length);
+					    byte [] packed_string = (byte [])pack_list.get(0);
+					    
+					    ArrayList length_list = CodeMapper.packLengthTable(huffman_length);
+					    
+                	        int m                 = (int)length_list.get(0);
+                	        byte init_value       = (byte)length_list.get(1);
+                	        byte max_delta        = (byte)length_list.get(2);
+                	        byte [] packed_delta  = (byte [])length_list.get(3);
+                	
+                  	    out.writeInt(m);
+            		        out.writeByte(init_value);
+            		        out.writeByte(max_delta);
+            		        out.writeInt(packed_delta.length);
+            		        out.write(packed_delta, 0, packed_delta.length);	
+      
+            		        byte rank_table_length = (byte)rank_table.length;
+            		        out.writeInt(rank_table.length);
+            		        for(int k = 0; k < rank_table.length; k++)
+            		        	    out.writeByte(rank_table[k]);
+            		    
+            		        int p = (int)pack_list.get(5);
+            		        out.writeInt(p);
+            		        
+ 		                out.writeInt(packed_string.length);
+             		    out.write(packed_string, 0, packed_string.length);
+             		    
+             		    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
+					    double shannon_limit   = (double) huffman_list.get(1);
+					    
+					    System.out.println("Shannon limit is " + String.format("%.1f", shannon_limit));
+					    System.out.println("Packed string bitlength is " + (packed_string.length * 8));
+					    System.out.println();
 					} 
 					else
 					{
@@ -2225,7 +2230,8 @@ public class DeltaWriter
 						ArrayList packed_list = SegmentMapper.packSegments(segments);
 						byte [] packed_segments = (byte [])packed_list.get(0);
 						int packed_length = packed_segments.length;
-					
+						
+						
 						if(deflate_type == 0)
 							deflater = new Deflater(Deflater.BEST_COMPRESSION);
 						else if(deflate_type == 1)
@@ -2240,20 +2246,57 @@ public class DeltaWriter
 						
 						if(zipped_length < packed_length)
 						{
+                            int huffman_length = CodeMapper.getHuffmanBitlength(packed_segments);
+							//System.out.println("Huffman bit length for packed segments is " + huffman_length + ", zipped bit length including header is " + (zipped_length * 8));
+							//System.out.println();
 							//System.out.println("Zipped packed segments.");
-							int huffman_length = CodeMapper.getHuffmanBitlength(packed_segments);
-							System.out.println("Huffman bit length for packed segments is " + huffman_length + ", zipped bit length including header is " + (zipped_length * 8));
-							System.out.println();
 							out.writeInt(zipped_length);
 							out.writeInt(packed_length);
 							out.write(zipped_data, 0, zipped_length);
+							
+							ArrayList zero_segments = new ArrayList();
+							ArrayList one_segments  = new ArrayList();
+							    
+							for(int k = 0; k < segments.size(); k++)
+							{
+							    byte [] segment = (byte [])segments.get(k);
+								int type        = StringMapper.getType(segment);
+								int iterations  = StringMapper.getIterations(segment);
+								if(type == 0)
+							        zero_segments.add(segment);
+								else
+									one_segments.add(segment);
+							}
+							    
+							ArrayList zero_list = SegmentMapper.packSegments(zero_segments);
+							ArrayList one_list  = SegmentMapper.packSegments(one_segments);
+							   
+							byte [] packed_zero_segments = (byte [])zero_list.get(0);
+							byte [] packed_one_segments  = (byte [])one_list.get(0);
+							 
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+							deflater.setInput(packed_zero_segments);
+							deflater.finish();
+							int zipped_length2 = deflater.deflate(zipped_data);
+							deflater.end();
+							
+							
+							deflater = new Deflater(Deflater.BEST_COMPRESSION);
+							deflater.setInput(packed_one_segments);
+							deflater.finish();
+							int zipped_length3 = deflater.deflate(zipped_data);
+							deflater.end();
+							
+							System.out.println("Zipped length of packed segments was " + zipped_length);
+							System.out.println("Zipped length of zero and one segments packed separately was " + (zipped_length2 + zipped_length3));
+							System.out.println();
 						}
 						else
 						{
 							out.writeInt(0);
 							out.writeInt(packed_length);	
 							out.write(packed_segments, 0, packed_length);
-							System.out.println("Did not zip packed segments.");
+							//System.out.println("Did not zip packed segments.");
 						}
 					}
 				}

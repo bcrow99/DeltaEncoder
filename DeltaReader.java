@@ -135,30 +135,54 @@ public class DeltaReader
 				int number_of_segments = in.readInt();
 				if (number_of_segments == 1)
 				{
-					int string_length = in.readInt();
-					byte[] string = new byte[string_length];
-					int zipped_length = in.readInt();
-
-					if (zipped_length == 0)
-						in.read(string, 0, string_length);
-					else
+					int n           = in.readInt();
+					
+				    byte init_value = in.readByte();
+				    
+				    byte max_delta  = in.readByte();
+				    
+				    int packed_delta_length = in.readInt();
+				   
+				    byte [] packed_delta = new byte[packed_delta_length];
+				    in.read(packed_delta, 0, packed_delta_length);
+				    
+				    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
+				   
+					int [] code = CodeMapper.getCanonicalCode(code_length);
+					
+					int m = in.readInt();
+					
+					int [] rank_table = new int[m];
+					for(int k = 0; k < m; k++)
 					{
-						byte[] zipped_string = new byte[zipped_length];
-						in.read(zipped_string, 0, zipped_length);
-						Inflater inflater = new Inflater();
-						inflater.setInput(zipped_string, 0, zipped_length);
-						int unzipped_length = inflater.inflate(string);
-						if (unzipped_length != string_length)
-							System.out.println("Unzipped string not expected length.");
+					    int rank = in.readByte();
+					    if(rank < 0)
+					    	    rank += 256;
+					    rank_table[k] = rank;
 					}
-
+					
+					int p = in.readInt();
+					
+					int packed_string_length = in.readInt();
+					
+				    byte [] packed_string = new byte[packed_string_length];
+					in.read(packed_string, 0, packed_string_length);
+					
+					ArrayList pack_list = new ArrayList();
+					pack_list.add(packed_string);
+					pack_list.add(packed_string.length * 8);
+					pack_list.add(rank_table);
+					pack_list.add(code);
+					pack_list.add(code_length);
+					pack_list.add(p);
+					
+                    byte [] string = CodeMapper.unpackCode(pack_list);
 					string_list.add(string);
 				} 
 				else
 				{
 					int total_length = 0;
 					
-
 					int[] segment_length = new int[number_of_segments];
 					byte[] segment_info = new byte[number_of_segments];
 					
