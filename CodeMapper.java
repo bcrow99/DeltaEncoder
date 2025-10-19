@@ -107,7 +107,7 @@ public class CodeMapper
 			int j = src[i];
 			if(j < 0)
 				j += 256;
-			if(j > table.length)
+			if(j > table.length - 1)
 			{
 				// Don't see how this can happen, but setting it to the least probable
 				// value seems to fix it.
@@ -508,7 +508,6 @@ public class CodeMapper
 		return number_unpacked;
 	}
 	
-
 	public static byte [] unpackCode(ArrayList pack_list)
 	{
 		byte [] src         = (byte [])pack_list.get(0);
@@ -517,6 +516,12 @@ public class CodeMapper
 		int  [] code        = (int []) pack_list.get(3);
 		byte [] code_length = (byte [])pack_list.get(4);
 		int     n           = (int)    pack_list.get(5);
+		
+		System.out.println("Table length is " + table.length);
+		System.out.println("Code length is " + code.length);
+		System.out.println("Code length length is " + code_length.length);
+		System.out.println("Number of output bytes is " + n);
+		System.out.println();
 		
 		int[] inverse_table = new int[table.length];
 		for(int i = 0; i < table.length; i++)
@@ -1593,14 +1598,14 @@ public class CodeMapper
 	public static ArrayList packLengthTable(byte[] length)
 	{
 		ArrayList result = new ArrayList();
-		int n = length.length;
+		int       n       = length.length;
 		result.add(n);
 
 		byte init_value = length[0];
 		result.add(init_value);
 
 		byte[] length_delta = new byte[n - 1];
-		byte max_delta = 0;
+		byte   max_delta    = 0;
 		for(int i = 0; i < n - 1; i++)
 		{
 			length_delta[i] = (byte) (length[i + 1] - length[i]);
@@ -1632,7 +1637,7 @@ public class CodeMapper
 			}
 			result.add(packed_length);
 		} 
-		else if(max_delta <= 3)
+		else if(max_delta == 2)
 		{
 			int byte_length = (n - 1) / 4;
 			if((n - 1) % 4 != 0)
@@ -1658,7 +1663,7 @@ public class CodeMapper
 			}
 			result.add(packed_length);
 		} 
-		else if(max_delta <= 8)
+		else if(max_delta == 3)
 		{
 			int byte_length = (n - 1) / 2;
 			if((n - 1) % 2 != 0)
@@ -1683,9 +1688,11 @@ public class CodeMapper
 				}
 			}
 			result.add(packed_length);
-		} else
+		} 
+		else
+		{
 			result.add(length_delta);
-
+		}
 		return result;
 	}
 
@@ -1699,10 +1706,10 @@ public class CodeMapper
 
 		byte[] length = new byte[n];
 
-		if(max_delta > 8)
+		if(max_delta > 3)
 		{
 			if(packed_delta.length != n - 1)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 1.");
 			else
 			{
 				length[0] = init_value;
@@ -1716,7 +1723,7 @@ public class CodeMapper
 			if((n - 1) % 8 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 2.");
 			else
 			{
 				byte[] mask = SegmentMapper.getPositiveMask();
@@ -1744,7 +1751,7 @@ public class CodeMapper
 			if((n - 1) % 4 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 3.");
 			else
 			{
 				byte[] mask = new byte[4];
@@ -1775,7 +1782,7 @@ public class CodeMapper
 			if((n - 1) % 2 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 4.");
 			else
 			{
 				byte[] mask = new byte[2];
@@ -1808,22 +1815,23 @@ public class CodeMapper
 		byte[] length = new byte[n];
 		length[0] = init_value;
 
-		if(max_delta > 8)
+		if(max_delta > 3)
 		{
 			if(packed_delta.length != n - 1)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 1.");
 			else
 			{
 				for(int i = 1; i < n; i++)
 					length[i] = (byte) (length[i - 1] + packed_delta[i - 1]);
 			}
-		} else if(max_delta == 1)
+		} 
+		else if(max_delta == 1)
 		{
 			int byte_length = (n - 1) / 8;
 			if((n - 1) % 8 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 2.");
 			else
 			{
 				byte[] mask = SegmentMapper.getPositiveMask();
@@ -1849,7 +1857,7 @@ public class CodeMapper
 			if((n - 1) % 4 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+				System.out.println("Packed deltas are not the right length 3.");
 			else
 			{
 				byte[] mask = new byte[4];
@@ -1876,11 +1884,15 @@ public class CodeMapper
 		} 
 		else
 		{
+			System.out.println("Max delta is " + max_delta);
 			int byte_length = (n - 1) / 2;
 			if((n - 1) % 2 != 0)
 				byte_length++;
 			if(packed_delta.length != byte_length)
-				System.out.println("Packed deltas are not the right length.");
+			{
+				System.out.println("Packed deltas are not the right length 4.");
+				System.out.println("Expected length is " + byte_length + ", actual length is " + packed_delta.length);
+			}
 			else
 			{
 				byte[] mask = new byte[2];
