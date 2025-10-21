@@ -36,7 +36,7 @@ public class DeltaWriter
 	
 	int delta_type      = 2;
 	
-	boolean precompress = false;
+	boolean precompress = true;
 	int deflate_type    = 0;
 	
 	int histogram_type    = 0;
@@ -2078,17 +2078,40 @@ public class DeltaWriter
                 	        byte init_value       = (byte)length_list.get(1);
                 	        byte max_delta        = (byte)length_list.get(2);
                 	        byte [] packed_delta  = (byte [])length_list.get(3);
-                	
-                  	    out.writeInt(m);
+                	        
+                	        out.writeInt(m);
             		        out.writeByte(init_value);
             		        out.writeByte(max_delta);
-            		        out.writeInt(packed_delta.length);
-            		        out.write(packed_delta, 0, packed_delta.length);	
-      
+            		       
+                	        
+                	        int [] bit_table = StringMapper.getBitTable();
+                	        double zero_ratio = StringMapper.getZeroRatio(packed_delta, packed_delta.length * 8, bit_table);
+                	        System.out.println("Zero ratio of packed lengths is " + String.format("%.2f", zero_ratio));
+                	        
+                	        byte [] uncompressed_deltas = new byte[packed_delta.length + 1];
+                	        for(int k = 0; k < packed_delta.length; k++)
+                	        	    uncompressed_deltas[k] = packed_delta[k];
+                	        
+                	        System.out.println("Packed delta length is " + packed_delta.length);
+                	        if(zero_ratio < .5)
+                	        	    uncompressed_deltas[packed_delta.length] = 16;
+                	        byte [] compressed_deltas = StringMapper.compressStrings2(uncompressed_deltas);
+                	        System.out.println("Compressed packed length is " + compressed_deltas.length);
+                	        
+                	        out.writeInt(compressed_deltas.length);
+                	        out.write(compressed_deltas, 0, compressed_deltas.length);
+                	        
+            		        byte [] _rank_table = new byte[rank_table.length];
             		        byte rank_table_length = (byte)rank_table.length;
             		        out.writeInt(rank_table.length);
             		        for(int k = 0; k < rank_table.length; k++)
+            		        {
             		        	    out.writeByte(rank_table[k]);
+            		        	    _rank_table[k] = (byte)rank_table[k];
+            		        }
+            		        zero_ratio = StringMapper.getZeroRatio(_rank_table, rank_table.length * 8, bit_table);
+            		        System.out.println("Zero ratio of rank table is " + String.format("%.2f", zero_ratio));
+            		        
             		    
             		        int p = (int)pack_list.get(5);
             		        out.writeInt(p);
@@ -2099,8 +2122,11 @@ public class DeltaWriter
              		    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
 					    double shannon_limit   = (double) huffman_list.get(1);
 					    
-					    System.out.println("Shannon limit is " + String.format("%.1f", shannon_limit));
+					    
+					    zero_ratio = StringMapper.getZeroRatio(packed_string, packed_string.length * 8, bit_table);
+					    System.out.println("Shannon limit for packed deltas is " + String.format("%.1f", shannon_limit));
 					    System.out.println("Packed string bitlength is " + (packed_string.length * 8));
+					    System.out.println("Zero ratio of packed delta string is " + String.format("%.2f", zero_ratio));
 					    System.out.println();
 					} 
 					else

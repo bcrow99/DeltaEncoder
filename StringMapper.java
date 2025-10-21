@@ -22,7 +22,6 @@ public class StringMapper
 	public static ArrayList getHistogram(byte src[])
 	{
 		// We want a histogram of the unsigned values.
-		
 		int [] value = new int[src.length];
 		
 		for(int i = 0; i < src.length; i++)
@@ -83,7 +82,6 @@ public class StringMapper
 		int[] histogram = new int[range];
 		for(int i = 0; i < range; i++)
 			histogram[i] = 0;
-		// Starting the range at 0.
 		for(int i = 0; i < src.length; i++)
 		{
 			int j = src[i] - min;
@@ -2468,17 +2466,19 @@ public class StringMapper
 		string_list.add(bit_length);
 		string_list.add(string_table);
 
-		double zero_percentage = value.length;
+		// This assumes an array of packed strings.
+		
+		double zero_ratio = value.length;
 		if(histogram.length > 1)
 		{
 			int min_histogram_value = Integer.MAX_VALUE;
 			for(int k = 0; k < histogram.length; k++)
 				if(histogram[k] < min_histogram_value)
 					min_histogram_value = histogram[k];
-			zero_percentage -= min_histogram_value;
+			zero_ratio -= min_histogram_value;
 		}
-		zero_percentage /= bit_length;
-		if(zero_percentage > .5)
+		zero_ratio /= bit_length;
+		if(zero_ratio > .5)
 		{
 			byte[] compression_string = compressZeroStrings(string);
 			string_list.add(compression_string);
@@ -2488,7 +2488,22 @@ public class StringMapper
 			byte[] compression_string = compressOneStrings(string);
 			string_list.add(compression_string);
 		}
-
+		
+ 
+		// More generic, also handling anomalous strings.
+		/*
+		int [] bit_table  = StringMapper.getBitTable();
+		double zero_ratio = StringMapper.getZeroRatio(string, bit_length, bit_table);
+		
+		int byte_length = StringMapper.getBytelength(bit_length);
+		byte [] clipped_string = new byte[byte_length];
+		for(int i = 0; i < byte_length - 1; i++)
+			clipped_string[i] = string[i];
+		if(zero_ratio < .5)
+			clipped_string[byte_length - 1] = 16;
+		byte [] compression_string = compressStrings2(clipped_string);
+		*/
+		
 		return string_list;
 	}
    
