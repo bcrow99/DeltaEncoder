@@ -2146,10 +2146,9 @@ public class SegmentMapper
 
 	public static int getBit(byte[] string, int position)
 	{
-		int byte_offset = position / 8;
-		int bit_offset = position % 8;
-		byte mask = getPositiveMask(bit_offset);
-
+		int  byte_offset = position / 8;
+		int  bit_offset  = position % 8;
+		byte mask        = getPositiveMask(bit_offset);
 		if((string[byte_offset] & mask) == 0)
 			return 0;
 		else
@@ -2171,4 +2170,183 @@ public class SegmentMapper
 			string[byte_offset] |= mask;
 		}
 	}
+	
+	public static byte [] packBits(byte [] src, int number_of_pack_bits)
+	{
+		int j               = number_of_pack_bits;
+		int number_of_bits  = src.length * j;
+		int number_of_bytes = number_of_bits / 8;
+		if(number_of_bits % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+		
+		byte [] trailing_mask = getTrailingMask();
+	
+		int offset       = 0;
+		int current_bit  = 0;
+		int current_byte = 0;
+		
+		for(int i = 0; i < src.length; i++)
+		{
+		    byte value = src[i];
+		    if(current_bit + j <= 8)
+		    {
+		    	    if(current_bit == 0)
+		    	    	    dst[current_byte] = value;
+		    	    else
+		    	    	    dst[current_byte] |= (byte)(value << current_bit);
+		    } 
+		    else
+		    {
+		    	    dst[current_byte]  |= (byte) (value << current_bit);
+		    	    
+		    	    int number_of_extra_bits  = (current_bit + j) % 8;
+		    	    
+		    	    int k                 = j - number_of_extra_bits;
+		    	    byte extra_value      = (byte) (value >> k);
+		    	    extra_value          &= trailing_mask[number_of_extra_bits - 1] ;
+		    	    
+		    	    dst[current_byte + 1] = extra_value;
+		    	   
+		    }
+		    offset      += j;
+    	        current_bit  = offset % 8;
+    	        current_byte = offset / 8;
+		}
+		
+		return dst;
+	}
+	
+	public static byte [] unpackBits(byte [] src, int number_of_bytes, int number_of_pack_bits)
+	{
+		byte [] dst = new byte[number_of_bytes];
+		
+		int offset       = 0;
+		int current_bit  = 0;
+		int current_byte = 0;
+		
+		byte [] leading_mask  = getLeadingMask();
+		byte [] trailing_mask = getTrailingMask();
+		
+		int j = number_of_pack_bits;
+		
+		int i = 0;
+		
+		while(i < number_of_bytes)
+		{
+			byte value = src[current_byte];
+			if(current_bit + j <= 8)
+			{
+				if(current_bit == 0)
+				{
+					value &= trailing_mask[j - 1];
+					
+					dst[i++] = value;
+				}
+				else 
+				{
+				    value >>= current_bit;
+			        value &= trailing_mask[j - 1];
+			        
+				    dst[i++] = value;
+				}
+			}
+			else
+			{
+				int number_of_extra_bits = current_bit + j - 8;
+				int number_of_bits       = j - number_of_extra_bits;
+				
+				value >>= current_bit;
+		    	    	value &= trailing_mask[number_of_bits - 1];
+		    	    	
+		    	    	byte extra_bits = src[current_byte + 1];
+		    	    	extra_bits &= trailing_mask[number_of_extra_bits - 1];
+		    	    	extra_bits <<= number_of_bits;
+		    	    	
+		    	    	value |= extra_bits;
+		    	    	
+		    	    	dst[i++] = value;
+			}
+			
+			offset      += j;
+			current_bit  = offset % 8;
+			current_byte = offset / 8;
+		}
+		
+		System.out.println("First output byte is " + dst[0]);
+		System.out.println();
+		
+		
+		/*
+		for(int i = 0; i < number_of_bytes; i++)
+		{ 
+			byte value = src[current_byte];
+		    if(current_bit + j <= 8)
+		    {
+		    	    if(current_bit != 0)
+		    	    	    value >>= current_bit;
+		        value &= leading_mask[j];
+		        dst[i] = value;
+		        
+		        offset += j;
+		        current_bit = offset % 8;
+		        current_byte = offset / 8;
+		    }
+		    else
+		    {
+		    	    int number_of_leading_bits  = (current_bit + j) % 8;
+	    	        int number_of_trailing_bits = j - number_of_leading_bits;  
+	    	       
+		    }
+		}
+		*/
+		
+		return dst;
+		
+		
+		/*
+		int j               = number_of_pack_bits;
+		int number_of_bits  = src.length * j;
+		int number_of_bytes = number_of_bits / 8;
+		if(number_of_bits % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+	
+		int offset       = 0;
+		int current_bit  = 0;
+		int current_byte = 0;
+		
+		for(int i = 0; i < src.length; i++)
+		{
+		    byte value = src[i];
+		    if(current_bit + j <= 8)
+		    {
+		    	    if(current_bit == 0)
+		    	    	    dst[current_byte] = value;
+		    	    else
+		    	    	    dst[current_byte] |= value << current_bit;
+		    	    
+		    	    current_bit += j;
+		    	    offset      += j;
+		    }
+		    else
+		    {
+		    	    dst[current_byte]  |= (byte) (value << current_bit);
+		    	    
+		    	    int number_of_leading_bits  = (current_bit + j) % 8;
+		    	    int number_of_trailing_bits = j - number_of_leading_bits;
+		    	    int k                       = 8 - number_of_trailing_bits;
+		    	    dst[current_byte + 1]       = (byte) (value >> k);
+		    	 
+		    	    offset      += j;
+		    	    current_bit  = offset % 8;
+		    	    current_byte = offset / 8;
+		    }
+		}
+		
+		System.out.println("Destination length is " + dst.length + ", current byte is " + current_byte);
+		return dst;
+		*/
+	}
+	
 }
