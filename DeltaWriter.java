@@ -34,7 +34,7 @@ public class DeltaWriter
 	int correction     = 0;
 	int min_set_id     = 0;
 	
-	int delta_type      = 2;
+	int delta_type      = 5;
 	
 	boolean precompress = true;
 	int deflate_type    = 0;
@@ -62,6 +62,7 @@ public class DeltaWriter
 	JTextField[] channel_text;
 
 	int[] max_bytelength;
+	int [] min_bytelength;
 
 	long file_length;
 	double file_compression_rate;
@@ -80,7 +81,6 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		
 		String prefix = new String("");
 		String filename = new String(args[0]);
 
@@ -143,6 +143,7 @@ public class DeltaWriter
 			channel_compressed_length = new int[6];
 
 			channel_string_type = new int[3];
+			min_bytelength      = new int[3];
 			max_bytelength      = new int[3];
 			channel_iterations  = new byte[3];
 			
@@ -1401,10 +1402,8 @@ public class DeltaWriter
 
 				int[] delta = (int[]) result.get(1);
 
-	
 				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
 				System.out.println();
-				
 				
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
@@ -2083,36 +2082,34 @@ public class DeltaWriter
             		        out.writeByte(init_value);
             		        out.writeByte(max_delta);
             		       
-                	        
                 	        int [] bit_table = StringMapper.getBitTable();
                 	        double zero_ratio = StringMapper.getZeroRatio(packed_delta, packed_delta.length * 8, bit_table);
-                	        System.out.println("Zero ratio of packed lengths is " + String.format("%.2f", zero_ratio));
+                	        //System.out.println("Zero ratio of packed lengths is " + String.format("%.2f", zero_ratio));
                 	        
                 	        byte [] uncompressed_deltas = new byte[packed_delta.length + 1];
                 	        for(int k = 0; k < packed_delta.length; k++)
                 	        	    uncompressed_deltas[k] = packed_delta[k];
                 	        
-                	        System.out.println("Packed delta length is " + packed_delta.length);
+                	        //System.out.println("Packed delta length is " + packed_delta.length);
                 	        if(zero_ratio < .5)
                 	        	    uncompressed_deltas[packed_delta.length] = 16;
                 	        byte [] compressed_deltas = StringMapper.compressStrings2(uncompressed_deltas);
-                	        System.out.println("Compressed packed length is " + compressed_deltas.length);
+                	        //System.out.println("Compressed packed length is " + compressed_deltas.length);
                 	        
                 	        out.writeInt(compressed_deltas.length);
                 	        out.write(compressed_deltas, 0, compressed_deltas.length);
                 	        
-            		        byte [] _rank_table = new byte[rank_table.length];
-            		        byte rank_table_length = (byte)rank_table.length;
-            		        out.writeInt(rank_table.length);
+                	        byte [] rank = new byte[rank_table.length];
+            		        //System.out.println("Rank table:");
             		        for(int k = 0; k < rank_table.length; k++)
             		        {
-            		        	    out.writeByte(rank_table[k]);
-            		        	    _rank_table[k] = (byte)rank_table[k];
+            		        	    rank[k] = (byte)rank_table[k];
+            		        	    //System.out.print(rank_table[k] + " ");
             		        }
-            		        zero_ratio = StringMapper.getZeroRatio(_rank_table, rank_table.length * 8, bit_table);
-            		        System.out.println("Zero ratio of rank table is " + String.format("%.2f", zero_ratio));
             		        
-            		    
+            		        out.writeInt(rank.length);
+            		        out.write(rank, 0, rank.length);
+            		        
             		        int p = (int)pack_list.get(5);
             		        out.writeInt(p);
             		        
@@ -2122,23 +2119,42 @@ public class DeltaWriter
              		    ArrayList huffman_list = CodeMapper.getHuffmanList(string);
 					    double shannon_limit   = (double) huffman_list.get(1);
 					    
-					    
 					    zero_ratio = StringMapper.getZeroRatio(packed_string, packed_string.length * 8, bit_table);
-					    System.out.println("Shannon limit for packed deltas is " + String.format("%.1f", shannon_limit));
-					    System.out.println("Packed string bitlength is " + (packed_string.length * 8));
-					    System.out.println("Zero ratio of packed delta string is " + String.format("%.2f", zero_ratio));
-					    System.out.println();
+					    //System.out.println("Shannon limit for packed deltas is " + String.format("%.1f", shannon_limit));
+					    //System.out.println("Packed string bitlength is " + (packed_string.length * 8));
+					    //System.out.println("Zero ratio of packed delta string is " + String.format("%.2f", zero_ratio));
+					    //System.out.println();
 					} 
 					else
 					{
 						int total_length = 0;
-						byte[] segment_data = new byte[number_of_segments];
-						for (int k = 0; k < number_of_segments; k++)
+						byte [] segment_data  = new byte[number_of_segments];
+						byte [] segment_data2 = new byte[number_of_segments + 1];
+						
+						int min_value = Integer.MAX_VALUE;
+						int max_value = 0;
+						for(int k = 0; k < number_of_segments; k++)
 						{
 							byte[] current_segment = (byte[]) segments.get(k);
 							segment_data[k]        = current_segment[current_segment.length - 1];
+							
+							int current_value = segment_data[k];
+							if(current_value < 0)
+								current_value += 256;
+							if(min_value > current_value)
+								min_value = current_value;
+							if(max_value < current_value)
+								max_value = current_value;	
 						}
 						
+						//System.out.println("Min segment length is " + min_value + ", max length is " + max_value);
+						int [] bit_table = StringMapper.getBitTable();
+            	            double zero_ratio = StringMapper.getZeroRatio(segment_data, segment_data.length * 8, bit_table);
+            	            //System.out.println("Zero ratio of segment data is " + String.format("%.2f", zero_ratio));
+            	            if(zero_ratio < .5)
+            	            	    segment_data2[segment_data2.length - 1] = 16;
+            	            byte [] compressed_segment_data = StringMapper.compressStrings2(segment_data2);
+            	           
 						if(deflate_type == 0)
 							deflater = new Deflater(Deflater.BEST_COMPRESSION);
 						else if(deflate_type == 1)
@@ -2149,9 +2165,12 @@ public class DeltaWriter
 						byte[] zipped_data = new byte[2 * segment_data.length];
 						deflater.finish();
 						int zipped_length = deflater.deflate(zipped_data);
+						
+						//System.out.println("Zipped length is " + zipped_length + ", compressed length is " + compressed_segment_data.length);
+						//System.out.println();
+						
 						deflater.end();
 
-						
 						if (zipped_length < segment_data.length)
 						{
 							//System.out.println("Zipped channel " + i + " data.");
@@ -2184,16 +2203,24 @@ public class DeltaWriter
 						}
 						else
 						{
-							//System.out.println("Segment length fits in an unsigned byte.");
+							System.out.println("Segment length fits in an unsigned byte.");
 							segment_length = new byte[number_of_segments];	
 						}
 						
-						for (int k = 0; k < number_of_segments; k++)
+						min_value = Integer.MAX_VALUE;
+						max_value = 0;
+						for(int k = 0; k < number_of_segments; k++)
 						{
 							if(length_type == 0)
 							{
 								byte[] current_segment = (byte[]) segments.get(k);
 								segment_length[k] = (byte) (current_segment.length - 1);
+								
+								int current_length = current_segment.length - 1;
+								if(min_value > current_length)
+									min_value = current_length;
+								if(max_value < current_length)
+									max_value = current_length;
 								total_length += current_segment.length - 1;	
 							}
 							else if(length_type == 1)
@@ -2214,11 +2241,11 @@ public class DeltaWriter
 								int length                = current_segment.length - 1;
 								int a                     = length;
 							    a                        &= 0x000000ff;
-							    int b                   = length >> 8;
+							    int b                     = length >> 8;
 							    b                        &= 0x000000ff;
 							    int c                     = length;
 							    c                        &= 0x000000ff;
-							    int d                   = length >> 8;
+							    int d                     = length >> 8;
 							    d                        &= 0x000000ff;
 							    segment_length[2 * k]     = (byte)a;
 							    segment_length[2 * k + 1] = (byte)b;
@@ -2227,6 +2254,18 @@ public class DeltaWriter
 								total_length += length;	
 							}
 						}
+						
+						zero_ratio = StringMapper.getZeroRatio(segment_length, segment_length.length * 8, bit_table);
+        	                System.out.println("Zero ratio of segment lengths is " + String.format("%.2f", zero_ratio));
+        	                System.out.println("Minimum length is " + min_value + ", maximum length is " + max_value);
+        	                byte [] segment_length2 = new byte[segment_length.length + 1];
+        	                for(int k = 0; k < segment_length.length; k++)
+        	                	    segment_length2[k] = (byte) (segment_length[k] - min_value);
+        	                
+        	                if(zero_ratio < .5)
+    							segment_length2[segment_length2.length - 1] = 16;
+        	                byte [] compressed_segment_length = StringMapper.compressStrings2(segment_length2);
+        	                
 						
 						if(deflate_type == 0)
 							deflater = new Deflater(Deflater.BEST_COMPRESSION);
@@ -2240,7 +2279,7 @@ public class DeltaWriter
 						zipped_length = deflater.deflate(zipped_data);
 						deflater.end();
 
-						if (zipped_length < segment_length.length)
+						if(zipped_length < segment_length.length)
 						{
 							//System.out.println("Zipped channel " + i + " lengths.");
 							out.writeInt(zipped_length);
@@ -2252,7 +2291,47 @@ public class DeltaWriter
 							out.writeInt(0);
 							out.write(segment_length, 0, segment_length.length);
 						}
-
+						
+						
+						int number_of_bits = 8;
+						if(max_value == 1)
+						    number_of_bits = 1;
+						else if(max_value <= 3)
+							number_of_bits = 2;
+						else if(max_value <= 7)
+							number_of_bits = 3;
+						else if(max_value <= 15)
+							number_of_bits = 4;
+						else if(max_value <= 31)
+							number_of_bits = 5;
+						else if(max_value <= 63)
+							number_of_bits = 6;
+						else if(max_value <= 127)
+							number_of_bits = 7;
+						
+						byte [] packed_bits = SegmentMapper.packBits(segment_length, number_of_bits);
+						zero_ratio = StringMapper.getZeroRatio(packed_bits, packed_bits.length * 8, bit_table);
+						
+						
+						
+						byte [] packed_bits2 = new byte[packed_bits.length + 1];
+						for(int k = 0; k < packed_bits.length; k++)
+							packed_bits2[k] = packed_bits[k];
+						if(zero_ratio < .5)
+							packed_bits2[packed_bits2.length - 1] = 16;
+						
+						byte [] compressed_packed_bits = StringMapper.compressStrings2(packed_bits2);
+						
+						
+						System.out.println("Original length is          " + segment_length.length);
+						System.out.println("Zipped length is            " + zipped_length);
+						System.out.println("Compressed length is        " + compressed_segment_length.length);
+						System.out.println("Packed length is            " + packed_bits.length);
+						System.out.println("Compressed packed length is " + compressed_packed_bits.length);
+						System.out.println("Zero ratio of packed segment lengths is " + String.format("%.2f", zero_ratio));
+						System.out.println();
+						
+						
 						ArrayList packed_list = SegmentMapper.packSegments(segments);
 						byte [] packed_segments = (byte [])packed_list.get(0);
 						int packed_length = packed_segments.length;
