@@ -2310,20 +2310,16 @@ public class StringMapper
 		ArrayList string_list = new ArrayList();
 
 		ArrayList histogram_list = getHistogram(value);
-		int min_value = (int) histogram_list.get(0);
-		int[] histogram = (int[]) histogram_list.get(1);
-		int value_range = (int) histogram_list.get(2);
-		int[] string_table = getRankTable(histogram);
+		int       min_value      = (int) histogram_list.get(0);
+		int[]     histogram      = (int[]) histogram_list.get(1);
+		int       value_range    = (int) histogram_list.get(2);
+		int[]     string_table   = getRankTable(histogram);
 
 		value[0] = value_range / 2;
 		for(int i = 1; i < value.length; i++)
 			value[i] -= min_value;
 		byte[] string = new byte[value.length * 16];
 		int bit_length = packStrings2(value, string_table, string);
-
-		string_list.add(min_value);
-		string_list.add(bit_length);
-		string_list.add(string_table);
 
 		double zero_ratio = value.length;
 		if(histogram.length > 1)
@@ -2344,8 +2340,12 @@ public class StringMapper
 			setData(0, 0, bit_length, string2);
 		else
 			setData(1, 0, bit_length, string2);
-		
 	    byte [] string3 = compressStrings2(string2);
+	    
+	    
+	    string_list.add(min_value);
+		string_list.add(bit_length);
+		string_list.add(string_table);
 	    string_list.add(string3);
 		
 		return string_list;
@@ -2361,16 +2361,11 @@ public class StringMapper
 		int value_range          = (int) histogram_list.get(2);
 		int[] string_table       = getRankTable(histogram);
 
-		
 		value[0] = value_range / 2;
 		for(int i = 1; i < value.length; i++)
 			value[i] -= min_value;
 		byte[] string = new byte[value.length * 16];
 		int bitlength = packStrings2(value, string_table, string);
-
-		string_list.add(min_value);
-		string_list.add(bitlength);
-		string_list.add(string_table);
 
 		double zero_ratio = value.length;
 		if(histogram.length > 1)
@@ -2391,6 +2386,10 @@ public class StringMapper
 			setData(0, 0, bitlength, string2);
 		else
 			setData(1, 0, bitlength, string2);
+		
+		string_list.add(min_value);
+		string_list.add(bitlength);
+		string_list.add(string_table);
 		
 		if(compress)
 		{
@@ -2418,55 +2417,6 @@ public class StringMapper
 			value[i] -= min_value;
 		byte[] string = new byte[value.length * 16];
 		int bit_length = packStrings2(value, string_table, string);
-
-		string_list.add(min_value);
-		string_list.add(bit_length);
-		string_list.add(string_table);
-
-		double zero_percentage = value.length;
-		if(histogram.length > 1)
-		{
-			int min_histogram_value = Integer.MAX_VALUE;
-			for(int k = 0; k < histogram.length; k++)
-				if(histogram[k] < min_histogram_value)
-					min_histogram_value = histogram[k];
-			zero_percentage -= min_histogram_value;
-		}
-		zero_percentage /= bit_length;
-		if(zero_percentage > .5)
-		{
-			byte[] compression_string = compressZeroStrings(string, bit_length);
-			string_list.add(compression_string);
-		} 
-		else
-		{
-			byte[] compression_string = compressOneStrings(string, bit_length);
-			string_list.add(compression_string);
-		}
-
-		return string_list;
-	}
- 
-	
-	public static ArrayList getStringList2(byte[] value)
-	{
-		ArrayList string_list = new ArrayList();
-
-		ArrayList histogram_list = getHistogram(value);
-		int min_value = (int) histogram_list.get(0);
-		int[] histogram = (int[]) histogram_list.get(1);
-		int[] string_table = getRankTable(histogram);
-
-		for(int i = 0; i < value.length; i++)
-			value[i] -= min_value;
-		byte[] string = new byte[value.length * 16];
-		int bit_length = packStrings2(value, string_table, string);
-
-		string_list.add(min_value);
-		string_list.add(bit_length);
-		string_list.add(string_table);
-
-		// This assumes an array of packed strings.
 		
 		double zero_ratio = value.length;
 		if(histogram.length > 1)
@@ -2478,31 +2428,63 @@ public class StringMapper
 			zero_ratio -= min_histogram_value;
 		}
 		zero_ratio /= bit_length;
-		if(zero_ratio > .5)
-		{
-			byte[] compression_string = compressZeroStrings(string);
-			string_list.add(compression_string);
-		} 
-		else
-		{
-			byte[] compression_string = compressOneStrings(string);
-			string_list.add(compression_string);
-		}
-		
- 
-		// More generic, also handling anomalous strings.
-		/*
-		int [] bit_table  = StringMapper.getBitTable();
-		double zero_ratio = StringMapper.getZeroRatio(string, bit_length, bit_table);
 		
 		int byte_length = StringMapper.getBytelength(bit_length);
 		byte [] clipped_string = new byte[byte_length];
 		for(int i = 0; i < byte_length - 1; i++)
 			clipped_string[i] = string[i];
-		if(zero_ratio < .5)
-			clipped_string[byte_length - 1] = 16;
-		byte [] compression_string = compressStrings2(clipped_string);
-		*/
+		if(zero_ratio >= .5)
+			setData(0, 0, bit_length, clipped_string);
+		else
+			setData(1, 0, bit_length, clipped_string);
+		byte[] compression_string = compressStrings2(clipped_string);
+		
+		string_list.add(min_value);
+		string_list.add(bit_length);
+		string_list.add(string_table);
+		string_list.add(compression_string);
+		
+		return string_list;
+	}
+ 
+	public static ArrayList getStringList2(byte[] value)
+	{
+		ArrayList string_list    = new ArrayList();
+		ArrayList histogram_list = getHistogram(value);
+		int       min_value      = (int) histogram_list.get(0);
+		int[]     histogram      = (int[]) histogram_list.get(1);
+		int[]     string_table   = getRankTable(histogram);
+
+		for(int i = 0; i < value.length; i++)
+			value[i] -= min_value;
+		
+		byte[] string     = new byte[value.length * 16];
+		int    bit_length = packStrings2(value, string_table, string);
+		double zero_ratio = value.length;
+		if(histogram.length > 1)
+		{
+			int min_histogram_value = Integer.MAX_VALUE;
+			for(int k = 0; k < histogram.length; k++)
+				if(histogram[k] < min_histogram_value)
+					min_histogram_value = histogram[k];
+			zero_ratio -= min_histogram_value;
+		}
+		zero_ratio /= bit_length;
+		
+		int byte_length = StringMapper.getBytelength(bit_length);
+		byte [] clipped_string = new byte[byte_length];
+		for(int i = 0; i < byte_length - 1; i++)
+			clipped_string[i] = string[i];
+		if(zero_ratio >= .5)
+			setData(0, 0, bit_length, clipped_string);
+		else
+			setData(1, 0, bit_length, clipped_string);
+		byte[] compression_string = compressStrings2(clipped_string);
+		
+		string_list.add(min_value);
+		string_list.add(bit_length);
+		string_list.add(string_table);
+		string_list.add(compression_string);
 		
 		return string_list;
 	}

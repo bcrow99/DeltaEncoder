@@ -112,26 +112,24 @@ public class DeltaReader
 					int dimension = in.readInt();
 					byte[] map = new byte[dimension];
 					byte iterations = StringMapper.getIterations(map_string);
+					
+					System.out.println("Iterations of map string is " + iterations);
 
 					int size = 0;
-					if (iterations == 0)
+					if (iterations == 0 || iterations == 16)
 						size = StringMapper.unpackStrings2(map_string, map_table, map);
-					else if (iterations < 16)
-					{
-						byte[] decompressed_string = StringMapper.decompressZeroStrings(map_string);
-						size = StringMapper.unpackStrings2(decompressed_string, map_table, map);
-					} 
 					else
 					{
-						byte[] decompressed_string = StringMapper.decompressOneStrings(map_string);
+						byte[] decompressed_string = StringMapper.decompressStrings2(map_string);	
 						size = StringMapper.unpackStrings2(decompressed_string, map_table, map);
 					}
-
+					
 					if (increment != 0)
 						for (int k = 0; k < map.length; k++)
 							map[k] += increment;
 					map_list.add(map);
 				}
+				
 				int number_of_segments = in.readInt();
 				if (number_of_segments == 1)
 				{
@@ -140,19 +138,13 @@ public class DeltaReader
 				    byte init_value = in.readByte();
 				    
 				    byte max_delta  = in.readByte();
-				    
-				    //int packed_delta_length = in.readInt();
-				    //byte [] packed_delta    = new byte[packed_delta_length];
-				    //in.read(packed_delta, 0, packed_delta_length);
-				    
+				   
 				    int compressed_length   = in.readInt();
 				    
 				    byte [] compressed_delta = new byte[compressed_length];
 				    in.read(compressed_delta, 0, compressed_length);
 				   
 				    byte [] decompressed_delta = StringMapper.decompressStrings2(compressed_delta);
-				    System.out.println("Decompressed delta length is " + decompressed_delta.length);
-				    //System.out.println("Packed delta length is " + packed_delta.length);
 				    
 				    int packed_delta_length = decompressed_delta.length - 1;
 				    byte [] packed_delta    = new byte[packed_delta_length];
@@ -160,26 +152,21 @@ public class DeltaReader
 				    	    packed_delta[k] = decompressed_delta[k];
 				    System.out.println();
 				    
-				    /*
-				    int packed_delta_length = decompressed_delta.length - 1;
-				    byte [] packed_delta    = new byte[packed_delta_length];
-				    for(int k = 0; k < packed_delta.length; k++)
-				    	    packed_delta[k] = decompressed_delta[k];
-				    */
-				    
 				    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
 				   
 					int [] code = CodeMapper.getCanonicalCode(code_length);
 					
 					int m = in.readInt();
 					
-					int [] rank_table = new int[m];
+					int []  rank_table = new int[m];
+					byte [] rank       = new byte[m];
+					in.read(rank, 0, m);
 					for(int k = 0; k < m; k++)
 					{
-					    int rank = in.readByte();
-					    if(rank < 0)
-					    	    rank += 256;
-					    rank_table[k] = rank;
+						if(rank[k] >= 0)
+							rank_table[k] = rank[k];
+						else
+					       rank_table[k]  = rank[k] + 256;
 					}
 					
 					int p = in.readInt();
