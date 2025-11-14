@@ -56,10 +56,7 @@ public class CodeMapper
 		for(int i = 0; i < src.length; i++)
 		{
 			int j = src[i];
-			// Double check.  Looks like a bug.
-			//j += 128;
 			
-			// Probably what we want to do.
 			if(j < 0)
 			    j += 256;
 
@@ -110,7 +107,7 @@ public class CodeMapper
 			if(j > table.length - 1)
 			{
 				// Don't see how this can happen, but setting it to the least probable
-				// value seems to fix it.
+				// value will prevent the program from halting.
 				System.out.println("Index is larger than rank table length.");
 				System.out.println("Index is " + j + ", rank table length is " + table.length);
 				System.out.println("Source length is " + src.length + ", source index is " + i);
@@ -1706,7 +1703,7 @@ public class CodeMapper
 
 		byte[] length = new byte[n];
 
-		if(max_delta > 3)
+		if(max_delta > 4)
 		{
 			if(packed_delta.length != n - 1)
 				System.out.println("Packed deltas are not the right length 1.");
@@ -1815,7 +1812,7 @@ public class CodeMapper
 		byte[] length = new byte[n];
 		length[0] = init_value;
 
-		if(max_delta > 3)
+		if(max_delta > 4)
 		{
 			if(packed_delta.length != n - 1)
 				System.out.println("Packed deltas are not the right length 1.");
@@ -1919,7 +1916,120 @@ public class CodeMapper
 		}
 		return length;
 	}
+	
+	public static ArrayList getRangeList(byte[] src)
+	{
+		int    n    = src.length;
+		int [] freq = new int[n];
+		int [] sum  = new int[n];
+		
+		for(int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if(j < 0)
+			    j += 256;
+			freq[j]++;
+		}
+		
+		int current_sum = 0;
+		for(int i = 0; i < n; i++)
+		{
+			current_sum += freq[i - 1];
+			sum[i]       = current_sum;
+		}
+		
+	    long [] offset = new long [] {0L, 0L};
+	    long [] range  = new long [] {1L, 1L};
+	    
+	    for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    int k = sum[j];
+	    	    
+	    	    long a = range[0];
+	    	    long b = range[1];
+	    	    
+	    	    a     *= k;
+	    	    b     *= k;
+	    	    
+	    	    if(offset[1] == 0)
+	    	    {
+	    	    	    offset[0] = a;
+	    	    	    offset[1] = b;
+	    	    }
+	    	    else
+	    	    {
+	    	    	    offset[0] *= b;
+	    	    	    offset[1] *= b;
+	    	    	    offset[0] += a;
+	    	    }
+	    	    
+	    	    range[0] *= freq[j];
+	    	    range[1] *= n;   
+	    }
+	    
+		ArrayList list = new ArrayList();
+		list.add(offset[0]);
+		list.add(offset[1]);
+		list.add(n);
+		list.add(freq);
+		return list;
+	}
 
+	public static byte [] getMessageFromRangeList(ArrayList list)
+	{
+		long [] v    = new long[2];
+		long [] w    = new long[2];
+		v[0]         = (long)list.get(0);
+		v[0]         = (long)list.get(1);
+		int     n    = (int)list.get(2);
+		int []  freq = (int [])list.get(3);
+		int []  sum  = new int[n];
+	
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		long [] lower  = new long[2];
+		long [] upper  = new long[2];
+		
+		byte [] m = new byte[n];
+		for(int i = 0; i < n; i++)
+		{
+			for(int j = 0; j < 256; j++)
+			{
+				w[0]  = v[0] * offset[1];
+				w[1]  = v[1] * offset[1];
+				w[0] -= offset[0];
+				
+				lower[0] = range[0] * sum[j];
+				lower[1] = range[1] * n;
+				upper[0] = range[0] * (sum[j] + freq[j]);
+				upper[1] = range[1] * n;
+				
+				long lower_quotient = lower[0]/lower[1];
+				long upper_quotient = upper[0]/upper[1];
+				
+				long location       = w[0] / w[1];
+				
+				if((lower_quotient <= location) && (location < upper_quotient))
+				{
+				    offset[0] *= n;
+				    offset[1] *= n;
+				    offset[0] += freq[j];
+				    
+				    range[0] *= freq[j];
+				    range[1] *= n;
+				    
+				    m[i] = (byte)j;
+				    break;
+				}
+			}
+		}
+		
+		return m;
+	}
+	
 	public static ArrayList getHuffmanList(byte[] string)
 	{
 		ArrayList list = new ArrayList();
@@ -1977,7 +2087,7 @@ public class CodeMapper
 
 		// We produce a rank table from the histogram to use when encoding.
 		int[] rank_table = StringMapper.getRankTable(string_histogram);
-
+	
 		// We produce a frequency table to produce huffman lengths.
 		ArrayList frequency_list = new ArrayList();
 		for(int k = 0; k < n; k++)
@@ -1989,7 +2099,7 @@ public class CodeMapper
 		byte[] huffman_length = CodeMapper.getHuffmanLength2(frequency);
 
 		// We produce a huffman code from the lengths.
-		int[] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
+		int [] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
 
 		// We produce the estimated bit length of the output.
 		int estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
@@ -2016,4 +2126,7 @@ public class CodeMapper
 
 		return list;
 	}
+	
+	
+	
 }
