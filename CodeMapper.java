@@ -2003,63 +2003,49 @@ public class CodeMapper
 	}
 
 	
-	public static ArrayList getRangeList2(byte[] src)
+	public static ArrayList getRangeList2(byte[] src, double [] p)
 	{
-		int    n    = src.length;
-		int [] freq = new int[256];
-		int [] sum  = new int[256];
-		
-		for(int i = 0; i < n; i++)
+		double [] sum = new double[p.length];
+	
+		double current_sum = 0.;
+		for(int i = 1; i < p.length; i++)
 		{
-			int j = src[i];
-			if(j < 0)
-			    j += 256;
-			freq[j]++;
-		}
-		
-		int current_sum = 0;
-		for(int i = 1; i < 256; i++)
-		{
-			current_sum += freq[i - 1];
+			current_sum += p[i - 1];
 			sum[i]       = current_sum;
 		}
 		
 		double offset = 0.;
 		double range  = 1.;
-		
-	    
+		int    n      = src.length;
 	    for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
-	    	     
-	    	    int k = sum[j];
 	    	   
-	    	    double addend = range * k;
-	    	    addend       /= n;
+	    	    double addend = range * sum[j];
 	    	    offset       += addend;
 	    	    
-	    	    range *= freq[j];
-	    	    range /= n;
+	    	    range *= p[j];
 	    	    
-	    	    
+	    	    /*
 	    	    System.out.println("Symbol " + i + " is " + j);
-	    	    System.out.println("Frequency is " + freq[j]);
-	    	    System.out.println("Accumulated frequency is " + k);
-	    	    System.out.println("Offset quotient is " + String.format("%.4f", offset));
-	    	    System.out.println("Range quotient is " + String.format("%.4f", range));
+	    	    System.out.println("Probability is " + p[j]);
+	    	    System.out.println("Accumulated probability is " + sum[j]);
+	    	    System.out.println("Offset is " + String.format("%.4f", offset));
+	    	    System.out.println("Range is " + String.format("%.4f", range));
 	    	    System.out.println();   
+	    	    */
 	    }
 	    System.out.println();
 	    
 	   
 		ArrayList list = new ArrayList();
 		
-		double intermediate_value = (offset + range) / 2;
+		double intermediate_value = (2 * offset + range) / 2;
 		list.add(intermediate_value);
 		list.add(n);
-		list.add(freq);
+		list.add(p);
 		return list;
 	}
 	
@@ -2127,19 +2113,17 @@ public class CodeMapper
 		return m;
 	}
 	
-	
-	
 	public static byte [] getMessageFromRangeList2(ArrayList list)
 	{
-		double  v    = (double)list.get(0);
-		int     n    = (int)list.get(1);
-		int []  freq = (int [])list.get(2);
-		int []  sum  = new int[256];
+		double  v     = (double)list.get(0);
+		int     n     = (int)list.get(1);
+		double [] p   = (double [])list.get(2);
+		double [] sum = new double[p.length];
 		
-		int current_sum = 0;
-		for(int i = 1; i < 256; i++)
+		double current_sum = 0;
+		for(int i = 1; i < p.length; i++)
 		{
-			current_sum += freq[i - 1];
+			current_sum += p[i - 1];
 			sum[i]       = current_sum;
 		}
 		
@@ -2150,25 +2134,21 @@ public class CodeMapper
 		for(int i = 0; i < n; i++)
 		{
 			double w = v - offset;
-			for(int j = 0; j < 256; j++)
+			for(int j = 0; j < p.length; j++)
 			{
 				double lower = range * sum[j];
-				lower       /= n;
-				double upper = range * (sum[j] + freq[j]);
-				upper       /= n;
+				double upper = range * (sum[j] + p[j]);
 				
 				if((lower <= w) && (w < upper))
 				{ 
-					System.out.println("j is " + j);
-					System.out.println("Lower is " + String.format("%.4f", lower));
-					System.out.println("w is " + String.format("%.4f", w));
-					System.out.println("Upper is " + String.format("%.4f", upper));
-				    double addend = sum[j];
-				    addend       /= n;
-				    offset       += addend;
-				    range       *= freq[j];
-				    range       /= n; 
-				    m[i]         = (byte)j;
+					//System.out.println("j is " + j);
+					//System.out.println("Lower is " + String.format("%.4f", lower));
+					//System.out.println("w is " + String.format("%.4f", w));
+					//System.out.println("Upper is " + String.format("%.4f", upper));
+				   
+				    offset += range * sum[j];
+				    range  *= p[j];
+				    m[i]    = (byte)j;
 				    break;
 				}
 			}
