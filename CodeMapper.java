@@ -1917,7 +1917,7 @@ public class CodeMapper
 		return length;
 	}
 	
-
+    /*
 	public static ArrayList getRangeList(byte[] src)
 	{
 		int    n    = src.length;
@@ -2001,7 +2001,106 @@ public class CodeMapper
 		list.add(freq);
 		return list;
 	}
-
+    */
+	
+	public static ArrayList getRangeQuotient(byte[] src, int [] f, int m)
+	{
+	    int [][] p = new int[f.length][2];
+	    int [][] s = new int[f.length][2];
+		
+		int sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			p[i][0] = f[i];
+			p[i][1] = m;
+			s[i][0] = sum;
+			s[i][1] = m;
+			sum    += f[i];
+		}
+		
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		int    n       = src.length;
+	    for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	   
+	    	    long [] addend = new long[2];
+	    	    addend[0] = s[j][0] * range[0];
+	    	    addend[1] = s[j][1] * range[1];
+	    	    
+	    	    if(addend[1] == offset[1])
+	    	        offset[0] += addend[0];
+	    	    else if(addend[1] % offset[1] == 0)
+	    	    {
+	    	    	    long factor = addend[1] / offset[1];
+	    	    	    offset[0]  *= factor;
+	    	    	    offset[1]  *= factor;
+	    	    	    offset[0]  += addend[0];
+	    	    }
+	    	    else
+	    	    {
+	    	    	    long factor = addend[1];
+    	    	        offset[0]  *= factor;
+    	    	        offset[1]  *= factor;
+    	    	        factor      = offset[1];
+    	    	        addend[0]  *= factor;
+    	    	        addend[1]  *= factor;
+    	    	        offset[0]  += addend[0];
+	    	    }
+	    	    
+	    	    range[0] *= p[j][0];
+	    	    range[1] *= p[j][1];
+	    }
+	    
+	    long [] value = new long[2];
+	 
+	    if(offset[1] == range[1])
+	    {
+	    	    value[0]  = 2 * offset[0] + range[0];
+	    	    // To prevent underflow.
+	    	    value[0] *= offset[1];
+	    	    value[1]  = offset[1] * offset[1] * 2;
+	    	    if(value[0] / offset[1] != 0)
+	    	    {
+	    	    	    value[0] /= offset[1];
+	    	    	    value[1] /= offset[1];
+	    	    }
+	    }
+	    else if(range[1] % offset[1] == 0)
+	    {
+	    	    System.out.println("Got here 2.");
+	    	    long factor = range[1] / offset[1];
+	    	    offset[0]  *= factor;
+	    	    offset[1]  *= factor;
+	    	    value[0]    = 2 * offset[0] + range[0]; 
+	    	    	value[0]   /= 2;
+	    	    value[1]    = offset[1];
+	    }
+	    else
+	    {
+	    	    System.out.println("Got here 3.");
+	    	    long factor = range[1];
+    	        offset[0]  *= factor;
+    	        offset[1]  *= factor;
+    	        factor      = offset[1];
+    	        range[0]   *= factor;
+    	        range[1]   *= factor;
+    	        value[0]    = 2 * offset[0] + range[0];
+    	        value[0]   /= 2;
+	    	    value[1]    = offset[1];
+	    }
+	 
+	  
+		ArrayList list = new ArrayList();
+		list.add(value);
+		list.add(f);
+		list.add(m);
+		list.add(n);
+		return list;
+	}
 	
 	public static ArrayList getRangeList2(byte[] src, double [] p)
 	{
