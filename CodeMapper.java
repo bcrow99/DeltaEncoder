@@ -2147,6 +2147,7 @@ public class CodeMapper
 		list.add(p);
 		return list;
 	}
+
 	
 	public static byte [] getMessageFromRangeList(ArrayList list)
 	{
@@ -2240,11 +2241,6 @@ public class CodeMapper
 				
 				if((lower <= w) && (w < upper))
 				{ 
-					//System.out.println("j is " + j);
-					//System.out.println("Lower is " + String.format("%.4f", lower));
-					//System.out.println("w is " + String.format("%.4f", w));
-					//System.out.println("Upper is " + String.format("%.4f", upper));
-				   
 				    offset += range * sum[j];
 				    range  *= p[j];
 				    m[i]    = (byte)j;
@@ -2254,6 +2250,103 @@ public class CodeMapper
 		}
 		
 		return m;
+	}
+	
+	/*
+	list.add(value);
+	list.add(f);
+	list.add(m);
+	list.add(n);
+	return list;
+	*/
+	
+	public static byte [] getMessage(long [] v, int [] f, int m, int n)
+	{
+		int [] s = new int[f.length];
+		
+		int sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = sum;
+			sum += f[i];
+		}
+		
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		
+		byte [] message = new byte[n];
+		
+		for(int i = 0; i < n; i++)
+		{
+			long [] w = new long [] {v[0], v[1]};
+			w[0]     *= offset[1];
+			w[1]     *= offset[1];
+			w[0]     -= offset[0] * w[1];
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				long [] lower = new long [] {range[0], range[1]};
+				lower[0] *= s[j];
+				lower[1] *= m;
+				
+				long [] upper = new long [] {range[0], range[1]};
+				upper[0] *= (s[j] + f[j]);
+				upper[1] *= m;
+				
+				System.out.println("P sum is " + (s[j] + f[j]));
+				System.out.println("Denominator is " + m);
+				System.out.println("Range is " + range[0] + " " + range[1]);
+				System.out.println("Upper is " + upper[0] + " " + upper[1]);
+				
+				if(w[1] != lower[1])
+				{
+					lower[0] *= w[1];
+					lower[1] *= w[1];
+					upper[0] *= w[1];
+					upper[1] *= w[1];
+					w[0]     *= lower[1];
+					w[1]     *= lower[1];
+				}
+				
+				
+				double _lower = lower[0];
+				_lower       /= lower[1];
+				
+				double _upper = upper[0];
+				_upper       /= upper[1];
+				
+				double _w     = w[0];
+				_w            /= w[1];
+				
+				System.out.println("Lower is " + _lower + ", w is " + _w + ", upper is " + _upper);
+				System.out.println("Lower 0 is " + lower[0] + ", w 0 is " + w[0] + " upper 0 is " + upper[0]);
+				//if((lower[0] <= w[0]) && (w[0] < upper[0]))
+				if((_lower <= _w) && (_w < _upper))
+				{ 
+					System.out.println("Got here.");
+				    long [] addend = new long [] {range[0], range[1]};
+				    addend[0]     *= s[j];
+				    addend[1]     *= m;
+				    if(addend[1] != offset[1])
+				    {
+				    	    addend[0] *= offset[1];
+				    	    addend[1] *= offset[1];
+						offset[0] *= addend[1];
+						offset[1] *= addend[1];    
+				    }
+				    offset[0] += addend[0];
+				    
+				    range[0]      *= f[j];
+				    range[1]      *= m;
+				    
+				    message[i]    = (byte)j;
+				    
+				    break;
+				}
+			}
+		}
+		
+		return message;
 	}
 	
 	public static ArrayList getHuffmanList(byte[] string)
