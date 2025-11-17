@@ -2045,6 +2045,143 @@ public class CodeMapper
 		return list;
 	}
 	
+	public static BigInteger [] getRangeQuotient2(byte[] src, int [] f, int m)
+	{
+	    int [] s = new int[f.length];
+		
+		int sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = sum;
+			sum    += f[i];
+		}
+		
+		BigInteger [] offset = new BigInteger[2];
+		offset[0] = BigInteger.ZERO;
+		offset[1] = BigInteger.ONE;
+		
+		BigInteger [] range  = new BigInteger[2];
+		range[0] = BigInteger.ONE;
+		range[1] = BigInteger.ONE;
+		
+		
+		
+		
+		int    n       = src.length;
+	    
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0] = addend[0].multiply(factor);
+	    	    factor = factor.valueOf(m);
+	    	    addend[1] = addend[1].multiply(factor);
+	    	    
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	    ArrayList <BigInteger> numerator_list   = getPrimeFactors(offset[0]);
+	    	    if(numerator_list.size() != 0)
+	    	    {   
+	    	    	    ArrayList <BigInteger> denominator_list = getPrimeFactors(offset[1]);
+		    	    ArrayList <BigInteger> multiple_list    = new ArrayList <BigInteger>(); 
+			    for(int k = 0; k < numerator_list.size(); k++)
+			    {
+			    	    factor = numerator_list.get(k);
+			    	    if(denominator_list.contains(factor))
+			    	    {
+			    	    	    int index = denominator_list.lastIndexOf(factor);
+			    	        denominator_list.remove(index);
+			    	        multiple_list.add(factor); 
+			      	}
+			    }
+			    
+			    int size = multiple_list.size();
+				if(size > 0)
+				{
+				    	BigInteger common_factor = multiple_list.get(0);
+				    	for(int k = 1; k < size; k++)
+				    	{
+				    	    	factor = multiple_list.get(k);
+				    	    	common_factor = common_factor.multiply(factor);
+				    	}   
+				    	offset[0] = offset[0].divide(common_factor);
+				    	offset[1] = offset[1].divide(common_factor);
+				}
+			    
+	    	    }
+			    
+            factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);;
+	    	    
+	    	    numerator_list   = getPrimeFactors(range[0]);
+	    	    if(numerator_list.size() != 0)
+	    	    {   
+	    	    	    ArrayList <BigInteger> denominator_list = getPrimeFactors(range[1]);
+		    	    ArrayList <BigInteger> multiple_list    = new ArrayList <BigInteger>(); 
+			    for(int k = 0; k < numerator_list.size(); k++)
+			    {
+			    	    factor = numerator_list.get(k);
+			    	    if(denominator_list.contains(factor))
+			    	    {
+			    	    	    int index = denominator_list.lastIndexOf(factor);
+			    	        denominator_list.remove(index);
+			    	        multiple_list.add(factor); 
+			      	}
+			    }
+			    
+			    int size = multiple_list.size();
+				if(size > 0)
+				{
+				    	BigInteger common_factor = multiple_list.get(0);
+				    	for(int k = 1; k < size; k++)
+				    	{
+				    	    	factor = multiple_list.get(k);
+				    	    	common_factor = common_factor.multiply(factor);
+				    	}   
+				    	range[0] = offset[0].divide(common_factor);
+				    	range[1] = offset[1].divide(common_factor);
+				}
+	    	    }
+	    }
+	
+		if(offset[1].compareTo(range[1]) != 0)
+		{
+			BigInteger range_factor = range[1];
+			BigInteger offset_factor = offset[1];
+			
+			offset[0] = offset[0].multiply(range_factor);
+			offset[1] = offset[1].multiply(range_factor);
+			
+			offset[0] = offset[0].multiply(range_factor);
+			offset[1] = offset[1].multiply(range_factor);
+			
+			System.out.println("Range and offset have different denominators.");
+		}
+		
+		
+        BigInteger[] value = new BigInteger[2];
+        value[0]    = offset[0].multiply(BigInteger.TWO);
+        value[0]    = value[0].add(range[0]); 
+  	    value[0]    = value[0].divide(BigInteger.TWO);
+        value[1]    = offset[1];
+	  
+		return value;
+	}
+	
+	
+	
 	
 	
 	
@@ -2241,6 +2378,28 @@ public class CodeMapper
 	    	    }
 	    }
 	    if(j > 2)
+	    	    list.add(j);
+	    
+	    return list;
+	}
+	
+	public static ArrayList<BigInteger> getPrimeFactors(BigInteger number)
+	{
+		BigInteger j = number;
+		BigInteger i = BigInteger.TWO;
+	
+		
+		ArrayList <BigInteger> list = new ArrayList<BigInteger>();
+		
+	    for(i = i; i.compareTo(j) < 0; i = i.add(BigInteger.ONE))
+	    {
+	    	    while(j.mod(i) == BigInteger.ZERO)
+	    	    {
+	    	    	    list.add(i);
+	    	    	    j = j.divide(i);
+	    	    }
+	    }
+	    if(j.compareTo(BigInteger.TWO) == 1)
 	    	    list.add(j);
 	    
 	    return list;
