@@ -1917,182 +1917,125 @@ public class CodeMapper
 		return length;
 	}
 	
-    /*
-	public static ArrayList getRangeList(byte[] src)
-	{
-		int    n    = src.length;
-		int [] freq = new int[256];
-		int [] sum  = new int[256];
-		
-		for(int i = 0; i < n; i++)
-		{
-			int j = src[i];
-			if(j < 0)
-			    j += 256;
-			freq[j]++;
-		}
-		
-		int current_sum = 0;
-		for(int i = 1; i < 256; i++)
-		{
-			current_sum += freq[i - 1];
-			sum[i]       = current_sum;
-		}
-		
-	    long [] offset = new long [] {0L, 0L};
-	    long [] range  = new long [] {1L, 1L};
-	    
-	    for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	     
-	    	    int k = sum[j];
-	    	   
-	    	    
-	    	    long a = range[0] * k;
-	    	    long b = range[1] * n;
-	    	    
-	    	    if(k > 0)
-	    	    {
-	    	        if(offset[1] == 0)
-	    	        {
-	    	    	        offset[0] = a;
-	    	    	        offset[1] = b;
-	    	        }
-	    	        else
-	    	        {
-	    	    	        offset[0] *= b;
-	    	    	        offset[1] *= b;
-	    	    	        offset[0] += a;
-	    	        }
-	    	    }
-	    	    
-	    	    range[0] *= freq[j];
-	    	    range[1] *= n;
-	    	    
-	    	    double offset_quotient = offset[0];
-	    	    offset_quotient       /= offset[1];
-	    	    double range_quotient  = range[0];
-	    	    range_quotient        /= range[1];
-	    	    
-	    	    System.out.println("Symbol " + i + " is " + j);
-	    	    System.out.println("Frequency is " + freq[j]);
-	    	    System.out.println("Accumulated frequency is " + k);
-	    	    System.out.println("Offset 0 is " + offset[0]);
-	    	    System.out.println("Offset 1 is " + offset[1]);
-	    	    System.out.println("Offset quotient is " + String.format("%.4f", offset_quotient));
-	    	    
-	    	    System.out.println("Range 0 is " + range[0]);
-	    	    System.out.println("Range 1 is " + range[1]);
-	    	    System.out.println("Range quotient is " + String.format("%.4f", range_quotient));
-	    	    System.out.println();
-	    	    
-	    	      
-	    }
-	    System.out.println();
-	    
-	   
-		ArrayList list = new ArrayList();
-		list.add(offset[0]);
-		list.add(offset[1]);
-		list.add(n);
-		list.add(freq);
-		return list;
-	}
-    */
-	
 	public static ArrayList getRangeQuotient(byte[] src, int [] f, int m)
 	{
-	    int [][] p = new int[f.length][2];
-	    int [][] s = new int[f.length][2];
+	    int [] s = new int[f.length];
 		
 		int sum = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			p[i][0] = f[i];
-			p[i][1] = m;
-			s[i][0] = sum;
-			s[i][1] = m;
+			s[i] = sum;
 			sum    += f[i];
 		}
 		
 		long [] offset = new long [] {0L, 1L};
 		long [] range  = new long [] {1L, 1L};
 		int    n       = src.length;
-	    for(int i = 0; i < n; i++)
+	    
+		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
 	    	   
-	    	    long [] addend = new long[2];
-	    	    addend[0] = s[j][0] * range[0];
-	    	    addend[1] = s[j][1] * range[1];
+	    	    long [] addend = new long[] {range[0], range[1]};
+	    	    addend[0] *= s[j];
+	    	    addend[1] *= m;
 	    	    
-	    	    if(addend[1] == offset[1])
-	    	        offset[0] += addend[0];
-	    	    else if(addend[1] % offset[1] == 0)
-	    	    {
-	    	    	    long factor = addend[1] / offset[1];
-	    	    	    offset[0]  *= factor;
-	    	    	    offset[1]  *= factor;
-	    	    	    offset[0]  += addend[0];
-	    	    }
-	    	    else
-	    	    {
-	    	    	    long factor = addend[1];
-    	    	        offset[0]  *= factor;
-    	    	        offset[1]  *= factor;
-    	    	        factor      = offset[1];
-    	    	        addend[0]  *= factor;
-    	    	        addend[1]  *= factor;
-    	    	        offset[0]  += addend[0];
-	    	    }
+	    	    offset[0] *= addend[1];
+	    	    addend[0] *= offset[1];
+	    	    offset[1] *= addend[1];
+	    	    offset[0] += addend[0];
 	    	    
-	    	    range[0] *= p[j][0];
-	    	    range[1] *= p[j][1];
-	    }
-	    
-	    long [] value = new long[2];
-	 
-	    if(offset[1] == range[1])
-	    {
-	    	    value[0]  = 2 * offset[0] + range[0];
-	    	    // To prevent underflow.
-	    	    value[0] *= offset[1];
-	    	    value[1]  = offset[1] * offset[1] * 2;
-	    	    if(value[0] / offset[1] != 0)
-	    	    {
-	    	    	    value[0] /= offset[1];
-	    	    	    value[1] /= offset[1];
+	    	    ArrayList <Long> numerator_list   = getPrimeFactors(offset[0]);
+	    	    if(numerator_list.size() != 0)
+	    	    {   
+	    	    	    ArrayList <Long> denominator_list = getPrimeFactors(offset[1]);
+		    	    ArrayList <Long> multiple_list    = new ArrayList <Long>(); 
+			    for(int k = 0; k < numerator_list.size(); k++)
+			    {
+			    	    long factor = numerator_list.get(k);
+			    	    if(denominator_list.contains(factor))
+			    	    {
+			    	    	    int index = denominator_list.lastIndexOf(factor);
+			    	        denominator_list.remove(index);
+			    	        multiple_list.add(factor); 
+			      	}
+			    }
+			    
+			    int size = multiple_list.size();
+				if(size > 0)
+				{
+				    	long common_factor = multiple_list.get(0);
+				    	for(int k = 1; k < size; k++)
+				    	{
+				    	    	long factor = multiple_list.get(k);
+				    	    	common_factor *= factor;
+				    	}   
+				    	offset[0] /= common_factor;
+				    	offset[1] /= common_factor;
+				    	
+				    //System.out.println("Factoring offset by " + common_factor);
+				}
+			    
+	    	    }
+			    
+
+	    	    range[0] *= f[j];
+	    	    range[1] *= m;
+	    	    
+	    	    numerator_list   = getPrimeFactors(range[0]);
+	    	    if(numerator_list.size() != 0)
+	    	    {   
+	    	    	    ArrayList <Long> denominator_list = getPrimeFactors(range[1]);
+		    	    ArrayList <Long> multiple_list    = new ArrayList <Long>(); 
+			    for(int k = 0; k < numerator_list.size(); k++)
+			    {
+			    	    long factor = numerator_list.get(k);
+			    	    if(denominator_list.contains(factor))
+			    	    {
+			    	    	    int index = denominator_list.lastIndexOf(factor);
+			    	        denominator_list.remove(index);
+			    	        multiple_list.add(factor); 
+			      	}
+			    }
+			    
+			    int size = multiple_list.size();
+				if(size > 0)
+				{
+				    	long common_factor = multiple_list.get(0);
+				    	for(int k = 1; k < size; k++)
+				    	{
+				    	    	long factor = multiple_list.get(k);
+				    	    	common_factor *= factor;
+				    	}   
+				    	range[0] /= common_factor;
+				    	range[1] /= common_factor;
+				    	
+				    	//System.out.println("Factoring range by " + common_factor);
+				}  
 	    	    }
 	    }
-	    else if(range[1] % offset[1] == 0)
-	    {
-	    	    System.out.println("Got here 2.");
-	    	    long factor = range[1] / offset[1];
-	    	    offset[0]  *= factor;
-	    	    offset[1]  *= factor;
-	    	    value[0]    = 2 * offset[0] + range[0]; 
-	    	    	value[0]   /= 2;
-	    	    value[1]    = offset[1];
-	    }
-	    else
-	    {
-	    	    System.out.println("Got here 3.");
-	    	    long factor = range[1];
-    	        offset[0]  *= factor;
-    	        offset[1]  *= factor;
-    	        factor      = offset[1];
-    	        range[0]   *= factor;
-    	        range[1]   *= factor;
-    	        value[0]    = 2 * offset[0] + range[0];
-    	        value[0]   /= 2;
-	    	    value[1]    = offset[1];
-	    }
-	 
+	
+		if(offset[1] != range[1])
+		{
+			long range_factor = range[1];
+			long offset_factor = offset[1];
+			
+			offset[0] *= range_factor;
+			offset[1] *= range_factor;
+			
+			range[0]  *= offset_factor;
+			range[1]  *= offset_factor;
+			
+			System.out.println("Range and offset have different denominators.");
+		}
+		
+		long [] value = new long[2];
+        value[0]    = 2 * offset[0] + range[0]; 
+  	    value[0]   /= 2;
+        value[1]    = offset[1];
+		
 	  
 		ArrayList list = new ArrayList();
 		list.add(value);
@@ -2102,15 +2045,24 @@ public class CodeMapper
 		return list;
 	}
 	
-	public static ArrayList getRangeList2(byte[] src, double [] p)
-	{
-		double [] sum = new double[p.length];
 	
-		double current_sum = 0.;
-		for(int i = 1; i < p.length; i++)
+	
+	
+	public static ArrayList getRangeList(byte[] src, int [] f, int m)
+	{
+		double [] p = new double[f.length];
+		for(int i = 0; i < f.length; i++)
 		{
-			current_sum += p[i - 1];
-			sum[i]       = current_sum;
+			p[i]  = f[i];
+			p[i] /= m;
+		}
+		
+		double [] s = new double[f.length];
+		double current_sum = 0.;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += p[i];
 		}
 		
 		double offset = 0.;
@@ -2122,19 +2074,9 @@ public class CodeMapper
 	    	    if(j < 0)
 	    	    	    j += 256;
 	    	   
-	    	    double addend = range * sum[j];
+	    	    double addend = range * s[j];
 	    	    offset       += addend;
-	    	    
-	    	    range *= p[j];
-	    	    
-	    	    /*
-	    	    System.out.println("Symbol " + i + " is " + j);
-	    	    System.out.println("Probability is " + p[j]);
-	    	    System.out.println("Accumulated probability is " + sum[j]);
-	    	    System.out.println("Offset is " + String.format("%.4f", offset));
-	    	    System.out.println("Range is " + String.format("%.4f", range));
-	    	    System.out.println();   
-	    	    */
+	    	    range        *= p[j];
 	    }
 	    System.out.println();
 	    
@@ -2148,72 +2090,7 @@ public class CodeMapper
 		return list;
 	}
 
-	
 	public static byte [] getMessageFromRangeList(ArrayList list)
-	{
-		long [] v    = new long[2];
-		long [] w    = new long[2];
-		v[0]         = (long)list.get(0);
-		v[1]         = (long)list.get(1);
-		
-		System.out.println("v[0] is " + v[0]);
-		System.out.println("v[1] is " + v[1]);
-		int     n    = (int)list.get(2);
-		int []  freq = (int [])list.get(3);
-		int []  sum  = new int[256];
-		
-		int current_sum = 0;
-		for(int i = 1; i < 256; i++)
-		{
-			current_sum += freq[i - 1];
-			sum[i]       = current_sum;
-		}
-	
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		long [] lower  = new long[2];
-		long [] upper  = new long[2];
-		
-		byte [] m = new byte[n];
-		for(int i = 0; i < n; i++)
-		{
-			for(int j = 0; j < 256; j++)
-			{
-				w[0]  = v[0] * offset[1];
-				w[1]  = v[1] * offset[1];
-				w[0] -= offset[0];
-				
-				lower[0] = range[0] * sum[j];
-				lower[1] = range[1] * n;
-				upper[0] = range[0] * (sum[j] + freq[j]);
-				upper[1] = range[1] * n;
-				
-				long lower_quotient = lower[0];
-				lower_quotient     /= lower[1];
-				long upper_quotient = upper[0];
-				upper_quotient     /= upper[1];
-				long location       = w[0];
-				location           /= w[1];
-				
-				if((lower_quotient <= location) && (location < upper_quotient))
-				{
-				    offset[0] *= n;
-				    offset[1] *= n;
-				    offset[0] += freq[j];
-				    
-				    range[0] *= freq[j];
-				    range[1] *= n;
-				    
-				    m[i] = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return m;
-	}
-	
-	public static byte [] getMessageFromRangeList2(ArrayList list)
 	{
 		double  v     = (double)list.get(0);
 		int     n     = (int)list.get(1);
@@ -2252,13 +2129,401 @@ public class CodeMapper
 		return m;
 	}
 	
+	public static byte [] getMessage2(long [] q, int [] f, int m, int n)
+	{
+		
+		double v  = q[0];
+		v        /= q[1];
+		
+		
+		double [] p = new double[f.length];
+		for(int i = 0; i < f.length; i++)
+		{
+			p[i]  = f[i];
+			p[i] /= m;
+		}
+		
+		/*
+		double [] s = new double[f.length];
+		double current_sum = 0.;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += p[i];
+		}
+		*/
+		int [] s = new int[f.length];
+		int current_sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += f[i];
+		}
+		
+		byte [] message = new byte[n];
+		
+		
+		long [] offset = new long[] {0L, 1L};
+		long [] range  = new long[] {1L, 1L};
+		
+		//double offset = 0.;
+		//double range  = 1.;
+		
+		
+		for(int i = 0; i < n; i++)
+		{
+			//double w = v - offset;
+			long [] w = new long[] {q[0], q[1]};
+			long [] x = new long[] {offset[0], offset[1]};
+			
+			
+			w[0] *= x[1];
+			w[1] *= x[1];
+			x[0] *= w[1];
+			w[0] -= x[0];
+			
+			
+			for(int j = 0; j < p.length; j++)
+			{
+				//double lower = range * s[j];
+				//double upper = range * (s[j] + p[j]);
+				
+				long [] lower = new long [] {range[0], range[1]};
+				lower[0] *= s[j];
+				lower[1] *= m;
+				long [] upper = new long [] {range[0], range[1]};
+				upper[0] *= s[j] + f[j];
+				upper[1] *= m;
+				
+				double _w = w[0];
+				_w       /= w[1];
+				
+				double _lower = lower[0];
+				_lower       /= lower[1];
+				
+				double _upper = upper[0];
+				_upper       /= upper[1];
+				if((_lower <= _w) && (_w < _upper))
+				{ 
+				    //offset += range * s[j];
+				    long [] y = new long[] {range[0], range[1]};
+				    y[0] *= s[j];
+				    y[1] *= m;
+				    
+				    offset[0] *= y[1];
+				    offset[1] *= y[1];
+				    y[0]      *= offset[1];
+				    offset[0] += y[0];
+				    
+				    //range  *= p[j];
+				    range[0] *= f[j];
+				    range[1] *= m;
+				    message[i]    = (byte)j;
+				    break;
+				}
+			}
+		}
+		
+		return message;
+	}
+	
+	public static ArrayList<Long> getPrimeFactors(long number)
+	{
+		long j = number;
+		
+		ArrayList <Long>list = new ArrayList<Long>();
+	    for(long i = 2; i < j; i++)
+	    {
+	    	    while(j % i == 0)
+	    	    {
+	    	    	    list.add(i);
+	    	    	    j /= i;
+	    	    }
+	    }
+	    if(j > 2)
+	    	    list.add(j);
+	    
+	    return list;
+	}
+	
+	public static byte [] getMessage(long [] v, int [] f, int m, int n)
+	{
+		int [] s = new int[f.length];
+		int current_sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += f[i];
+		}
+		
+		byte [] message = new byte[n];
+		
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		
+		for(int i = 0; i < n; i++)
+		{
+			long [] w = new long [] {v[0], v[1]};
+			if(offset[0] != 0)
+			{
+			    w[0] *= offset[1];
+			    w[0] -= offset[0] * w[1];
+			    w[1] *= offset[1];
+			    
+			}
+			double b = w[0];
+			b       /= w[1];
+			
+			System.out.println("W decimal fraction is " + b);
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				long [] lower = new long [] {range[0], range[1]};
+				lower[0]     *= s[j];
+				lower[1]     *= m;
+				
+				double a = lower[0];
+				a       /= lower[1];
+				
+		
+				long [] upper = new long [] {range[0], range[1]};
+				upper[0]     *= s[j] + f[j];
+				upper[1]     *= m;
+				
+				double c = upper[0];
+				c       /= upper[1];
+				
+				if((a <= b) && (b < c))
+				{ 
+					long [] addend = new long [] {range[0], range[1]};
+					addend[0] *= s[j];
+					addend[1] *= m;
+					
+					offset[0] *= addend[1];
+					offset[0] += addend[0] * offset[1];
+				    offset[1] *= addend[1];
+				    
+				    
+				    ArrayList <Long> numerator_list   = getPrimeFactors(offset[0]);
+				    if(numerator_list.size() > 0)
+				    {
+				        ArrayList <Long> denominator_list = getPrimeFactors(offset[1]);
+				        ArrayList <Long> multiple_list    = new ArrayList <Long>();
+				        for(int k = 0; k < numerator_list.size(); k++)
+				        {
+				    	        long factor = numerator_list.get(k);
+				    	        if(denominator_list.contains(factor))
+				    	        {
+				    	    	        int index = denominator_list.lastIndexOf(factor);
+				    	    	        denominator_list.remove(index);
+				    	    	        multiple_list.add(factor);
+				    	        }
+				        }
+				    
+				        int size = multiple_list.size();
+				        if(size > 0)
+				        {
+				    	        long common_factor = multiple_list.get(0);
+				    	        for(int k = 1; k < size; k++)
+				    	        {
+				    	    	        long factor = multiple_list.get(k);
+				    	    	        common_factor *= factor;
+				    	        }
+				    	        offset[0] /= common_factor;
+					    	    offset[1] /= common_factor;
+					    	    System.out.println("Factoring offset by " + common_factor);
+				        }  
+				    }
+				   
+				    double d = offset[0];
+				    d       /= offset[1];
+				    
+				    System.out.println("Offset decimal fraction is " + d);
+					
+				    range[0]  *= f[j];
+				    range[1]  *= m;
+				    
+				    numerator_list   = getPrimeFactors(range[0]);
+				    if(numerator_list.size() > 0)
+				    {
+				        ArrayList <Long> denominator_list = getPrimeFactors(range[1]);
+				        ArrayList <Long> multiple_list    = new ArrayList <Long>();
+				        for(int k = 0; k < numerator_list.size(); k++)
+				        {
+				    	        long factor = numerator_list.get(k);
+				    	        if(denominator_list.contains(factor))
+				    	        {
+				    	    	        int index = denominator_list.lastIndexOf(factor);
+				    	    	        denominator_list.remove(index);
+				    	    	        multiple_list.add(factor);
+				    	        }
+				        }
+				    
+				        int size = multiple_list.size();
+				        if(size > 0)
+				        {
+				    	        long common_factor = multiple_list.get(0);
+				    	        for(int k = 1; k < size; k++)
+				    	        {
+				    	    	        long factor = multiple_list.get(k);
+				    	    	        common_factor *= factor;
+				    	        }
+				    	        range[0] /= common_factor;
+					    	    range[1] /= common_factor;
+					    	    System.out.println("Factoring range by " + common_factor);
+				        }  
+				    }
+				    
+				    double e = range[0];
+				    e       /= range[1];
+				    System.out.println("Range decimal fraction is " + e);
+				    System.out.println();
+				   
+				    message[i]    = (byte)j;
+				    break;
+				}
+			}
+		}
+		
+		return message;
+	}
+	
 	/*
-	list.add(value);
-	list.add(f);
-	list.add(m);
-	list.add(n);
-	return list;
-	*/
+	public static byte [] getMessage(long [] q, int [] f, int m, int n)
+	{
+		
+		double v  = q[0];
+		v        /= q[1];
+		
+		
+		double [] p = new double[f.length];
+		for(int i = 0; i < f.length; i++)
+		{
+			p[i]  = f[i];
+			p[i] /= m;
+		}
+		
+		double [] s = new double[f.length];
+		double current_sum = 0.;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += p[i];
+		}
+		
+		int [] s2 = new int[f.length];
+		int current_sum2 = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s2[i]         = current_sum2;
+			current_sum2 += f[i];
+		}
+		
+		byte [] message = new byte[n];
+		double offset = 0.;
+		
+		long [] offset2 = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		
+		for(int i = 0; i < n; i++)
+		{
+			double w = v - offset;
+			long [] w2 = new long [] {q[0], q[1]};
+			if(offset2[0] != 0)
+			{
+			    w2[0] *= offset2[1];
+			    w2[0] -= offset2[0] * w2[1];
+			    w2[1] *= offset2[1];
+			    
+			}
+			double b = w2[0];
+			b       /= w2[1];
+			
+			System.out.println("W decimal fraction is " + w + ", quotient is " + b);
+			
+			for(int j = 0; j < p.length; j++)
+			{
+				long [] lower = new long [] {range[0], range[1]};
+				lower[0]     *= s2[j];
+				lower[1]     *= m;
+				
+				double a = lower[0];
+				a       /= lower[1];
+				
+		
+				long [] upper = new long [] {range[0], range[1]};
+				upper[0]     *= s2[j] + f[j];
+				upper[1]     *= m;
+				
+				double c = upper[0];
+				c       /= upper[1];
+				
+				if((a <= w) && (w < c))
+				{ 
+					
+					double addend = range[0] * s2[j];
+					addend /= range[1] * m;
+					
+					offset += addend;
+					
+
+					long [] addend2 = new long [] {range[0], range[1]};
+					addend2[0] *= s2[j];
+					addend2[1] *= m;
+					
+					offset2[0] *= addend2[1];
+					offset2[0] += addend2[0] * offset2[1];
+				    offset2[1] *= addend2[1];
+				    
+				    
+				    ArrayList <Long> numerator_list   = getPrimeFactors(offset2[0]);
+				    
+				    
+				    if(numerator_list.size() > 0)
+				    {
+				        ArrayList <Long> denominator_list = getPrimeFactors(offset2[1]);
+				        ArrayList <Long> multiple_list    = new ArrayList <Long>();
+				        for(int k = 0; k < numerator_list.size(); k++)
+				        {
+				    	        long factor = numerator_list.get(k);
+				    	        if(denominator_list.contains(factor))
+				    	        {
+				    	    	        int index = denominator_list.lastIndexOf(factor);
+				    	    	        denominator_list.remove(index);
+				    	    	        multiple_list.add(factor);
+				    	        }
+				        }
+				    
+				        int size = multiple_list.size();
+				        if(size > 0)
+				        {
+				    	        long common_factor = multiple_list.get(0);
+				    	        for(int k = 1; k < size; k++)
+				    	        {
+				    	    	        long factor = multiple_list.get(k);
+				    	    	        common_factor *= factor;
+				    	        }
+				    	        offset2[0] /= common_factor;
+					    	    offset2[1] /= common_factor;
+				        }  
+				    }
+				   
+				    double d = offset2[0];
+				    d       /= offset2[1];
+				    
+				    System.out.println("Offset decimal fraction is " + offset + ", offset quotient is " + d);
+					
+				    range[0]  *= f[j];
+				    range[1]  *= m;
+				    message[i]    = (byte)j;
+				    break;
+				}
+			}
+		}
+		
+		return message;
+	}
+	
 	
 	public static byte [] getMessage(long [] v, int [] f, int m, int n)
 	{
@@ -2293,19 +2558,21 @@ public class CodeMapper
 				upper[0] *= (s[j] + f[j]);
 				upper[1] *= m;
 				
-				System.out.println("P sum is " + (s[j] + f[j]));
-				System.out.println("Denominator is " + m);
+				//System.out.println("P sum is " + (s[j] + f[j]));
+				//System.out.println("Denominator is " + m);
 				System.out.println("Range is " + range[0] + " " + range[1]);
 				System.out.println("Upper is " + upper[0] + " " + upper[1]);
 				
 				if(w[1] != lower[1])
-				{
+				{ 
+					System.out.println("W 0 is " + w[0] + ", lower 0 is " + lower[0]);
+					System.out.println("W 1 is " + w[1] + ", lower 1 is " + lower[1]);
 					lower[0] *= w[1];
 					lower[1] *= w[1];
 					upper[0] *= w[1];
 					upper[1] *= w[1];
-					w[0]     *= lower[1];
-					w[1]     *= lower[1];
+					//w[0]     *= lower[1];
+					//w[1]     *= lower[1];
 				}
 				
 				
@@ -2320,6 +2587,7 @@ public class CodeMapper
 				
 				System.out.println("Lower is " + _lower + ", w is " + _w + ", upper is " + _upper);
 				System.out.println("Lower 0 is " + lower[0] + ", w 0 is " + w[0] + " upper 0 is " + upper[0]);
+				System.out.println("Lower 1 is " + lower[1] + ", w 1 is " + w[1] + " upper 1 is " + upper[1]);
 				//if((lower[0] <= w[0]) && (w[0] < upper[0]))
 				if((_lower <= _w) && (_w < _upper))
 				{ 
@@ -2348,6 +2616,7 @@ public class CodeMapper
 		
 		return message;
 	}
+	*/
 	
 	public static ArrayList getHuffmanList(byte[] string)
 	{
