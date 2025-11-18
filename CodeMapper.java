@@ -1917,7 +1917,7 @@ public class CodeMapper
 		return length;
 	}
 	
-	public static ArrayList getRangeQuotient(byte[] src, int [] f, int m)
+	public static long [] getRangeQuotient(byte[] src, int [] f, int m)
 	{
 	    int [] s = new int[f.length];
 		
@@ -2028,7 +2028,7 @@ public class CodeMapper
 			range[0]  *= offset_factor;
 			range[1]  *= offset_factor;
 			
-			System.out.println("Range and offset have different denominators.");
+			//System.out.println("Range and offset have different denominators.");
 		}
 		
 		long [] value = new long[2];
@@ -2036,13 +2036,7 @@ public class CodeMapper
   	    value[0]   /= 2;
         value[1]    = offset[1];
 		
-	  
-		ArrayList list = new ArrayList();
-		list.add(value);
-		list.add(f);
-		list.add(m);
-		list.add(n);
-		return list;
+		return value;
 	}
 	
 	public static BigInteger [] getRangeQuotient2(byte[] src, int [] f, int m)
@@ -2064,9 +2058,7 @@ public class CodeMapper
 		range[0] = BigInteger.ONE;
 		range[1] = BigInteger.ONE;
 		
-		
-		
-		
+	
 		int    n       = src.length;
 	    
 		for(int i = 0; i < n; i++)
@@ -2167,7 +2159,7 @@ public class CodeMapper
 			offset[0] = offset[0].multiply(range_factor);
 			offset[1] = offset[1].multiply(range_factor);
 			
-			System.out.println("Range and offset have different denominators.");
+			//System.out.println("Range and offset have different denominators.");
 		}
 		
 		
@@ -2179,10 +2171,6 @@ public class CodeMapper
 	  
 		return value;
 	}
-	
-	
-	
-	
 	
 	
 	public static ArrayList getRangeList(byte[] src, int [] f, int m)
@@ -2265,105 +2253,7 @@ public class CodeMapper
 		
 		return m;
 	}
-	
-	public static byte [] getMessage2(long [] q, int [] f, int m, int n)
-	{
-		
-		double v  = q[0];
-		v        /= q[1];
-		
-		
-		double [] p = new double[f.length];
-		for(int i = 0; i < f.length; i++)
-		{
-			p[i]  = f[i];
-			p[i] /= m;
-		}
-		
-		/*
-		double [] s = new double[f.length];
-		double current_sum = 0.;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]         = current_sum;
-			current_sum += p[i];
-		}
-		*/
-		int [] s = new int[f.length];
-		int current_sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]         = current_sum;
-			current_sum += f[i];
-		}
-		
-		byte [] message = new byte[n];
-		
-		
-		long [] offset = new long[] {0L, 1L};
-		long [] range  = new long[] {1L, 1L};
-		
-		//double offset = 0.;
-		//double range  = 1.;
-		
-		
-		for(int i = 0; i < n; i++)
-		{
-			//double w = v - offset;
-			long [] w = new long[] {q[0], q[1]};
-			long [] x = new long[] {offset[0], offset[1]};
-			
-			
-			w[0] *= x[1];
-			w[1] *= x[1];
-			x[0] *= w[1];
-			w[0] -= x[0];
-			
-			
-			for(int j = 0; j < p.length; j++)
-			{
-				//double lower = range * s[j];
-				//double upper = range * (s[j] + p[j]);
-				
-				long [] lower = new long [] {range[0], range[1]};
-				lower[0] *= s[j];
-				lower[1] *= m;
-				long [] upper = new long [] {range[0], range[1]};
-				upper[0] *= s[j] + f[j];
-				upper[1] *= m;
-				
-				double _w = w[0];
-				_w       /= w[1];
-				
-				double _lower = lower[0];
-				_lower       /= lower[1];
-				
-				double _upper = upper[0];
-				_upper       /= upper[1];
-				if((_lower <= _w) && (_w < _upper))
-				{ 
-				    //offset += range * s[j];
-				    long [] y = new long[] {range[0], range[1]};
-				    y[0] *= s[j];
-				    y[1] *= m;
-				    
-				    offset[0] *= y[1];
-				    offset[1] *= y[1];
-				    y[0]      *= offset[1];
-				    offset[0] += y[0];
-				    
-				    //range  *= p[j];
-				    range[0] *= f[j];
-				    range[1] *= m;
-				    message[i]    = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return message;
-	}
-	
+
 	public static ArrayList<Long> getPrimeFactors(long number)
 	{
 		long j = number;
@@ -2433,7 +2323,7 @@ public class CodeMapper
 			double b = w[0];
 			b       /= w[1];
 			
-			System.out.println("W decimal fraction is " + b);
+			//System.out.println("W decimal fraction is " + b);
 			
 			for(int j = 0; j < f.length; j++)
 			{
@@ -2490,14 +2380,14 @@ public class CodeMapper
 				    	        }
 				    	        offset[0] /= common_factor;
 					    	    offset[1] /= common_factor;
-					    	    System.out.println("Factoring offset by " + common_factor);
+					    	    //System.out.println("Factoring offset by " + common_factor);
 				        }  
 				    }
 				   
 				    double d = offset[0];
 				    d       /= offset[1];
 				    
-				    System.out.println("Offset decimal fraction is " + d);
+				    //System.out.println("Offset decimal fraction is " + d);
 					
 				    range[0]  *= f[j];
 				    range[1]  *= m;
@@ -2529,14 +2419,13 @@ public class CodeMapper
 				    	        }
 				    	        range[0] /= common_factor;
 					    	    range[1] /= common_factor;
-					    	    System.out.println("Factoring range by " + common_factor);
 				        }  
 				    }
 				    
 				    double e = range[0];
 				    e       /= range[1];
-				    System.out.println("Range decimal fraction is " + e);
-				    System.out.println();
+				    //System.out.println("Range decimal fraction is " + e);
+				    //System.out.println();
 				   
 				    message[i]    = (byte)j;
 				    break;
@@ -2547,104 +2436,84 @@ public class CodeMapper
 		return message;
 	}
 	
-	/*
-	public static byte [] getMessage(long [] q, int [] f, int m, int n)
+	public static byte [] getMessage(BigInteger [] v, int [] f, int m, int n)
 	{
-		
-		double v  = q[0];
-		v        /= q[1];
-		
-		
-		double [] p = new double[f.length];
-		for(int i = 0; i < f.length; i++)
-		{
-			p[i]  = f[i];
-			p[i] /= m;
-		}
-		
-		double [] s = new double[f.length];
-		double current_sum = 0.;
+		int [] s = new int[f.length];
+		int current_sum = 0;
 		for(int i = 0; i < f.length; i++)
 		{
 			s[i]         = current_sum;
-			current_sum += p[i];
-		}
-		
-		int [] s2 = new int[f.length];
-		int current_sum2 = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s2[i]         = current_sum2;
-			current_sum2 += f[i];
+			current_sum += f[i];
 		}
 		
 		byte [] message = new byte[n];
-		double offset = 0.;
 		
-		long [] offset2 = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
+		
+		BigInteger [] offset = new BigInteger[2];
+		offset[0] = BigInteger.ZERO;
+		offset[1] = BigInteger.ONE;
+		
+		BigInteger [] range  = new BigInteger[2];
+		range[0] = BigInteger.ONE;
+		range[1] = BigInteger.ONE;
 		
 		for(int i = 0; i < n; i++)
 		{
-			double w = v - offset;
-			long [] w2 = new long [] {q[0], q[1]};
-			if(offset2[0] != 0)
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
 			{
-			    w2[0] *= offset2[1];
-			    w2[0] -= offset2[0] * w2[1];
-			    w2[1] *= offset2[1];
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
 			    
 			}
-			double b = w2[0];
-			b       /= w2[1];
 			
-			System.out.println("W decimal fraction is " + w + ", quotient is " + b);
-			
-			for(int j = 0; j < p.length; j++)
-			{
-				long [] lower = new long [] {range[0], range[1]};
-				lower[0]     *= s2[j];
-				lower[1]     *= m;
-				
-				double a = lower[0];
-				a       /= lower[1];
-				
-		
-				long [] upper = new long [] {range[0], range[1]};
-				upper[0]     *= s2[j] + f[j];
-				upper[1]     *= m;
-				
-				double c = upper[0];
-				c       /= upper[1];
-				
-				if((a <= w) && (w < c))
-				{ 
-					
-					double addend = range[0] * s2[j];
-					addend /= range[1] * m;
-					
-					offset += addend;
-					
 
-					long [] addend2 = new long [] {range[0], range[1]};
-					addend2[0] *= s2[j];
-					addend2[1] *= m;
+		    BigDecimal b = new BigDecimal(w[0]);
+		    BigDecimal divisor   = new BigDecimal(w[1]);
+		    b = b.divide(divisor);
+			
+			//System.out.println("W decimal fraction is " + b);
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				lower[0] = lower[0].multiply(BigInteger.valueOf(s[j]));
+				lower[1] = lower[1].multiply(BigInteger.valueOf(m));
+				
+				BigDecimal a = new BigDecimal(lower[0]);
+			    divisor   = new BigDecimal(lower[1]);
+			    a = a.divide(divisor);
+				
+				BigInteger [] upper = new BigInteger [] {range[0], range[1]};
+				upper[0] = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				upper[1] = upper[1].multiply(BigInteger.valueOf(m));
+				
+				BigDecimal c = new BigDecimal(upper[0]);
+			    divisor   = new BigDecimal(upper[1]);
+			    c = c.divide(divisor);
+				
+				if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
+				{ 
+					BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					addend[0] = addend[0].multiply(BigInteger.valueOf(s[j]));
+					addend[1] = addend[1].multiply(BigInteger.valueOf(m));
 					
-					offset2[0] *= addend2[1];
-					offset2[0] += addend2[0] * offset2[1];
-				    offset2[1] *= addend2[1];
+					offset[0] = offset[0].multiply(addend[1]);
+					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+					
+				    offset[1] = offset[1].multiply(addend[1]);
 				    
 				    
-				    ArrayList <Long> numerator_list   = getPrimeFactors(offset2[0]);
-				    
-				    
+				    ArrayList <BigInteger> numerator_list   = getPrimeFactors(offset[0]);
 				    if(numerator_list.size() > 0)
 				    {
-				        ArrayList <Long> denominator_list = getPrimeFactors(offset2[1]);
-				        ArrayList <Long> multiple_list    = new ArrayList <Long>();
+				        ArrayList <BigInteger> denominator_list = getPrimeFactors(offset[1]);
+				        ArrayList <BigInteger> multiple_list    = new ArrayList <BigInteger>();
 				        for(int k = 0; k < numerator_list.size(); k++)
 				        {
-				    	        long factor = numerator_list.get(k);
+				    	        BigInteger factor = numerator_list.get(k);
 				    	        if(denominator_list.contains(factor))
 				    	        {
 				    	    	        int index = denominator_list.lastIndexOf(factor);
@@ -2656,118 +2525,64 @@ public class CodeMapper
 				        int size = multiple_list.size();
 				        if(size > 0)
 				        {
-				    	        long common_factor = multiple_list.get(0);
+				    	        BigInteger common_factor = multiple_list.get(0);
 				    	        for(int k = 1; k < size; k++)
 				    	        {
-				    	    	        long factor = multiple_list.get(k);
-				    	    	        common_factor *= factor;
+				    	    	        BigInteger factor = multiple_list.get(k);
+				    	    	        common_factor = common_factor.multiply(factor);
 				    	        }
-				    	        offset2[0] /= common_factor;
-					    	    offset2[1] /= common_factor;
+				    	        offset[0] = offset[0].divide(common_factor);
+					    	    offset[1] = offset[1].divide(common_factor);
 				        }  
 				    }
 				   
-				    double d = offset2[0];
-				    d       /= offset2[1];
+				    BigDecimal d = new BigDecimal(offset[0]);
+				    divisor   = new BigDecimal(offset[1]);
+				    d = d.divide(divisor);
 				    
-				    System.out.println("Offset decimal fraction is " + offset + ", offset quotient is " + d);
 					
-				    range[0]  *= f[j];
-				    range[1]  *= m;
-				    message[i]    = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return message;
-	}
-	
-	
-	public static byte [] getMessage(long [] v, int [] f, int m, int n)
-	{
-		int [] s = new int[f.length];
-		
-		int sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = sum;
-			sum += f[i];
-		}
-		
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		
-		byte [] message = new byte[n];
-		
-		for(int i = 0; i < n; i++)
-		{
-			long [] w = new long [] {v[0], v[1]};
-			w[0]     *= offset[1];
-			w[1]     *= offset[1];
-			w[0]     -= offset[0] * w[1];
-			
-			for(int j = 0; j < f.length; j++)
-			{
-				long [] lower = new long [] {range[0], range[1]};
-				lower[0] *= s[j];
-				lower[1] *= m;
-				
-				long [] upper = new long [] {range[0], range[1]};
-				upper[0] *= (s[j] + f[j]);
-				upper[1] *= m;
-				
-				//System.out.println("P sum is " + (s[j] + f[j]));
-				//System.out.println("Denominator is " + m);
-				System.out.println("Range is " + range[0] + " " + range[1]);
-				System.out.println("Upper is " + upper[0] + " " + upper[1]);
-				
-				if(w[1] != lower[1])
-				{ 
-					System.out.println("W 0 is " + w[0] + ", lower 0 is " + lower[0]);
-					System.out.println("W 1 is " + w[1] + ", lower 1 is " + lower[1]);
-					lower[0] *= w[1];
-					lower[1] *= w[1];
-					upper[0] *= w[1];
-					upper[1] *= w[1];
-					//w[0]     *= lower[1];
-					//w[1]     *= lower[1];
-				}
-				
-				
-				double _lower = lower[0];
-				_lower       /= lower[1];
-				
-				double _upper = upper[0];
-				_upper       /= upper[1];
-				
-				double _w     = w[0];
-				_w            /= w[1];
-				
-				System.out.println("Lower is " + _lower + ", w is " + _w + ", upper is " + _upper);
-				System.out.println("Lower 0 is " + lower[0] + ", w 0 is " + w[0] + " upper 0 is " + upper[0]);
-				System.out.println("Lower 1 is " + lower[1] + ", w 1 is " + w[1] + " upper 1 is " + upper[1]);
-				//if((lower[0] <= w[0]) && (w[0] < upper[0]))
-				if((_lower <= _w) && (_w < _upper))
-				{ 
-					System.out.println("Got here.");
-				    long [] addend = new long [] {range[0], range[1]};
-				    addend[0]     *= s[j];
-				    addend[1]     *= m;
-				    if(addend[1] != offset[1])
+				    range[0]  = range[0].multiply(BigInteger.valueOf(f[j]));
+				    range[1]  = range[1].multiply(BigInteger.valueOf(m));
+				    
+				    numerator_list   = getPrimeFactors(range[0]);
+				    if(numerator_list.size() > 0)
 				    {
-				    	    addend[0] *= offset[1];
-				    	    addend[1] *= offset[1];
-						offset[0] *= addend[1];
-						offset[1] *= addend[1];    
+				    	    ArrayList <BigInteger> denominator_list = getPrimeFactors(range[1]);
+				        ArrayList <BigInteger> multiple_list    = new ArrayList <BigInteger>();
+				        for(int k = 0; k < numerator_list.size(); k++)
+				        {
+				    	        BigInteger factor = numerator_list.get(k);
+				    	        if(denominator_list.contains(factor))
+				    	        {
+				    	    	        int index = denominator_list.lastIndexOf(factor);
+				    	    	        denominator_list.remove(index);
+				    	    	        multiple_list.add(factor);
+				    	        }
+				        }
+				    
+				        int size = multiple_list.size();
+				        if(size > 0)
+				        {
+				    	        BigInteger common_factor = multiple_list.get(0);
+				    	        for(int k = 1; k < size; k++)
+				    	        {
+				    	    	        BigInteger factor = multiple_list.get(k);
+				    	    	        common_factor = common_factor.multiply(factor);
+				    	        }
+				    	        range[0] = range[0].divide(common_factor);
+					    	    range[1] = range[1].divide(common_factor);
+					    	    //System.out.println("Factoring range by " + common_factor);
+				        }  
 				    }
-				    offset[0] += addend[0];
 				    
-				    range[0]      *= f[j];
-				    range[1]      *= m;
 				    
+				    //e       /= range[1];
+				    BigDecimal e = new BigDecimal(range[0]);
+				    divisor   = new BigDecimal(range[1]);
+				    e = e.divide(divisor);
+				    
+				   
 				    message[i]    = (byte)j;
-				    
 				    break;
 				}
 			}
@@ -2775,8 +2590,8 @@ public class CodeMapper
 		
 		return message;
 	}
-	*/
 	
+
 	public static ArrayList getHuffmanList(byte[] string)
 	{
 		ArrayList list = new ArrayList();

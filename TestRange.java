@@ -36,41 +36,27 @@ public class TestRange
 	    int [] freq = new int [] {1, 1};
 	    int    m    = 2;
 	   
-		ArrayList list1 = CodeMapper.getRangeList(message, freq, m);
-		
-		double v = (double)list1.get(0);
-		System.out.println("Location of message in probabilistic space returned by getRangeList() is " + v);
-	    System.out.println();
-		
-		byte [] decoded_message1 = CodeMapper.getMessageFromRangeList(list1);
-		System.out.println("Decoded message from getMessageFromRangeList:");
-	    for(int i = 0; i < decoded_message1.length; i++)
-	    	    System.out.print(decoded_message1[i] + " ");
-	    System.out.println();
-	    System.out.println();
-	    
-	    ArrayList list2 = CodeMapper.getRangeQuotient(message, freq, m);
-	    long [] value = (long [])list2.get(0);
+	    long [] value   = CodeMapper.getRangeQuotient(message, freq, m);;
 	    double location = value[0];
 	    location       /= value[1];
 	    System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + location);
-	    System.out.println();
+	    System.out.println("Decoded message from getMessage with longs:");
+	    byte [] decoded_message = CodeMapper.getMessage(value, freq, m, message.length);
+	    for(int i = 0; i < decoded_message.length; i++)
+    	      System.out.print(decoded_message[i] + " ");
+        System.out.println();
+        System.out.println();
 	    
 	    BigInteger [] value2 = CodeMapper.getRangeQuotient2(message, freq, m);
-	    
 	    BigDecimal location2 = new BigDecimal(value2[0]);
-	    
 	    BigDecimal divisor   = new BigDecimal(value2[1]);
-	    
 	    location2 = location2.divide(divisor);
-	    
 	    System.out.println("Location of message in probabilistic space returned by getRangeQuotient2 is " + location2);
-	    /*
-	    byte [] decoded_message = CodeMapper.getMessage(value, freq, m, message.length);
-	    System.out.println("Decoded message from getMessage:");
+	    
+	    decoded_message = CodeMapper.getMessage(value2, freq, m, message.length);
+	    System.out.println("Decoded message from getMessage with BigIntegers:");
 	    for(int i = 0; i < decoded_message.length; i++)
 	    	    System.out.print(decoded_message[i] + " ");
 	    System.out.println();
-	    */
 	}
 }
