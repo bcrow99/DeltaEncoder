@@ -14,7 +14,7 @@ public class TestRange
 	{
 		
 	    byte [] message = new byte[10];
-	    message[0]      = 0;
+	    message[0]      = 4;
 	    message[1]      = 1;
 	    message[2]      = 0;
 	    message[3]      = 1;
@@ -23,7 +23,7 @@ public class TestRange
 	    message[6]      = 0;
 	    message[7]      = 1;
 	    message[8]      = 1;
-	    message[9]      = 0;
+	    message[9]      = 12;
 	    
 	    /*
 	    message[10]     = 3;
@@ -84,12 +84,12 @@ public class TestRange
 	    	    }
 	    }
 	 
-	    long [] value   = CodeMapper.getRangeQuotient(message, f, sum);
+	    long [] value   = CodeMapper.getRangeQuotient(message, symbol_table, f, sum);
 	    double location = value[0];
 	    location       /= value[1];
 	    System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + location);
 	    
-	    byte [] decoded_message = CodeMapper.getMessage(value, f, sum, message.length);
+	    byte [] decoded_message = CodeMapper.getMessage(value, inverse_table, f, sum, message.length);
 	    System.out.println("Decoded message from getMessage with longs:");
 	    for(int i = 0; i < decoded_message.length; i++)
     	      System.out.print(decoded_message[i] + " ");

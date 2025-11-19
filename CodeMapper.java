@@ -2008,12 +2008,105 @@ public class CodeMapper
         if(gcd > 1)
 	    {
 	    	    //System.out.println("Factoring value.");
-	    	    range[0] /= gcd;
-	    	    range[1] /= gcd;
+	    	    value[0] /= gcd;
+	    	    value[1] /= gcd;
 	    }
 		
 		return value;
 	}
+	
+	public static long [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] f, int m)
+	{
+	    int [] s = new int[f.length];
+		
+		int sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = sum;
+			sum    += f[i];
+		}
+		
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		int    n       = src.length;
+	    
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    
+	    	    j = table.get(j);
+	    	   
+	    	    long [] addend = new long[] {range[0], range[1]};
+	    	    addend[0]     *= s[j];
+	    	    addend[1]     *= m;
+	    	    long gcd       = getGCD(offset[0], offset[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	    	    //System.out.println("Factoring addend.");
+	    	    	    addend[0] /= gcd;
+	    	    	    addend[1] /= gcd;
+	    	    }
+	    	    
+	    	    
+	    	    offset[0] *= addend[1];
+	    	    addend[0] *= offset[1];
+	    	    offset[1] *= addend[1];
+	    	    offset[0] += addend[0];
+	    	    
+	    	    gcd = getGCD(offset[0], offset[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	    	    //System.out.println("Factoring offset.");
+	    	    	    offset[0] /= gcd;
+	    	    	    offset[1] /= gcd;
+	    	    }
+	    	    
+	    	    range[0] *= f[j];
+	    	    range[1] *= m;
+	    	    
+	    	    gcd = getGCD(range[0], range[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	    	    //System.out.println("Factoring range.");
+	    	    	    range[0] /= gcd;
+	    	    	    range[1] /= gcd;
+	    	    }
+	    }
+	
+		// We do this so we can add offset and range numerators
+		// to produce value.
+		if(offset[1] != range[1])
+		{
+			long range_factor = range[1];
+			long offset_factor = offset[1];
+			
+			offset[0] *= range_factor;
+			offset[1] *= range_factor;
+			
+			range[0]  *= offset_factor;
+			range[1]  *= offset_factor;
+			
+			//System.out.println("Range and offset have different denominators.");
+		}
+		
+		long [] value = new long[2];
+        value[0]    = 2 * offset[0] + range[0]; 
+  	    value[0]   /= 2;
+        value[1]    = offset[1];
+        
+        long gcd = getGCD(value[0], value[1]);
+        if(gcd > 1)
+	    {
+	    	    //System.out.println("Factoring value.");
+	    	    value[0] /= gcd;
+	    	    value[1] /= gcd;
+	    }
+		
+		return value;
+	}
+	
 	
 	public static BigInteger [] getRangeQuotient2(byte[] src, int [] f, int m)
 	{
@@ -2087,7 +2180,7 @@ public class CodeMapper
 	    	    }
 	    }
 	
-		// We do this so we can add offset and range numerators to produce v.
+		// Make sure range and offset have same denominator.
 		if(offset[1].compareTo(range[1]) != 0)
 		{
 			BigInteger range_factor = range[1];
@@ -2100,6 +2193,7 @@ public class CodeMapper
 			offset[1] = offset[1].multiply(range_factor);	
 		}
 		
+
 		
         BigInteger[] value = new BigInteger[2];
         value[0]    = offset[0].multiply(BigInteger.TWO);
@@ -2198,32 +2292,6 @@ public class CodeMapper
 		
 		return m;
 	}
-
-	/*
-	public static ArrayList<Long> getPrimeFactors(long n)
-	{
-		long j = n;
-		
-		ArrayList <Long>list = new ArrayList<Long>();
-	    for(long i = 2; i < j; i++)
-	    {   
-	    	    //System.out.println("i  is " + i);
-	    	    while(j % i == 0)
-	    	    {
-	    	    	    list.add(i);
-	    	    	    j /= i;
-	    	    	    
-	    	    	    if(j == i || j < i)
-	    	    	    	    break;
-	    	    	    //System.out.println("j is " + j);
-	    	    }
-	    }
-	    if(j > 2)
-	    	    list.add(j);
-	    
-	    return list;
-	}
-	*/
 	
 	public static ArrayList<Long> getPrimeFactors(long n)
 	{
@@ -2383,6 +2451,131 @@ public class CodeMapper
 				w[1] /= gcd;
 			}
 			
+			BigDecimal b = BigDecimal.valueOf(w[0]);
+			b            = b.divide(BigDecimal.valueOf(w[1]));
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				long [] lower = new long [] {range[0], range[1]};
+				lower[0]     *= s[j];
+				lower[1]     *= m;
+				
+				gcd = getGCD(lower[0], lower[1]);
+				if(gcd > 1)
+				{
+					//System.out.println("Factoring lower bound.");
+					lower[0] /= gcd;
+					lower[1] /= gcd;
+				}
+				
+				BigDecimal a = BigDecimal.valueOf(lower[0]);
+				a            = a.divide(BigDecimal.valueOf(lower[1]));
+		
+				long [] upper = new long [] {range[0], range[1]};
+				upper[0]     *= s[j] + f[j];
+				upper[1]     *= m;
+				
+				gcd = getGCD(upper[0], upper[1]);
+				if(gcd > 1)
+				{
+					//System.out.println("Factoring lower bound.");
+					upper[0] /= gcd;
+					upper[1] /= gcd;
+				}
+			
+				BigDecimal c = BigDecimal.valueOf(upper[0]);
+				c            = c.divide(BigDecimal.valueOf(upper[1]));
+				
+				if((b.compareTo(a) >= 0) && (b.compareTo(c) < 0))
+				{ 
+					long [] addend = new long [] {range[0], range[1]};
+					addend[0] *= s[j];
+					addend[1] *= m;
+					
+					gcd = getGCD(addend[0], addend[1]);
+					if(gcd > 1)
+					{
+						//System.out.println("Factoring addend.");
+						addend[0] /= gcd;
+						addend[1] /= gcd;
+					}
+					
+					offset[0] *= addend[1];
+					offset[0] += addend[0] * offset[1];
+				    offset[1] *= addend[1];
+				    
+				    gcd = getGCD(offset[0], offset[1]);
+				    if(gcd > 1)
+					{
+						//System.out.println("Factoring offset.");
+						offset[0] /= gcd;
+						offset[1] /= gcd;
+					}
+				   
+				    double d = offset[0];
+				    d       /= offset[1];
+				    
+				    //System.out.println("Offset decimal fraction is " + d);
+					
+				    range[0]  *= f[j];
+				    range[1]  *= m;
+				    gcd = getGCD(range[0], range[1]);
+				    if(gcd > 1)
+					{
+						//System.out.println("Factoring offset.");
+						range[0] /= gcd;
+						range[1] /= gcd;
+					}
+				    
+				    double e = range[0];
+				    e       /= range[1];
+				    //System.out.println("Range decimal fraction is " + e);
+				    //System.out.println();
+				    
+				   
+				    
+				    message[i]    = (byte)j;
+				    break;
+				}
+			}
+		}
+		
+		return message;
+	}
+	
+	public static byte [] getMessage(long [] v, Hashtable <Integer, Integer> table, int [] f, int m, int n)
+	{
+		int [] s = new int[f.length];
+		int current_sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]         = current_sum;
+			current_sum += f[i];
+		}
+		
+		byte [] message = new byte[n];
+		
+		long [] offset = new long [] {0L, 1L};
+		long [] range  = new long [] {1L, 1L};
+		
+		for(int i = 0; i < n; i++)
+		{
+			long [] w = new long [] {v[0], v[1]};
+			if(offset[0] != 0)
+			{
+			    w[0] *= offset[1];
+			    w[0] -= offset[0] * w[1];
+			    w[1] *= offset[1];
+			    
+			}
+			long gcd = getGCD(w[0], w[1]);
+			
+			if(gcd > 1)
+			{
+				w[0] /= gcd;
+				w[1] /= gcd;
+			}
+			
 			/*
 			double b = w[0];
 			b       /= w[1];
@@ -2473,6 +2666,8 @@ public class CodeMapper
 				    e       /= range[1];
 				    //System.out.println("Range decimal fraction is " + e);
 				    //System.out.println();
+				    j = table.get(j);
+				    //System.out.println("Message " + i + " is " + j);
 				    System.out.println("Message " + i + " is " + j);
 				    message[i]    = (byte)j;
 				    break;
@@ -2482,6 +2677,8 @@ public class CodeMapper
 		
 		return message;
 	}
+	
+	
 	
 	public static byte [] getMessage(BigInteger [] v, int [] f, int m, int n)
 	{
