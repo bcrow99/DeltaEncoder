@@ -492,14 +492,7 @@ public class CodeMapper
 					System.out.println("No match for prefix-free code at byte " + current_byte);
 			}
 		}
-        
-		// Looks like a bug.
-		/*
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = (byte) (buffer[i] - 128);
-		*/
-		
-		// Probably what we want to do.
+      
 		for(int i = 0; i < dst.length; i++)
 			dst[i] = (byte) (buffer[i]);
 		return number_unpacked;
@@ -1917,198 +1910,7 @@ public class CodeMapper
 		return length;
 	}
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	public static long [] getRangeQuotient(byte[] src, int [] f, int m)
-	{
-	    int [] s = new int[f.length];
-		
-		int sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = sum;
-			sum    += f[i];
-		}
-		
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		int    n       = src.length;
-	    
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	   
-	    	    long [] addend = new long[] {range[0], range[1]};
-	    	    addend[0]     *= s[j];
-	    	    addend[1]     *= m;
-	    	    long gcd       = getGCD(offset[0], offset[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring addend.");
-	    	    	    addend[0] /= gcd;
-	    	    	    addend[1] /= gcd;
-	    	    }
-	    	    
-	    	    
-	    	    offset[0] *= addend[1];
-	    	    addend[0] *= offset[1];
-	    	    offset[1] *= addend[1];
-	    	    offset[0] += addend[0];
-	    	    
-	    	    gcd = getGCD(offset[0], offset[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring offset.");
-	    	    	    offset[0] /= gcd;
-	    	    	    offset[1] /= gcd;
-	    	    }
-	    	    
-	    	    range[0] *= f[j];
-	    	    range[1] *= m;
-	    	    
-	    	    gcd = getGCD(range[0], range[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring range.");
-	    	    	    range[0] /= gcd;
-	    	    	    range[1] /= gcd;
-	    	    }
-	    }
-	
-		// We do this so we can add offset and range numerators
-		// to produce value.
-		if(offset[1] != range[1])
-		{
-			long range_factor = range[1];
-			long offset_factor = offset[1];
-			
-			offset[0] *= range_factor;
-			offset[1] *= range_factor;
-			
-			range[0]  *= offset_factor;
-			range[1]  *= offset_factor;
-			
-			//System.out.println("Range and offset have different denominators.");
-		}
-		
-		long [] value = new long[2];
-        value[0]    = 2 * offset[0] + range[0]; 
-  	    value[0]   /= 2;
-        value[1]    = offset[1];
-        
-        long gcd = getGCD(value[0], value[1]);
-        if(gcd > 1)
-	    {
-	    	    //System.out.println("Factoring value.");
-	    	    value[0] /= gcd;
-	    	    value[1] /= gcd;
-	    }
-		
-		return value;
-	}
-	
-	public static long [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] f, int m)
-	{
-	    int [] s = new int[f.length];
-		
-		int sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = sum;
-			sum    += f[i];
-		}
-		
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		int    n       = src.length;
-	    
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    
-	    	    j = table.get(j);
-	    	   
-	    	    long [] addend = new long[] {range[0], range[1]};
-	    	    addend[0]     *= s[j];
-	    	    addend[1]     *= m;
-	    	    long gcd       = getGCD(offset[0], offset[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring addend.");
-	    	    	    addend[0] /= gcd;
-	    	    	    addend[1] /= gcd;
-	    	    }
-	    	    
-	    	    
-	    	    offset[0] *= addend[1];
-	    	    addend[0] *= offset[1];
-	    	    offset[1] *= addend[1];
-	    	    offset[0] += addend[0];
-	    	    
-	    	    gcd = getGCD(offset[0], offset[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring offset.");
-	    	    	    offset[0] /= gcd;
-	    	    	    offset[1] /= gcd;
-	    	    }
-	    	    
-	    	    range[0] *= f[j];
-	    	    range[1] *= m;
-	    	    
-	    	    gcd = getGCD(range[0], range[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    //System.out.println("Factoring range.");
-	    	    	    range[0] /= gcd;
-	    	    	    range[1] /= gcd;
-	    	    }
-	    }
-	
-		// We do this so we can add offset and range numerators
-		// to produce value.
-		if(offset[1] != range[1])
-		{
-			long range_factor = range[1];
-			long offset_factor = offset[1];
-			
-			offset[0] *= range_factor;
-			offset[1] *= range_factor;
-			
-			range[0]  *= offset_factor;
-			range[1]  *= offset_factor;
-			
-			//System.out.println("Range and offset have different denominators.");
-		}
-		
-		long [] value = new long[2];
-        value[0]    = 2 * offset[0] + range[0]; 
-  	    value[0]   /= 2;
-        value[1]    = offset[1];
-        
-        long gcd = getGCD(value[0], value[1]);
-        if(gcd > 1)
-	    {
-	    	    //System.out.println("Factoring value.");
-	    	    value[0] /= gcd;
-	    	    value[1] /= gcd;
-	    }
-		
-		return value;
-	}
-	
-	
-	public static BigInteger [] getRangeQuotient2(byte[] src, int [] f, int m)
+	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] f, int m)
 	{
 	    int [] s = new int[f.length];
 		
@@ -2135,6 +1937,7 @@ public class CodeMapper
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
+	    	    j = table.get(j);
 	    	   
 	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
 	    	    
@@ -2193,8 +1996,6 @@ public class CodeMapper
 			offset[1] = offset[1].multiply(range_factor);	
 		}
 		
-
-		
         BigInteger[] value = new BigInteger[2];
         value[0]    = offset[0].multiply(BigInteger.TWO);
         value[0]    = value[0].add(range[0]); 
@@ -2208,112 +2009,10 @@ public class CodeMapper
 	    	    value[0] = value[0].divide(gcd);
 	    	    value[1] = value[1].divide(gcd);
 	    }
-	  
+	 
 		return value;
 	}
 
-	public static ArrayList getRangeList(byte[] src, int [] f, int m)
-	{
-		double [] p = new double[f.length];
-		for(int i = 0; i < f.length; i++)
-		{
-			p[i]  = f[i];
-			p[i] /= m;
-		}
-		
-		double [] s = new double[f.length];
-		double current_sum = 0.;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]         = current_sum;
-			current_sum += p[i];
-		}
-		
-		double offset = 0.;
-		double range  = 1.;
-		int    n      = src.length;
-	    for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	   
-	    	    double addend = range * s[j];
-	    	    offset       += addend;
-	    	    range        *= p[j];
-	    }
-	    System.out.println();
-	    
-	   
-		ArrayList list = new ArrayList();
-		
-		double intermediate_value = (2 * offset + range) / 2;
-		list.add(intermediate_value);
-		list.add(n);
-		list.add(p);
-		return list;
-	}
-
-	public static byte [] getMessageFromRangeList(ArrayList list)
-	{
-		double  v     = (double)list.get(0);
-		int     n     = (int)list.get(1);
-		double [] p   = (double [])list.get(2);
-		double [] sum = new double[p.length];
-		
-		double current_sum = 0;
-		for(int i = 1; i < p.length; i++)
-		{
-			current_sum += p[i - 1];
-			sum[i]       = current_sum;
-		}
-		
-		double offset = 0.;
-		double range  = 1.;
-		
-		byte [] m = new byte[n];
-		for(int i = 0; i < n; i++)
-		{
-			double w = v - offset;
-			for(int j = 0; j < p.length; j++)
-			{
-				double lower = range * sum[j];
-				double upper = range * (sum[j] + p[j]);
-				
-				if((lower <= w) && (w < upper))
-				{ 
-				    offset += range * sum[j];
-				    range  *= p[j];
-				    m[i]    = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return m;
-	}
-	
-	public static ArrayList<Long> getPrimeFactors(long n)
-	{
-		double root = Math.sqrt(n);
-		
-		long j = n;
-		long k = (long)root;
-		
-		ArrayList <Long> list = new ArrayList<Long>();
-	    for(long i = 2; i < j && i <= k; i++)
-	    {   
-	    	    while(j % i == 0)
-	    	    {
-	    	    	    list.add(i);
-	    	    	    j /= i;
-	    	    }
-	    }
-	    if(j > 2)
-	    	    list.add(j);
-	    
-	    return list;
-	}
 	
 	public static long getGCD(long a, long b)
 	{
@@ -2394,7 +2093,94 @@ public class CodeMapper
 		return divisor;
 	}
 	
-	/*
+	public static long pow(long base, long exp)
+	{
+		long a = base;
+		for(int i = 2; i <= exp; i++)
+		    a *= base;
+		
+		return a;
+	}
+	
+	public static long pow(long base, long exp, long mod)
+	{
+		long a = base;
+		for(int i = 2; i <= exp; i++)
+		    a *= base;
+		a %= mod;
+		return a;
+	}
+	
+	public static boolean isProbablePrime(long n)
+	{
+		long b = 2;
+		long d = n - 1;
+		long s = 0;
+		while((d & 1) == 0)
+		{
+			s++;
+			d >>= 1;
+		}
+		
+		long x = pow(b, d, n);
+		if(x == 1 || x == n - 1)
+			return true;
+		
+		for(int i = 1; i < s; i++)
+		{
+			x = (x * x) % n;
+			if(x == 1)
+				return false;
+			else if(x == n - 1)	
+				return true;
+		}
+	
+		return false;
+	}
+	
+	public static long nextPrime(long n)
+	{
+		long m = 0;
+		if(n % 2 == 0)
+			m = n + 1;
+		else
+			m = n + 2;
+		boolean foundPrime = false;
+		while(!foundPrime)
+		{
+		    boolean isPrime = isProbablePrime(m);
+		    if(isPrime)
+		    	    return m;
+		    else
+		    	    m += 2;
+		}
+		return m;
+	}
+	
+	
+	public static ArrayList<Long> getPrimeFactors(long n)
+	{
+		double root = Math.sqrt(n);
+		
+		long j = n;
+		long k = (long)root;
+		
+		ArrayList <Long> list = new ArrayList<Long>();
+	    //for(long i = 2; i < j && i <= k; i++)
+		for(long i = 2; i < j && i <= k; i = nextPrime(i))
+	    {   
+	    	    while(j % i == 0)
+	    	    {
+	    	    	    list.add(i);
+	    	    	    j /= i;
+	    	    }
+	    }
+	    if(j > 2)
+	    	    list.add(j);
+	    
+	    return list;
+	}
+	
 	public static ArrayList<BigInteger> getPrimeFactors(BigInteger number)
 	{
 		BigInteger j = number;
@@ -2416,9 +2202,8 @@ public class CodeMapper
 	    
 	    return list;
 	}
-	*/
 	
-	public static byte [] getMessage(long [] v, int [] f, int m, int n)
+	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] f, int m, int n)
 	{
 		int [] s = new int[f.length];
 		int current_sum = 0;
@@ -2429,269 +2214,6 @@ public class CodeMapper
 		}
 		
 		byte [] message = new byte[n];
-		
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		
-		for(int i = 0; i < n; i++)
-		{
-			long [] w = new long [] {v[0], v[1]};
-			if(offset[0] != 0)
-			{
-			    w[0] *= offset[1];
-			    w[0] -= offset[0] * w[1];
-			    w[1] *= offset[1];
-			    
-			}
-			long gcd = getGCD(w[0], w[1]);
-			
-			if(gcd > 1)
-			{
-				w[0] /= gcd;
-				w[1] /= gcd;
-			}
-			
-			BigDecimal b = BigDecimal.valueOf(w[0]);
-			b            = b.divide(BigDecimal.valueOf(w[1]));
-			
-			for(int j = 0; j < f.length; j++)
-			{
-				long [] lower = new long [] {range[0], range[1]};
-				lower[0]     *= s[j];
-				lower[1]     *= m;
-				
-				gcd = getGCD(lower[0], lower[1]);
-				if(gcd > 1)
-				{
-					//System.out.println("Factoring lower bound.");
-					lower[0] /= gcd;
-					lower[1] /= gcd;
-				}
-				
-				BigDecimal a = BigDecimal.valueOf(lower[0]);
-				a            = a.divide(BigDecimal.valueOf(lower[1]));
-		
-				long [] upper = new long [] {range[0], range[1]};
-				upper[0]     *= s[j] + f[j];
-				upper[1]     *= m;
-				
-				gcd = getGCD(upper[0], upper[1]);
-				if(gcd > 1)
-				{
-					//System.out.println("Factoring lower bound.");
-					upper[0] /= gcd;
-					upper[1] /= gcd;
-				}
-			
-				BigDecimal c = BigDecimal.valueOf(upper[0]);
-				c            = c.divide(BigDecimal.valueOf(upper[1]));
-				
-				if((b.compareTo(a) >= 0) && (b.compareTo(c) < 0))
-				{ 
-					long [] addend = new long [] {range[0], range[1]};
-					addend[0] *= s[j];
-					addend[1] *= m;
-					
-					gcd = getGCD(addend[0], addend[1]);
-					if(gcd > 1)
-					{
-						//System.out.println("Factoring addend.");
-						addend[0] /= gcd;
-						addend[1] /= gcd;
-					}
-					
-					offset[0] *= addend[1];
-					offset[0] += addend[0] * offset[1];
-				    offset[1] *= addend[1];
-				    
-				    gcd = getGCD(offset[0], offset[1]);
-				    if(gcd > 1)
-					{
-						//System.out.println("Factoring offset.");
-						offset[0] /= gcd;
-						offset[1] /= gcd;
-					}
-				   
-				    double d = offset[0];
-				    d       /= offset[1];
-				    
-				    //System.out.println("Offset decimal fraction is " + d);
-					
-				    range[0]  *= f[j];
-				    range[1]  *= m;
-				    gcd = getGCD(range[0], range[1]);
-				    if(gcd > 1)
-					{
-						//System.out.println("Factoring offset.");
-						range[0] /= gcd;
-						range[1] /= gcd;
-					}
-				    
-				    double e = range[0];
-				    e       /= range[1];
-				    //System.out.println("Range decimal fraction is " + e);
-				    //System.out.println();
-				    
-				   
-				    
-				    message[i]    = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return message;
-	}
-	
-	public static byte [] getMessage(long [] v, Hashtable <Integer, Integer> table, int [] f, int m, int n)
-	{
-		int [] s = new int[f.length];
-		int current_sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]         = current_sum;
-			current_sum += f[i];
-		}
-		
-		byte [] message = new byte[n];
-		
-		long [] offset = new long [] {0L, 1L};
-		long [] range  = new long [] {1L, 1L};
-		
-		for(int i = 0; i < n; i++)
-		{
-			long [] w = new long [] {v[0], v[1]};
-			if(offset[0] != 0)
-			{
-			    w[0] *= offset[1];
-			    w[0] -= offset[0] * w[1];
-			    w[1] *= offset[1];
-			    
-			}
-			long gcd = getGCD(w[0], w[1]);
-			
-			if(gcd > 1)
-			{
-				w[0] /= gcd;
-				w[1] /= gcd;
-			}
-			
-			/*
-			double b = w[0];
-			b       /= w[1];
-			*/
-			BigDecimal b = BigDecimal.valueOf(w[0]);
-			b            = b.divide(BigDecimal.valueOf(w[1]));
-			
-			for(int j = 0; j < f.length; j++)
-			{
-				long [] lower = new long [] {range[0], range[1]};
-				lower[0]     *= s[j];
-				lower[1]     *= m;
-				
-				gcd = getGCD(lower[0], lower[1]);
-				if(gcd > 1)
-				{
-					//System.out.println("Factoring lower bound.");
-					lower[0] /= gcd;
-					lower[1] /= gcd;
-				}
-				
-				/*
-				double a = lower[0];
-				a       /= lower[1];
-				*/
-				BigDecimal a = BigDecimal.valueOf(lower[0]);
-				a            = a.divide(BigDecimal.valueOf(lower[1]));
-		
-				long [] upper = new long [] {range[0], range[1]};
-				upper[0]     *= s[j] + f[j];
-				upper[1]     *= m;
-				
-				gcd = getGCD(upper[0], upper[1]);
-				if(gcd > 1)
-				{
-					//System.out.println("Factoring lower bound.");
-					upper[0] /= gcd;
-					upper[1] /= gcd;
-				}
-			
-				//double c = upper[0];
-				//c       /= upper[1];
-				BigDecimal c = BigDecimal.valueOf(upper[0]);
-				c            = c.divide(BigDecimal.valueOf(upper[1]));
-				
-				if((b.compareTo(a) >= 0) && (b.compareTo(c) < 0))
-				{ 
-					long [] addend = new long [] {range[0], range[1]};
-					addend[0] *= s[j];
-					addend[1] *= m;
-					
-					gcd = getGCD(addend[0], addend[1]);
-					if(gcd > 1)
-					{
-						//System.out.println("Factoring addend.");
-						addend[0] /= gcd;
-						addend[1] /= gcd;
-					}
-					
-					offset[0] *= addend[1];
-					offset[0] += addend[0] * offset[1];
-				    offset[1] *= addend[1];
-				    
-				    gcd = getGCD(offset[0], offset[1]);
-				    if(gcd > 1)
-					{
-						//System.out.println("Factoring offset.");
-						offset[0] /= gcd;
-						offset[1] /= gcd;
-					}
-				   
-				    double d = offset[0];
-				    d       /= offset[1];
-				    
-				    //System.out.println("Offset decimal fraction is " + d);
-					
-				    range[0]  *= f[j];
-				    range[1]  *= m;
-				    gcd = getGCD(range[0], range[1]);
-				    if(gcd > 1)
-					{
-						//System.out.println("Factoring offset.");
-						range[0] /= gcd;
-						range[1] /= gcd;
-					}
-				    
-				    double e = range[0];
-				    e       /= range[1];
-				    //System.out.println("Range decimal fraction is " + e);
-				    //System.out.println();
-				    j = table.get(j);
-				    //System.out.println("Message " + i + " is " + j);
-				    System.out.println("Message " + i + " is " + j);
-				    message[i]    = (byte)j;
-				    break;
-				}
-			}
-		}
-		
-		return message;
-	}
-	
-	
-	
-	public static byte [] getMessage(BigInteger [] v, int [] f, int m, int n)
-	{
-		int [] s = new int[f.length];
-		int current_sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]         = current_sum;
-			current_sum += f[i];
-		}
-		
-		byte [] message = new byte[n];
-		
 		
 		BigInteger [] offset = new BigInteger[2];
 		offset[0] = BigInteger.ZERO;
@@ -2783,8 +2305,8 @@ public class CodeMapper
 				    BigDecimal e = new BigDecimal(range[0]);
 				    divisor   = new BigDecimal(range[1]);
 				    e = e.divide(divisor);
-				    
 				   
+				    j = table.get(j);
 				    message[i]    = (byte)j;
 				    break;
 				}
