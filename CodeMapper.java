@@ -1996,21 +1996,46 @@ public class CodeMapper
 			offset[1] = offset[1].multiply(range_factor);	
 		}
 		
+		/*
         BigInteger[] value = new BigInteger[2];
         value[0]    = offset[0].multiply(BigInteger.TWO);
         value[0]    = value[0].add(range[0]); 
   	    value[0]    = value[0].divide(BigInteger.TWO);
         value[1]    = offset[1];
-        
-        BigInteger gcd = value[0].gcd(value[1]);
+        */
+		
+		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		BigInteger gcd = value[0].gcd(value[1]);
         if(gcd.compareTo(BigInteger.ONE) == 1)
 	    {
-	    	    //System.out.println("Factoring value.");
+	    	    System.out.println("Factoring value 1.");
 	    	    value[0] = value[0].divide(gcd);
 	    	    value[1] = value[1].divide(gcd);
+	    	    return value;
 	    }
-	 
-		return value;
+        else
+        {
+    		    boolean foundDivisor = false;
+    		
+    		    for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+    		    {
+    		    	    value[0] = value[0].add(BigInteger.ONE);
+    		    	    gcd      = value[0].gcd(value[1]);
+    		        if(gcd.compareTo(BigInteger.ONE) == 1)
+    		    	    {
+    		    	        value[0] = value[0].divide(gcd);
+    		    	        value[1] = value[1].divide(gcd);
+    		    	        System.out.println("Factoring value 2.");
+    		    	        foundDivisor = true;
+    		    	        break;
+    		        }    
+    		    	    if(foundDivisor)
+    		    	        return value;
+    		    	    else
+    		    	    	    return offset;
+    		    }
+    		}
+        return offset;
 	}
 
 	
