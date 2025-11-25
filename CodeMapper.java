@@ -2150,6 +2150,7 @@ public class CodeMapper
 		
 	}
 	
+	// Adaptive probability.
 	public static BigInteger [] getRangeQuotient3(byte[] src, Hashtable <Integer, Integer> table, int [] f, int m)
 	{
 	    int [] s = new int[f.length];
@@ -2450,50 +2451,37 @@ public class CodeMapper
 				upper[0] = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
 				upper[1] = upper[1].multiply(BigInteger.valueOf(m));
 				
-				/*
-				BigDecimal b = new BigDecimal(w[0]);
-			    BigDecimal divisor   = new BigDecimal(w[1]);
-			    b = b.divide(divisor);
 				
-				BigDecimal a = new BigDecimal(lower[0]);
-			    divisor   = new BigDecimal(lower[1]);
-			    a = a.divide(divisor);
+				BigInteger [] a = new BigInteger [] {lower[0], lower[1]};
+    	            BigInteger [] b = new BigInteger [] {w[0], w[1]};
+    	            BigInteger [] c = new BigInteger [] {upper[0], upper[1]};
 				
-				BigDecimal c = new BigDecimal(upper[0]);
-			    divisor   = new BigDecimal(upper[1]);
-			    c = c.divide(divisor);
-			    */
-
-	    	        BigInteger w_factor     = w[1];
-	    	        BigInteger lower_factor = lower[1];
-	    	        BigInteger upper_factor = upper[1];
-	    	        
-	    	        BigInteger [] a = new BigInteger [] {lower[0], lower[1]};
-	    	        BigInteger [] b = new BigInteger [] {w[0], w[1]};
-	    	        BigInteger [] c = new BigInteger [] {upper[0], upper[1]};
-	    	        
-	    	        if(w_factor.compareTo(lower_factor) != 0)
-	    	        {
-	    	        	    a[0] = a[0].multiply(w_factor);
-	    	        	    a[1] = a[1].multiply(w_factor);
-	    	        	    
-	    	        	    b[0] = a[0].multiply(lower_factor);
-	    	        	    b[1] = a[1].multiply(lower_factor);
-	    	        	    
-	    	        }
-
-	        	    if(b[1].compareTo(c[1]) != 0)
-	        	    {
-	        	    	    a[0] = a[0].multiply(c[1]);
-    	        	        a[1] = a[1].multiply(c[1]);
-    	        	    
-    	        	        b[0] = b[0].multiply(c[1]);
-    	        	        b[1] = b[1].multiply(c[1]);
-    	        	    
-    	        	        c[0] = c[0].multiply(b[1]);
-    	        	        c[1] = c[1].multiply(b[1]);
-	        	    }
-	        	    
+				
+				// We could check if the denominators are divisible.
+				if(a[1].compareTo(c[1]) != 0)
+				{
+					BigInteger lower_factor = a[1];
+					BigInteger upper_factor = c[1];
+					
+					a[0] = a[0].multiply(upper_factor);
+					a[1] = a[1].multiply(upper_factor);
+					c[0] = c[0].multiply(upper_factor);
+					c[1] = c[1].multiply(upper_factor);
+				}
+				
+				if(a[1].compareTo(b[1]) != 0)
+				{
+					BigInteger bound_factor = a[1];
+					BigInteger value_factor = b[1];
+					
+					a[0] = a[0].multiply(value_factor);
+					a[1] = a[1].multiply(value_factor);
+					c[0] = c[0].multiply(value_factor);
+					c[1] = c[1].multiply(value_factor);
+					
+					b[0] = b[0].multiply(bound_factor);
+					b[1] = b[1].multiply(bound_factor);
+				}
 	    	        
 				if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
 				{ 
