@@ -2159,11 +2159,45 @@ public class CodeMapper
         value[1] = value[1].divide(max_gcd);
         */
 		
-		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		BigInteger []  value       = new BigInteger[] {offset[0], offset[1]};
+		if(offset[1].compareTo(range[1]) != 0)
+		{
+			BigInteger range_factor  = range[1];
+			BigInteger offset_factor = offset[1];
+			
+			offset[0]                = offset[0].multiply(range_factor);
+			offset[1]                = offset[1].multiply(range_factor);
+			
+			range[0]                 = range[0].multiply(offset_factor);
+			range[1]                 = range[1].multiply(offset_factor);
+		    System.out.println("Cross multiplied offset and range.");
+		    
+		    BigInteger stop = offset[0].add(range[0]);
+		    
+		    if(offset_factor.compareTo(range_factor) >= 0)
+		    {
+		    	    value[0] = offset[0].divide(offset_factor);
+		    	    value[1] = offset[1].divide(offset_factor);
+		    	     
+		    }
+		    else
+		    {
+		    	    value[0] = offset[0].divide(range_factor);
+	    	        value[1] = offset[1].divide(range_factor);
+		    }
+		    
+		    
+		}
 		
+		// If we want to establish a preponderance of zero bits in our
+		// numerator, we would now look for the number in the interval 
+		// that divides by two the most times.  For now we simply return the offset.
 		
-        return value;
+		//System.out.println("Offset 0 is " + offset[0] + ", offset 1 is " + offset[1]);
+		//System.out.println("Range 0 is " + range[0] + ", range 1 is " + range[1]);
+	    //System.out.println("Value 0 is " + value[0] + ", value 1 is " + value[1]);
 		
+        return value;	
 	}
 	
 	
@@ -2561,7 +2595,7 @@ public class CodeMapper
 		long k = (long)root;
 		
 		ArrayList <Long> list = new ArrayList<Long>();
-	    //for(long i = 2; i < j && i <= k; i++)
+	   
 		for(long i = 2; i < j && i <= k; i = nextPrime(i))
 	    {   
 	    	    while(j % i == 0)
@@ -2576,15 +2610,15 @@ public class CodeMapper
 	    return list;
 	}
 	
-	public static ArrayList<BigInteger> getPrimeFactors(BigInteger number)
+	public static ArrayList<BigInteger> getPrimeFactors(BigInteger n)
 	{
-		BigInteger j = number;
+		BigInteger j = n;
 		BigInteger i = BigInteger.TWO;
-	    BigInteger k = number.sqrt();
+	    BigInteger k = n.sqrt();
 		
 		ArrayList <BigInteger> list = new ArrayList<BigInteger>();
 		
-	    for(i = i; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.add(BigInteger.ONE))
+	    for(i = BigInteger.TWO; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.add(BigInteger.ONE));
 	    {
 	    	    while(j.mod(i) == BigInteger.ZERO)
 	    	    {
