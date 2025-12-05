@@ -2014,6 +2014,7 @@ public class CodeMapper
 	    return list;
 	}
 	
+	/*
 	public static ArrayList<BigInteger> getPrimeFactors(BigInteger n)
 	{
 		BigInteger j = n;
@@ -2023,6 +2024,29 @@ public class CodeMapper
 		ArrayList <BigInteger> list = new ArrayList<BigInteger>();
 		
 	    for(i = BigInteger.TWO; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.add(BigInteger.ONE));
+	    {
+	    	    while(j.mod(i) == BigInteger.ZERO)
+	    	    {
+	    	    	    list.add(i);
+	    	    	    j = j.divide(i);
+	    	    }
+	    }
+	    if(j.compareTo(BigInteger.TWO) == 1)
+	    	    list.add(j);
+	    
+	    return list;
+	}
+	*/
+	
+	public static ArrayList <BigInteger> getPrimeFactors(BigInteger n)
+	{
+		BigInteger j = n;
+		BigInteger i = BigInteger.TWO;
+	    BigInteger k = n.sqrt();
+		
+		ArrayList <BigInteger> list = new ArrayList<BigInteger>();
+		
+	    for(i = BigInteger.TWO; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.nextProbablePrime())
 	    {
 	    	    while(j.mod(i) == BigInteger.ZERO)
 	    	    {
@@ -2658,11 +2682,57 @@ public class CodeMapper
 			System.out.println("Product does not equal offset.");
 		
 		
+		ArrayList <BigInteger> prime_factors = new ArrayList <BigInteger> ();
 		
 		int size = offset_factors.size();
-		BigInteger numerator = offset_factors.get(size - 1);
+		for(int i = 0; i < size; i++)
+		{
+			BigInteger factor     = offset_factors.get(i);
+			ArrayList <BigInteger> factor_list = getPrimeFactors(factor);
+			for(int k = 0; k < factor_list.size(); k++)
+			{
+			    BigInteger prime_factor = factor_list.get(k);
+			    prime_factors.add(prime_factor);
+			}
+		}
+		
+		Collections.sort(prime_factors, Comparator.reverseOrder());
+		
+		size = prime_factors.size();
+		
+		BigInteger current_factor = prime_factors.get(0);
+		
+		System.out.println("Largest prime factor is " + current_factor);
+		System.out.println("The number of prime factors is " + size);
 		
 		ArrayList <BigInteger> selected_factors = new ArrayList <BigInteger> ();
+		
+		product = BigInteger.ONE;
+		size    = prime_factors.size();
+		for(int i = 0; i < size; i++)
+		{
+			BigInteger factor = prime_factors.get(i);
+			BigInteger current_product = product.multiply(factor);
+			if(current_product.compareTo(offset[0]) < 0 && offset[0].mod(factor) == BigInteger.ZERO)
+			{
+				product = current_product;
+				selected_factors.add(factor);
+			}
+		}
+		
+		size = selected_factors.size();
+		System.out.println("The number of selected factors is " + size);
+		
+		
+		
+		offset[0] = offset[0].divide(product);
+		offset[1] = offset[1].divide(product);
+		
+		
+		/*
+		BigInteger numerator = offset_factors.get(size - 1);
+		
+		
 		
 		selected_factors.add(numerator);
 		
@@ -2726,24 +2796,18 @@ public class CodeMapper
 		BigInteger gcd = offset[0].gcd(offset[1]);
 		offset[0] = offset[0].divide(gcd);
 		offset[1] = offset[1].divide(gcd);
+		*/
 		
-		
+		/*
+		BigInteger gcd = offset[0].gcd(offset[1]);
+		offset[0] = offset[0].divide(gcd);
+		offset[1] = offset[1].divide(gcd);
+		*/
 	    BigInteger [] value = new BigInteger [] {offset[0], offset[1]};
 	    
 		
         return value;	
 	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
 	
 	
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
