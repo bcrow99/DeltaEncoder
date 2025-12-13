@@ -12,6 +12,7 @@ public class TestRange
 	
 	public TestRange()
 	{
+		
 		byte [] message = new byte[10];
 	    
 	    message[0] = 0;
@@ -20,38 +21,38 @@ public class TestRange
 	    message[3] = 1;
 	    
 	    
-	    message[4] = 1;
+	    
+	    
+	    message[4] = 0;
 	    message[5] = 1;
-	    message[6] = 0;
-	    message[7] = 1;
-	    message[8] = 1;
-	    message[9] = 127;
+	    message[6] = 2;
+	    message[7] = 3;
+	    message[8] = 0;
+	    message[9] = 1;
 	    
 	    /*
-	    message[10] = 4;
-	    message[11] = 1;
-	    
-	   
+	    message[10] = 2;
+	    message[11] = 2;
 	    message[12] = 0;
 	    message[13] = 1;
-	    message[14] = 1;
-	    message[15] = 127;
+	    message[14] = 2;
+	    message[15] = 3;
 	    message[16] = 0;
 	    message[17] = 1;
-	    message[18] = 1;
-	    message[19] = 127;
+	    message[18] = 2;
+	    message[19] = 3;
 	    
-	   
-		
-		int k = 1;
+	    
+	    
+		int k = 5;
 		
 		byte [] message = new byte [640 * k];
 		
-		for(int i = 0; i < 50; i++)
+		for(int i = 0; i < 640; i++)
 		{
 			for(int j = 0; j < k; j++)
 			{
-			    message[i] = (byte)(i % 2);
+			    message[i] = (byte)(i % 9);
 			}
 		}
 		*/
@@ -93,16 +94,30 @@ public class TestRange
 	    	    }
 	    }
 	 
+	    
+	    
 	    long start = System.nanoTime();
-	    BigInteger [] value = CodeMapper.getRangeQuotient(message, symbol_table, f, sum);
+	    BigInteger [] value = CodeMapper.getRangeQuotient2(message, symbol_table, f, sum);
 	    long stop = System.nanoTime();
 		long time = stop - start;
+		
 		System.out.println("It took " + (time / 1000000) + " ms to produce v.");
+		
 		int length1        = value[0].bitLength();
 	    int length2        = value[1].bitLength();
-	    System.out.println("Numerator has bit length " + length1);
-	    System.out.println("Denominator has bit length " + length2);
+	    // System.out.println("Numerator " + value[0]   + " has bit length " + length1);
+	    // System.out.println("Denominator " + value[1] + " has bit length " + length2);
 		
+	    int bitlength1 = 8 * message.length;
+	    int bitlength2 = length1 + length2;
+	   
+	    /*
+	    double compression = bitlength2;
+	    compression       /= bitlength1;
+	    
+	    System.out.println("Ratio of message bitlength and quotient bitlength is " + compression);
+	    */
+	    
 	    /*
 	    BigDecimal location = new BigDecimal(value[0]);
 	    try
@@ -114,20 +129,23 @@ public class TestRange
 	    }
 	    catch(Exception e)
 	    {
-	    	    System.out.println("Exception dividing numerator by denominator:");
+	    	    System.out.println("Exception dividing numerator by denominator to get decimal value:");
 	    	    System.out.println(e.toString());
 	    	    System.out.println("Numerator is " + value[0]);
 	    	    System.out.println("Denominator is " + value[1]);
 	    }
-	    
+	   
 		
 		try
 		{
-			byte [] decoded_message = CodeMapper.getMessage2(value, inverse_table, f, sum, message.length);
+			byte [] decoded_message = CodeMapper.getMessage(value, inverse_table, f, sum, message.length);
+			
 			System.out.println("Decoded message from getMessage:");
 		    for(int i = 0; i < decoded_message.length; i++)
 		    	    System.out.print(decoded_message[i] + " ");
+		   
 		    System.out.println();
+		   
 		}
 		catch(Exception e)
 	    {
