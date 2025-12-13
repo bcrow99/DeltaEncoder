@@ -2134,6 +2134,23 @@ public class CodeMapper
 		return list;
 	}
 	
+	
+	public static ArrayList <BigInteger> getPrimes(BigInteger limit)
+	{
+		ArrayList <BigInteger> primes = new ArrayList <BigInteger> ();
+		
+		BigInteger prime = BigInteger.TWO;
+		while(prime.compareTo(limit) == -1)
+		{
+			primes.add(prime);
+			BigInteger next_prime = prime.nextProbablePrime();
+			prime = next_prime;
+		}
+		
+		return primes;
+	}
+	
+	
 	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
 		int [] f = frequency.clone();
@@ -2312,6 +2329,23 @@ public class CodeMapper
         BigInteger largest_index = BigInteger.ZERO;
 		int number_of_searches   = 0;
 		
+		// primes < than 212
+		/*
+		small_primes = set([
+		    2,  3,  5,  7, 11, 13, 17, 19, 23, 29,
+		   31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+		   73, 79, 83, 89, 97,101,103,107,109,113,
+		  127,131,137,139,149,151,157,163,167,173,
+		  179,181,191,193,197,199,211])
+	    */
+		
+		
+		
+		
+		
+		
+		// BigInteger limit = BigInteger.ZERO;
+		// limit = limit.valueOf(89);
 		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
         for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
 	    {
@@ -2323,16 +2357,78 @@ public class CodeMapper
         	        max_gcd = gcd;
         	        largest_index = index;
 	        }
-	    	    number_of_searches++;
+	        number_of_searches++;
+	        //BigInteger numerator = value[0].divide(gcd);
+	        //if(numerator.compareTo(limit) <= 0)
+	        	//    break;
 	    }
         
         System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+        System.out.println("Index was " + largest_index); 
         System.out.println();
         value[0] = offset[0].add(largest_index);
         value[1] = offset[1];
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
         
+        
+        
+        ArrayList <BigInteger> numerator_factors = getPrimeFactors(value[0]);
+        ArrayList <BigInteger> denominator_factors = getPrimeFactors(value[1]);
+        
+        System.out.println("Value numerator factors: ");
+		for(int i = 0; i < numerator_factors.size(); i++)
+		{
+			BigInteger factor = numerator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		System.out.println("Value denominator factors: ");
+		for(int i = 0; i < denominator_factors.size(); i++)
+		{
+			BigInteger factor = denominator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		numerator_factors = getPrimeFactors(offset[0]);
+        denominator_factors = getPrimeFactors(offset[1]);
+        
+        System.out.println("Offset numerator factors: ");
+		for(int i = 0; i < numerator_factors.size(); i++)
+		{
+			BigInteger factor = numerator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		System.out.println("Offset denominator factors: ");
+		for(int i = 0; i < denominator_factors.size(); i++)
+		{
+			BigInteger factor = denominator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		/*
+		gcd = offset[0].gcd(offset[1]);
+		offset[0] = offset[0].divide(gcd);
+		offset[1] = offset[1].divide(gcd);
+		*/
+		
+		int length = 0;
+		length = offset[0].bitLength();
+		//System.out.println("Offset numerator bitlength is " + length);
+		length = offset[1].bitLength();
+		//System.out.println("Offset denominator bitlength is " + length);
+		length = value[0].bitLength();
+		System.out.println("Value numerator bitlength is " + length);
+		length = value[1].bitLength();
+		System.out.println("Value denominator bitlength is " + length);
         return value;	
 	}
 	
@@ -2411,7 +2507,6 @@ public class CodeMapper
 			       	offset_divisors.add(gcd);
 	    	    }
 	    	    
-	    	    
 	    	    factor = BigInteger.ONE;
 	    	    factor            = factor.valueOf(s[j]);
 	    	    addend[0]         = addend[0].multiply(factor);
@@ -2453,41 +2548,6 @@ public class CodeMapper
 		}
 		
 		
-		/*
-		
-		BigInteger    gcd        = offset[0].gcd(offset[1]);
-		BigInteger    max_gcd    = gcd;  
-        BigInteger largest_index = BigInteger.ZERO;
-		int number_of_searches   = 0;
-		
-		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
-        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
-	    {
-	    	    value[0] = value[0].add(BigInteger.ONE);
-	    	    
-	    	    gcd = value[0].gcd(value[1]);
-	        if(gcd.compareTo(max_gcd) == 1)
-	        {
-        	        max_gcd = gcd;
-        	        largest_index = index;
-	        }
-	    	    number_of_searches++;
-	    }
-        
-        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-        System.out.println("Greatest common divisor was " + max_gcd);
-        System.out.println("Range was " + range[0]);
-        System.out.println("Index was " + largest_index);
-        
-        
-        
-        
-        System.out.println();
-        value[0] = offset[0].add(largest_index);
-        value[1] = offset[1];
-        value[0] = value[0].divide(max_gcd);
-        value[1] = value[1].divide(max_gcd);
-        */
 		
 		/*
 		BigInteger d = offset[0].add(range[0]);
@@ -2587,11 +2647,6 @@ public class CodeMapper
 		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
         return value;	
 	}
-
-	
-	
-	
-	
 
 	public static BigInteger [] getRangeQuotient4(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
@@ -2709,51 +2764,6 @@ public class CodeMapper
 			offset_factors.add(range_factor);
 		}
 		
-		/*
-		for(int i = 0; i < offset_divisors.size(); i++)
-		{
-			BigInteger divisor = offset_divisors.get(i);
-			
-			for(int j = 0; j < offset_factors.size(); j++)
-			{
-				BigInteger factor = offset_factors.get(j);
-				
-				if(factor.compareTo(divisor) > 0)
-				{
-					if(factor.mod(divisor) == BigInteger.ZERO)
-					{
-						factor = factor.divide(divisor);
-						offset_factors.set(j, factor);
-						offset_divisors.remove(i);
-						i--;
-						break;
-					}
-				}
-			}
-
-		}
-		
-		
-		BigInteger product = BigInteger.ONE;
-		for(int i = 0; i < offset_factors.size(); i++)
-		{
-			BigInteger factor = offset_factors.get(i);
-			product = product.multiply(factor);
-		}
-		
-		for(int i = 0; i < offset_divisors.size(); i++)
-		{
-			BigInteger divisor = offset_divisors.get(i);
-			product = product.divide(divisor);
-		}
-		
-		
-		if(product.compareTo(offset[1]) == 0)
-			System.out.println("Product of factors is equal to offset.");
-		else 
-			System.out.println("Product of factors is not equal to offset.");
-		*/
-	
 		ArrayList <BigInteger> prime_factors = new ArrayList <BigInteger> ();
 		
 		int size = offset_factors.size();
@@ -2786,8 +2796,6 @@ public class CodeMapper
 		Collections.sort(prime_factors, Comparator.reverseOrder());
 		Collections.sort(prime_divisors, Comparator.reverseOrder());
 		
-		//System.out.println("Number of prime factors is "  + prime_factors.size());
-		//System.out.println("Number of prime divisors is " + prime_divisors.size());
 		for(int i = 0; i < prime_divisors.size(); i++)
 		{
 			BigInteger prime_divisor = prime_divisors.get(i);
@@ -2799,26 +2807,8 @@ public class CodeMapper
 				i--;
 			}
 		}
-		//System.out.println();
-		//System.out.println("Number of prime factors is " + prime_factors.size());
-		//System.out.println();
 		
-		BigInteger product = BigInteger.ONE;
-		for(int i = 0; i < prime_factors.size(); i++)
-		{
-			BigInteger factor = prime_factors.get(i);
-			product = product.multiply(factor);
-		}
-		
-		
-		if(product.compareTo(offset[1]) == 0)
-			System.out.println("Product of factors is equal to offset.");
-		else 
-			System.out.println("Product of factors is not equal to offset.");
-		
-		
-		
-		System.out.println("Prime factors:");
+		System.out.println("Prime factors of denominator:");
 		for(int i = 0; i < prime_factors.size(); i++)
 		{
 			BigInteger factor = prime_factors.get(i);
@@ -2827,47 +2817,37 @@ public class CodeMapper
 		System.out.println();
 		System.out.println();
 		
-		BigInteger dividend = range[1].divide(range[0]);
-		System.out.println("Range divides denominator " + dividend + " times.");
-		BigInteger modulus = range[1].mod(range[0]);
-		System.out.println("Remainder is " + modulus);
+	    offset_factors = getPrimeFactors(offset[0]);
+	    Collections.sort(offset_factors, Comparator.reverseOrder());
+	    System.out.println("Prime factors of offset:");
+		for(int i = 0; i < offset_factors.size(); i++)
+		{
+			BigInteger factor = offset_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
 		System.out.println();
 		
-	    /*
-		BigInteger bound = offset[0].add(range[0]);
-		bound = bound.divide(BigInteger.TWO);
 	    
-		ArrayList <BigInteger> selected_factors = new ArrayList <BigInteger> ();
-		product = BigInteger.ONE;
+	    
+		/*
 		
+		BigInteger bound = offset[0].add(range[0]);
+		ArrayList <BigInteger> selected_factors = new ArrayList <BigInteger> ();
+		BigInteger product = BigInteger.ONE;
 		for(int i = 0; i < prime_factors.size(); i++)
 		{
 			BigInteger prime_factor = prime_factors.get(i);
-			product = product.multiply(prime_factor);
-			selected_factors.add(prime_factor);
-			if(product.compareTo(bound) > 0)
+			if(product.multiply(prime_factor).compareTo(bound) == - 1)
+			{
+			    selected_factors.add(prime_factor);
+			    product = product.multiply(prime_factor);
+			}
+			else
 				break;
 		}
 		
-		if(product.compareTo(bound) > 0)
-			System.out.println("Product is greater than bound");
-		System.out.println();
-		
-		BigInteger max_factor = selected_factors.get(0);
-		while(product.compareTo(bound) >  0)
-		{
-			max_factor = max_factor.subtract(BigInteger.ONE);
-			product    = max_factor;
-			
-			for(int i = 1; i < selected_factors.size(); i++)
-			{
-			    BigInteger factor =  selected_factors.get(i);
-			    product = product.multiply(factor);
-			}
-		}
-		
-		selected_factors.set(0, max_factor);
-		System.out.println("Selected factors:");
+		System.out.println("Selected factors with a product less than bound:");
 		for(int i = 0; i < selected_factors.size(); i++)
 		{
 			BigInteger factor = selected_factors.get(i);
@@ -2875,91 +2855,36 @@ public class CodeMapper
 		}
 		System.out.println();
 		System.out.println();
-				
-		if(product.compareTo(bound) < 0)
-			System.out.println("Product is less than bound");
 		
-		if(product.compareTo(offset[0]) >= 0)
-			System.out.println("Product is greater than or equal to offset");
+		if(product.compareTo(offset[0]) == - 1)
+		    System.out.println("Product is also less than offset.");
 		else
+			 System.out.println("Product is equal to or greater than offset.");	
+		
+		BigInteger greatest_factor = selected_factors.get(0);
+		BigInteger max_factor = greatest_factor.add(BigInteger.ONE);
+	
+		while(product.compareTo(offset[0]) == -1)
 		{
-			System.out.println("Product is less than offset");
-			BigInteger factor = selected_factors.get(0);
-			product = factor;
-			
-			max_factor = selected_factors.get(1);
-			max_factor = max_factor.add(BigInteger.ONE);
-			product = product.multiply(max_factor);
-			for(int i = 2; i < selected_factors.size(); i++)
-			{
-				factor = selected_factors.get(i);
-				product = product.multiply(factor);	
-			}
-			System.out.println("Increased factor.");
-			if(product.compareTo(bound) < 0)
-				System.out.println("Product is less than bound");
-			else
-				System.out.println("Product is greater than bound");
-			
-			//if(product.compareTo(offset[0]) >= 0)
-			//	System.out.println("Product is greater than or equal to offset");
-			
-			System.out.println();
+			product = max_factor;
+		    for(int i = 1; i < selected_factors.size(); i++)
+		    {
+			    BigInteger factor = selected_factors.get(i);
+			    product = product.multiply(factor);
+		    }
+		    if(product.compareTo(offset[0]) == -1)
+		    	   max_factor = max_factor.add(BigInteger.ONE);
+		    
 		}
+		
+		System.out.println("Product is equal to or greater than offset after replacing max factor " + greatest_factor + " with " + max_factor);
+		if(product.compareTo(bound) == - 1)
+		    System.out.println("Product is less than bound");
+		else
+		    System.out.println("Product is also equal to or greater than bound.");
+		System.out.println();
 		*/
-		/*
 		
-		BigInteger    gcd        = offset[0].gcd(offset[1]);
-		BigInteger    max_gcd    = gcd;  
-        BigInteger largest_index = BigInteger.ZERO;
-		int number_of_searches   = 0;
-		
-		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
-        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
-	    {
-	    	    value[0] = value[0].add(BigInteger.ONE);
-	    	    
-	    	    gcd = value[0].gcd(value[1]);
-	        if(gcd.compareTo(max_gcd) == 1)
-	        {
-        	        max_gcd = gcd;
-        	        largest_index = index;
-	        }
-	    	    number_of_searches++;
-	    }
-        
-        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-        System.out.println("Greatest common divisor was " + max_gcd);
-        System.out.println("Range was " + range[0]);
-        System.out.println("Index was " + largest_index);
-        
-        
-        
-        
-        System.out.println();
-        value[0] = offset[0].add(largest_index);
-        value[1] = offset[1];
-        value[0] = value[0].divide(max_gcd);
-        value[1] = value[1].divide(max_gcd);
-        */
-		
-		BigInteger d = offset[0].add(range[0]);
-		BigInteger a = d.multiply(offset[1]);
-		BigInteger b = d.multiply(range[0]);
-		BigInteger c = a.subtract(b);
-		
-		BigInteger v = c.divide(offset[1]);
-		
-		if(v.compareTo(offset[0]) == -1)
-			System.out.println("V is less than offset.");
-		else
-			System.out.println("V is equal to or greater than offset.");
-		
-		if(v.compareTo(d) == -1)
-			System.out.println("V is less than bound.");
-		else
-			System.out.println("V is equal to or greater than bound.");
-        
 		BigInteger    gcd        = offset[0].gcd(offset[1]);
 		offset[0] = offset[0].divide(gcd);
 		offset[1] = offset[1].divide(gcd);
