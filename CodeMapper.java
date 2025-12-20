@@ -1910,6 +1910,121 @@ public class CodeMapper
 		return length;
 	}
 	
+	
+	
+	public static ArrayList getHuffmanList(byte[] string)
+	{
+		ArrayList list = new ArrayList();
+
+		ArrayList histogram_list = StringMapper.getHistogram(string);
+		int string_min = (int) histogram_list.get(0);
+		int[] string_histogram = (int[]) histogram_list.get(1);
+		int value_range = (int) histogram_list.get(2);
+
+		// This is the number of different values in the string;
+		int n = string_histogram.length;
+
+		// We produce a rank table from the histogram to use when encoding.
+		int[] rank_table = StringMapper.getRankTable(string_histogram);
+
+		// We produce a frequency table to produce huffman lengths.
+		ArrayList frequency_list = new ArrayList();
+		for(int k = 0; k < n; k++)
+			frequency_list.add(string_histogram[k]);
+		Collections.sort(frequency_list, Comparator.reverseOrder());
+		int[] frequency = new int[n];
+		for(int k = 0; k < n; k++)
+			frequency[k] = (int) frequency_list.get(k);
+
+		double shannon_limit = getShannonLimit(frequency);
+
+		byte[] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+
+		// We produce a huffman code from the lengths.
+		int[] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
+
+		// We produce the estimated bit length of the output.
+		int estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
+
+		list.add(estimated_bit_length);
+		list.add(shannon_limit);
+		list.add(rank_table);
+		list.add(huffman_code);
+		list.add(huffman_length);
+
+		return list;
+	}
+
+	public static ArrayList getHuffmanList2(byte[] string)
+	{
+		ArrayList list = new ArrayList();
+
+		ArrayList histogram_list = StringMapper.getHistogram(string);
+		int string_min = (int) histogram_list.get(0);
+		int[] string_histogram = (int[]) histogram_list.get(1);
+		int value_range = (int) histogram_list.get(2);
+
+		// This is the number of different values in the string;
+		int n = string_histogram.length;
+
+		// We produce a rank table from the histogram to use when encoding.
+		int[] rank_table = StringMapper.getRankTable(string_histogram);
+	
+		// We produce a frequency table to produce huffman lengths.
+		ArrayList frequency_list = new ArrayList();
+		for(int k = 0; k < n; k++)
+			frequency_list.add(string_histogram[k]);
+		Collections.sort(frequency_list, Comparator.reverseOrder());
+		int[] frequency = new int[n];
+		for(int k = 0; k < n; k++)
+			frequency[k] = (int) frequency_list.get(k);
+		byte[] huffman_length = CodeMapper.getHuffmanLength2(frequency);
+
+		// We produce a huffman code from the lengths.
+		int [] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
+
+		// We produce the estimated bit length of the output.
+		int estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
+
+		int byte_length = estimated_bit_length / 8;
+		if(estimated_bit_length % 8 != 0)
+			byte_length++;
+		// byte_length += 2;
+		byte[] packed_string = new byte[byte_length];
+
+		int huffman_bit_length = packCode(string, rank_table, huffman_code, huffman_length, packed_string);
+
+		System.out.println("Estimated bit length was " + estimated_bit_length);
+		System.out.println("Actual bit length was " + huffman_bit_length);
+
+		ArrayList length_list = CodeMapper.packLengthTable(huffman_length);
+
+		list.add(huffman_bit_length);
+		list.add(rank_table);
+		list.add(huffman_code);
+		list.add(huffman_length);
+		list.add(length_list);
+		list.add(packed_string);
+
+		return list;
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	// Requires a < b.
 	public static int gcd(int a, int b) 
 	{
@@ -2014,7 +2129,6 @@ public class CodeMapper
 	    return list;
 	}
 	
-	
 	public static ArrayList <BigInteger> getPrimeFactors(BigInteger n)
 	{
 		BigInteger j = n;
@@ -2025,116 +2139,18 @@ public class CodeMapper
 		
 	    for(i = BigInteger.TWO; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.nextProbablePrime())
 	    {
-	    	    while(j.mod(i) == BigInteger.ZERO)
-	    	    {
-	    	    	    list.add(i);
-	    	    	    j = j.divide(i);
-	    	    }
+	    	while(j.mod(i) == BigInteger.ZERO)
+	    	{
+	    	    list.add(i);
+	    	    j = j.divide(i);
+	    	}
 	    }
 	    if(j.compareTo(BigInteger.TWO) == 1)
 	    	    list.add(j);
 	    
 	    return list;
 	}
-	
-	public static ArrayList getHuffmanList(byte[] string)
-	{
-		ArrayList list = new ArrayList();
 
-		ArrayList histogram_list = StringMapper.getHistogram(string);
-		int string_min = (int) histogram_list.get(0);
-		int[] string_histogram = (int[]) histogram_list.get(1);
-		int value_range = (int) histogram_list.get(2);
-
-		// This is the number of different values in the string;
-		int n = string_histogram.length;
-
-		// We produce a rank table from the histogram to use when encoding.
-		int[] rank_table = StringMapper.getRankTable(string_histogram);
-
-		// We produce a frequency table to produce huffman lengths.
-		ArrayList frequency_list = new ArrayList();
-		for(int k = 0; k < n; k++)
-			frequency_list.add(string_histogram[k]);
-		Collections.sort(frequency_list, Comparator.reverseOrder());
-		int[] frequency = new int[n];
-		for(int k = 0; k < n; k++)
-			frequency[k] = (int) frequency_list.get(k);
-
-		double shannon_limit = getShannonLimit(frequency);
-
-		byte[] huffman_length = CodeMapper.getHuffmanLength2(frequency);
-
-		// We produce a huffman code from the lengths.
-		int[] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
-
-		// We produce the estimated bit length of the output.
-		int estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
-
-		list.add(estimated_bit_length);
-		list.add(shannon_limit);
-		list.add(rank_table);
-		list.add(huffman_code);
-		list.add(huffman_length);
-
-		return list;
-	}
-
-	public static ArrayList getHuffmanList2(byte[] string)
-	{
-		ArrayList list = new ArrayList();
-
-		ArrayList histogram_list = StringMapper.getHistogram(string);
-		int string_min = (int) histogram_list.get(0);
-		int[] string_histogram = (int[]) histogram_list.get(1);
-		int value_range = (int) histogram_list.get(2);
-
-		// This is the number of different values in the string;
-		int n = string_histogram.length;
-
-		// We produce a rank table from the histogram to use when encoding.
-		int[] rank_table = StringMapper.getRankTable(string_histogram);
-	
-		// We produce a frequency table to produce huffman lengths.
-		ArrayList frequency_list = new ArrayList();
-		for(int k = 0; k < n; k++)
-			frequency_list.add(string_histogram[k]);
-		Collections.sort(frequency_list, Comparator.reverseOrder());
-		int[] frequency = new int[n];
-		for(int k = 0; k < n; k++)
-			frequency[k] = (int) frequency_list.get(k);
-		byte[] huffman_length = CodeMapper.getHuffmanLength2(frequency);
-
-		// We produce a huffman code from the lengths.
-		int [] huffman_code = CodeMapper.getCanonicalCode(huffman_length);
-
-		// We produce the estimated bit length of the output.
-		int estimated_bit_length = CodeMapper.getCost(huffman_length, frequency);
-
-		int byte_length = estimated_bit_length / 8;
-		if(estimated_bit_length % 8 != 0)
-			byte_length++;
-		// byte_length += 2;
-		byte[] packed_string = new byte[byte_length];
-
-		int huffman_bit_length = packCode(string, rank_table, huffman_code, huffman_length, packed_string);
-
-		System.out.println("Estimated bit length was " + estimated_bit_length);
-		System.out.println("Actual bit length was " + huffman_bit_length);
-
-		ArrayList length_list = CodeMapper.packLengthTable(huffman_length);
-
-		list.add(huffman_bit_length);
-		list.add(rank_table);
-		list.add(huffman_code);
-		list.add(huffman_length);
-		list.add(length_list);
-		list.add(packed_string);
-
-		return list;
-	}
-	
-	
 	public static ArrayList <BigInteger> getPrimes(BigInteger limit)
 	{
 		ArrayList <BigInteger> primes = new ArrayList <BigInteger> ();
@@ -2150,6 +2166,76 @@ public class CodeMapper
 		return primes;
 	}
 	
+	public static ArrayList <BigInteger> getPrimes(BigInteger init, BigInteger limit)
+	{
+		ArrayList <BigInteger> primes = new ArrayList <BigInteger> ();
+		
+		BigInteger prime = init;
+		while(prime.compareTo(limit) == -1)
+		{
+			primes.add(prime);
+			BigInteger next_prime = prime.nextProbablePrime();
+			prime = next_prime;
+		}
+		
+		return primes;
+	}
+	
+	public static ArrayList < ArrayList <BigInteger>> getCommonFactors(ArrayList <ArrayList <BigInteger>> factor_list, ArrayList <BigInteger> factors)
+	{
+	    ArrayList <ArrayList <BigInteger>> common_factors = new ArrayList <ArrayList <BigInteger>> ();
+	    
+	    int size = factor_list.size();
+	    for(int i = 0; i < size; i++)
+	    {
+	    	ArrayList <BigInteger> current_factors        = factor_list.get(i);
+	    	ArrayList <BigInteger> current_common_factors = new ArrayList <BigInteger>();
+	    	ArrayList <BigInteger> target_factors         = (ArrayList <BigInteger>)factors.clone();
+	    	
+	    	int size2 = current_factors.size();
+	    	for(int j = 0; j < size2; j++)
+	    	{
+	    		BigInteger factor = current_factors.get(j);
+	    		if(target_factors.contains(factor))
+	    		{
+	    			int k = target_factors.indexOf(factor);
+	    			target_factors.remove(k);
+	    			current_common_factors.add(factor);
+	    		}
+	    	}
+	    	common_factors.add(current_common_factors);
+	    }
+	    
+	    return common_factors;
+	}
+	
+	public static ArrayList getMaxProduct(ArrayList <ArrayList <BigInteger>> factor_list)
+	{
+		int size = factor_list.size();
+		
+		BigInteger max = BigInteger.ZERO;
+		int        index = 0;
+		for(int i = 0; i < size; i++)
+		{
+			ArrayList <BigInteger> factors = factor_list.get(i);
+			BigInteger value = BigInteger.ONE;
+			int size2 = factors.size();
+			for(int j = 0; j < size2; j++)
+			{
+				BigInteger factor = factors.get(j);
+				value             = value.multiply(factor);
+			}
+			if(value.compareTo(max) == 1)
+			{
+				max = value;
+				index = i;
+			}
+		}
+		ArrayList result = new ArrayList();
+		result.add(max);
+		result.add(index);
+		return    result;
+	}
 	
 	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
@@ -2217,19 +2303,183 @@ public class CodeMapper
 	    	    gcd = range[0].gcd(range[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
+	    	    	range[0] = range[0].divide(gcd);
 			    	range[1] = range[1].divide(gcd);
 	    	    }
 	    	    f[j]--;
 	    	    m--;
 	    	    for(int k = j + 1; k < s.length; k++)
-	    	    {
-	    	    	    s[k]--;
-	    	    }
+	    	        s[k]--;
 	    }
 	
-		BigInteger [] value = new BigInteger [] {offset[0], offset[1]};
-        return value;	
+		BigInteger range_factor  = range[1];
+		BigInteger offset_factor = offset[1];
+		
+		if(offset[1].compareTo(range[1]) != 0)
+		{		
+			offset[0] = offset[0].multiply(range_factor);
+			offset[1] = offset[1].multiply(range_factor);
+					
+			range[0] = range[0].multiply(offset_factor);
+			range[1] = range[1].multiply(offset_factor);	
+		}
+		
+		
+		
+		BigInteger a = BigInteger.ZERO;
+		BigInteger b = offset[1];
+		BigDecimal c = BigDecimal.ZERO;
+		BigDecimal d = BigDecimal.ZERO;
+		
+		
+		BigInteger k = BigInteger.TWO;
+		int length   = b.bitLength();
+		for(int i = 1; i < length; i++)
+		    	k = k.multiply(BigInteger.TWO);
+	
+		a = offset[0];
+		a = a.multiply(k);
+		a = a.divide(b);
+		c = new BigDecimal(a);
+		d = new BigDecimal(k);
+		c = c.divide(d);
+		
+		BigInteger lower = c.unscaledValue();
+		length = lower.bitLength();
+		System.out.println("Lower bound has bitlength " + length);
+		
+		a = offset[0].add(range[0]);
+		a = a.multiply(k);
+		a = a.divide(b);
+		c = new BigDecimal(a);
+		d = new BigDecimal(k);
+		c = c.divide(d);
+		
+		BigInteger upper = c.unscaledValue();
+		System.out.println("Upper bound has bitlength " + length);
+		
+		BigInteger value = lower;
+		System.out.println("Lower value is " + lower);
+		
+		
+		for(int i = length; i >= 0; i--)
+		{
+		    if(!lower.testBit(i) && upper.testBit(i))
+		    	{
+		      	System.out.println("Found different bits at index " + i);
+		      	
+		      	value = lower;
+		      	value = value.setBit(i);
+		      	for(int j = i - 1; j >= 0; j--)
+		      		value = value.clearBit(j);
+		      	int length2 = value.bitLength();
+		      	//System.out.println("Bitlength of value is " + length2);
+		      	
+		      	if(value.compareTo(upper) == -1)
+		      	{
+		      		System.out.println("Found intermediate value " + value);
+		      		break;
+		      	}
+		    	}
+		}
+		
+		
+		
+		System.out.println("Upper value is " + upper);
+		System.out.println();
+		
+		
+		
+	
+		/*
+        BigInteger upper = offset[0].add(range[0]);
+        BigInteger lower = offset[0];
+        
+        
+		BigInteger a = offset[0];
+		BigInteger b = offset[1];
+		    
+		BigInteger k = BigInteger.TWO;
+		for(int i = 1; i < b.bitLength(); i++)
+		{
+		    	k = k.multiply(BigInteger.TWO);
+		}
+		    
+		BigInteger c = a.multiply(k);
+		c = c.divide(b);
+		    
+		
+		BigInteger d = c.mod(b);
+		if(d.compareTo(k.divide(BigInteger.TWO)) == 1)
+		    	c = c.add(BigInteger.ONE);
+		
+		
+		BigDecimal e = new BigDecimal(c);
+		BigDecimal g = new BigDecimal(k);
+		BigDecimal lower = e.divide(g);
+	
+		
+		a = bound;
+		c = a.multiply(k);
+		c = c.divide(b);
+		
+		d = c.mod(b);
+		if(d.compareTo(k.divide(BigInteger.TWO)) == 1)
+	      	c = c.add(BigInteger.ONE);
+	    
+		e = new BigDecimal(c);
+		BigDecimal upper = e.divide(g);
+		
+		
+		System.out.println("Lower bound is " + lower + ", upper bound is " + upper);
+		
+		BigInteger lower_bound = lower.unscaledValue();
+		BigInteger upper_bound = upper.unscaledValue();
+		
+		int length1 = lower_bound.bitLength();
+		int length2 = upper_bound.bitLength();
+		
+		
+		System.out.println("Lower bound length is " + length1 + ", upper bound length is " + length2);
+		
+		BigInteger value = lower_bound;
+		
+		int length3 = value.bitLength();
+		System.out.println("Value length is " + length3);
+		
+		
+		int index = 0;
+		for(int i = 0; i < length1; i++)
+		{
+		    if(!lower_bound.testBit(i) && upper_bound.testBit(i))
+		    	{
+		      	System.out.println("Found different bits at index " + i);
+		      	
+		      	value = lower_bound;
+		      	value = value.setBit(i);
+		      	for(int j = i + 1; j < length1; j++)
+		      	{
+		      		value = value.clearBit(j);
+		      	}
+		      	if(value.compareTo(upper_bound) == -1)
+		      	{
+		      		System.out.println("Found intermdiate value at index " + i);
+		      		break;
+		      	} 	
+		    	}
+		}
+		
+		if(value.compareTo(upper_bound) >= 0)
+			value = lower_bound;
+		
+		*/
+		
+		
+		
+		
+		
+		BigInteger [] value2 = new BigInteger [] {offset[0], offset[1]};
+        return value2;	
 	}
 	
 
@@ -2311,18 +2561,18 @@ public class CodeMapper
 	    	    }
 	    }
 	
-		
-		BigInteger range_factor  = range[1];
-		BigInteger offset_factor = offset[1];
-		
 		if(offset[1].compareTo(range[1]) != 0)
-		{		
-			offset[0] = offset[0].multiply(range_factor);
-			offset[1] = offset[1].multiply(range_factor);
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
 					
-			range[0] = range[0].multiply(offset_factor);
-			range[1] = range[1].multiply(offset_factor);	
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
 		}
+		
+		
 		
 		BigInteger    gcd        = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
@@ -2330,23 +2580,18 @@ public class CodeMapper
 		int number_of_searches   = 0;
 		
 	
-		// BigInteger limit = BigInteger.ZERO;
-		// limit = limit.valueOf(89);
 		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
         for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
 	    {
-	    	    value[0] = value[0].add(BigInteger.ONE);
+	    	value[0] = value[0].add(BigInteger.ONE);
 	    	    
-	    	    gcd = value[0].gcd(value[1]);
+	    	gcd = value[0].gcd(value[1]);
 	        if(gcd.compareTo(max_gcd) == 1)
 	        {
         	        max_gcd = gcd;
         	        largest_index = index;
 	        }
 	        number_of_searches++;
-	        //BigInteger numerator = value[0].divide(gcd);
-	        //if(numerator.compareTo(limit) <= 0)
-	        	//    break;
 	    }
         
         System.out.println("Number of searches for greatest divisor was " + number_of_searches);
@@ -2400,11 +2645,6 @@ public class CodeMapper
 		}
 		System.out.println();
 		System.out.println();
-		/*
-		gcd = offset[0].gcd(offset[1]);
-		offset[0] = offset[0].divide(gcd);
-		offset[1] = offset[1].divide(gcd);
-		*/
 		
 		int length = 0;
 		length = offset[0].bitLength();
@@ -2418,6 +2658,7 @@ public class CodeMapper
         return value;	
 	}
 	
+
 	public static BigInteger [] getRangeQuotient3(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
 		int [] f = frequency.clone();
@@ -2442,10 +2683,6 @@ public class CodeMapper
 		
 		int    n       = src.length;
 	    
-		ArrayList <BigInteger> offset_factors  = new ArrayList <BigInteger> ();
-		ArrayList <BigInteger> offset_divisors = new ArrayList <BigInteger> ();
-		
-		
 		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
@@ -2464,8 +2701,8 @@ public class CodeMapper
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
+	    	        addend[0] = addend[0].divide(gcd);
+			        addend[1] = addend[1].divide(gcd);
 	    	    }
 	    	    
 	    	    offset[0] = offset[0].multiply(addend[1]);
@@ -2473,33 +2710,15 @@ public class CodeMapper
 	    	    offset[1] = offset[1].multiply(addend[1]);
 	    	    offset[0] = offset[0].add(addend[0]);
 	    	    
-	    	    if(addend[1].compareTo(BigInteger.ONE) != 0)
-	    	        offset_factors.add(addend[1]);
 	    	    
-	    	   
 	    	    gcd = offset[0].gcd(offset[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    offset[0] = offset[0].divide(gcd);
 			    	offset[1] = offset[1].divide(gcd);
-			   
-			    	if(offset_factors.contains(gcd))
-			    	{
-			    	    int k = offset_factors.indexOf(gcd);
-			    	    offset_factors.remove(k);
-			    	    
-			    	}
-			    	else
-			       	offset_divisors.add(gcd);
 	    	    }
-	    	    
-	    	    factor = BigInteger.ONE;
-	    	    factor            = factor.valueOf(s[j]);
-	    	    addend[0]         = addend[0].multiply(factor);
-	    	    factor            = factor.valueOf(m);
-	    	    addend[1]         = addend[1].multiply(factor);
-	    	 
-            factor   = factor.valueOf(f[j]);
+			    
+                factor   = factor.valueOf(f[j]);
 	    	    range[0] = range[0].multiply(factor);
 	    	    factor   = factor.valueOf(m);
 	    	    range[1] = range[1].multiply(factor);
@@ -2507,10 +2726,9 @@ public class CodeMapper
 	    	    gcd = range[0].gcd(range[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
+	    	    	range[0] = range[0].divide(gcd);
 			    	range[1] = range[1].divide(gcd);
 	    	    }
-	    	    
 	    	    f[j]--;
 	    	    m--;
 	    	    for(int k = j + 1; k < s.length; k++)
@@ -2519,122 +2737,161 @@ public class CodeMapper
 	    	    }
 	    }
 	
-		BigInteger range_factor  = range[1];
-		BigInteger offset_factor = offset[1];
-		
 		if(offset[1].compareTo(range[1]) != 0)
-		{		
-			offset[0] = offset[0].multiply(range_factor);
-			offset[1] = offset[1].multiply(range_factor);
+		{	
+			System.out.println("Offset and range denominators are unequal.");
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+		    
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
 					
-			range[0] = range[0].multiply(offset_factor);
-			range[1] = range[1].multiply(offset_factor);	
-			
-			offset_factors.add(range_factor);
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+			System.out.println("Offset is " + offset[0] + ", range is " + range[0]);
 		}
 		
+		
+		ArrayList <BigInteger> prime = new ArrayList <BigInteger> ();
+		
+		for(BigInteger i = BigInteger.ZERO; i.compareTo(range[0]) == -1; i = i.add(BigInteger.ONE))
+		{
+		    BigInteger current_value = offset[0].add(i);
+		    if(current_value.isProbablePrime(2))
+		    {
+		        prime.add(i);	
+		    }
+		}
+		
+		int size = prime.size();
+		System.out.println("The interval with length " + range[0] + " contains " + size + " primes");
+			
+		ArrayList <ArrayList <BigInteger>> interval_factors = new ArrayList <ArrayList <BigInteger>> ();
+		
+		for(BigInteger i = BigInteger.ZERO; i.compareTo(range[0]) == -1; i = i.add(BigInteger.ONE))
+		{
+			if(!prime.contains(i))
+			{
+		        BigInteger current_value              = offset[0].add(i);
+		        ArrayList <BigInteger> current_factors = getPrimeFactors(current_value);
+		        interval_factors.add(current_factors); 
+		    }
+		    else
+		    {
+		    	BigInteger current_factor = BigInteger.ONE;
+		    	ArrayList <BigInteger> current_factors = new ArrayList <BigInteger> ();
+		    	current_factors.add(current_factor);
+		    	interval_factors.add(current_factors);	
+		    }
+		}
+		
+		ArrayList <BigInteger> denominator_factors = getPrimeFactors(offset[1]);
+		
+		ArrayList <ArrayList <BigInteger>> common_factors = getCommonFactors(interval_factors, denominator_factors);
+		
+		ArrayList result = getMaxProduct(common_factors);
 		
 		
 		/*
-		BigInteger d = offset[0].add(range[0]);
-		BigInteger a = d.multiply(offset[1]);
-		BigInteger b = d.multiply(range[0]);
-		BigInteger c = a.subtract(b);
-		
-		BigInteger v = c.divide(offset[1]);
-		
-		if(v.compareTo(offset[0]) == -1)
-			System.out.println("V is less than offset.");
-		else
-			System.out.println("V is equal to or greater than offset.");
-		
-		if(v.compareTo(d) == -1)
-			System.out.println("V is less than bound.");
-		else
-			System.out.println("V is equal to or greater than bound.");
-		BigInteger    gcd        = v.gcd(offset[1]);
-		v = v.divide(gcd);
-		int length        = v.bitLength();
-		
-		System.out.println("Bitlength of v is " + length);
-		*/
-		
-		ArrayList <BigInteger> factor_list = new ArrayList <BigInteger> ();
-		
-		BigInteger product = BigInteger.ONE;
-		BigInteger factor  = BigInteger.TWO;
-		BigInteger bound   = offset[0].add(range[0]);
-		while(product.compareTo(bound) == -1)
-		{
-			product = product.multiply(factor);
-			factor_list.add(factor);
-		}
-		
-		
-		while(product.compareTo(bound) >= 0)
-        {
-	        int        size           = factor_list.size();
-	        BigInteger second_to_last = factor_list.get(size - 2);
-	        BigInteger last           = factor_list.get(size - 1);
-	        BigInteger combined       = second_to_last.add(last);
-	        combined                  = combined.subtract(BigInteger.ONE);
-	        factor_list.remove(size - 1);
-	        factor_list.remove(size - 2);
-	        factor_list.add(combined);
-	        
-	        product = BigInteger.ONE;
-	        size    = factor_list.size();
-	        for(int i = 0; i < size; i++)
-	        {
-	        	    factor = factor_list.get(i);
-	        	    product = product.multiply(factor);
-	        }
-        }
-		
-		if(product.compareTo(bound) == -1)
-            System.out.println("Product is less than bound.");
-		if(product.compareTo(offset[0]) == -1)
-		{
-			int size = factor_list.size();
-			System.out.println("Product is less than offset.");
-			factor = factor_list.get(size - 1);
-			factor = factor.add(BigInteger.ONE);
-			product = factor;
-			for(int i = 0; i < size - 1; i++)
-			{
-				factor = factor_list.get(i); 
-				product = product.multiply(factor);
-			}
-			if(product.compareTo(offset[0]) == -1)
-				System.out.println("Product is still less than offset.");	
-			else
-			{
-				if(product.compareTo(bound) >= 0)	
-				{
-					System.out.println("Product is greater than offset and bound.");		
-				}
-				else
-				{
-					System.out.println("Product is now greater than offset and less than bound.");	
-				}
-			}
-		}
-		else
-			System.out.println("Product is greater than or equal to offset.");
-		
-		BigInteger gcd        = offset[0].gcd(offset[1]);
-		offset[0] = offset[0].divide(gcd);
-		offset[1] = offset[1].divide(gcd);
-		int length = offset[0].bitLength();
-		//System.out.println("Bitlength of offset is " + length);
-		
-		
-		
+		BigInteger gcd           = BigInteger.ZERO;
+		gcd                      = offset[0].gcd(offset[1]);
+		BigInteger    max_gcd    = gcd;  
+        BigInteger largest_index = BigInteger.ZERO;
+		int number_of_searches   = 0;
+	
 		BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
+        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+	    {
+        	value[0] = value[0].add(BigInteger.ONE);
+        	if(!prime.contains(index))
+        	{
+	    	
+	    	gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+        	        max_gcd = gcd;
+        	        largest_index = index;
+	        }
+	        number_of_searches++;
+        	}
+	    }
+        
+        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+        System.out.println("Index was " + largest_index); 
+        System.out.println();
+        value[0] = offset[0].add(largest_index);
+        value[1] = offset[1];
+        value[0] = value[0].divide(max_gcd);
+        value[1] = value[1].divide(max_gcd);
+        
+        
+        
+        ArrayList <BigInteger> numerator_factors = getPrimeFactors(value[0]);
+        ArrayList <BigInteger> denominator_factors = getPrimeFactors(value[1]);
+        
+        System.out.println("Value numerator factors: ");
+		for(int i = 0; i < numerator_factors.size(); i++)
+		{
+			BigInteger factor = numerator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		System.out.println("Value denominator factors: ");
+		for(int i = 0; i < denominator_factors.size(); i++)
+		{
+			BigInteger factor = denominator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		numerator_factors = getPrimeFactors(offset[0]);
+        denominator_factors = getPrimeFactors(offset[1]);
+        
+        System.out.println("Offset numerator factors: ");
+		for(int i = 0; i < numerator_factors.size(); i++)
+		{
+			BigInteger factor = numerator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		System.out.println("Offset denominator factors: ");
+		for(int i = 0; i < denominator_factors.size(); i++)
+		{
+			BigInteger factor = denominator_factors.get(i);
+			System.out.print(factor + " ");	
+		}
+		System.out.println();
+		System.out.println();
+		
+		int length = 0;
+		length = offset[0].bitLength();
+		//System.out.println("Offset numerator bitlength is " + length);
+		length = offset[1].bitLength();
+		//System.out.println("Offset denominator bitlength is " + length);
+		length = value[0].bitLength();
+		System.out.println("Value numerator bitlength is " + length);
+		length = value[1].bitLength();
+		System.out.println("Value denominator bitlength is " + length);
+		*/
+		BigInteger max = (BigInteger)result.get(0);
+		int x = (int)result.get(1);
+		//System.out.println("Index of max product is " + x);
+		BigInteger addend = BigInteger.ZERO;
+		addend = addend.valueOf(x);
+		
+		BigInteger [] value = new BigInteger [] {offset[0].add(addend), offset[1]};
+		value[0] = value[0].divide(max);
+		value[1] = value[1].divide(max);
+		
         return value;	
 	}
-
-	public static BigInteger [] getRangeQuotient4(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
+	
+	public static BigInteger getRangeQuotient4(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
 		int [] f = frequency.clone();
 		int    m = sum_of_frequencies;
@@ -2686,14 +2943,12 @@ public class CodeMapper
 	    	    offset[1] = offset[1].multiply(addend[1]);
 	    	    offset[0] = offset[0].add(addend[0]);
 	    	    
-	    	  
 	    	    gcd = offset[0].gcd(offset[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    offset[0] = offset[0].divide(gcd);
 			    	offset[1] = offset[1].divide(gcd);
 	    	    }
-	    	    
 	    	    
 	    	    factor = BigInteger.ONE;
 	    	    factor            = factor.valueOf(s[j]);
@@ -2739,7 +2994,7 @@ public class CodeMapper
 		BigInteger b = offset[1];
 		    
 		BigInteger k = BigInteger.TWO;
-		for(int i = 0; i < b.bitLength(); i++)
+		for(int i = 1; i < b.bitLength(); i++)
 		{
 		    	k = k.multiply(BigInteger.TWO);
 		}
@@ -2747,9 +3002,11 @@ public class CodeMapper
 		BigInteger c = a.multiply(k);
 		c = c.divide(b);
 		    
+		/*
 		BigInteger d = c.mod(b);
 		if(d.compareTo(k.divide(BigInteger.TWO)) == 1)
 		    	c = c.add(BigInteger.ONE);
+		*/
 		
 		BigDecimal e = new BigDecimal(c);
 		BigDecimal g = new BigDecimal(k);
@@ -2759,9 +3016,11 @@ public class CodeMapper
 		a = bound;
 		c = a.multiply(k);
 		c = c.divide(b);
+		/*
 		d = c.mod(b);
 		if(d.compareTo(k.divide(BigInteger.TWO)) == 1)
-	    	c = c.add(BigInteger.ONE);
+	      	c = c.add(BigInteger.ONE);
+	    */
 		e = new BigDecimal(c);
 		BigDecimal upper = e.divide(g);
 		
@@ -2790,29 +3049,162 @@ public class CodeMapper
 		    	{
 		      	System.out.println("Found different bits at index " + i);
 		      	
-		      	BigInteger test_value = lower_bound;
-		      	test_value = test_value.setBit(i);
+		      	value = lower_bound;
+		      	value = value.setBit(i);
 		      	for(int j = i + 1; j < length1; j++)
 		      	{
-		      		test_value = test_value.clearBit(j);
+		      		value = value.clearBit(j);
 		      	}
-		      	if(test_value.compareTo(upper_bound) == -1)
+		      	if(value.compareTo(upper_bound) == -1)
 		      	{
 		      		System.out.println("Found intermdiate value at index " + i);
 		      		break;
-		      	}
-		      	
+		      	} 	
 		    	}
 		}
 		
-		BigInteger    gcd        = offset[0].gcd(offset[1]);
-		offset[0] = offset[0].divide(gcd);
-		offset[1] = offset[1].divide(gcd);
-		//BigInteger [] value   = new BigInteger [] {offset[0], offset[1]};
-        return offset;	
+		if(value.compareTo(upper_bound) >= 0)
+			value = lower_bound;
+		
+        return value;	
 	}
 
 	
+	public static byte [] getMessage2(BigInteger value, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
+	{
+		int [] f = frequency.clone();
+		int    m = sum_of_frequencies;
+		
+		int [] s   = new int[f.length];
+		int    sum = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = sum;
+			sum += f[i];
+		}
+		
+		int length = value.bitLength();
+		
+		BigInteger denominator = BigInteger.TWO;
+		for(int i = 1; i < length; i++)
+			denominator = denominator.multiply(BigInteger.TWO);
+		
+		BigInteger [] v = new BigInteger [] {value, denominator};
+		
+		
+		
+		byte [] message = new byte[n];
+		
+		BigInteger [] offset = new BigInteger[2];
+		offset[0]            = BigInteger.ZERO;
+		offset[1]            = BigInteger.ONE;
+		
+		BigInteger [] range  = new BigInteger[2];
+		range[0]             = BigInteger.ONE;
+		range[1]             = BigInteger.ONE;
+		
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower       = new BigInteger [] {range[0], range[1]};
+				    lower[0]                  = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]                  = lower[1].multiply(BigInteger.valueOf(m));
+				
+				    BigInteger [] upper       = new BigInteger [] {range[0], range[1]};
+				    upper[0]                  = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    upper[1]                  = upper[1].multiply(BigInteger.valueOf(m));
+				
+				    BigInteger [] a           = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b           = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c           = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(c[1]) != 0)
+				    {
+					    BigInteger lower_factor = a[1];
+					    BigInteger upper_factor = c[1];
+					
+					    a[0]                    = a[0].multiply(upper_factor);
+					    a[1]                    = a[1].multiply(upper_factor);
+					    c[0]                    = c[0].multiply(upper_factor);
+					    c[1]                    = c[1].multiply(upper_factor);
+				    }
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+					    BigInteger bound_factor = a[1];
+					    BigInteger value_factor = b[1];
+					
+					    a[0]                    = a[0].multiply(value_factor);
+					    a[1]                    = a[1].multiply(value_factor);
+					    c[0]                    = c[0].multiply(value_factor);
+					    c[1]                    = c[1].multiply(value_factor);
+					    b[0]                    = b[0].multiply(bound_factor);
+					    b[1]                    = b[1].multiply(bound_factor);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+					
+				        offset[1]            = offset[1].multiply(addend[1]);
+				    
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				    
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	        
+				        j = table.get(j);
+				        message[i]    = (byte)j;
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return message;
+	}
+	
+
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
 	{
 		int [] f = frequency.clone();
