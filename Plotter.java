@@ -41,7 +41,7 @@ public class Plotter
 		    {
 		        public void windowClosing(WindowEvent event)
 		        {   
-		        	System.exit(0);	
+		            System.exit(0);	
 		        }
 		    };
 		    frame.addWindowListener(window_handler);
@@ -50,6 +50,7 @@ public class Plotter
 		    frame.add(canvas);
 		    Dimension d = canvas.getSize();
 		    frame.setSize(d);
+		    frame.pack();
 		    
 		    canvas.repaint();
 		}
@@ -64,21 +65,24 @@ public class Plotter
 	{
 	    int [] value;
 	    
+	    int    margin = 5;
+	    
 	    public PlotCanvas(int [] value)
 	    {
-	    	this.value = value;
+	    	    this.value = value;
 	    	
-	    	int max = 0;
-	    	for(int i = 0; i < value.length; i++)
-	    	{
-	    		if(value[i] > max)
-	    			max = value[i];
-	    	}
+	    	    int max = 0;
+	    	    for(int i = 0; i < value.length; i++)
+	    	    {
+	    		    if(value[i] > max)
+	    			    max = value[i];
+	    	    }
 	    	
-	    	int xdim = value.length + 10;
-	    	int ydim = max + 10;
-	    	Dimension plot_dimension = new Dimension(xdim, ydim);
-	    	this.setSize(plot_dimension);
+	    	    int xdim = value.length + margin * 2;
+	    	    int ydim = (max * 100) + margin * 2;
+	    	   
+	      	Dimension plot_dimension = new Dimension(xdim, ydim);
+	      	this.setSize(plot_dimension);
 	    }
 	    
 	    public void paint(Graphics g)
@@ -91,18 +95,39 @@ public class Plotter
 			Image buffered_image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 			Graphics2D graphics_buffer = (Graphics2D) buffered_image.getGraphics();
 			
-			graphics_buffer.setColor(java.awt.Color.BLACK);
-			//graphics_buffer.setColor(java.awt.Color.WHITE);
+			graphics_buffer.setColor(java.awt.Color.WHITE);
 			graphics_buffer.fillRect(0, 0, xdim, ydim);
-			//graphics_buffer.setColor(java.awt.Color.BLACK);
 			
-			/*
-			graphics_buffer.drawLine(5, 5, xdim - 5, 5);
-			graphics_buffer.drawLine(xdim - 5, 5, xdim - 5, ydim - 5);
-			graphics_buffer.drawLine(5, 5, 5, ydim - 5);
-			graphics_buffer.drawLine(5, ydim - 5, xdim - 5, ydim - 5);
-			*/
+			graphics_buffer.setColor(java.awt.Color.BLACK);
+			graphics_buffer.drawLine(margin, margin, xdim - margin, margin);
+			graphics_buffer.drawLine(xdim - margin, margin, xdim - margin, ydim - margin);
+			graphics_buffer.drawLine(margin, margin, margin, ydim - margin);
+			graphics_buffer.drawLine(margin, ydim - margin, xdim - margin, ydim - margin);
+			
+			int current_value = value[0];
+			int current_x     = margin;
+			int current_y     = ydim - 1;
+			current_y        -= margin;
+			current_y        -= current_value * 100;
+			
+			int previous_x = current_x;
+			int previous_y = current_y;
+			for(int i = 1; i < value.length; i++)
+			{
+			    current_x     = previous_x + 1;
+			    current_value = value[i];
+			    current_y     = ydim - 1;
+				current_y    -= margin;
+				current_y    -= current_value * 100;
+			    
+				graphics_buffer.drawLine(previous_x, previous_y, current_x, current_y);
+				
+				previous_x = current_x;
+				previous_y = current_y;
+			}
+			
 			g.drawImage(buffered_image, 0, 0, null);
 		}
 	}
+
 }
