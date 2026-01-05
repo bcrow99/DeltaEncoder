@@ -2372,17 +2372,15 @@ public class CodeMapper
 	//This method returns the offset.
 	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
-		int    m = src.length;
 		int    n = src.length;
-		
 		int [] f = frequency.clone();
 	    int [] s = new int[f.length];
 		
-		int sum = 0;
+		int m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i] = sum;
-			sum    += f[i];
+			s[i] = m;
+			m   += f[i];
 		}
 		
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
@@ -2442,28 +2440,20 @@ public class CodeMapper
 	//This method returns the offset.
 	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int sum_of_frequencies)
 	{
+		int    n       = src.length;
 		int [] f = frequency.clone();
-		int    m = sum_of_frequencies;
-		
 	    int [] s = new int[f.length];
 		
-		int sum = 0;
+		int m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i] = sum;
-			sum    += f[i];
+			s[i] = m;
+			m    += f[i];
 		}
 		
-		BigInteger [] offset = new BigInteger[2];
-		offset[0]            = BigInteger.ZERO;
-		offset[1]            = BigInteger.ONE;
-		
-		BigInteger [] range  = new BigInteger[2];
-		range[0]             = BigInteger.ONE;
-		range[1]             = BigInteger.ONE;
-		
-		int    n       = src.length;
-	    
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
 		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
@@ -2479,21 +2469,18 @@ public class CodeMapper
 	    	    factor            = factor.valueOf(m);
 	    	    addend[1]         = addend[1].multiply(factor);
 	    	    
-	    	    
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    addend[0] = addend[0].divide(gcd);
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
-	    	    
-	    	    
+	    	     
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
 	    	    offset[0] = offset[0].add(addend[0]);
 	    	     
-	    	  
 	    	    gcd = offset[0].gcd(offset[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
@@ -2501,7 +2488,6 @@ public class CodeMapper
 			    	offset[1] = offset[1].divide(gcd);
 	    	    }
 			
-	    	    
             factor   = factor.valueOf(f[j]);
 	    	    range[0] = range[0].multiply(factor);
 	    	    factor   = factor.valueOf(m);
@@ -2522,6 +2508,7 @@ public class CodeMapper
 	    	        s[k]--;
 	    }
 	
+		
 		BigInteger gcd = offset[0].gcd(offset[1]);
 	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    {
@@ -2729,41 +2716,37 @@ public class CodeMapper
 	    return offset;
 	}
 	
-	// This method uses the numerator and denominator.
-	public static byte [] getMessage(BigInteger [] location, Hashtable <Integer, Integer>table, int [] frequency)
+
+	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency)
 	{
 		int [] f = frequency.clone();
-		
-		
-		int [] s   = new int[f.length];
+		int [] s = new int[f.length];
 		int    m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
 			s[i] = m;
 			m += f[i];
 		}
-		
-		int n = m;
-		
-		byte [] message = new byte[n];
-		
+		int    n = m;
+	
+		byte [] message      = new byte[n];
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		
+	
 		for(int i = 0; i < n; i++)
 		{
-			BigInteger [] current_location = new BigInteger[] {location[0], location[1]};
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
 			if(offset[0].compareTo(BigInteger.ZERO) != 0)
 			{
-			    current_location[0] = current_location[0].multiply(offset[1]);
-			    current_location[0] = current_location[0].subtract(offset[0].multiply(current_location[1]));
-			    current_location[1] = current_location[1].multiply(offset[1]);
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
 			    
-			    BigInteger gcd = current_location[0].gcd(current_location[1]);
+			    BigInteger gcd = w[0].gcd(w[1]);
 	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	        {
-	    	    	        current_location[0] = current_location[0].divide(gcd);
-			       	current_location[1] = current_location[1].divide(gcd);
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
 	    	        }
 			}
 			
@@ -2771,26 +2754,28 @@ public class CodeMapper
 			{
 				if(f[j] != 0)
 				{
-				    BigInteger [] lower       = new BigInteger [] {range[0], range[1]};
-				    lower[0]                  = lower[0].multiply(BigInteger.valueOf(s[j]));
-				    lower[1]                  = lower[1].multiply(BigInteger.valueOf(m));
-				
-				    BigInteger [] upper       = new BigInteger [] {range[0], range[1]};
-				    upper[0]                  = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-				    upper[1]                  = upper[1].multiply(BigInteger.valueOf(m));
-				
-					BigInteger bound_factor    = lower[1];
-					BigInteger location_factor = current_location[1];
-					
-					lower[0] = lower[0].multiply(location_factor);
-					lower[1] = lower[1].multiply(location_factor);
-					upper[0] = upper[0].multiply(location_factor);
-					upper[1] = upper[1].multiply(location_factor);
-					current_location[0] = current_location[0].multiply(bound_factor);
-					current_location[1] = current_location[1].multiply(bound_factor);
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
 				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
 	    	        
-				    if((lower[0].compareTo(current_location[0]) <= 0) && (upper[0].compareTo(current_location[0]) > 0))
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
 				    { 
 					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
 					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
@@ -2798,9 +2783,7 @@ public class CodeMapper
 					
 					    offset[0]            = offset[0].multiply(addend[1]);
 					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
-					
 				        offset[1]            = offset[1].multiply(addend[1]);
-				    
 				        BigInteger gcd = offset[0].gcd(offset[1]);
 					    if(gcd.compareTo(BigInteger.ONE) == 1)
 					    {
@@ -2810,7 +2793,6 @@ public class CodeMapper
 				  
 				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
 				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
-				    
 				        gcd = range[0].gcd(range[1]);
 		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
 		    	            {
@@ -2832,14 +2814,17 @@ public class CodeMapper
 		}
 		
 		return message;
-	}		
-
+	}	
+   
+	
+	
+	
 	
 	// This method uses the numerator and denominator.
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
 	{
 		int [] f = frequency.clone();
-		int    m = sum_of_frequencies;
+		
 		
 		int [] s   = new int[f.length];
 		int    sum = 0;
@@ -2848,7 +2833,8 @@ public class CodeMapper
 			s[i] = sum;
 			sum += f[i];
 		}
-		
+		int    m = sum_of_frequencies;
+	
 		byte [] message = new byte[n];
 		
 		BigInteger [] offset = new BigInteger[2];
@@ -2959,7 +2945,8 @@ public class CodeMapper
 		
 		return message;
 	}	
-
+   
+	
 	// This method uses the normalized fraction.
 	public static byte [] getMessage2(BigInteger value, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
 	{
@@ -3092,105 +3079,4 @@ public class CodeMapper
 		
 		return message;
 	}
-	
-	// This method uses the numerator and denominator.
-	public static byte [] getMessage3(long [] location, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
-	{
-		int [] f = frequency.clone();
-		int    m = sum_of_frequencies;
-		
-		int [] s   = new int[f.length];
-		int    sum = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = sum;
-			sum += f[i];
-		}
-		
-		byte [] message = new byte[n];
-		
-		long [] offset  = {0L, 1L};
-		long [] range   = {1L, 1L};
-		
-		for(int i = 0; i < n; i++)
-		{
-			long [] current_location = {location[0], location[1]};
-			if(offset[0] != 0)
-			{
-				current_location[0] *= offset[1];
-				current_location[0] -= offset[0] * location[1];
-				current_location[1] *= offset[1];
-				
-				long gcd = gcd(current_location[0], current_location[1]);
-				if(gcd > 1)
-				{
-					current_location[0] /= gcd;
-					current_location[1] /= gcd;
-				}
-			}
-			
-			for(int j = 0; j < f.length; j++)
-			{
-				if(f[j] != 0)
-				{
-					long [] lower = {range[0], range[1]};
-					long [] upper = {range[0], range[1]};
-				    
-					lower[0]     *= s[j];
-				    lower[1]     *= m;
-				    
-				    upper[0]     *= s[j] + f[j];
-				    upper[1]     *= m;
-				    
-				    long location_denominator = current_location[1];
-				    lower[0] *= location_denominator;
-				    lower[1] *= location_denominator;
-				    upper[0] *= location_denominator;
-				    upper[1] *= location_denominator;
-				    
-				    long bound_denominator = range[1] * m;
-				    current_location[0]   *= bound_denominator;
-				    current_location[1]   *= bound_denominator;
-				
-				    
-				    if(lower[0] <= current_location[0] && current_location[0] < upper[0])
-				    {
-				    	    long [] addend = {lower[0] / location_denominator, lower[1] / location_denominator};
-				    	    
-				    	    offset[0] *= addend[1];
-				    	    offset[0] += addend[0] * offset[1];
-				    	    offset[1] *= addend[1];
-				    	    
-				    	    long gcd = gcd(offset[0], offset[1]);
-				    	    if(gcd > 1)
-				    	    {
-				    	    	    offset[0] /= gcd;
-				    	    	    offset[1] /= gcd;
-				    	    }
-				    	    
-				    	    range[0] *= f[j];
-				    	    range[1] *= m;
-				    	    gcd = gcd(range[0], range[1]);
-				    	    if(gcd > 1)
-				    	    {
-				    	    	    range[0] /= gcd;
-				    	    	    range[1] /= gcd;
-				    	    }
-				    	    
-				    	    f[j]--;
-			    	        m--;
-			    	        for(int k = j + 1; k < s.length; k++)
-			    	    	        s[k]--;
-		    	        
-				        j = table.get(j);
-				        message[i]    = (byte)j;
-				        break;
-				    }
-			    }
-			}	
-		}
-		
-		return message;
-	}	
-	
 }
