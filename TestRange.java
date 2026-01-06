@@ -41,15 +41,16 @@ public class TestRange
 	    */
 		
 	   
-		int k = 3;
+		int xdim = 160;
+		int ydim = 120;
 		
-		byte [] message = new byte [640 * k];
+		byte [] message = new byte [xdim * ydim];
 		
-		for(int i = 0; i < k; i++)
+		for(int i = 0; i < ydim; i++)
 		{
-		    for(int j = 0; j < 640; j++)
+		    for(int j = 0; j < xdim; j++)
 		    {
-			    message[i * 640 + j] = (byte)(j);
+			    message[i * xdim + j] = (byte)(j);
 			}
 		}
 		
@@ -95,7 +96,8 @@ public class TestRange
 	    BigInteger [] location = CodeMapper.getRangeQuotient(message, symbol_table, f);
 	    long stop = System.nanoTime();
 		long time = stop - start;
-		System.out.println("It took " + (time / 1000000) + " ms to get location.");
+		System.out.println("It took " + (time / 1000000) + " ms to get probabalistic location.");
+		System.out.println();
 		/*
 		double location = value[0];
 		location       /= value[1];

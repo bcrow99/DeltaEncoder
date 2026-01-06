@@ -2386,8 +2386,16 @@ public class CodeMapper
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		
+		int xdim = 160;
 		for(int i = 0; i < n; i++)
 	    {
+			if(i % xdim == 0)
+			{
+				System.out.println("Row " + (i / xdim));
+				System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
+				System.out.println("Bitlength of range denominator is  " +  range[0].bitLength());
+				System.out.println();
+			}
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
@@ -2397,13 +2405,14 @@ public class CodeMapper
 	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
 	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
 	    	   
+	    	   
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    addend[0] = addend[0].divide(gcd);
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
-	    	  
+	    	   
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
@@ -2419,13 +2428,15 @@ public class CodeMapper
 	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
 	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
 	    	    
+
 	    	    gcd = range[0].gcd(range[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    range[0] = range[0].divide(gcd);
 			    	range[1] = range[1].divide(gcd);
 	    	    }
-	    	   
+	    	 
+	    	    
 	    	    f[j]--;
 	    	    m--;
 	    	    for(int k = j + 1; k < s.length; k++)
@@ -2807,6 +2818,16 @@ public class CodeMapper
 		    	        
 				        j = table.get(j);
 				        message[i]    = (byte)j;
+				        
+				        int xdim = 160;
+				        if(i % xdim == 0)
+						{
+				           	System.out.println("Row " + (i / xdim));
+							System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
+							System.out.println("Bitlength of range denominator is " +  range[0].bitLength());
+							System.out.println();
+						}
+				        
 				        break;
 				    }
 			    }
@@ -2816,10 +2837,7 @@ public class CodeMapper
 		return message;
 	}	
    
-	
-	
-	
-	
+
 	// This method uses the numerator and denominator.
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
 	{
