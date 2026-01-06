@@ -1,5 +1,8 @@
 import java.util.*;
 import java.util.zip.*;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.lang.Math.*;
 import java.math.*;
 
@@ -42,7 +45,7 @@ public class TestRange
 		
 	   
 		int xdim = 256;
-		int ydim = 120;
+		int ydim = 128;
 		
 		byte [] message = new byte [xdim * ydim];
 		
@@ -93,7 +96,33 @@ public class TestRange
 	    }
 	 
 	    long start = System.nanoTime();
+	    //BigInteger [] location = CodeMapper.getRangeQuotient2(message, symbol_table, f);
 	    BigInteger [] location = CodeMapper.getRangeQuotient(message, symbol_table, f);
+		try
+		{
+			DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("woo")));
+			
+			byte [] numerator   = location[0].toByteArray();
+			byte [] denominator = location[1].toByteArray();
+			
+			out.writeInt(numerator.length);
+			out.write(numerator);
+			out.writeInt(denominator.length);
+			out.write(denominator);
+			
+			out.flush();
+			out.close();
+
+			File file = new File("woo");
+			long file_length = file.length();
+		    System.out.println("woo file length is " + file_length);
+			System.out.println();
+		} 
+		catch (Exception e)
+		{
+			System.out.println(e.toString());
+		}
+	    
 	    long stop = System.nanoTime();
 		long time = stop - start;
 		System.out.println("It took " + (time / 1000000) + " ms to get probabalistic location.");
@@ -204,6 +233,5 @@ public class TestRange
 	    }
 	    */
 	}
-
 
 }
