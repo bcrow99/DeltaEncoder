@@ -2386,7 +2386,7 @@ public class CodeMapper
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		
-		int xdim = 160;
+		int xdim = 256;
 		for(int i = 0; i < n; i++)
 	    {
 			if(i % xdim == 0)
@@ -2819,7 +2819,7 @@ public class CodeMapper
 				        j = table.get(j);
 				        message[i]    = (byte)j;
 				        
-				        int xdim = 160;
+				        int xdim = 256;
 				        if(i % xdim == 0)
 						{
 				           	System.out.println("Row " + (i / xdim));
@@ -3097,4 +3097,5 @@ public class CodeMapper
 		
 		return message;
 	}
+
 }
