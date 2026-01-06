@@ -41,7 +41,7 @@ public class TestRange
 	    */
 		
 	   
-		int xdim = 160;
+		int xdim = 256;
 		int ydim = 120;
 		
 		byte [] message = new byte [xdim * ydim];
@@ -204,5 +204,6 @@ public class TestRange
 	    }
 	    */
 	}
+
 
 }
