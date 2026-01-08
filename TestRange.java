@@ -15,7 +15,7 @@ public class TestRange
 	
 	public TestRange()
 	{
-		/*
+		
 		byte [] message = new byte[10];
 	    
 		message[0] = 0;
@@ -30,7 +30,7 @@ public class TestRange
 		message[8] = 0;
 		message[9] = 1;
 		
-		
+		/*
 	    message[10] = 2;
 	    message[11] = 2;
 	    message[12] = 0;
@@ -41,9 +41,9 @@ public class TestRange
 	    message[17] = 1;
 	    message[18] = 2;
 	    message[19] = 3;
-	    */
+	    
 		
-	   
+	    
 		int xdim = 256;
 		int ydim = 128;
 		
@@ -56,7 +56,7 @@ public class TestRange
 			    message[i * xdim + j] = (byte)(j);
 			}
 		}
-		
+		*/
 		
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
@@ -97,19 +97,27 @@ public class TestRange
 	 
 	    long start = System.nanoTime();
 	    //BigInteger [] location = CodeMapper.getRangeQuotient2(message, symbol_table, f);
-	    BigInteger [] location = CodeMapper.getRangeQuotient(message, symbol_table, f);
-		try
+	    //BigInteger [] location = CodeMapper.getRangeQuotient(message, symbol_table, f);
+	    
+	    long [] location = CodeMapper.getRangeQuotient3(message, symbol_table, f);
+	    long stop = System.nanoTime();
+	    long time = stop - start;
+	    System.out.println("It took " + (time / 1000000) + " ms to get probabalistic location.");
+	    System.out.println();
+	    
+	    try
 		{
 			DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("woo")));
 			
+			/*
 			byte [] numerator   = location[0].toByteArray();
 			byte [] denominator = location[1].toByteArray();
 			
+			System.out.println("Numerator length is " + numerator.length);
 			out.writeInt(numerator.length);
-			out.write(numerator);
-			out.writeInt(denominator.length);
-			out.write(denominator);
-			
+			*/
+			out.writeLong(location[0]);
+			out.writeLong(location[1]);
 			out.flush();
 			out.close();
 
@@ -123,10 +131,7 @@ public class TestRange
 			System.out.println(e.toString());
 		}
 	    
-	    long stop = System.nanoTime();
-		long time = stop - start;
-		System.out.println("It took " + (time / 1000000) + " ms to get probabalistic location.");
-		System.out.println();
+	  
 		/*
 		double location = value[0];
 		location       /= value[1];
@@ -138,17 +143,16 @@ public class TestRange
 			start = System.nanoTime();
 			//byte [] decoded_message = CodeMapper.getMessage(location, inverse_table, f, sum, message.length);
 			
-			byte [] decoded_message = CodeMapper.getMessage(location, inverse_table, f);
+			byte [] decoded_message = CodeMapper.getMessage3(location, inverse_table, f);
 			stop = System.nanoTime();
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
 		
-			/*
+			
 			System.out.println("Decoded message from getMessage:");
 		    for(int i = 0; i < decoded_message.length; i++)
 		    	    System.out.print(decoded_message[i] + " ");
 		    System.out.println();
-		    */
 		}
 		catch(Exception e)
 	    {
