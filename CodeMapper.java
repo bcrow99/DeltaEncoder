@@ -2729,7 +2729,151 @@ public class CodeMapper
 	    return offset;
 	}
 	
+	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		
+	    int [] s = new int[f.length];
+		
+	    int    m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+		byte [] bit_buffer = new byte[src.length * 2];
+		
+		int     bit_offset       = 0;
+		int     byte_offset      = 0;
+		int     bits_outstanding = 0;
 	
+		int n = src.length;
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    
+	    	    long [] offset = {1L, 4L};
+	    		long [] range  = {1L, 2L};
+	    	    
+	    	    
+	    	    long [] addend = {range[0], range[1]};
+	    	    addend[0] *= s[j];
+	    	    addend[1] *= m;
+	    	    
+	    	   
+	    	    long gcd = gcd(addend[0], addend[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	    	    addend[0] /= gcd;
+	    	    	    addend[1] /= gcd;
+	    	    }
+	    	   
+	    	    
+	    	    offset[0] *= addend[1];
+	    	    addend[0] *= offset[1];
+	    	    offset[1] *= addend[1];
+	    	    offset[0] += addend[0];
+	    	     
+	    	    
+	    	    gcd = gcd(offset[0], offset[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	        offset[0] /= gcd;
+    	    	        offset[1] /= gcd;
+	    	    }
+	    	   
+	    	    
+			range[0] *= f[j];
+			range[1] *= m;
+			
+			
+			gcd = gcd(range[0], range[1]);
+    	        if(gcd > 1)
+    	        {
+    	            range[0] /= gcd;
+	    	        range[1] /= gcd;
+    	        }
+    	      
+    	        double p = offset[0];
+    	        p       /= offset[1];
+    	        double r = range[0];
+    	        r       /= range[1];
+    	        while(r <= .25)
+    	        {
+    	        	    if(p + r <= .5) 
+    	        	    {
+    	        	        bit_offset++;
+    	        	        if(bit_offset == 8)
+    	        	        {
+    	        	    	        byte_offset++;
+    	        	    	        bit_offset = 0;
+    	        	        }
+    	        	        int value = 1;
+    	        	        while(bits_outstanding > 0)
+    	        	        {
+    	        	        	    int position = byte_offset * 8 + bit_offset;
+    	        	        	    SegmentMapper.setBit(bit_buffer, position, value);
+    	        	        	    bit_offset++;
+    	    	        	        if(bit_offset == 8)
+    	    	        	        {
+    	    	        	    	        byte_offset++;
+    	    	        	    	        bit_offset = 0;
+    	    	        	        } 
+    	    	        	        bits_outstanding--;
+    	        	        }
+    	        	    }
+    	        	    else if(p >= .5)
+    	        	    {
+    	        	    	    int value = 1;
+    	        	    	    int position = byte_offset * 8 + bit_offset;
+    	        	    	    SegmentMapper.setBit(bit_buffer, position, value);
+    	        	    	    while(bits_outstanding > 0)
+    	        	    	    {
+    	        	    	        bit_offset++;
+        	        	        if(bit_offset == 8)
+        	        	        {
+        	        	    	        byte_offset++;
+        	        	    	        bit_offset = 0;
+        	        	        }
+        	        	        bits_outstanding--;
+    	        	    	    }
+    	        	    	    p = p - .5;   
+    	        	    }
+    	        	    else
+    	        	    {
+    	        	    	    bits_outstanding++;
+    	        	    	    p = p - .25;
+    	        	    }
+    	        	    p *= 2;
+    	        	    r *= 2;  
+    	        }
+            
+    	      
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	        s[k]--;
+	    }
+	
+	    byte [] bits = new byte[byte_offset + 1];
+	    for(int i = 0; i < bits.length; i++)
+	    	    bits[i] = bit_buffer[i];
+	    int extra_bits = 0;
+	    if(bit_offset != 0)
+	    	    extra_bits = 8 - bit_offset;
+	    int bitlength = bits.length * 8 - extra_bits;
+		
+	    ArrayList result = new ArrayList();
+	    result.add(bits);
+	    result.add(bitlength);
+	    
+	    return result;
+	}
 	
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency)
 	{
@@ -2822,16 +2966,6 @@ public class CodeMapper
 				        j = table.get(j);
 				        message[i]    = (byte)j;
 				        
-				        /*
-				        int xdim = 256;
-				        if(i % xdim == 0)
-						{
-				           	System.out.println("Row " + (i / xdim));
-							System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
-							System.out.println("Bitlength of range denominator is " +  range[0].bitLength());
-							System.out.println();
-						}
-				        */
 				        break;
 				    }
 			    }
@@ -3277,6 +3411,178 @@ public class CodeMapper
 		
 		return message;
 	}	
-   
-
+	
+	public static byte [] getMessage4(long [] v, Hashtable <Integer, Integer>table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		int [] s = new int[f.length];
+		int    m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m += f[i];
+		}
+		int    n = m;
+		byte [] message      = new byte[n];
+		
+		
+		long [] offset = {1L, 4L};
+		long [] range  = {1L, 2L};
+	
+		for(int i = 0; i < n; i++)
+		{
+			long [] w = new long[] {v[0], v[1]};
+			if(offset[0] != 0)
+			{
+				/*
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    */
+				
+				w[0] *= offset[1];
+				w[0] -= offset[0] * w[1];
+				w[1] *= offset[1];
+			    
+				/*
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+	    	        */
+				
+				long gcd = gcd(w[0], w[1]);
+				if(gcd > 1)
+				{
+					w[0] /= gcd;
+					w[1] /= gcd;
+				}
+			}
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    long [] lower = new long [] {range[0], range[1]};
+				    lower[0]     *= s[j];
+				    lower[1]     *= m;
+				   
+				    long [] upper = new long [] {range[0], lower[1]};
+				    upper[0]     *= (s[j] + f[j]);
+				    
+				    long [] a     = new long [] {lower[0], lower[1]};
+    	                long [] b     = new long [] {w[0], w[1]};
+    	                long [] c     = new long [] {upper[0], upper[1]};
+				
+    	                a[0] *= w[1];
+    	                a[1] *= w[1];
+					c[0] *= w[1];
+					c[1] *= w[1];
+					b[0] *= lower[1];
+					b[1] *= lower[1];    
+    	                
+    	                
+    	                /*
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+				    */
+    	                /*
+    	                if(a[1] != b[1])
+    				    {
+    				    	    a[0] *= w[1];
+    					    a[1] *= w[1];
+    					    c[0] *= w[1];
+    					    c[1] *= w[1];
+    					    b[0] *= lower[1];
+    					    b[1] *= lower[1];
+    				    }
+	    	            */
+    	                
+    	                
+				    //if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+    	                if((a[0] <= b[0]) && (c[0] > b[0]))
+				    { 
+				        /*
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+		    	            */
+    	                	    long [] addend = {range[0], range[1]};
+    						addend[0]     *= s[j];
+    						addend[1]     *= m;
+    						
+    						offset[0]     *= addend[1];
+    						offset[0]     += addend[0] * offset[1];
+    					    offset[1]     *=  addend[1];
+    					    
+    					    long gcd = gcd(offset[0], offset[1]);
+    						if(gcd > 1)
+    						{
+    							offset[0] /= gcd;
+    							offset[1] /= gcd;
+    						}
+    					  
+    					    range[0] *= f[j];
+    					    range[1] *= m;
+    					    gcd       = gcd(range[0], range[1]);
+    			    	        if(gcd > 1)
+    			    	        {
+    			    	    	        range[0] /= gcd;
+    					    	    range[1] /= gcd;
+    			    	        }
+    			    	        
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+				        j = table.get(j);
+				        message[i]    = (byte)j;
+				        
+				        /*
+				        int xdim = 256;
+				        if(i % xdim == 0)
+						{
+				           	System.out.println("Row " + (i / xdim));
+							System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
+							System.out.println("Bitlength of range denominator is " +  range[0].bitLength());
+							System.out.println();
+						}
+				        */
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return message;
+	}	
 }
