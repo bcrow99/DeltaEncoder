@@ -96,9 +96,110 @@ public class TestRange
 	    }
 	 
 	    long start = System.nanoTime();
+	    
+	    ArrayList result = CodeMapper.getNormalRangeQuotient(message, symbol_table, f);
+	    long stop = System.nanoTime();
+	    long time = stop - start;
+	    System.out.println("It took " + (time / 1000000) + " ms to get normal range quotient.");
+	    
+	    byte [] bit_buffer = (byte[])result.get(0);
+	    int     bit_length = (int)result.get(1);
+	    
+	    long x = 0;
+	    long y = 1;
+	    
+	    for(int position = bit_length - 1; position >= 0; position--)
+	    {
+	    	    int value = SegmentMapper.getBit(bit_buffer, position);
+	    	    if(value == 1)
+	    	    	    x += y;
+	    	    y *= 2;
+	    }
+	    
+	    double location = x;
+	    location /= y;
+	    System.out.println("The probabilistic location is " + location);
+	    
+	    /*
+	    long [] location = {x, y};
+	    
+	    try
+		{
+			System.out.println("Starting to decode message.");
+			start = System.nanoTime();
+			//byte [] decoded_message = CodeMapper.getMessage(location, inverse_table, f, sum, message.length);
+			
+			byte [] decoded_message = CodeMapper.getMessage4(location, inverse_table, f);
+			stop = System.nanoTime();
+			time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+		
+			
+			System.out.println("Decoded message from getMessage:");
+		    for(int i = 0; i < decoded_message.length; i++)
+		    	    System.out.print(decoded_message[i] + " ");
+		    System.out.println();
+		}
+		catch(Exception e)
+	    {
+	    	    System.out.println("Exception decoding message:");
+	    	    System.out.println(e.toString());
+	    }
+	    */
+	    
+	    
+	    
+	    /*
+	    BigInteger x = BigInteger.ZERO;
+	    BigInteger y = BigInteger.ONE;
+	    
+	   
+	    for(int position = bit_length - 1; position >= 0; position--)
+	    {
+	    	    int value = SegmentMapper.getBit(bit_buffer, position);
+	    	    if(value == 1)
+	    	    	    x = x.add(y);
+	    	    y = y.multiply(BigInteger.TWO);
+	    }
+	    
+	    BigInteger numerator = x;
+	    BigInteger denominator = BigInteger.TWO;
+	    for(int i = 1; i < bit_length; i++)
+	    {
+	    	    denominator = denominator.multiply(BigInteger.TWO);
+	    }
+	    
+	    System.out.println("Numerator is " + numerator + ", denominator is " + denominator);
+        BigDecimal d_numerator = new BigDecimal(numerator);
+        BigDecimal d_denominator = new BigDecimal(denominator);
+        */
+	    
+	    
+	    /*
+	    
+	   
+	    BigInteger numerator = new BigInteger(bit_buffer);
+	    BigInteger denominator = BigInteger.TWO;
+	    for(int i = 1; i < bit_buffer.length; i++)
+	    {
+	    	    denominator = denominator.multiply(BigInteger.TWO);
+	    }
+	    
+	    BigDecimal location = new BigDecimal(numerator.divide(denominator));
+	    
+	    System.out.println("The probabilistic location is " + location);
+	    
+	    
+	    System.out.println("The byte length of the bit buffer is " + bit_buffer.length);
+	    System.out.println("The bitlength is " + bit_length);
+	    System.out.println("Quotient bits:");
+	    StringMapper.printBits(bit_buffer, bit_length);
+	    
 	    //BigInteger [] location = CodeMapper.getRangeQuotient2(message, symbol_table, f);
 	    //BigInteger [] location = CodeMapper.getRangeQuotient(message, symbol_table, f);
+	    */
 	    
+	    /*
 	    long [] location = CodeMapper.getRangeQuotient3(message, symbol_table, f);
 	    long stop = System.nanoTime();
 	    long time = stop - start;
@@ -109,13 +210,12 @@ public class TestRange
 		{
 			DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("woo")));
 			
-			/*
 			byte [] numerator   = location[0].toByteArray();
 			byte [] denominator = location[1].toByteArray();
 			
 			System.out.println("Numerator length is " + numerator.length);
 			out.writeInt(numerator.length);
-			*/
+			
 			out.writeLong(location[0]);
 			out.writeLong(location[1]);
 			out.flush();
@@ -130,13 +230,13 @@ public class TestRange
 		{
 			System.out.println(e.toString());
 		}
-	    
+	    */
 	  
 		/*
 		double location = value[0];
 		location       /= value[1];
 		System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + location);
-		*/
+		
 		try
 		{
 			System.out.println("Starting to decode message.");
@@ -159,7 +259,8 @@ public class TestRange
 	    	    System.out.println("Exception decoding message:");
 	    	    System.out.println(e.toString());
 	    }
-		
+		*/
+	    
 		/*
 		int length1        = value[0].bitLength();
 	    int length2        = value[1].bitLength();
