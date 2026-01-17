@@ -15,7 +15,7 @@ public class TestRange
 	
 	public TestRange()
 	{
-		
+		/*
 		byte [] message = new byte[10];
 	    
 		message[0] = 0;
@@ -30,7 +30,7 @@ public class TestRange
 		message[8] = 0;
 		message[9] = 1;
 		
-		/*
+		
 	    message[10] = 2;
 	    message[11] = 2;
 	    message[12] = 0;
@@ -41,11 +41,11 @@ public class TestRange
 	    message[17] = 1;
 	    message[18] = 2;
 	    message[19] = 3;
-	    
+        */
 		
-	    
+  
 		int xdim = 256;
-		int ydim = 128;
+		int ydim = 1;
 		
 		byte [] message = new byte [xdim * ydim];
 		
@@ -53,10 +53,10 @@ public class TestRange
 		{
 		    for(int j = 0; j < xdim; j++)
 		    {
-			    message[i * xdim + j] = (byte)(j);
+			    message[i * xdim + j] = (byte)(8 - j % 8);
 			}
 		}
-		*/
+		
 		
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
@@ -94,7 +94,64 @@ public class TestRange
 	    	    	    j++;
 	    	    }
 	    }
+	    
+	    
+	    double bitlength = CodeMapper.getShannonLimit(f);
+	    
+	    System.out.println("Number of message bytes is " + message.length);
+	    System.out.println("Minimum number of bits to represent message is " + String.format("%.1f", bitlength));
+	    
+	  
+	    ArrayList result = CodeMapper.getRangeQuotient(message, symbol_table, f, message.length);
+	    
+	     
+	    BigInteger [] v = (BigInteger [])result.get(0);
+	    
+	    BigInteger a = v[0];
+	    BigInteger b = v[1];
+	    
+	    int fraction_bitlength = a.bitLength() + b.bitLength();
+	    
+	    System.out.println("Bit length of fraction is " + fraction_bitlength);
 	 
+	    
+	    
+	    
+	    BigInteger k = BigInteger.TWO;
+	    for(int i = 1; i < b.bitLength(); i++)
+	    {
+	    	    k = k.multiply(BigInteger.TWO);
+	    }
+	    
+	    BigInteger n = a.multiply(k);
+	    n = n.divide(b);
+	    
+	    BigInteger m = n.mod(b);
+	    if(m.compareTo(k.divide(BigInteger.TWO)) == 1)
+	    {
+	    	    n = n.add(BigInteger.ONE);
+	    }
+	   
+	    try
+	    {
+	    	    BigDecimal location = new BigDecimal(n);
+	        BigDecimal divisor  = new BigDecimal(k);
+	        location            = location.divide(divisor);
+	     
+	        System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + location);
+	    }
+	    catch(Exception e)
+	    {
+	    	    System.out.println("Exception getting decimal value for location:");
+	    	    System.out.println(e.toString());
+	    	    System.out.println("Numerator is " + n);
+	    	    System.out.println("Denominator is " + k);
+	    }
+		
+	    
+	    
+	    
+	    /*
 	    long start = System.nanoTime();
 	    
 	    ArrayList result = CodeMapper.getNormalRangeQuotient(message, symbol_table, f);
@@ -120,7 +177,7 @@ public class TestRange
 	    location /= y;
 	    System.out.println("The probabilistic location is " + location);
 	    
-	    /*
+	    
 	    long [] location = {x, y};
 	    
 	    try

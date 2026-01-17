@@ -2448,6 +2448,87 @@ public class CodeMapper
         return offset;	
 	}	
 	
+	public static ArrayList getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency, int n)
+	{
+		int [] f = frequency.clone();
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m   += f[i];
+		}
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		int xdim = 256;
+		for(int i = 0; i < n; i++)
+	    {
+			/*
+			if(i % xdim == 0)
+			{
+				System.out.println("Row " + (i / xdim));
+				System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
+				System.out.println("Bitlength of range denominator is  " +  range[0].bitLength());
+				System.out.println();
+			}
+			*/
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+	    	   
+	    	   
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	     
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
+	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
+	    	    
+
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	 
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	        s[k]--;
+	    }
+	
+        ArrayList result = new ArrayList();
+        result.add(offset);
+        result.add(f);
+        
+        return result;
+	}	
+	
 	
 	// This method searches for smallest numerator/denominator.
 	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
@@ -2748,7 +2829,11 @@ public class CodeMapper
 		int     byte_offset      = 0;
 		int     bits_outstanding = 0;
 	
+		long [] offset = {1L, 4L};
+		long [] range  = {1L, 2L};
+		
 		int n = src.length;
+		
 		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
@@ -2756,11 +2841,6 @@ public class CodeMapper
 	    	    	    j += 256;
 	    	    j = table.get(j);
 	    	   
-	    	    
-	    	    long [] offset = {1L, 4L};
-	    		long [] range  = {1L, 2L};
-	    	    
-	    	    
 	    	    long [] addend = {range[0], range[1]};
 	    	    addend[0] *= s[j];
 	    	    addend[1] *= m;
@@ -2853,11 +2933,19 @@ public class CodeMapper
     	        	    r *= 2;  
     	        }
             
+    	        
     	      
 	    	    f[j]--;
 	    	    m--;
 	    	    for(int k = j + 1; k < s.length; k++)
 	    	        s[k]--;
+	    	    
+	    	    
+	    	    offset[0] = 1;
+	    	    offset[1] = 4;
+	    	    range[0]  = 1;
+	    	    range[1]  = 2;
+	    	   
 	    }
 	
 	    byte [] bits = new byte[byte_offset + 1];
@@ -3434,31 +3522,9 @@ public class CodeMapper
 			long [] w = new long[] {v[0], v[1]};
 			if(offset[0] != 0)
 			{
-				/*
-			    w[0] = w[0].multiply(offset[1]);
-			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-			    w[1] = w[1].multiply(offset[1]);
-			    */
-				
 				w[0] *= offset[1];
 				w[0] -= offset[0] * w[1];
 				w[1] *= offset[1];
-			    
-				/*
-			    BigInteger gcd = w[0].gcd(w[1]);
-	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	        {
-	    	    	        w[0] = w[0].divide(gcd);
-			       	w[1] = w[1].divide(gcd);
-	    	        }
-	    	        */
-				
-				long gcd = gcd(w[0], w[1]);
-				if(gcd > 1)
-				{
-					w[0] /= gcd;
-					w[1] /= gcd;
-				}
 			}
 			
 			for(int j = 0; j < f.length; j++)
@@ -3483,31 +3549,7 @@ public class CodeMapper
 					b[0] *= lower[1];
 					b[1] *= lower[1];    
     	                
-    	                
-    	                /*
-				    if(a[1].compareTo(b[1]) != 0)
-				    {
-				    	    a[0] = a[0].multiply(w[1]);
-					    a[1] = a[1].multiply(w[1]);
-					    c[0] = c[0].multiply(w[1]);
-					    c[1] = c[1].multiply(w[1]);
-					    b[0] = b[0].multiply(lower[1]);
-					    b[1] = b[1].multiply(lower[1]);
-				    }
-				    */
-    	                /*
-    	                if(a[1] != b[1])
-    				    {
-    				    	    a[0] *= w[1];
-    					    a[1] *= w[1];
-    					    c[0] *= w[1];
-    					    c[1] *= w[1];
-    					    b[0] *= lower[1];
-    					    b[1] *= lower[1];
-    				    }
-	    	            */
-    	                
-    	                
+    	             
 				    //if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
     	                if((a[0] <= b[0]) && (c[0] > b[0]))
 				    { 
@@ -3565,8 +3607,13 @@ public class CodeMapper
 			    	    	        s[k]--;
 				        j = table.get(j);
 				        message[i]    = (byte)j;
-				        
 				        /*
+				        offset[0] = 1;
+				        offset[1] = 4;
+				        
+				        range[0] = 1;
+				        range[1] = 2;
+				        
 				        int xdim = 256;
 				        if(i % xdim == 0)
 						{
