@@ -15,8 +15,8 @@ public class TestRange
 	
 	public TestRange()
 	{
-		/*
-		byte [] message = new byte[10];
+		
+		byte [] message = new byte[20];
 	    
 		message[0] = 0;
 		message[1] = 1;
@@ -41,15 +41,15 @@ public class TestRange
 	    message[17] = 1;
 	    message[18] = 2;
 	    message[19] = 3;
-        */
+        
 		
-  
+        /*
 		int xdim = 256;
-		int ydim = 1;
+		int ydim = 2;
 		
 		byte [] message = new byte [xdim * ydim];
 		
-		for(int i = 0; i < ydim; i++)
+		for(int i = 0; i < 1; i++)
 		{
 		    for(int j = 0; j < xdim; j++)
 		    {
@@ -57,6 +57,14 @@ public class TestRange
 			}
 		}
 		
+		for(int i = 1; i < 2; i++)
+		{
+		    for(int j = 0; j < xdim; j++)
+		    {
+			    message[i * xdim + j] = (byte)(j % 8);
+			}
+		}
+		*/
 		
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
@@ -99,13 +107,16 @@ public class TestRange
 	    double bitlength = CodeMapper.getShannonLimit(f);
 	    
 	    System.out.println("Number of message bytes is " + message.length);
-	    System.out.println("Minimum number of bits to represent message is " + String.format("%.1f", bitlength));
+	    System.out.println("Shannon number of bits is " + String.format("%.1f", bitlength));
 	    
 	  
-	    ArrayList result = CodeMapper.getRangeQuotient(message, symbol_table, f, message.length);
+	    ArrayList result = CodeMapper.getRangeQuotient(message, 0, 10, symbol_table, f);
+	    
 	    
 	     
-	    BigInteger [] v = (BigInteger [])result.get(0);
+	    BigInteger [] v  = (BigInteger [])result.get(0);
+	    int        [] f2 = (int [])result.get(1);
+	    
 	    
 	    BigInteger a = v[0];
 	    BigInteger b = v[1];
@@ -114,9 +125,6 @@ public class TestRange
 	    
 	    System.out.println("Bit length of fraction is " + fraction_bitlength);
 	 
-	    
-	    
-	    
 	    BigInteger k = BigInteger.TWO;
 	    for(int i = 1; i < b.bitLength(); i++)
 	    {
@@ -134,11 +142,11 @@ public class TestRange
 	   
 	    try
 	    {
-	    	    BigDecimal location = new BigDecimal(n);
+	    	BigDecimal location = new BigDecimal(n);
 	        BigDecimal divisor  = new BigDecimal(k);
 	        location            = location.divide(divisor);
 	     
-	        System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + location);
+	        System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + String.format("%.8f", location));
 	    }
 	    catch(Exception e)
 	    {
@@ -147,8 +155,129 @@ public class TestRange
 	    	    System.out.println("Numerator is " + n);
 	    	    System.out.println("Denominator is " + k);
 	    }
-		
 	    
+	    
+	    try
+		{
+			long start = System.nanoTime();
+			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f, sum, 10);
+			long stop = System.nanoTime();
+			long time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+			
+			System.out.println("Decoded message from getMessage:");
+		    for(int i = 0; i < decoded_message.length; i++)
+		    	    System.out.print(decoded_message[i] + " ");
+		    System.out.println();
+		    
+		   
+		}
+		catch(Exception e)
+	    {
+	    	    System.out.println("Exception decoding message:");
+	    	    System.out.println(e.toString());
+	    }
+	    
+
+
+	    
+	    
+	    
+	    
+	    result = CodeMapper.getRangeQuotient(message, 10, 10, symbol_table, f2);
+	    v  = (BigInteger [])result.get(0);
+	    int [] f3 = (int [])result.get(1);
+	    
+	    
+	    a = v[0];
+	    b = v[1];
+	    
+	    fraction_bitlength = a.bitLength() + b.bitLength();
+	    
+	    System.out.println("Bit length of fraction is " + fraction_bitlength);
+	 
+	    k = BigInteger.TWO;
+	    for(int i = 1; i < b.bitLength(); i++)
+	    {
+	    	    k = k.multiply(BigInteger.TWO);
+	    }
+	    
+	    n = a.multiply(k);
+	    n = n.divide(b);
+	    
+	    m = n.mod(b);
+	    if(m.compareTo(k.divide(BigInteger.TWO)) == 1)
+	    {
+	    	    n = n.add(BigInteger.ONE);
+	    }
+	   
+	    try
+	    {
+	    	BigDecimal location = new BigDecimal(n);
+	        BigDecimal divisor  = new BigDecimal(k);
+	        location            = location.divide(divisor);
+	     
+	        System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + String.format("%.8f", location));
+	    }
+	    catch(Exception e)
+	    {
+	    	    System.out.println("Exception getting decimal value for location:");
+	    	    System.out.println(e.toString());
+	    	    System.out.println("Numerator is " + n);
+	    	    System.out.println("Denominator is " + k);
+	    }
+	    
+	    try
+		{
+			long start = System.nanoTime();
+			
+			sum = 0;
+			for(int i = 0; i < f2.length; i++)
+			{
+				sum += f2[i];
+			}
+			
+			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f2, sum, 10);
+			long stop = System.nanoTime();
+			long time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+			
+			System.out.println("Decoded message from getMessage:");
+		    for(int i = 0; i < decoded_message.length; i++)
+		    	    System.out.print(decoded_message[i] + " ");
+		    System.out.println();
+		    
+		   
+		}
+		catch(Exception e)
+	    {
+	    	    System.out.println("Exception decoding message:");
+	    	    System.out.println(e.toString());
+	    }
+		
+	    /*
+	    try
+		{
+			long start = System.nanoTime();
+			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f, sum, message.length);
+			long stop = System.nanoTime();
+			long time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+			
+			System.out.println("Decoded message from getMessage:");
+		    for(int i = 0; i < decoded_message.length; i++)
+		    	    System.out.print(decoded_message[i] + " ");
+		    System.out.println();
+		    
+		   
+		}
+		catch(Exception e)
+	    {
+	    	    System.out.println("Exception decoding message:");
+	    	    System.out.println(e.toString());
+	    }
+	    
+	    */
 	    
 	    
 	    /*
