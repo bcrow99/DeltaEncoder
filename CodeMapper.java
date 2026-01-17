@@ -2530,6 +2530,94 @@ public class CodeMapper
 	}	
 	
 	
+	
+	
+	public static ArrayList getRangeQuotient(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m   += f[i];
+		}
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		int n = src_length;
+		
+		int p = src_offset;
+		
+		int xdim = 256;
+		for(int i = p; i < n + p; i++)
+	    {
+			/*
+			if(i % xdim == 0)
+			{
+				System.out.println("Row " + (i / xdim));
+				System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
+				System.out.println("Bitlength of range denominator is  " +  range[0].bitLength());
+				System.out.println();
+			}
+			*/
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+	    	   
+	    	   
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	     
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
+	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
+	    	    
+
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	 
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	        s[k]--;
+	    }
+	
+        ArrayList result = new ArrayList();
+        result.add(offset);
+        result.add(f);
+        
+        return result;
+	}	
+	
+	
 	// This method searches for smallest numerator/denominator.
 	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
