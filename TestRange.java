@@ -108,6 +108,7 @@ public class TestRange
 	    
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Shannon number of bits is " + String.format("%.1f", bitlength));
+	    System.out.println();
 	    
 	  
 	    ArrayList result = CodeMapper.getRangeQuotient3(message, 0, 10, symbol_table, f);
@@ -120,11 +121,7 @@ public class TestRange
 	    
 	    BigInteger a = v[0];
 	    BigInteger b = v[1];
-	    
-	    int fraction_bitlength = a.bitLength() + b.bitLength();
-	    
-	    System.out.println("Bit length of fraction is " + fraction_bitlength);
-	 
+	  
 	    BigInteger k = BigInteger.TWO;
 	    for(int i = 1; i < b.bitLength(); i++)
 	    {
@@ -162,17 +159,19 @@ public class TestRange
 			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f, sum, 10);
 			long stop = System.nanoTime();
 			long time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+			//System.out.println("It took " + (time / 1000000) + " ms to decode message.");
 			
 			System.out.println("Decoded message from getMessage:");
 		    for(int i = 0; i < decoded_message.length; i++)
 		    	    System.out.print(decoded_message[i] + " ");
+		    System.out.println();
 		    System.out.println();
 		}
 		catch(Exception e)
 	    {
 	    	    System.out.println("Exception decoding message:");
 	    	    System.out.println(e.toString());
+	    	    System.out.println();
 	    }
 	    
 	    result = CodeMapper.getRangeQuotient3(message, 10, 10, symbol_table, f2);
@@ -182,10 +181,7 @@ public class TestRange
 	    a = v[0];
 	    b = v[1];
 	    
-	    fraction_bitlength = a.bitLength() + b.bitLength();
-	    
-	    System.out.println("Bit length of fraction is " + fraction_bitlength);
-	 
+	  
 	    k = BigInteger.TWO;
 	    for(int i = 1; i < b.bitLength(); i++)
 	    {
@@ -206,7 +202,6 @@ public class TestRange
 	    	    BigDecimal location = new BigDecimal(n);
 	        BigDecimal divisor  = new BigDecimal(k);
 	        location            = location.divide(divisor);
-	     
 	        System.out.println("Location of message in probabilistic space returned by getRangeQuotient is " + String.format("%.8f", location));
 	    }
 	    catch(Exception e)
@@ -230,14 +225,13 @@ public class TestRange
 			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f2, sum, 10);
 			long stop = System.nanoTime();
 			long time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
+			//System.out.println("It took " + (time / 1000000) + " ms to decode message.");
 			
 			System.out.println("Decoded message from getMessage:");
 		    for(int i = 0; i < decoded_message.length; i++)
 		    	    System.out.print(decoded_message[i] + " ");
 		    System.out.println();
-		    
-		   
+		    System.out.println();
 		}
 		catch(Exception e)
 	    {

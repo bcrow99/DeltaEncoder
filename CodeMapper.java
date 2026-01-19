@@ -2983,13 +2983,6 @@ public class CodeMapper
 			range[1] = range[1].multiply(range_factor);	
 		}
 		
-	    /*
-		BigInteger gcd = offset[0].gcd(offset[1]);
-		offset[0]      = offset[0].divide(gcd);
-		offset[1]      = offset[1].divide(gcd);
-		*/
-		
-		
 		BigInteger gcd = offset[0].gcd(offset[1]);
 		BigInteger max_gcd       = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
@@ -3007,13 +3000,15 @@ public class CodeMapper
 		double limit = getShannonLimit(f2);
 		
 		int number_of_bits = (int)Math.ceil(limit);
-		
-		//System.out.println("Searching interval for greatest common divisor:");
-		
 		int neighborhood = 3;
-        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+		
+		// Not sure why this works, but assume it is more reliable the larger the interval. 
+		
+		BigInteger step = BigInteger.TEN;
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
-	      	value[0]  = value[0].add(BigInteger.ONE);
+	      	value[0]  = value[0].add(step);
 	    	    gcd = value[0].gcd(value[1]);
 	        if(gcd.compareTo(max_gcd) == 1)
 	        {
@@ -3034,20 +3029,11 @@ public class CodeMapper
 	        }
 	        number_of_searches++;
 	    }
-		//System.out.println("Finished.");
-		
+	    
 		System.out.println("Range interval was " + range[0]);
 		System.out.println("Optimal index was " + largest_index);
 		System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-		/*
-		BigDecimal location = new BigDecimal(largest_index);
-		location = location.divide(new BigDecimal(range[0]));
-        
-        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-        System.out.println("Divisor location was " + location); 
-        System.out.println();
-        */
-        
+	
         value[0] = offset[0].add(largest_index);
         value[1] = offset[1];
         value[0] = value[0].divide(max_gcd);
