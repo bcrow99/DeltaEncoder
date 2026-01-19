@@ -107,10 +107,28 @@ public class TestRange
 	    double bitlength = CodeMapper.getShannonLimit(f);
 	    
 	    System.out.println("Number of message bytes is " + message.length);
-	    System.out.println("Shannon number of bits is " + String.format("%.1f", bitlength));
-	    System.out.println();
+	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    
+	    
+	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, 10);
+	    //System.out.println("Size of list is " + result.size());
+	    
+	    
+	   
+	    int number_of_bits = 0;
+	    for(int i = 0; i < result.size(); i++)
+	    {
+	    	    BigInteger [] v = result.get(i);
+	    	    number_of_bits += v[0].bitLength();
+	    	    number_of_bits += v[1].bitLength();
+	    	    
+	    }
+	    
+	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
+	    System.out.println();
 	  
+	  
+	    /*
 	    ArrayList result = CodeMapper.getRangeQuotient3(message, 0, 10, symbol_table, f);
 	    
 	    BigInteger [] v  = (BigInteger [])result.get(0);
@@ -180,7 +198,8 @@ public class TestRange
 	    	    System.out.println("Exception decoding message:");
 	    	    System.out.println(e.toString());
 	    }
-		
+		*/
+	    
 	 
 	    /*
 	    long start = System.nanoTime();

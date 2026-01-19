@@ -3003,7 +3003,6 @@ public class CodeMapper
 		int neighborhood = 3;
 		
 		// Not sure why this works, but assume it is more reliable the larger the interval. 
-		
 		BigInteger step = BigInteger.TEN;
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
@@ -3022,17 +3021,17 @@ public class CodeMapper
         	        int combined_bitlength = current_value[0].bitLength() + current_value[1].bitLength();
         	        if(combined_bitlength <= number_of_bits + neighborhood)
         	        {
-        	        	    System.out.println("Combined bitlength of quotient is " + combined_bitlength);
-        	        	    System.out.println("Shannon number is " + number_of_bits);
+        	        	    //System.out.println("Combined bitlength of quotient is " + combined_bitlength);
+        	        	    //System.out.println("Shannon number is " + number_of_bits);
         	        	    break;
         	        }
 	        }
 	        number_of_searches++;
 	    }
 	    
-		System.out.println("Range interval was " + range[0]);
-		System.out.println("Optimal index was " + largest_index);
-		System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+		//System.out.println("Range interval was " + range[0]);
+		//System.out.println("Optimal index was " + largest_index);
+		//System.out.println("Number of searches for greatest divisor was " + number_of_searches);
 	
         value[0] = offset[0].add(largest_index);
         value[1] = offset[1];
@@ -3044,6 +3043,64 @@ public class CodeMapper
         result.add(f);
         return result;	
 	}	
+	
+	public static ArrayList <BigInteger []> getQuotientList(byte [] src, int segment_length)
+	{
+		boolean [] isSymbol = new boolean[256];
+	    int     [] f        = new int[256];
+	    
+	    int sum = 0;
+	    for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    isSymbol[j] = true;
+	    	    f[j]++;
+	    	    sum++;
+	    }
+	    
+	    int number_of_symbols = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i]) 
+	    	    	    number_of_symbols++; 
+	    }
+	    
+	    int [] f2 = new int[number_of_symbols];
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    //Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	   
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    //inverse_table.put(j,  i);
+	    	    	    f2[j] = f[i];
+	    	    	    j++;
+	    	    }
+	    }
+	    
+	    f = f2;
+	    int number_of_segments = src.length / segment_length;
+	    int offset             = 0;
+	    ArrayList <BigInteger []> quotient_list = new ArrayList<BigInteger []>();
+	    for(int i = 0; i < number_of_segments; i++)
+	    {
+	       	ArrayList result = CodeMapper.getRangeQuotient3(src, offset, segment_length, symbol_table, f);
+		    BigInteger [] v   = (BigInteger [])result.get(0);
+		    f2                = (int [])result.get(1);  
+		    f                 = f2;
+		    offset           += segment_length;
+		    quotient_list.add(v);
+	    }
+	    
+		return quotient_list;
+	}
+	
 		
 	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b)
 	{
