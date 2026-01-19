@@ -127,134 +127,19 @@ public class TestRange
 	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
 	    System.out.println();
 	  
-	  
-	    /*
-	    ArrayList result = CodeMapper.getRangeQuotient3(message, 0, 10, symbol_table, f);
-	    
-	    BigInteger [] v  = (BigInteger [])result.get(0);
-	    int        [] f2 = (int [])result.get(1);
-	    
-	    
-	    BigInteger a = v[0];
-	    BigInteger b = v[1];
-	  
-	    BigDecimal location = CodeMapper.getNormalFraction(a, b);
-	    System.out.println("Location of message in probabilistic space returned by getRangeQuotient3 is " + String.format("%.8f", location));
-	    
-	    try
-		{
-			long start = System.nanoTime();
-			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f, sum, 10);
-			long stop = System.nanoTime();
-			long time = stop - start;
-			//System.out.println("It took " + (time / 1000000) + " ms to decode message.");
-			
-			System.out.println("Decoded message from getMessage:");
-		    for(int i = 0; i < decoded_message.length; i++)
-		    	    System.out.print(decoded_message[i] + " ");
-		    System.out.println();
-		    System.out.println();
-		}
-		catch(Exception e)
+	    for(int i = 0; i < result.size(); i++)
 	    {
-	    	    System.out.println("Exception decoding message:");
-	    	    System.out.println(e.toString());
-	    	    System.out.println();
+	    	   BigInteger [] v = result.get(i);  
+	    	   ArrayList result2 = CodeMapper.getMessage2(v, inverse_table, f, 10);
+	    	   
+	    	   byte [] message2 = (byte [])result2.get(0);
+	    	   int  [] f2       = (int [])result2.get(1);
+	    	   f                = f2;
+	    	   
+	    	   System.out.println("Decoded message from getMessage2:");
+		   for(j = 0; j < message2.length; j++)
+			    	System.out.print(message2[j] + " ");
+		   System.out.println();
 	    }
-	    
-	    result = CodeMapper.getRangeQuotient3(message, 10, 10, symbol_table, f2);
-	    v  = (BigInteger [])result.get(0);
-	    int [] f3 = (int [])result.get(1);
-	    
-	    a = v[0];
-	    b = v[1];
-	    
-	    location = CodeMapper.getNormalFraction(a, b);
-	    System.out.println("Location of message in probabilistic space returned by getRangeQuotient3 is " + String.format("%.8f", location));
-	  
-	    try
-		{
-			long start = System.nanoTime();
-			
-			sum = 0;
-			for(int i = 0; i < f2.length; i++)
-			{
-				sum += f2[i];
-			}
-			
-			byte [] decoded_message = CodeMapper.getMessage(v, inverse_table, f2, sum, 10);
-			long stop = System.nanoTime();
-			long time = stop - start;
-			//System.out.println("It took " + (time / 1000000) + " ms to decode message.");
-			
-			System.out.println("Decoded message from getMessage:");
-		    for(int i = 0; i < decoded_message.length; i++)
-		    	    System.out.print(decoded_message[i] + " ");
-		    System.out.println();
-		    System.out.println();
-		}
-		catch(Exception e)
-	    {
-	    	    System.out.println("Exception decoding message:");
-	    	    System.out.println(e.toString());
-	    }
-		*/
-	    
-	 
-	    /*
-	    long start = System.nanoTime();
-	    
-	    ArrayList result = CodeMapper.getNormalRangeQuotient(message, symbol_table, f);
-	    long stop = System.nanoTime();
-	    long time = stop - start;
-	    System.out.println("It took " + (time / 1000000) + " ms to get normal range quotient.");
-	    
-	    byte [] bit_buffer = (byte[])result.get(0);
-	    int     bit_length = (int)result.get(1);
-	    
-	    long x = 0;
-	    long y = 1;
-	    
-	    for(int position = bit_length - 1; position >= 0; position--)
-	    {
-	    	    int value = SegmentMapper.getBit(bit_buffer, position);
-	    	    if(value == 1)
-	    	    	    x += y;
-	    	    y *= 2;
-	    }
-	    
-	    double location = x;
-	    location /= y;
-	    System.out.println("The probabilistic location is " + location);
-	    
-	    
-	    long [] location = {x, y};
-	    
-	    try
-		{
-			System.out.println("Starting to decode message.");
-			start = System.nanoTime();
-			//byte [] decoded_message = CodeMapper.getMessage(location, inverse_table, f, sum, message.length);
-			
-			byte [] decoded_message = CodeMapper.getMessage4(location, inverse_table, f);
-			stop = System.nanoTime();
-			time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to decode message.");
-		
-			
-			System.out.println("Decoded message from getMessage:");
-		    for(int i = 0; i < decoded_message.length; i++)
-		    	    System.out.print(decoded_message[i] + " ");
-		    System.out.println();
-		}
-		catch(Exception e)
-	    {
-	    	    System.out.println("Exception decoding message:");
-	    	    System.out.println(e.toString());
-	    }
-	    */
-	    
 	}
-
-
 }
