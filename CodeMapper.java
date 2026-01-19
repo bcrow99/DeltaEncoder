@@ -3045,7 +3045,36 @@ public class CodeMapper
         return result;	
 	}	
 		
-		
+	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b)
+	{
+        BigInteger q = BigInteger.TWO;
+		for(int i = 1; i < b.bitLength(); i++)
+		    	q = q.multiply(BigInteger.TWO);
+		BigInteger p = a.multiply(q);
+		p        = p.divide(b);
+		    
+		BigInteger r = q.mod(b);
+		if(r.compareTo(q.divide(BigInteger.TWO)) == 1)
+		    	p = p.add(BigInteger.ONE);
+		   
+		try
+		{
+		    	BigDecimal s = new BigDecimal(p);
+		    BigDecimal t  = new BigDecimal(q);
+		    s            = s.divide(t);
+		    return s;
+		}
+		catch(Exception e)
+		{
+		    	System.out.println("Exception getting decimal value for fraction:");
+		    	System.out.println(e.toString());
+		    	System.out.println("Numerator is " + p);
+		    	System.out.println("Denominator is " + q);
+		    	return BigDecimal.ZERO;
+		}
+	}
+	
+	
 	// This method uses a renormalization technique suggested by Moffet.  It produces an approximation of the offset/range.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
