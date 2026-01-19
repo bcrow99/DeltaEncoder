@@ -110,7 +110,7 @@ public class TestRange
 	    System.out.println("Shannon number of bits is " + String.format("%.1f", bitlength));
 	    
 	  
-	    ArrayList result = CodeMapper.getRangeQuotient(message, 0, 10, symbol_table, f);
+	    ArrayList result = CodeMapper.getRangeQuotient3(message, 0, 10, symbol_table, f);
 	    
 	    
 	     
@@ -142,7 +142,7 @@ public class TestRange
 	   
 	    try
 	    {
-	    	BigDecimal location = new BigDecimal(n);
+	    	    BigDecimal location = new BigDecimal(n);
 	        BigDecimal divisor  = new BigDecimal(k);
 	        location            = location.divide(divisor);
 	     
@@ -156,7 +156,6 @@ public class TestRange
 	    	    System.out.println("Denominator is " + k);
 	    }
 	    
-	    
 	    try
 		{
 			long start = System.nanoTime();
@@ -169,8 +168,6 @@ public class TestRange
 		    for(int i = 0; i < decoded_message.length; i++)
 		    	    System.out.print(decoded_message[i] + " ");
 		    System.out.println();
-		    
-		   
 		}
 		catch(Exception e)
 	    {
@@ -178,16 +175,9 @@ public class TestRange
 	    	    System.out.println(e.toString());
 	    }
 	    
-
-
-	    
-	    
-	    
-	    
-	    result = CodeMapper.getRangeQuotient(message, 10, 10, symbol_table, f2);
+	    result = CodeMapper.getRangeQuotient3(message, 10, 10, symbol_table, f2);
 	    v  = (BigInteger [])result.get(0);
 	    int [] f3 = (int [])result.get(1);
-	    
 	    
 	    a = v[0];
 	    b = v[1];
@@ -213,7 +203,7 @@ public class TestRange
 	   
 	    try
 	    {
-	    	BigDecimal location = new BigDecimal(n);
+	    	    BigDecimal location = new BigDecimal(n);
 	        BigDecimal divisor  = new BigDecimal(k);
 	        location            = location.divide(divisor);
 	     
@@ -524,5 +514,6 @@ public class TestRange
 	    }
 	    */
 	}
+
 
 }

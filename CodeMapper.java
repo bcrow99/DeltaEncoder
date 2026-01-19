@@ -2126,11 +2126,11 @@ public class CodeMapper
 		
 	    for(i = BigInteger.TWO; i.compareTo(j) < 0 && i.compareTo(k) < 0; i = i.nextProbablePrime())
 	    {
-	    	while(j.mod(i) == BigInteger.ZERO)
-	    	{
-	    	    list.add(i);
-	    	    j = j.divide(i);
-	    	}
+	      	while(j.mod(i) == BigInteger.ZERO)
+	    	    {
+	    	        list.add(i);
+	    	        j = j.divide(i);
+	    	    }
 	    }
 	    if(j.compareTo(BigInteger.TWO) == 1)
 	    	    list.add(j);
@@ -2763,15 +2763,10 @@ public class CodeMapper
 		
 		int p = src_offset;
 		
-		
-		
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		
 		
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		
-	    
-		//int xdim = 256;
 		for(int i = p; i < n + p; i++)
 	    {
 	    	    int j = src[i];
@@ -2843,14 +2838,20 @@ public class CodeMapper
 			range[1] = range[1].multiply(range_factor);	
 		}
 		
-	
-		BigInteger    gcd        = offset[0].gcd(offset[1]);
-		BigInteger    max_gcd    = gcd;  
+	    /*
+		BigInteger gcd = offset[0].gcd(offset[1]);
+		offset[0]      = offset[0].divide(gcd);
+		offset[1]      = offset[1].divide(gcd);
+		*/
+		
+		
+		BigInteger gcd = offset[0].gcd(offset[1]);
+		BigInteger max_gcd       = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
        
 		int number_of_searches   = 0;
 		
-		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		BigInteger [] value      = new BigInteger[] {offset[0], offset[1]};
 		
 		System.out.println("Searching interval for greatest common divisor:");
         for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
@@ -2865,10 +2866,17 @@ public class CodeMapper
 	        number_of_searches++;
 	    }
 		System.out.println("Finished.");
+		
+		System.out.println("Range interval was " + range[0]);
+		System.out.println("Optimal index was " + largest_index);
+		/*
+		BigDecimal location = new BigDecimal(largest_index);
+		location = location.divide(new BigDecimal(range[0]));
         
-        //System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-        //System.out.println("Divisor index was " + largest_index); 
-        //System.out.println();
+        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+        System.out.println("Divisor location was " + location); 
+        System.out.println();
+        */
         
         value[0] = offset[0].add(largest_index);
         value[1] = offset[1];
@@ -2881,7 +2889,177 @@ public class CodeMapper
         return result;	
 	}
 	
+	// This method searches for smallest numerator/denominator.
+	public static ArrayList getRangeQuotient3(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		
+		
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+        int n = src_length;
+		
+		int p = src_offset;
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		for(int i = p; i < n + p; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = factor.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
+	    	    
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	   
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    
+            factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	    
+	    	   
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
 	
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+					
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+		
+	    /*
+		BigInteger gcd = offset[0].gcd(offset[1]);
+		offset[0]      = offset[0].divide(gcd);
+		offset[1]      = offset[1].divide(gcd);
+		*/
+		
+		
+		BigInteger gcd = offset[0].gcd(offset[1]);
+		BigInteger max_gcd       = gcd;  
+        BigInteger largest_index = BigInteger.ZERO;
+       
+		int number_of_searches   = 0;
+		
+		BigInteger [] value      = new BigInteger[] {offset[0], offset[1]};
+		
+		int [] f2 = new int[f.length];
+		for(int i = 0; i < f.length; i++)
+		{
+			f2[i] = frequency[i] - f[i];
+		}
+		
+		double limit = getShannonLimit(f2);
+		
+		int number_of_bits = (int)Math.ceil(limit);
+		
+		//System.out.println("Searching interval for greatest common divisor:");
+		
+		int neighborhood = 3;
+        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+	    {
+	      	value[0]  = value[0].add(BigInteger.ONE);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+        	        max_gcd = gcd;
+        	        largest_index = index;
+        	        
+        	        BigInteger [] current_value = {value[0], value[1]};
+        	        current_value[0]            = current_value[0].divide(gcd);
+        	        current_value[1]            = current_value[1].divide(gcd);
+        	        
+        	        int combined_bitlength = current_value[0].bitLength() + current_value[1].bitLength();
+        	        if(combined_bitlength <= number_of_bits + neighborhood)
+        	        {
+        	        	    System.out.println("Combined bitlength of quotient is " + combined_bitlength);
+        	        	    System.out.println("Shannon number is " + number_of_bits);
+        	        	    break;
+        	        }
+	        }
+	        number_of_searches++;
+	    }
+		//System.out.println("Finished.");
+		
+		System.out.println("Range interval was " + range[0]);
+		System.out.println("Optimal index was " + largest_index);
+		System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+		/*
+		BigDecimal location = new BigDecimal(largest_index);
+		location = location.divide(new BigDecimal(range[0]));
+        
+        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+        System.out.println("Divisor location was " + location); 
+        System.out.println();
+        */
+        
+        value[0] = offset[0].add(largest_index);
+        value[1] = offset[1];
+        value[0] = value[0].divide(max_gcd);
+        value[1] = value[1].divide(max_gcd);
+       
+        ArrayList result = new ArrayList();
+        result.add(value);
+        result.add(f);
+        return result;	
+	}	
+		
+		
 	// This method uses a renormalization technique suggested by Moffet.  It produces an approximation of the offset/range.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
@@ -3396,8 +3574,6 @@ public class CodeMapper
 		
 		return message;
 	}
-	
-
 	
 	public static byte [] getMessage3(long [] v, Hashtable <Integer, Integer>table, int [] frequency)
 	{
