@@ -3002,8 +3002,19 @@ public class CodeMapper
 		int number_of_bits = (int)Math.ceil(limit);
 		int neighborhood = 3;
 		
-		// Not sure why this works, but assume it is more reliable the larger the interval. 
-		BigInteger step = BigInteger.TEN;
+		
+		
+		ArrayList <BigInteger> factor_list = getPrimeFactors(offset[1]);
+		System.out.println("Offset denominator has " + factor_list.size() + " factors:");
+		for(int i = 0; i < factor_list.size(); i++)
+		{
+			BigInteger j = factor_list.get(i);
+			System.out.print(j + " ");
+		}
+		System.out.println();
+		System.out.println();
+		
+		BigInteger step = BigInteger.valueOf(1);
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {

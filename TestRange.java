@@ -16,7 +16,7 @@ public class TestRange
 	public TestRange()
 	{
 		
-		/*
+		
 		byte [] message = new byte[20];
 	    
 		message[0] = 0;
@@ -42,13 +42,14 @@ public class TestRange
 	    message[17] = 1;
 	    message[18] = 2;
 	    message[19] = 3;
-        */
+   
 		
 		
     
 		int xdim = 10;
 		int ydim = 2;
 		
+		/*
 		byte [] message = new byte [xdim * ydim];
 		
 		for(int i = 0; i < 1; i++)
@@ -66,7 +67,7 @@ public class TestRange
 			    message[i * xdim + j] = (byte)(j % 8);
 			}
 		}
-		
+		*/
 		
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
@@ -110,13 +111,10 @@ public class TestRange
 	    
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
+	    System.out.println();
 	    
 	    
 	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, xdim);
-	    System.out.println("Size of list is " + result.size());
-	    
-	    
-	   
 	    int number_of_bits = 0;
 	    for(int i = 0; i < result.size(); i++)
 	    {
@@ -129,7 +127,7 @@ public class TestRange
 	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
 	    System.out.println();
 	  
-	    /*
+	   
 	    for(int i = 0; i < result.size(); i++)
 	    {
 	    	   BigInteger [] v = result.get(i);  
@@ -144,6 +142,5 @@ public class TestRange
 			    	System.out.print(message2[j] + " ");
 		   System.out.println();
 	    }
-	    */
 	}
 }
