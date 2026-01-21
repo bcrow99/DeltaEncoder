@@ -15,59 +15,19 @@ public class TestRange
 	
 	public TestRange()
 	{
-		
-		
-		byte [] message = new byte[20];
-	    
-		message[0] = 0;
-		message[1] = 1;
-		message[2] = 0;
-		message[3] = 1;
-	  
-		message[4] = 0;
-		message[5] = 1;
-		message[6] = 2;
-		message[7] = 3;
-		message[8] = 0;
-		message[9] = 1;
-		
-		
-	    message[10] = 2;
-	    message[11] = 2;
-	    message[12] = 0;
-	    message[13] = 1;
-	    message[14] = 2;
-	    message[15] = 3;
-	    message[16] = 0;
-	    message[17] = 1;
-	    message[18] = 2;
-	    message[19] = 3;
-   
-		
-		
-    
-		int xdim = 10;
+		int xdim = 256;
 		int ydim = 2;
 		
-		/*
+	
 		byte [] message = new byte [xdim * ydim];
 		
-		for(int i = 0; i < 1; i++)
+		for(int i = 0; i < ydim; i++)
 		{
 		    for(int j = 0; j < xdim; j++)
 		    {
-			    message[i * xdim + j] = (byte)(8 - j % 8);
+			    message[i * xdim + j] = (byte)(j);
 			}
 		}
-		
-		for(int i = 1; i < 2; i++)
-		{
-		    for(int j = 0; j < xdim; j++)
-		    {
-			    message[i * xdim + j] = (byte)(j % 8);
-			}
-		}
-		*/
 		
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
@@ -106,14 +66,13 @@ public class TestRange
 	    	    }
 	    }
 	    
-	    
 	    double bitlength = CodeMapper.getShannonLimit(f);
 	    
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
 	    
-	    
+	    long start = System.nanoTime();
 	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, xdim);
 	    int number_of_bits = 0;
 	    for(int i = 0; i < result.size(); i++)
@@ -123,11 +82,13 @@ public class TestRange
 	    	    number_of_bits += v[1].bitLength();
 	    	    
 	    }
-	    
+	    long stop = System.nanoTime();
+		long time = stop - start;
+		System.out.println("It took " + (time / 1000000) + " ms to calculate quotients.");
 	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
 	    System.out.println();
 	  
-	   
+	    start = System.nanoTime();
 	    for(int i = 0; i < result.size(); i++)
 	    {
 	    	   BigInteger [] v = result.get(i);  
@@ -137,10 +98,15 @@ public class TestRange
 	    	   int  [] f2       = (int [])result2.get(1);
 	    	   f                = f2;
 	    	   
+	    	   /*
 	    	   System.out.println("Decoded message from getMessage2:");
 		   for(j = 0; j < message2.length; j++)
 			    	System.out.print(message2[j] + " ");
 		   System.out.println();
+		   */
 	    }
+	    stop = System.nanoTime();
+	    time = stop - start;
+	    System.out.println("It took " + (time / 1000000) + " ms to decode message.");
 	}
 }
