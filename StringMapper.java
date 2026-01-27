@@ -124,6 +124,31 @@ public class StringMapper
 		}
 		return rank;
 	}
+	
+	public static int[] getOrderTable(int src[])
+	{
+		ArrayList list = new ArrayList();
+		Hashtable table = new Hashtable();
+		for(int i = 0; i < src.length; i++)
+		{
+			double key = src[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+		Collections.sort(list);
+		
+		int order[] = new int[src.length];
+		
+		for(int i = 0; i < src.length; i++)
+		{
+			double key = (double) list.get(i);
+			int j = (int) table.get(key);
+			order[j] = i;
+		}
+		return order;
+	}
 
 	// This set of functions makes no assumptions about the
 	// the maxiumum length of an individual string.
@@ -2315,11 +2340,17 @@ public class StringMapper
 		int       value_range    = (int) histogram_list.get(2);
 		int[]     string_table   = getRankTable(histogram);
 
+		// Assume the first value is a code, which is the 
+		// case in our main application. Reset it to a 
+		// standard value.
 		value[0] = value_range / 2;
 		for(int i = 1; i < value.length; i++)
 			value[i] -= min_value;
-		byte[] string = new byte[value.length * 16];
-		int bit_length = packStrings2(value, string_table, string);
+		
+		
+		// A practical limit on how much the data might expand.
+		byte[] buffer  = new byte[value.length * 16];
+		int bit_length = packStrings2(value, string_table, buffer);
 
 		double zero_ratio = value.length;
 		if(histogram.length > 1)
@@ -2332,21 +2363,20 @@ public class StringMapper
 		}
 		zero_ratio /= bit_length;
 		
-		int    bytelength  = getBytelength(bit_length);
-		byte [] string2   = new byte[bytelength];
+		int    bytelength           = getBytelength(bit_length);
+		byte [] uncompressed_string = new byte[bytelength];
 		for(int i = 0; i < bytelength - 1; i++)
-			string2[i] = string[i];
+			uncompressed_string[i] = buffer[i];
 		if(zero_ratio >= .5)
-			setData(0, 0, bit_length, string2);
+			setData(0, 0, bit_length, uncompressed_string);
 		else
-			setData(1, 0, bit_length, string2);
-	    byte [] string3 = compressStrings2(string2);
-	    
+			setData(1, 0, bit_length, uncompressed_string);
+	    byte [] string = compressStrings2(uncompressed_string);
 	    
 	    string_list.add(min_value);
 		string_list.add(bit_length);
 		string_list.add(string_table);
-	    string_list.add(string3);
+	    string_list.add(string);
 		
 		return string_list;
 	}
@@ -2406,16 +2436,23 @@ public class StringMapper
 	// is not a code.
 	public static ArrayList getStringList2(int[] value)
 	{
+		
 		ArrayList string_list = new ArrayList();
-
+		
 		ArrayList histogram_list = getHistogram(value);
+	
 		int min_value = (int) histogram_list.get(0);
 		int[] histogram = (int[]) histogram_list.get(1);
+		
 		int[] string_table = getRankTable(histogram);
-
+        
+		
+		
 		for(int i = 0; i < value.length; i++)
 			value[i] -= min_value;
 		byte[] string = new byte[value.length * 16];
+		
+		
 		int bit_length = packStrings2(value, string_table, string);
 		
 		double zero_ratio = value.length;
