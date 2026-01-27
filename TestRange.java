@@ -17,23 +17,44 @@ public class TestRange
 	{
 		int xdim = 10;
 		int ydim = 1;
-		
-	    /*
 		byte [] message = new byte [xdim * ydim];
 		
+		/*
 		for(int i = 0; i < ydim; i++)
 		{
 		    for(int j = 0; j < xdim; j++)
 		    {
-			    message[i * xdim + j] = (byte)(j);
+			    message[i * xdim + j] = (byte)(j % 8);
 			}
 		}
-		*/
 		
 		
-        byte [] message = new byte[10];
+		message[0] = 0;
+		message[1] = 1;
+	    message[2] = 1;
+		message[3] = 2;
+	    message[4] = 2;
+		message[5] = 2;
+		message[6] = 3;
+		message[7] = 3;
+		message[8] = 3;
+		message[9] = 3;
+		  
+		message[10] = 4;
+		message[11] = 4;
+		message[12] = 4;
+		message[13] = 4;
+		message[14] = 4;
+		message[15] = 5;
+		message[16] = 5;
+		message[17] = 5;
+		message[18] = 5;
+		message[19] = 5;
+		
+		
+        byte [] message = new byte[20];
 	   
-        /*
+         
 	    message[0] = 2;
 	    message[1] = 2;
 	    message[2] = 0;
@@ -44,20 +65,33 @@ public class TestRange
 	    message[7] = 1;
 	    message[8] = 2;
 	    message[9] = 3;
+	    */
 	    
-	    message[10] = 0;
-		message[11] = 1;
-		message[12] = 0;
-		message[13] = 1;
+	    message[0] = 0;
+		message[1] = 1;
+		message[2] = 0;
+		message[3] = 1;
 	  
-		message[14] = 0;
-		message[15] = 1;
-		message[16] = 2;
-		message[17] = 3;
-		message[18] = 0;
-		message[19] = 1;
-		*/
-        
+		message[4] = 0;
+		message[5] = 1;
+		message[6] = 2;
+		message[7] = 3;
+		message[8] = 0;
+		message[9] = 1;
+		
+		/*
+		message[10] = 2;
+	    message[11] = 2;
+	    message[12] = 0;
+	    message[13] = 1;
+	    message[14] = 2;
+	    message[15] = 3;
+	    message[16] = 0;
+	    message[17] = 1;
+	    message[18] = 2;
+	    message[19] = 3;
+		
+	    
         
         message[0] = 3;
 		message[1] = 3;
@@ -72,7 +106,8 @@ public class TestRange
 		message[8] = 1;
 		
 		message[9] = 0;
-		/*
+		
+		
         message[0] = 0;
 		message[1] = 0;
 		message[2] = 0;
@@ -145,10 +180,11 @@ public class TestRange
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
 	    
-	    
+	    int [] order = CodeMapper.getOrderedTable(message, symbol_table, f);
+	 
 	    long start = System.nanoTime();
 	    
-	    BigInteger [] v = CodeMapper.getRangeQuotient(message, symbol_table, f);
+	    BigInteger [] v = CodeMapper.getRangeQuotient2(message, symbol_table, f, order);
 	    
 	    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
 	    System.out.println("Location in probalistic space is " + location);
@@ -162,12 +198,14 @@ public class TestRange
 	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
 	    System.out.println();
 	    
-	    byte [] message2 = CodeMapper.getMessage(v, inverse_table, f);
+	    
+	    byte [] message2 = CodeMapper.getMessage(v, inverse_table, f, order);
 	    System.out.println("Decoded message:");
 	    for(int i = 0; i < message2.length; i++)
 	    	    System.out.print(message2[i] + " ");
         System.out.println();
-	    /*
+        
+        /*
 	    long start = System.nanoTime();
 	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, xdim);
 	    int number_of_bits = 0;

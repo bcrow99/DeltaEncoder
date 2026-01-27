@@ -2368,18 +2368,83 @@ public class CodeMapper
 		return    result;
 	}
 	
+	//This method returns a list of the indices of a frequency table in the order that its value is exhausted.
+	public static ArrayList<Integer> getOrderedList(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	{
+		ArrayList <Integer> ordered_list = new ArrayList <Integer>();
+		int [] f = frequency.clone();
+		
+		int    n = src.length;
+	   
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = symbol_table.get(j);
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    ordered_list.add(j);
+	    	  
+	    }
+	
+        return ordered_list;	
+	}		
+	
+	//This method returns a list of the indices of a frequency table in the order that its value is exhausted.
+	public static int [] getOrderedTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	{
+		ArrayList <Integer> ordered_list = new ArrayList <Integer>();
+		int [] f = frequency.clone();
+		
+		int    n = src.length;
+	   
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = symbol_table.get(j);
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    ordered_list.add(j);  
+	    }
+	
+		n = frequency.length;
+		int [] ordered_table = new int[n];
+		for(int i = 0; i < n; i++)
+		{
+			int j = ordered_list.get(i);
+			ordered_table[i] = j;
+		}
+		
+        return ordered_table;	
+	}		
 	
 	//This method returns the offset.
-	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
+	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
-		int    n = src.length;
-		int [] f = frequency.clone();
-	    int [] s = new int[f.length];
+		/*
+		int [] order = StringMapper.getOrderTable(frequency);
 		
-		int m = 0;
+		int [] f    = new int[frequency.length];
+	
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			f[j] = frequency[i];
+		}
+		*/
+		
+		int [] f = frequency.clone();
+		
+		int    n = src.length;
+	   
+	    int [] s = new int[f.length];
+	    int m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i] = m;
+			s[i]  = m;
 			m   += f[i];
 		}
 		
@@ -2389,20 +2454,12 @@ public class CodeMapper
 		int xdim = 256;
 		for(int i = 0; i < n; i++)
 	    {
-			/*
-			if(i % xdim == 0)
-			{
-				System.out.println("Row " + (i / xdim));
-				System.out.println("Bitlength of offset denominator is " +  offset[0].bitLength());
-				System.out.println("Bitlength of range denominator is  " +  range[0].bitLength());
-				System.out.println();
-			}
-			*/
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
-	    	    j = table.get(j);
-	    	   
+	    	    j = symbol_table.get(j);
+	    	    //j = order[j];
+	    	  
 	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
 	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
 	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
@@ -2520,9 +2577,6 @@ public class CodeMapper
         return result;
 	}	
 	
-	
-	
-	
 	public static ArrayList getRangeQuotient(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
 	{
 		int [] f = frequency.clone();
@@ -2599,7 +2653,6 @@ public class CodeMapper
         return result;
 	}	
 	
-	// This method searches for smallest numerator/denominator.
 	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
 		int [] f = frequency.clone();
@@ -2640,7 +2693,6 @@ public class CodeMapper
 	    	    factor            = factor.valueOf(m);
 	    	    addend[1]         = addend[1].multiply(factor);
 	    	    
-	    	    
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
@@ -2648,7 +2700,6 @@ public class CodeMapper
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
 	    	   
-	    	    
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
@@ -2696,7 +2747,38 @@ public class CodeMapper
 			range[1] = range[1].multiply(range_factor);	
 		}
 		
-		BigInteger    gcd        = offset[0].gcd(offset[1]);
+		System.out.println("Range is " + range[0]);
+		
+		BigInteger delimiter = offset[0].add(range[0]);
+		BigInteger gcd = offset[1].gcd(offset[0]);
+		
+		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
+		int j = 0;
+		
+		BigInteger factor = BigInteger.ONE;
+		
+		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
+		BigInteger maximum_range = BigInteger.valueOf(1000);
+		int size = factor_list.size() - 1;
+		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
+		{
+			j++;
+			BigInteger next_factor = factor_list.get(j);
+			factor = factor.multiply(next_factor);
+		}
+		
+		if(factor.compareTo(BigInteger.ONE) != 0)
+		{
+		    delimiter = delimiter.divide(factor);
+		    offset[0] = offset[0].divide(factor);
+		    offset[1] = offset[1].divide(factor);
+		    range[0]  = delimiter.subtract(offset[0]);
+		    range[1]  = offset[1];
+		}
+	
+	    System.out.println("Reduced range is " + range[0]);
+		
+		gcd                      = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
        
@@ -2705,7 +2787,10 @@ public class CodeMapper
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
 		System.out.println("Searching interval for greatest common divisor:");
-        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+		
+		BigInteger step = BigInteger.valueOf(1);
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
 	      	value[0]  = value[0].add(BigInteger.ONE);
 	    	    gcd = value[0].gcd(value[1]);
@@ -2719,18 +2804,21 @@ public class CodeMapper
 		System.out.println("Finished.");
         
         value[0] = offset[0].add(largest_index);
-        value[1] = offset[1];
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
        
         return value;	
 	}
 	
-	// This method searches for smallest numerator/denominator.
-	public static ArrayList getRangeQuotient2(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
+	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int [] order)
 	{
-		int [] f = frequency.clone();
+		int [] f = new int[frequency.length];
 		
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			f[j]  = frequency[i];
+		}
 		
 	    int [] s = new int[f.length];
 		
@@ -2741,20 +2829,24 @@ public class CodeMapper
 			m    += f[i];
 		}
 		
-        int n = src_length;
+		BigInteger [] offset = new BigInteger[2];
+		offset[0]            = BigInteger.ZERO;
+		offset[1]            = BigInteger.ONE;
 		
-		int p = src_offset;
+		BigInteger [] range  = new BigInteger[2];
+		range[0]             = BigInteger.ONE;
+		range[1]             = BigInteger.ONE;
 		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		
-		for(int i = p; i < n + p; i++)
+		int    n       = src.length;
+	    
+		int xdim = 256;
+		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
-	    	    j = table.get(j);
+	    	    j = symbol_table.get(j);
+	    	    j = order[j];
 	    	   
 	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
 	    	    
@@ -2764,6 +2856,184 @@ public class CodeMapper
 	    	    factor            = factor.valueOf(m);
 	    	    addend[1]         = addend[1].multiply(factor);
 	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	   
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+            factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	    
+	    	   
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
+	
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+					
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+		
+		System.out.println("Range is " + range[0]);
+	
+		BigInteger delimiter = offset[0].add(range[0]);
+		BigInteger gcd       = offset[1].gcd(offset[0]);
+		
+		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
+		int j = 0;
+		
+		BigInteger factor = BigInteger.ONE;
+		
+		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
+		BigInteger maximum_range = BigInteger.valueOf(100000);
+		int size = factor_list.size() - 1;
+		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
+		{
+			j++;
+			BigInteger next_factor = factor_list.get(j);
+			factor = factor.multiply(next_factor);
+		}
+		
+		if(factor.compareTo(BigInteger.ONE) != 0)
+		{
+		    delimiter = delimiter.divide(factor);
+		    offset[0] = offset[0].divide(factor);
+		    offset[1] = offset[1].divide(factor);
+		    range[0]  = delimiter.subtract(offset[0]);
+		    range[1]  = offset[1];
+		}
+	
+	    System.out.println("Reduced range is " + range[0]);
+		
+		gcd                      = offset[0].gcd(offset[1]);
+		BigInteger    max_gcd    = gcd;  
+        BigInteger largest_index = BigInteger.ZERO;
+       
+		int number_of_searches   = 0;
+		
+		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		
+		System.out.println("Searching interval for greatest common divisor:");
+		
+		BigInteger step = BigInteger.valueOf(1);
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
+	    {
+	      	value[0]  = value[0].add(BigInteger.ONE);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+        	        max_gcd = gcd;
+        	        largest_index = index;
+	        }
+	        number_of_searches++;
+	    }
+		System.out.println("Optimal index is " + largest_index);
+        
+        value[0] = offset[0].add(largest_index);
+        value[0] = value[0].divide(max_gcd);
+        value[1] = value[1].divide(max_gcd);
+       
+        return value;
+	}
+	
+	
+	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int process_type)
+	{
+		int [] f = frequency.clone();
+		int [] order = StringMapper.getOrderTable(frequency);
+		int [] rank = StringMapper.getRankTable(frequency);
+		
+		if(process_type == 1)
+		{
+			for(int i = 0; i < order.length; i++)
+			{
+				int j = order[i];
+				f[j]  = frequency[i];
+			}	
+		}
+		else if(process_type == 2)
+		{
+			for(int i = 0; i < rank.length; i++)
+			{
+				int j = rank[i];
+				f[j]  = frequency[i];
+			}	
+		}
+		
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+		BigInteger [] offset = new BigInteger[2];
+		offset[0]            = BigInteger.ZERO;
+		offset[1]            = BigInteger.ONE;
+		
+		BigInteger [] range  = new BigInteger[2];
+		range[0]             = BigInteger.ONE;
+		range[1]             = BigInteger.ONE;
+		
+		int    n       = src.length;
+	    
+		int xdim = 256;
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = symbol_table.get(j);
+	    	    if(process_type == 1)
+	    	    	    j = order[j];
+	    	    	else if(process_type == 2)
+	    	    		j = rank[j];
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = factor.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
 	    	    
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
@@ -2772,7 +3042,6 @@ public class CodeMapper
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
 	    	   
-	    	    
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
@@ -2820,23 +3089,50 @@ public class CodeMapper
 			range[1] = range[1].multiply(range_factor);	
 		}
 		
-	    /*
-		BigInteger gcd = offset[0].gcd(offset[1]);
-		offset[0]      = offset[0].divide(gcd);
-		offset[1]      = offset[1].divide(gcd);
-		*/
+		System.out.println("Range is " + range[0]);
+	
+		BigInteger delimiter = offset[0].add(range[0]);
+		BigInteger gcd       = offset[1].gcd(offset[0]);
 		
+		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
+		int j = 0;
 		
-		BigInteger gcd = offset[0].gcd(offset[1]);
-		BigInteger max_gcd       = gcd;  
+		BigInteger factor = BigInteger.ONE;
+		
+		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
+		BigInteger maximum_range = BigInteger.valueOf(100000);
+		int size = factor_list.size() - 1;
+		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
+		{
+			j++;
+			BigInteger next_factor = factor_list.get(j);
+			factor = factor.multiply(next_factor);
+		}
+		
+		if(factor.compareTo(BigInteger.ONE) != 0)
+		{
+		    delimiter = delimiter.divide(factor);
+		    offset[0] = offset[0].divide(factor);
+		    offset[1] = offset[1].divide(factor);
+		    range[0]  = delimiter.subtract(offset[0]);
+		    range[1]  = offset[1];
+		}
+	
+	    System.out.println("Reduced range is " + range[0]);
+		
+		gcd                      = offset[0].gcd(offset[1]);
+		BigInteger    max_gcd    = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
        
 		int number_of_searches   = 0;
 		
-		BigInteger [] value      = new BigInteger[] {offset[0], offset[1]};
+		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
 		System.out.println("Searching interval for greatest common divisor:");
-        for(BigInteger index = BigInteger.ONE; index.compareTo(range[0]) == -1; index = index.add(BigInteger.ONE))
+		
+		BigInteger step = BigInteger.valueOf(1);
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
 	      	value[0]  = value[0].add(BigInteger.ONE);
 	    	    gcd = value[0].gcd(value[1]);
@@ -2847,28 +3143,13 @@ public class CodeMapper
 	        }
 	        number_of_searches++;
 	    }
-		System.out.println("Finished.");
-		
-		System.out.println("Range interval was " + range[0]);
-		System.out.println("Optimal index was " + largest_index);
-		/*
-		BigDecimal location = new BigDecimal(largest_index);
-		location = location.divide(new BigDecimal(range[0]));
-        
-        System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-        System.out.println("Divisor location was " + location); 
-        System.out.println();
-        */
+		System.out.println("Optimal index is " + largest_index);
         
         value[0] = offset[0].add(largest_index);
-        value[1] = offset[1];
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
        
-        ArrayList result = new ArrayList();
-        result.add(value);
-        result.add(f);
-        return result;	
+        return value;
 	}
 	
 	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b)
@@ -3024,13 +3305,10 @@ public class CodeMapper
     	        	    r *= 2;  
     	        }
             
-    	        
-    	      
 	    	    f[j]--;
 	    	    m--;
 	    	    for(int k = j + 1; k < s.length; k++)
 	    	        s[k]--;
-	    	    
 	    	    
 	    	    offset[0] = 1;
 	    	    offset[1] = 4;
@@ -3054,20 +3332,18 @@ public class CodeMapper
 	    return result;
 	}
 	
-	
-	
-	
-	
-	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency)
+	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>inverse_symbol_table, int [] frequency)
 	{
 		int [] f = frequency.clone();
 		int [] s = new int[f.length];
-		int    m = 0;
+		
+		
+		int m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i] = m;
-			m += f[i];
-		}
+			s[i]  = m;
+			m   += f[i];
+		}	
 		int    n = m;
 	
 		byte [] message      = new byte[n];
@@ -3146,7 +3422,7 @@ public class CodeMapper
 			    	        for(int k = j + 1; k < s.length; k++)
 			    	    	        s[k]--;
 		    	        
-				        j = table.get(j);
+				        j = inverse_symbol_table.get(j);
 				        message[i]    = (byte)j;
 				        
 				        break;
@@ -3158,19 +3434,277 @@ public class CodeMapper
 		return message;
 	}	
    
+	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>inverse_symbol_table, int [] frequency, int [] order)
+	{
+		byte[] inverse_order = new byte[order.length];
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			inverse_order[j] = (byte) i;
+		}
+		
+		
+		int [] f = new int [frequency.length];
+		
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			f[j] = frequency[i];
+		}	
+		
+		
+		int [] s = new int[f.length];
+		
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m   += f[i];
+		}	
+		int    n = m;
+	
+		byte [] message      = new byte[n];
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	            
+			    	        j = inverse_order[j];   
+				        j = inverse_symbol_table.get(j);
+				        message[i]    = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return message;
+	}	
+	
+	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>inverse_symbol_table, int [] frequency, int process_type)
+	{
+		
+		int [] order_table = StringMapper.getOrderTable(frequency);
+		byte[] inverse_order_table = new byte[order_table.length];
+		for(int i = 0; i < order_table.length; i++)
+		{
+			int j = order_table[i];
+			inverse_order_table[j] = (byte) i;
+		}
+		
+		int [] rank_table = StringMapper.getRankTable(frequency);
+		byte[] inverse_rank_table = new byte[rank_table.length];
+		for(int i = 0; i < rank_table.length; i++)
+		{
+			int j = rank_table[i];
+			inverse_rank_table[j] = (byte) i;
+		}
+		
+		int [] f = frequency.clone();
+		if(process_type == 1)
+		{
+			for(int i = 0; i < order_table.length; i++)
+			{
+				int j = order_table[i];
+				f[j] = frequency[i];
+			}	
+		}
+		else if(process_type == 2)
+		{
+			for(int i = 0; i < rank_table.length; i++)
+			{
+				int j = rank_table[i];
+				f[j] = frequency[i];
+			}   	
+		}
+		
+		int [] s = new int[f.length];
+		
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m   += f[i];
+		}	
+		int    n = m;
+	
+		byte [] message      = new byte[n];
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	            
+			    	        if(process_type == 1)
+			    	            j = inverse_order_table[j];
+			    	        else if(process_type == 2)
+			    	        	    j = inverse_rank_table[j];    
+				        j = inverse_symbol_table.get(j);
+				        message[i]    = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return message;
+	}	
+	
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int sum_of_frequencies, int n)
 	{
 		int [] f = frequency.clone();
 		
-		
 		int [] s   = new int[f.length];
-		int    sum = 0;
+		int    m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i] = sum;
-			sum += f[i];
+			s[i] = m;
+			m += f[i];
 		}
-		int    m = sum_of_frequencies;
+		
 	
 		byte [] message = new byte[n];
 		
@@ -3340,7 +3874,25 @@ public class CodeMapper
 		return quotient_list;
 	}
 	
-		
+
+	public static ArrayList <BigInteger []> getQuotientList2(byte [] src, int segment_length)
+	{
+	    int number_of_segments = src.length / segment_length;
+	    int offset             = 0;
+	    ArrayList <BigInteger []> quotient_list = new ArrayList<BigInteger []>();
+	    ArrayList <int []>        table_list    = new ArrayList<int []>();
+	    for(int i = 0; i < number_of_segments; i++)
+	    {
+	       	ArrayList result = CodeMapper.getRangeQuotient4(src, offset, segment_length);
+		    BigInteger [] v  = (BigInteger [])result.get(0);
+		    int [] f         = (int [])result.get(1);  
+		    offset          += segment_length;
+		    quotient_list.add(v);
+		    table_list.add(f);
+	    }
+	    
+		return quotient_list;
+	}	
 
 	public static ArrayList getRangeQuotient3(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
 	{
@@ -3525,193 +4077,394 @@ public class CodeMapper
         return result;	
 	}	
 	
-	
-
-public static ArrayList getRangeQuotient4(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
-{
-	int [] f = frequency.clone();
-	
-    int [] s = new int[f.length];
-	
-	int m = 0;
-	for(int i = 0; i < f.length; i++)
+	public static ArrayList getRangeQuotient4(byte[] src, int src_offset, int src_length, Hashtable <Integer, Integer> table, int [] frequency)
 	{
-		s[i] = m;
-		m    += f[i];
-	}
-	
-    int n = src_length;
-	
-	int p = src_offset;
-	
-	BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-	
-	BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-	
-	for(int i = p; i < n + p; i++)
-    {
-    	    int j = src[i];
-    	    if(j < 0)
-    	    	    j += 256;
-    	    j = table.get(j);
-    	   
-    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-    	    
-    	    BigInteger factor = BigInteger.ONE;
-    	    factor            = factor.valueOf(s[j]);
-    	    addend[0]         = addend[0].multiply(factor);
-    	    factor            = factor.valueOf(m);
-    	    addend[1]         = addend[1].multiply(factor);
-    	    
-    	    
-    	    BigInteger gcd = addend[0].gcd(addend[1]);
-    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-    	    {
-    	    	    addend[0] = addend[0].divide(gcd);
-		    addend[1] = addend[1].divide(gcd);
-    	    }
-    	   
-    	    
-    	    offset[0] = offset[0].multiply(addend[1]);
-    	    addend[0] = addend[0].multiply(offset[1]);
-    	    offset[1] = offset[1].multiply(addend[1]);
-    	    offset[0] = offset[0].add(addend[0]);
-    	    
-    	   
-    	    gcd = offset[0].gcd(offset[1]);
-    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-    	    {
-    	    	    offset[0] = offset[0].divide(gcd);
-		    	offset[1] = offset[1].divide(gcd);
-    	    }
+		int [] f = frequency.clone();
 		
-    	    
-        factor   = factor.valueOf(f[j]);
-    	    range[0] = range[0].multiply(factor);
-    	    factor   = factor.valueOf(m);
-    	    range[1] = range[1].multiply(factor);
-    	    
-    	   
-    	    gcd = range[0].gcd(range[1]);
-    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-    	    {
-    	    	    range[0] = range[0].divide(gcd);
-		    	range[1] = range[1].divide(gcd);
-    	    }
-    	   
-    	    
-    	    f[j]--;
-    	    m--;
-    	    for(int k = j + 1; k < s.length; k++)
-    	    {
-    	    	    s[k]--;
-    	    }
-    }
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+	    int n = src_length;
+		
+		int p = src_offset;
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		for(int i = p; i < n + p; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = factor.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
+	    	    
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	   
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    
+	        factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	    
+	    	   
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
 
-	if(offset[1].compareTo(range[1]) != 0)
-	{	
-	    BigInteger range_factor  = offset[1];
-	    BigInteger offset_factor = range[1];	
-		offset[0] = offset[0].multiply(offset_factor);
-		offset[1] = offset[1].multiply(offset_factor);
-				
-		range[0] = range[0].multiply(range_factor);
-		range[1] = range[1].multiply(range_factor);	
-	}
-	
-	int [] f2 = new int[f.length];
-	for(int i = 0; i < f.length; i++)
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+					
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+		
+		int [] f2 = new int[f.length];
+		for(int i = 0; i < f.length; i++)
+		{
+			f2[i] = frequency[i] - f[i];
+		}
+		
+		BigInteger delimiter = offset[0].add(range[0]);
+		//System.out.println("Offset is    " + offset[0]);
+		//System.out.println("Delimiter is " + delimiter);
+		
+		BigInteger gcd = offset[1].gcd(offset[0]);
+		
+		delimiter  = delimiter.divide(gcd);
+		offset[0] = offset[0].divide(gcd);
+		offset[1] = offset[1].divide(gcd);
+		//System.out.println("Offset is    " + offset[0]);
+		//System.out.println("Delimiter is " + delimiter);
+		
+	    range[0] = delimiter.subtract(offset[0]);
+	    range[1] = offset[1];
+		
+		
+		BigInteger step = BigInteger.valueOf(1);
+
+		BigInteger max_gcd = BigInteger.ONE;
+		BigInteger largest_index = BigInteger.ZERO;
+		int number_of_searches = 0;
+		
+		System.out.println("Range is " + range[0]);
+		BigInteger [] value = {offset[0], offset[1]};
+	    for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
+	    {
+	      	value[0]  = value[0].add(step);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+	    	        max_gcd = gcd;
+	    	        largest_index = index;
+	    	        
+	    	        /*
+	    	        BigInteger [] current_value = {value[0], value[1]};
+	    	        current_value[0]            = current_value[0].divide(gcd);
+	    	        current_value[1]            = current_value[1].divide(gcd);
+	    	        
+	    	        int combined_bitlength = current_value[0].bitLength() + current_value[1].bitLength();
+	    	        if(combined_bitlength <= number_of_bits + neighborhood)
+	    	        {
+	    	        	    //System.out.println("Combined bitlength of quotient is " + combined_bitlength);
+	    	        	    //System.out.println("Shannon number is " + number_of_bits);
+	    	        	
+	    	        	    System.out.println("Found optimal value.");
+	    	        	    factor_list = getPrimeFactors(current_value[0]);
+	    	        		System.out.println("Value numerator has " + factor_list.size() + " factors:");
+	    	        		for(int i = 0; i < factor_list.size(); i++)
+	    	        		{
+	    	        			BigInteger j = factor_list.get(i);
+	    	        			System.out.print(j + " ");
+	    	        		}
+	    	        		System.out.println();
+	    	        		factor_list = getPrimeFactors(current_value[1]);
+	    	        		System.out.println("Reduced denominator has " + factor_list.size() + " factors:");
+	    	        		for(int i = 0; i < factor_list.size(); i++)
+	    	        		{
+	    	        			BigInteger j = factor_list.get(i);
+	    	        			System.out.print(j + " ");
+	    	        		}
+	    	        		System.out.println();
+	    	        		System.out.println();
+	    	        	    break;
+	    	        }
+	    	        */
+	        }
+	        number_of_searches++;
+	    }
+	    
+		
+		System.out.println("Range interval was " + range[0]);
+		System.out.println("Optimal index was " + largest_index);
+		System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+		System.out.println();
+
+		
+	    value[0] = offset[0].add(largest_index);
+	    value[0] = value[0].divide(max_gcd);
+	    value[1] = value[1].divide(max_gcd);
+	    
+	   
+	    ArrayList result = new ArrayList();
+	    result.add(value);
+	    result.add(f);
+	    return result;	
+	}	
+
+	// This method does not check how many symbols get used.
+	public static ArrayList getRangeQuotient4(byte[] src, int src_offset, int segment_length)
 	{
-		f2[i] = frequency[i] - f[i];
-	}
-	
-	BigInteger delimiter = offset[0].add(range[0]);
-	//System.out.println("Offset is    " + offset[0]);
-	//System.out.println("Delimiter is " + delimiter);
-	
-	BigInteger gcd = offset[1].gcd(offset[0]);
-	
-	delimiter  = delimiter.divide(gcd);
-	offset[0] = offset[0].divide(gcd);
-	offset[1] = offset[1].divide(gcd);
-	//System.out.println("Offset is    " + offset[0]);
-	//System.out.println("Delimiter is " + delimiter);
-	
-    range[0] = delimiter.subtract(offset[0]);
-    range[1] = offset[1];
-	
-	
-	BigInteger step = BigInteger.valueOf(1);
+		
+		boolean [] isSymbol = new boolean[256];
+		int [] frequency = new int[256];
+		for(int i = src_offset; i < src_offset + segment_length; i++)
+		{
+			int j = src[i];
+    	        if(j < 0)
+    	    	        j += 256;
+    	        frequency[j]++;
+    	        isSymbol[j] = true;
+		}
+		
+		int number_of_symbols = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i]) 
+	    	    	    number_of_symbols++; 
+	    }
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	    int [] f = new int[number_of_symbols];
+	    
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    inverse_table.put(j,  i);
+	    	    	    f[j] = frequency[i];
+	    	    	    j++;
+	    	    }
+	    }
+		
+		int n = segment_length;
+		int p = src_offset;
+		
+		//int [] f = frequency.clone();
+		
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+	    
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		for(int i = p; i < n + p; i++)
+	    {
+	    	    j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = symbol_table.get(j);
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = factor.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
+	    	    
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	   
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    
+	        factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	    
+	    	   
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
 
-	BigInteger max_gcd = BigInteger.ONE;
-	BigInteger largest_index = BigInteger.ZERO;
-	int number_of_searches = 0;
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+					
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+		
+		int [] f2 = new int[f.length];
+		for(int i = 0; i < f.length; i++)
+		{
+			f2[i] = frequency[i] - f[i];
+		}
+		
+		BigInteger delimiter = offset[0].add(range[0]);
+		//System.out.println("Offset is    " + offset[0]);
+		//System.out.println("Delimiter is " + delimiter);
+		
+		BigInteger gcd = offset[1].gcd(offset[0]);
+		//System.out.println("Offset gcd is " + gcd);
+		
+		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
+		j = 0;
+		BigInteger factor = factor_list.get(j);
+		
+		BigInteger minimum_range = BigInteger.valueOf(Long.MAX_VALUE);
+		int size = factor_list.size() - 1;
+		while(range[0].divide(factor).compareTo(minimum_range) == 1 && j < size)
+		{
+			j++;
+			BigInteger next_factor = factor_list.get(j);
+			factor = factor.multiply(next_factor);
+		}
+		
+		delimiter = delimiter.divide(factor);
+		offset[0] = offset[0].divide(factor);
+		offset[1] = offset[1].divide(factor);
 	
-	System.out.println("Range is " + range[0]);
-	BigInteger [] value = {offset[0], offset[1]};
-    for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
-    {
-      	value[0]  = value[0].add(step);
-    	    gcd = value[0].gcd(value[1]);
-        if(gcd.compareTo(max_gcd) == 1)
-        {
-    	        max_gcd = gcd;
-    	        largest_index = index;
-    	        
-    	        /*
-    	        BigInteger [] current_value = {value[0], value[1]};
-    	        current_value[0]            = current_value[0].divide(gcd);
-    	        current_value[1]            = current_value[1].divide(gcd);
-    	        
-    	        int combined_bitlength = current_value[0].bitLength() + current_value[1].bitLength();
-    	        if(combined_bitlength <= number_of_bits + neighborhood)
-    	        {
-    	        	    //System.out.println("Combined bitlength of quotient is " + combined_bitlength);
-    	        	    //System.out.println("Shannon number is " + number_of_bits);
-    	        	
-    	        	    System.out.println("Found optimal value.");
-    	        	    factor_list = getPrimeFactors(current_value[0]);
-    	        		System.out.println("Value numerator has " + factor_list.size() + " factors:");
-    	        		for(int i = 0; i < factor_list.size(); i++)
-    	        		{
-    	        			BigInteger j = factor_list.get(i);
-    	        			System.out.print(j + " ");
-    	        		}
-    	        		System.out.println();
-    	        		factor_list = getPrimeFactors(current_value[1]);
-    	        		System.out.println("Reduced denominator has " + factor_list.size() + " factors:");
-    	        		for(int i = 0; i < factor_list.size(); i++)
-    	        		{
-    	        			BigInteger j = factor_list.get(i);
-    	        			System.out.print(j + " ");
-    	        		}
-    	        		System.out.println();
-    	        		System.out.println();
-    	        	    break;
-    	        }
-    	        */
-        }
-        number_of_searches++;
-    }
-    
-	
-	System.out.println("Range interval was " + range[0]);
-	System.out.println("Optimal index was " + largest_index);
-	System.out.println("Number of searches for greatest divisor was " + number_of_searches);
-	System.out.println();
+		//System.out.println("Offset is    " + offset[0]);
+		//System.out.println("Delimiter is " + delimiter);
+		
+	    range[0] = delimiter.subtract(offset[0]);
+	    range[1] = offset[1];
+		
+		
+		BigInteger step = BigInteger.valueOf(1);
 
-	
-    value[0] = offset[0].add(largest_index);
-    value[0] = value[0].divide(max_gcd);
-    value[1] = value[1].divide(max_gcd);
-    
-   
-    ArrayList result = new ArrayList();
-    result.add(value);
-    result.add(f);
-    return result;	
-}	
+		BigInteger max_gcd = BigInteger.ONE;
+		BigInteger largest_index = BigInteger.ZERO;
+		int number_of_searches = 0;
+		
+		System.out.println("Range is " + range[0]);
+		BigInteger [] value = {offset[0], offset[1]};
+	    for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
+	    {
+	      	value[0]  = value[0].add(step);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+	    	        max_gcd = gcd;
+	    	        largest_index = index;
+	        }
+	        number_of_searches++;
+	    }
+	    
+		
+		System.out.println("Range interval was " + range[0]);
+		System.out.println("Optimal index was " + largest_index);
+		System.out.println("Number of searches for greatest divisor was " + number_of_searches);
+		System.out.println();
 
+		
+	    value[0] = offset[0].add(largest_index);
+	    value[0] = value[0].divide(max_gcd);
+	    value[1] = offset[1].divide(max_gcd);
+	   
+	    
+	   
+	    ArrayList result = new ArrayList();
+	    result.add(value);
+	    result.add(frequency);
+	    return result;	
+	}	
 
 	
 	public static ArrayList getMessage2(BigInteger [] v, Hashtable <Integer, Integer>table, int [] frequency, int n)
