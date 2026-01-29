@@ -15,7 +15,7 @@ public class TestRange
 	
 	public TestRange()
 	{
-		int xdim = 10;
+		int xdim = 30;
 		int ydim = 1;
 		byte [] message = new byte [xdim * ydim];
 		
@@ -79,7 +79,7 @@ public class TestRange
 		message[8] = 0;
 		message[9] = 1;
 		
-		/*
+		
 		message[10] = 2;
 	    message[11] = 2;
 	    message[12] = 0;
@@ -92,21 +92,21 @@ public class TestRange
 	    message[19] = 3;
 		
 	    
-        
-        message[0] = 3;
-		message[1] = 3;
-		message[2] = 3;
-		message[3] = 3;
+	    
+        message[20] = 3;
+		message[21] = 3;
+		message[22] = 3;
+		message[23] = 3;
 	  
-		message[4] = 2;
-		message[5] = 2;
-		message[6] = 2;
+		message[24] = 2;
+		message[25] = 2;
+		message[26] = 2;
 		
-		message[7] = 1;
-		message[8] = 1;
+		message[27] = 1;
+		message[28] = 1;
 		
-		message[9] = 0;
-		
+		message[29] = 0;
+		/*
 		
         message[0] = 0;
 		message[1] = 0;
@@ -187,16 +187,25 @@ public class TestRange
 	    BigInteger [] v = CodeMapper.getRangeQuotient2(message, symbol_table, f, order);
 	    
 	    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
-	    System.out.println("Location in probalistic space is " + location);
+	    System.out.println("Location in probalistic space is " + String.format("%.4f", location));
 	    
 	    long stop = System.nanoTime();
 		long time = stop - start;
-		System.out.println("It took " + (time / 1000000) + " ms to calculate quotients.");
+		System.out.println("It took " + (time / 1000000) + " ms to calculate quotient.");
 		
 		int number_of_bits = v[0].bitLength();
-	    number_of_bits    += v[1].bitLength();
+		
+		BigInteger delta = v[1].subtract(v[0]);
+	    //number_of_bits    += v[1].bitLength();
+		number_of_bits    += delta.bitLength();
+		
+		System.out.println("Offset      " + v[0]);
+		System.out.println("Denominator " + v[1]);
+		System.out.println("Delta       " + delta);
+		
 	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
 	    System.out.println();
+	    
 	    
 	    
 	    byte [] message2 = CodeMapper.getMessage(v, inverse_table, f, order);
