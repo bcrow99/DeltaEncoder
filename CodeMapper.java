@@ -2368,10 +2368,69 @@ public class CodeMapper
 		return    result;
 	}
 	
-	//This method returns a list of the indices of a frequency table in the order that its value is exhausted.
-	public static ArrayList<Integer> getOrderedList(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	//This method returns a table of the indices of a frequency table in ascending order, greatest last.
+	public static int[] getAscendingTable(int src[])
 	{
-		ArrayList <Integer> ordered_list = new ArrayList <Integer>();
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int                         n     = src.length;
+		
+		for(int i = 0; i < n; i++)
+		{
+			double key = src[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+		
+		Collections.sort(list);
+		
+		int ascending_table[] = new int[n];
+		
+		for(int i = 0; i < n; i++)
+		{
+			double key         = list.get(i);
+			int    j           = table.get(key);
+			ascending_table[j] = i;
+		}
+		return ascending_table;
+	}
+	
+	//This method returns a table of the indices of a frequency table in descending order, greatest first.
+	public static int[] getDescendingTable(int src[])
+	{
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = src.length;
+		
+		for(int i = 0; i < n; i++)
+		{
+			double key = src[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+		
+		Collections.sort(list);
+		
+		int descending_table[] = new int[n];
+		
+		int k = 0;
+		for(int i = n - 1; i >= 0; i--)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = k++;
+		}
+		return descending_table;
+	}	
+		
+	//This method returns a table of the indices of a frequency table in the order that a value is exhausted first.
+	public static int [] getFirstTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	{
+		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
 		int [] f = frequency.clone();
 		
 		int    n = src.length;
@@ -2384,42 +2443,51 @@ public class CodeMapper
 	    	    j = symbol_table.get(j);
 	    	    f[j]--;
 	    	    if(f[j] == 0)
-	    	    	    ordered_list.add(j);
-	    	  
-	    }
-	
-        return ordered_list;	
-	}		
-	
-	//This method returns a list of the indices of a frequency table in the order that its value is exhausted.
-	public static int [] getOrderedTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
-	{
-		ArrayList <Integer> ordered_list = new ArrayList <Integer>();
-		int [] f = frequency.clone();
-		
-		int    n = src.length;
-	   
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    j = symbol_table.get(j);
-	    	    f[j]--;
-	    	    if(f[j] == 0)
-	    	    	    ordered_list.add(j);  
+	    	    	    exhausted_list.add(j);  
 	    }
 	
 		n = frequency.length;
-		int [] ordered_table = new int[n];
+		int [] first_table = new int[n];
 		for(int i = 0; i < n; i++)
 		{
-			int j = ordered_list.get(i);
-			ordered_table[i] = j;
+			int j = exhausted_list.get(i);
+			first_table[i] = j;
 		}
 		
-        return ordered_table;	
+        return first_table;	
 	}		
+	
+	//This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
+	public static int [] getLastTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	{
+		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+		int [] f = frequency.clone();
+			
+		int    n = src.length;
+		   
+		for(int i = 0; i < n; i++)
+		{
+		    	int j = src[i];
+		    	if(j < 0)
+		    	    	j += 256;
+		    	j = symbol_table.get(j);
+		    	f[j]--;
+		    	if(f[j] == 0)
+		    	    	exhausted_list.add(j);  
+		}
+		
+		n = frequency.length;
+		int [] last_table = new int[n];
+		
+		int k = 0;
+		for(int i = n - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = j;
+		}
+			
+	    return last_table;	
+	}	
 	
 	//This method returns the offset.
 	public static BigInteger [] getRangeQuotient(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
@@ -2976,25 +3044,17 @@ public class CodeMapper
 	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int process_type)
 	{
 		int [] f = frequency.clone();
-		int [] order = StringMapper.getOrderTable(frequency);
-		int [] rank = StringMapper.getRankTable(frequency);
+		
+		int [] order = null;
 		
 		if(process_type == 1)
-		{
-			for(int i = 0; i < order.length; i++)
-			{
-				int j = order[i];
-				f[j]  = frequency[i];
-			}	
-		}
+		    order = getDescendingTable(frequency);
 		else if(process_type == 2)
-		{
-			for(int i = 0; i < rank.length; i++)
-			{
-				int j = rank[i];
-				f[j]  = frequency[i];
-			}	
-		}
+		    order = getAscendingTable(frequency);
+		else if(process_type == 3)
+			order = getFirstTable(src, symbol_table, frequency);
+		else if(process_type == 4)
+		    order = getLastTable(src, symbol_table, frequency);	
 		
 	    int [] s = new int[f.length];
 		
@@ -3015,17 +3075,16 @@ public class CodeMapper
 		
 		int    n       = src.length;
 	    
-		int xdim = 256;
 		for(int i = 0; i < n; i++)
 	    {
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
 	    	    j = symbol_table.get(j);
-	    	    if(process_type == 1)
+	    	    if(order != null)
+	    	    {
 	    	    	    j = order[j];
-	    	    	else if(process_type == 2)
-	    	    		j = rank[j];
+	    	    }
 	    	   
 	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
 	    	    
@@ -3055,7 +3114,6 @@ public class CodeMapper
 			    	offset[1] = offset[1].divide(gcd);
 	    	    }
 			
-	    	    
             factor   = factor.valueOf(f[j]);
 	    	    range[0] = range[0].multiply(factor);
 	    	    factor   = factor.valueOf(m);

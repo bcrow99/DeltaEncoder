@@ -15,7 +15,7 @@ public class TestRange
 	
 	public TestRange()
 	{
-		int xdim = 30;
+		int xdim = 20;
 		int ydim = 1;
 		byte [] message = new byte [xdim * ydim];
 		
@@ -92,7 +92,7 @@ public class TestRange
 	    message[19] = 3;
 		
 	    
-	    
+	    /*
         message[20] = 3;
 		message[21] = 3;
 		message[22] = 3;
@@ -106,7 +106,7 @@ public class TestRange
 		message[28] = 1;
 		
 		message[29] = 0;
-		/*
+		
 		
         message[0] = 0;
 		message[1] = 0;
@@ -180,41 +180,53 @@ public class TestRange
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
 	    
-	    int [] order = CodeMapper.getOrderedTable(message, symbol_table, f);
+	
+	    for(int i = 0; i < 5; i++)
+	    {
+	    	    if(i == 0)
+	    	        System.out.println("Frequency table in symbol order.");
+	    	    else if(i == 1)
+	    	    	    System.out.println("Frequency table in descending order.");
+	    	    else if(i == 2)
+    	    	        System.out.println("Frequency table in ascending order."); 
+	    	    else if(i == 3)
+	    	        System.out.println("Frequency table in first exhausted order.");
+	    	    else if(i == 3)
+	    	        System.out.println("Frequency table in lastst exhausted order.");
+	        
+	    	    long start = System.nanoTime();
+	    
+	        BigInteger [] v = CodeMapper.getRangeQuotient2(message, symbol_table, f, i);
+	        
+	        long stop = System.nanoTime();
+		    long time = stop - start;
+		    System.out.println("It took " + (time / 1000000) + " ms to calculate quotient.");
+	        
+		    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
+	        System.out.println("Location in probalistic space is " + String.format("%.4f", location));
 	 
-	    long start = System.nanoTime();
-	    
-	    BigInteger [] v = CodeMapper.getRangeQuotient2(message, symbol_table, f, order);
-	    
-	    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
-	    System.out.println("Location in probalistic space is " + String.format("%.4f", location));
-	    
-	    long stop = System.nanoTime();
-		long time = stop - start;
-		System.out.println("It took " + (time / 1000000) + " ms to calculate quotient.");
+		    int number_of_bits = v[0].bitLength();
 		
-		int number_of_bits = v[0].bitLength();
+		    BigInteger delta = v[1].subtract(v[0]);
+	        //number_of_bits    += v[1].bitLength();
+		    number_of_bits    += delta.bitLength();
 		
-		BigInteger delta = v[1].subtract(v[0]);
-	    //number_of_bits    += v[1].bitLength();
-		number_of_bits    += delta.bitLength();
+		    System.out.println("Offset      " + v[0]);
+		    System.out.println("Denominator " + v[1]);
+		    System.out.println("Delta       " + delta);
 		
-		System.out.println("Offset      " + v[0]);
-		System.out.println("Denominator " + v[1]);
-		System.out.println("Delta       " + delta);
-		
-	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
-	    System.out.println();
+	        System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
+	        System.out.println();
+	    }
 	    
-	    
-	    
+	    /*
 	    byte [] message2 = CodeMapper.getMessage(v, inverse_table, f, order);
 	    System.out.println("Decoded message:");
 	    for(int i = 0; i < message2.length; i++)
 	    	    System.out.print(message2[i] + " ");
         System.out.println();
         
-        /*
+        
 	    long start = System.nanoTime();
 	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, xdim);
 	    int number_of_bits = 0;
