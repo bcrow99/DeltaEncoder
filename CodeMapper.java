@@ -2392,7 +2392,7 @@ public class CodeMapper
 		{
 			double key         = list.get(i);
 			int    j           = table.get(key);
-			ascending_table[j] = i;
+			ascending_table[i] = j;
 		}
 		return ascending_table;
 	}
@@ -2888,6 +2888,12 @@ public class CodeMapper
 			f[j]  = frequency[i];
 		}
 		
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			f[j]  = frequency[i];
+		}
+		
 	    int [] s = new int[f.length];
 		
 		int m = 0;
@@ -2976,8 +2982,6 @@ public class CodeMapper
 			range[0] = range[0].multiply(range_factor);
 			range[1] = range[1].multiply(range_factor);	
 		}
-		
-		System.out.println("Range is " + range[0]);
 	
 		BigInteger delimiter = offset[0].add(range[0]);
 		BigInteger gcd       = offset[1].gcd(offset[0]);
@@ -3006,7 +3010,7 @@ public class CodeMapper
 		    range[1]  = offset[1];
 		}
 	
-	    System.out.println("Reduced range is " + range[0]);
+	    //System.out.println("Reduced range is " + range[0]);
 		
 		gcd                      = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
@@ -3048,13 +3052,22 @@ public class CodeMapper
 		int [] order = null;
 		
 		if(process_type == 1)
-		    order = getDescendingTable(frequency);
+	        order = getDescendingTable(frequency);
 		else if(process_type == 2)
 		    order = getAscendingTable(frequency);
 		else if(process_type == 3)
 			order = getFirstTable(src, symbol_table, frequency);
 		else if(process_type == 4)
-		    order = getLastTable(src, symbol_table, frequency);	
+		    order = getLastTable(src, symbol_table, frequency);
+		
+		if(order != null)
+		{
+			for(int i = 0; i < order.length; i++)
+			{
+				int j = order[i];
+				f[j]  = frequency[i];
+			}	
+		}
 		
 	    int [] s = new int[f.length];
 		
@@ -3114,19 +3127,24 @@ public class CodeMapper
 			    	offset[1] = offset[1].divide(gcd);
 	    	    }
 			
+	    	    //System.out.println("Range is " + range[0]);
             factor   = factor.valueOf(f[j]);
 	    	    range[0] = range[0].multiply(factor);
 	    	    factor   = factor.valueOf(m);
 	    	    range[1] = range[1].multiply(factor);
 	    	    
+	    	    //System.out.println("Range is " + range[0] + " after multiplication.");
+	    	    //System.out.println();
+	    	    
 	    	   
+	    	    /*
 	    	    gcd = range[0].gcd(range[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    range[0] = range[0].divide(gcd);
 			    	range[1] = range[1].divide(gcd);
 	    	    }
-	    	   
+	    	    */
 	    	    
 	    	    f[j]--;
 	    	    m--;
@@ -3137,14 +3155,15 @@ public class CodeMapper
 	    }
 	
 		if(offset[1].compareTo(range[1]) != 0)
-		{	
+		{	//System.out.println("Cross multiplying range and offset.");
 		    BigInteger range_factor  = offset[1];
 		    BigInteger offset_factor = range[1];	
 			offset[0] = offset[0].multiply(offset_factor);
 			offset[1] = offset[1].multiply(offset_factor);
-					
+			//System.out.println("Range is " + range[0]);		
 			range[0] = range[0].multiply(range_factor);
-			range[1] = range[1].multiply(range_factor);	
+			range[1] = range[1].multiply(range_factor);
+			//System.out.println("Range is " + range[0] + " after cross multiplying.");	
 		}
 		
 		System.out.println("Range is " + range[0]);

@@ -178,9 +178,34 @@ public class TestRange
 	    
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
+	    
+	    
+	    /*
+	    BigInteger [] v = CodeMapper.getRangeQuotient2(message, symbol_table, f, 4);
+        
+	    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
+        System.out.println("Location in probabalistic space is " + String.format("%.4f", location));
+ 
+	    int number_of_bits = v[0].bitLength();
+	
+	    BigInteger delta = v[1].subtract(v[0]);
+        //number_of_bits    += v[1].bitLength();
+	    number_of_bits    += delta.bitLength();
+	
+	    System.out.println("Offset      " + v[0]);
+	    System.out.println("Denominator " + v[1]);
+	    System.out.println("Delta       " + delta);
+	
+        System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
+        System.out.println();
+	    */
+	    
+	    BigInteger [] offset = CodeMapper.getRangeQuotient(message, symbol_table, f);
+	    int number_of_bits = offset[0].bitLength();
+	    number_of_bits    += offset[1].bitLength();
+	    System.out.println("Number of bits for offset is " + number_of_bits);
 	    System.out.println();
 	    
-	
 	    for(int i = 0; i < 5; i++)
 	    {
 	    	    if(i == 0)
@@ -191,8 +216,8 @@ public class TestRange
     	    	        System.out.println("Frequency table in ascending order."); 
 	    	    else if(i == 3)
 	    	        System.out.println("Frequency table in first exhausted order.");
-	    	    else if(i == 3)
-	    	        System.out.println("Frequency table in lastst exhausted order.");
+	    	    else if(i == 4)
+	    	        System.out.println("Frequency table in last exhausted order.");
 	        
 	    	    long start = System.nanoTime();
 	    
@@ -203,15 +228,15 @@ public class TestRange
 		    System.out.println("It took " + (time / 1000000) + " ms to calculate quotient.");
 	        
 		    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
-	        System.out.println("Location in probalistic space is " + String.format("%.4f", location));
+	        System.out.println("Location in probabalistic space is " + String.format("%.4f", location));
 	 
-		    int number_of_bits = v[0].bitLength();
+		    number_of_bits = v[0].bitLength();
 		
 		    BigInteger delta = v[1].subtract(v[0]);
-	        //number_of_bits    += v[1].bitLength();
-		    number_of_bits    += delta.bitLength();
+	        number_of_bits    += v[1].bitLength();
+		    //number_of_bits    += delta.bitLength();
 		
-		    System.out.println("Offset      " + v[0]);
+		    System.out.println("Value       " + v[0]);
 		    System.out.println("Denominator " + v[1]);
 		    System.out.println("Delta       " + delta);
 		
