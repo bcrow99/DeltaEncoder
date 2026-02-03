@@ -6,14 +6,14 @@ import java.io.FileOutputStream;
 import java.lang.Math.*;
 import java.math.*;
 
-public class TestRange
+public class TestOffset
 {
 	public static void main(String[] args)
 	{
-		TestRange test = new TestRange();
+		TestOffset test = new TestOffset();
 	}	
 	
-	public TestRange()
+	public TestOffset()
 	{
 		int xdim = 100;
 		int ydim = 1;
@@ -93,15 +93,15 @@ public class TestRange
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
-	    
+	   
 	    for(int i = 0; i < 5; i++)
 	    {
 	    	    if(i == 0)
 	    	        System.out.println("Frequency table in symbol order.");
 	    	    else if(i == 1)
-	    	    	    System.out.println("Frequency table in descending order.");
+	    	    	    System.out.println("Frequency table in ascending order.");
 	    	    else if(i == 2)
-    	    	        System.out.println("Frequency table in ascending order."); 
+    	    	        System.out.println("Frequency table in descending order."); 
 	    	    else if(i == 3)
 	    	        System.out.println("Frequency table in first exhausted order.");
 	    	    else if(i == 4)
@@ -109,68 +109,24 @@ public class TestRange
 	        
 	    	    long start = System.nanoTime();
 	    
-	        BigInteger [] v = CodeMapper.getIntervalValue(message, symbol_table, f, i);
+	    	    BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+	    	    if(i == 0)
+	            offset = CodeMapper.getArithmeticOffset(message, symbol_table, f);
+	    	    else
+	    	    	    offset = CodeMapper.getArithmeticOffset(message, symbol_table, f, i);
 	        
 	        long stop = System.nanoTime();
 		    long time = stop - start;
-		    System.out.println("It took " + (time / 1000000) + " ms to calculate interval value.");
+		    System.out.println("It took " + (time / 1000000) + " ms to calculate offset.");
 	        
-		    BigDecimal location = CodeMapper.getNormalFraction(v[0], v[1]);
+		    BigDecimal location = CodeMapper.getNormalFraction(offset[0], offset[1]);
 	        System.out.println("Location in probabalistic space is " + String.format("%.4f", location));
 	        
-	        int number_of_bits = location.precision() + 32;
-	        System.out.println("Number of location bits is " + number_of_bits);
+	        int precision = location.precision();
+	        System.out.println("Number of location bits is " + (precision + 32));
 	        System.out.println();
+	 
 	    }
-	    
-	    /*
-	    byte [] message2 = CodeMapper.getMessage(v, inverse_table, f, order);
-	    System.out.println("Decoded message:");
-	    for(int i = 0; i < message2.length; i++)
-	    	    System.out.print(message2[i] + " ");
-        System.out.println();
         
-        
-	    long start = System.nanoTime();
-	    ArrayList <BigInteger []> result = CodeMapper.getQuotientList(message, xdim);
-	    int number_of_bits = 0;
-	    for(int i = 0; i < result.size(); i++)
-	    {
-	    	    BigInteger [] v = result.get(i);
-	    	    number_of_bits += v[0].bitLength();
-	    	    number_of_bits += v[1].bitLength();
-	    	    
-	    }
-	    long stop = System.nanoTime();
-		long time = stop - start;
-		System.out.println("It took " + (time / 1000000) + " ms to calculate quotients.");
-	    System.out.println("Number of arithmetic encoding bits is " + number_of_bits);
-	    System.out.println();
-	  
-	    start = System.nanoTime();
-	    for(int i = 0; i < result.size(); i++)
-	    {
-	    	   BigInteger [] v = result.get(i);  
-	    	   
-	    	   
-	    	   ArrayList result2 = CodeMapper.getMessage2(v, inverse_table, f, 10);
-	    	   
-	    	   
-	    	   byte [] message2 = (byte [])result2.get(0);
-	    	   System.out.println("Message length is " + message2.length);
-	    	   int  [] f2       = (int [])result2.get(1);
-	    	   f                = f2;
-	    	   
-	    	  
-	    	   System.out.println("Decoded message from getMessage2:");
-		   for(j = 0; j < message2.length; j++)
-			    	System.out.print(message2[j] + " ");
-		   System.out.println();
-		  
-	    }
-	    stop = System.nanoTime();
-	    time = stop - start;
-	    System.out.println("It took " + (time / 1000000) + " ms to decode message.");
-	    */
 	}
 }
