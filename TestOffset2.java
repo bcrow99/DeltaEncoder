@@ -19,7 +19,7 @@ public class TestOffset2
 	public TestOffset2()
 	{
 		int xdim = 256;
-		int ydim = 48;
+		int ydim = 24;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -106,18 +106,20 @@ public class TestOffset2
 		
 		int segment_length = message.length / n;
 		
+		byte [][] segment = new byte[n][segment_length];
+		int k = 0;
+		for(int i = 0; i < n; i++)
+		{
+			for(j = 0; j < segment_length; j++)
+				segment[i][j] = message[k++];
+		}
+		
 		
 		long start = System.nanoTime();
 		Thread [] encoder_thread = new Thread[n]; 
 		for(int i = 0; i < n; i++) 
 		{
-			byte [] segment   = new byte[segment_length];
-			int offset        = segment_length * i;
-			int stop          = offset + segment_length;
-			int k = 0;
-			for(j = offset; j < stop; j++)
-			    segment[k++] = message[j];
-		    encoder_thread[i] = new Thread(new ArithmeticEncoder(segment, i));
+		    encoder_thread[i] = new Thread(new ArithmeticEncoder(segment[i], i));
 		    encoder_thread[i].start(); 
 		} 
 		

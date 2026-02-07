@@ -2646,8 +2646,8 @@ public class CodeMapper
 	
 	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
-		int [] f = frequency.clone();
-		
+		// Modifying the input to save a copy.
+		int [] f = frequency;
 		int    n = src.length;
 	   
 	    int [] s = new int[f.length];
@@ -2672,19 +2672,21 @@ public class CodeMapper
 	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
 	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
 	    	   
-	    	   
+	    	    
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    addend[0] = addend[0].divide(gcd);
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
-	    	   
+	    	    
+	    	    
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
 	    	    offset[0] = offset[0].add(addend[0]);
-	    	     
+	    	    
+	    	    
 	    	    gcd = offset[0].gcd(offset[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
@@ -2692,17 +2694,17 @@ public class CodeMapper
 			    	offset[1] = offset[1].divide(gcd);
 	    	    }
 			
+	    	    
 	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
 	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
 	    	    
-
+           
 	    	    gcd = range[0].gcd(range[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    	    {
 	    	    	    range[0] = range[0].divide(gcd);
 			    	range[1] = range[1].divide(gcd);
 	    	    }
-	    	 
 	    	    
 	    	    f[j]--;
 	    	    m--;
