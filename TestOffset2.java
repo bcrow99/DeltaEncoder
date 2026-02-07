@@ -8,6 +8,9 @@ import java.math.*;
 
 public class TestOffset2
 {
+	BigDecimal []   arithmetic_offset;
+	int        [][] frequency;
+	
 	public static void main(String[] args)
 	{
 		TestOffset2 test = new TestOffset2();
@@ -16,7 +19,7 @@ public class TestOffset2
 	public TestOffset2()
 	{
 		int xdim = 256;
-		int ydim = 100;
+		int ydim = 48;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -94,32 +97,72 @@ public class TestOffset2
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
 	   
-	    long start = System.nanoTime();
-	    ArrayList result = CodeMapper.getArithmeticOffsetList(message, ydim);
-	    long stop = System.nanoTime();
-	    long time = stop - start;
-	    System.out.println("It took " + (time / 1000000) + " ms to get list of offsets and frequency tables.");
-	    ArrayList <BigDecimal> offset_list = (ArrayList <BigDecimal>)result.get(0);
-	    
-	    int cores = Runtime.getRuntime().availableProcessors();
-		System.out.println("There are " + cores + " processors available.");
+	    int number_of_processors = Runtime.getRuntime().availableProcessors();
+		System.out.println("There are " + number_of_processors + " processors available.");
 		
-	    System.out.println("Printing offsets:");
-	    for(int i = 0; i < ydim; i++)
-	    {
-	    	    BigDecimal offset = offset_list.get(i);
-	    	    System.out.print(String.format("%.6f", offset) + " ");
-	    }
+		int n             = number_of_processors;
+		arithmetic_offset = new BigDecimal[n];
+		frequency         = new int[n][256];
+		
+		int segment_length = message.length / n;
+		
+		
+		long start = System.nanoTime();
+		Thread [] encoder_thread = new Thread[n]; 
+		for(int i = 0; i < n; i++) 
+		{
+			byte [] segment   = new byte[segment_length];
+			int offset        = segment_length * i;
+			int stop          = offset + segment_length;
+			int k = 0;
+			for(j = offset; j < stop; j++)
+			    segment[k++] = message[j];
+		    encoder_thread[i] = new Thread(new ArithmeticEncoder(segment, i));
+		    encoder_thread[i].start(); 
+		} 
+		
+		for(int i = 0; i < n; i++)
+		{
+			try
+			{
+		        encoder_thread[i].join();
+			}
+			catch(Exception e)
+			{
+				System.out.println("Exception waiting for thread to finish:");
+				System.out.println(e.toString());
+			}
+		}
+		
+		long stop = System.nanoTime();
+	    long time = stop - start;
+	    System.out.println("It took " + (time / 1000000) + " ms to get offsets and frequency tables.");
+	    
+	    System.out.println("Offsets:");
+	    for(int i = 0; i < n; i++)
+	    	    System.out.print(String.format("%.6f", arithmetic_offset[i]) + " ");
 	    System.out.println();
-        
-	    /*
-	    BigDecimal location = CodeMapper.getNormalFraction(offset[0], offset[1]);
-        System.out.println("Location in probabilistic space is " + String.format("%.4f", location));
-        
-        int precision = location.precision();
-        System.out.println("Number of location bits is " + (precision + 32));
-        System.out.println();
-        */
-        
+	}
+	
+	class ArithmeticEncoder implements Runnable
+	{
+		byte [] src;
+		int     index;
+
+		public ArithmeticEncoder(byte [] src, int index)
+		{
+			this.src   = src;
+			this.index = index;
+		}
+
+		public void run()
+		{
+		    ArrayList  result = CodeMapper.getArithmeticOffset2(src);
+		    BigDecimal offset = (BigDecimal)result.get(0);
+		    int []     freq   = (int [])result.get(1);  
+		    
+		    arithmetic_offset[index] = offset;
+		    frequency[index]         = freq;
+		}
 	}
 }

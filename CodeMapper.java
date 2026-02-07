@@ -2599,6 +2599,51 @@ public class CodeMapper
 		 return offset;
 	}
 	
+	public static ArrayList getArithmeticOffset2(byte [] src)
+	{
+		 boolean [] isSymbol = new boolean[256];
+		 int     [] freq     = new int[256];
+		    
+		 for(int i = 0; i < src.length; i++)
+		 {
+		    	 int j = src[i];
+		    	 if(j < 0)
+		    	    	j += 256;
+		    	 isSymbol[j] = true;
+		    	 freq[j]++;
+		 }
+		 
+		 int number_of_symbols = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		     if(isSymbol[i]) 
+		    	     number_of_symbols++; 
+		 }
+		    
+		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+		 int [] f = new int[number_of_symbols];
+		    
+		 int j = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		    	if(isSymbol[i])
+		    	{
+		    	    	symbol_table.put(i, j);
+		    	    	f[j] = freq[i];
+		    	    	j++;
+		    	}
+		 }
+		 
+		 BigInteger [] fraction            = getArithmeticOffset(src, symbol_table, f);	
+		 BigDecimal    normalized_fraction = getNormalFraction(fraction[0], fraction[1]);
+		 
+		 ArrayList result = new ArrayList();
+		 result.add(normalized_fraction);
+		 result.add(freq);
+		 
+		 return result;
+	}
+	
 	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
 		int [] f = frequency.clone();
