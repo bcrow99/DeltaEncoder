@@ -101,6 +101,9 @@ public class TestOffset2
 	    System.out.println("It took " + (time / 1000000) + " ms to get list of offsets and frequency tables.");
 	    ArrayList <BigDecimal> offset_list = (ArrayList <BigDecimal>)result.get(0);
 	    
+	    int cores = Runtime.getRuntime().availableProcessors();
+		System.out.println("There are " + cores + " processors available.");
+		
 	    System.out.println("Printing offsets:");
 	    for(int i = 0; i < ydim; i++)
 	    {
