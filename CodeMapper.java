@@ -2488,13 +2488,83 @@ public class CodeMapper
 	    return last_table;	
 	}	
 
+	public static ArrayList getArithmeticOffsetList(byte [] src, int number_of_segments)
+	{
+		ArrayList <BigDecimal> arithmetic_offset = new ArrayList <BigDecimal> ();
+		ArrayList <int []>     frequency_table   = new ArrayList <int []> ();
+		
+		int segment_length = src.length / number_of_segments;
+		int offset         = 0;
+		int n              = number_of_segments;
+		for(int i = 0; i < n; i++)
+		{
+			byte []    segment  = new byte[segment_length];
+			
+			int k = 0;
+			for(int j = offset; j < offset + segment_length; j++)
+			{
+				segment[k] = src[j];
+				k++;
+			}
+			
+			offset += segment_length;
+			
+			
+			boolean [] isSymbol = new boolean[256];
+			int     [] freq     = new int[256];
+			    
+			for(int j = 0; j < segment.length; j++)
+			{
+			    	 k = segment[j];
+			    	 if(k < 0)
+			    	    	k += 256;
+			    	 isSymbol[k] = true;
+			    	 freq[k]++;
+			}
+			
+			frequency_table.add(freq);
+			
+			int number_of_symbols = 0;
+			for(int j = 0; j < 256; j++)
+			{
+			    if(isSymbol[j]) 
+			    	    number_of_symbols++; 
+			}
+			
+			Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+			int [] f                                  = new int[number_of_symbols];
+		    
+			 k = 0;
+			 for(int j = 0; j < 256; j++)
+			 {
+			    	if(isSymbol[j])
+			    	{
+			    	    	symbol_table.put(j, k);
+			    	    	f[k] = freq[j];
+			    	    k++;
+			    	}
+			 } 
+			  
+			 BigInteger [] fraction            = getArithmeticOffset(segment, symbol_table, f);
+			
+			 BigDecimal    normalized_fraction = getNormalFraction(fraction[0], fraction[1]);
+			 
+			 
+			 arithmetic_offset.add(normalized_fraction);
+		}
+		
+		ArrayList result = new ArrayList();
+		result.add(arithmetic_offset);
+		result.add(frequency_table);
+		
+		return result;
+	}
 	
-	public static BigInteger [] getArithmeticOffset(byte [] src, int order_type)
+	public static BigInteger [] getArithmeticOffset(byte [] src)
 	{
 		 boolean [] isSymbol = new boolean[256];
 		 int     [] freq     = new int[256];
 		    
-		 int sum = 0;
 		 for(int i = 0; i < src.length; i++)
 		 {
 		    	 int j = src[i];
@@ -2502,7 +2572,6 @@ public class CodeMapper
 		    	    	j += 256;
 		    	 isSymbol[j] = true;
 		    	 freq[j]++;
-		    	 sum++;
 		 }
 		 
 		 int number_of_symbols = 0;
@@ -2526,11 +2595,9 @@ public class CodeMapper
 		    	}
 		 }
 		 
-		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f, order_type);
+		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
 		 return offset;
 	}
-	
-	
 	
 	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
@@ -2608,6 +2675,49 @@ public class CodeMapper
         return offset;	
 	}	
 	
+	
+	// If the probabilistic space is ordered so the offset is the fraction that factors to the smallest numbers, 
+    // it will improve the compression rate, but that order does not seem to be a simple function of the probabilities.
+	public static BigInteger [] getArithmeticOffset(byte [] src, int order_type)
+	{
+		 boolean [] isSymbol = new boolean[256];
+		 int     [] freq     = new int[256];
+		    
+		 int sum = 0;
+		 for(int i = 0; i < src.length; i++)
+		 {
+		    	 int j = src[i];
+		    	 if(j < 0)
+		    	    	j += 256;
+		    	 isSymbol[j] = true;
+		    	 freq[j]++;
+		    	 sum++;
+		 }
+		 
+		 int number_of_symbols = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		     if(isSymbol[i]) 
+		    	     number_of_symbols++; 
+		 }
+		    
+		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+		 int [] f = new int[number_of_symbols];
+		    
+		 int j = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		    	if(isSymbol[i])
+		    	{
+		    	    	symbol_table.put(i, j);
+		    	    	f[j] = freq[i];
+		    	    	j++;
+		    	}
+		 }
+		 
+		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f, order_type);
+		 return offset;
+	}
 	
 	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int order_type)
 	{
