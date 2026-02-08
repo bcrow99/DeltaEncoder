@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.Math.*;
 import java.math.*;
+import java.util.concurrent.*;
 
 public class TestOffset2
 {
@@ -19,7 +20,7 @@ public class TestOffset2
 	public TestOffset2()
 	{
 		int xdim = 256;
-		int ydim = 24;
+		int ydim = 16;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -53,7 +54,7 @@ public class TestOffset2
 			message[i] = (byte)value;
 		}
 		
-		
+		/*
 	    boolean [] isSymbol = new boolean[256];
 	    int     [] freq     = new int[256];
 	    
@@ -96,26 +97,28 @@ public class TestOffset2
 	    System.out.println("Number of message bytes is " + message.length);
 	    System.out.println("Number of shannon bits is " + String.format("%.1f", bitlength));
 	    System.out.println();
-	   
+	    */
+		
+		
 	    int number_of_processors = Runtime.getRuntime().availableProcessors();
 		System.out.println("There are " + number_of_processors + " processors available.");
 		
-		int n             = number_of_processors;
-		arithmetic_offset = new BigDecimal[n];
-		frequency         = new int[n][256];
-		
+		int n              = number_of_processors;
+		arithmetic_offset  = new BigDecimal[n];
+		frequency          = new int[n][256];
 		int segment_length = message.length / n;
+		byte [][] segment  = new byte[n][segment_length];
 		
-		byte [][] segment = new byte[n][segment_length];
 		int k = 0;
 		for(int i = 0; i < n; i++)
 		{
-			for(j = 0; j < segment_length; j++)
+			for(int j = 0; j < segment_length; j++)
 				segment[i][j] = message[k++];
 		}
 		
-		
 		long start = System.nanoTime();
+		
+		
 		Thread [] encoder_thread = new Thread[n]; 
 		for(int i = 0; i < n; i++) 
 		{
@@ -135,6 +138,26 @@ public class TestOffset2
 				System.out.println(e.toString());
 			}
 		}
+		
+		
+		/*
+		ExecutorService executorService = Executors.newFixedThreadPool(n);
+		for (int i = 0; i < n; i++)
+		{
+			executorService.submit(new ArithmeticEncoder(segment[i], i));
+		}
+		executorService.shutdown();
+		
+		try
+		{
+		    executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+		}
+		catch(Exception e)
+		{
+			System.out.println("Exception waiting for thread to finish:");
+			System.out.println(e.toString());
+		}
+		*/
 		
 		long stop = System.nanoTime();
 	    long time = stop - start;
