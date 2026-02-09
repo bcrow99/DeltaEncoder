@@ -33,27 +33,44 @@ public class ArithmeticReader
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
 			
 			int n = in.readInt();
-			BigDecimal [] offset = new BigDecimal[n];
+			int number_of_segments = in.readInt();
+			int segment_length = in.readInt();
+			
+			BigDecimal [][] offset = new BigDecimal[n][number_of_segments];
 			for (int i = 0; i < n; i++)
 			{
-				int scale = in.readInt();
-				int size  = in.readInt();
+				for(int j = 0; j < number_of_segments; j++)
+				{
+				    int scale = in.readInt();
+				    int size  = in.readInt();
 				
-				byte [] byte_array = new byte[size];
-			    in.read(byte_array, 0, size);
+				    byte [] byte_array = new byte[size];
+			        in.read(byte_array, 0, size);
 			    
-			    BigInteger a = new BigInteger(byte_array);
-			    BigDecimal b = new BigDecimal(a);
-			    BigDecimal c = b.movePointLeft(scale);
+			        BigInteger a = new BigInteger(byte_array);
+			        BigDecimal b = new BigDecimal(a);
+			        BigDecimal c = b.movePointLeft(scale);
 			    
-			    offset[i] = c;			    
+			        offset[i][j] = c;	
+				}
+			}
+			
+			int [][] frequency = new int[n][256];
+			
+			for(int i = 0; i < n; i++)
+			{
+				for(int j = 0; j < 256; j++)
+					frequency[i][j] = in.readInt();
 			}
 			
 			System.out.println("Offsets:");
 		    for(int i = 0; i < n; i++)
-		    	    System.out.print(String.format("%.6f", offset[i]) + " ");
-		    System.out.println();
-			
+		    {
+		    	    for(int j = 0; j < number_of_segments; j++)
+		    	    	    System.out.print(String.format("%.6f", offset[i][j]) + " ");
+		    	    System.out.println();
+		    }
+		    
 		}
 		catch(Exception e)
 		{
