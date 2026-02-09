@@ -166,7 +166,7 @@ public class ArithmeticWriter
 
 		public void run()
 		{
-		    ArrayList  result = CodeMapper.getArithmeticOffsetList2(src, number_of_segments);
+		    ArrayList  result = CodeMapper.getArithmeticOffsetList(src, number_of_segments);
 		    
 		    BigDecimal [] offset = (BigDecimal [])result.get(0);
 		    
