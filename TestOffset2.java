@@ -9,8 +9,10 @@ import java.util.concurrent.*;
 
 public class TestOffset2
 {
-	BigDecimal []   arithmetic_offset;
+	BigDecimal [][] arithmetic_offset;
 	int        [][] frequency;
+	int             number_of_segments;
+	int             number_of_processors;
 	
 	public static void main(String[] args)
 	{
@@ -20,7 +22,7 @@ public class TestOffset2
 	public TestOffset2()
 	{
 		int xdim = 256;
-		int ydim = 16;
+		int ydim = 256;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -100,19 +102,22 @@ public class TestOffset2
 	    */
 		
 		
-	    int number_of_processors = Runtime.getRuntime().availableProcessors();
+	    number_of_processors = Runtime.getRuntime().availableProcessors();
 		System.out.println("There are " + number_of_processors + " processors available.");
 		
+		int number_of_lines_per_processor = ydim / number_of_processors;
+		number_of_segments            = number_of_lines_per_processor;
+		
 		int n              = number_of_processors;
-		arithmetic_offset  = new BigDecimal[n];
+		arithmetic_offset  = new BigDecimal[number_of_processors][number_of_segments];
 		frequency          = new int[n][256];
-		int segment_length = message.length / n;
-		byte [][] segment  = new byte[n][segment_length];
+		int segment_length = message.length / (n * number_of_segments);
+		byte [][] segment  = new byte[n][number_of_segments * segment_length];
 		
 		int k = 0;
 		for(int i = 0; i < n; i++)
 		{
-			for(int j = 0; j < segment_length; j++)
+			for(int j = 0; j < segment_length * number_of_segments; j++)
 				segment[i][j] = message[k++];
 		}
 		
@@ -139,33 +144,18 @@ public class TestOffset2
 			}
 		}
 		
-		
-		/*
-		ExecutorService executorService = Executors.newFixedThreadPool(n);
-		for (int i = 0; i < n; i++)
-		{
-			executorService.submit(new ArithmeticEncoder(segment[i], i));
-		}
-		executorService.shutdown();
-		
-		try
-		{
-		    executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-		}
-		catch(Exception e)
-		{
-			System.out.println("Exception waiting for thread to finish:");
-			System.out.println(e.toString());
-		}
-		*/
-		
 		long stop = System.nanoTime();
 	    long time = stop - start;
 	    System.out.println("It took " + (time / 1000000) + " ms to get offsets and frequency tables.");
 	    
 	    System.out.println("Offsets:");
-	    for(int i = 0; i < n; i++)
-	    	    System.out.print(String.format("%.6f", arithmetic_offset[i]) + " ");
+	    for(int i = 0; i < number_of_processors; i++)
+	    {
+	    	    //System.out.print(String.format("%.6f", arithmetic_offset[i]) + " ");
+	    	    BigDecimal [] current_offset = arithmetic_offset[i];
+	    	    for(int j = 0; j < number_of_segments; j++)
+	    	    	    System.out.print(String.format("%.6f", current_offset[j]) + " ");  
+	    }
 	    System.out.println();
 	}
 	
@@ -182,8 +172,9 @@ public class TestOffset2
 
 		public void run()
 		{
-		    ArrayList  result = CodeMapper.getArithmeticOffset2(src);
-		    BigDecimal offset = (BigDecimal)result.get(0);
+		    ArrayList  result = CodeMapper.getArithmeticOffsetList2(src, number_of_segments);
+		    
+		    BigDecimal [] offset = (BigDecimal [])result.get(0);
 		    int []     freq   = (int [])result.get(1);  
 		    
 		    arithmetic_offset[index] = offset;

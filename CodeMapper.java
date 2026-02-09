@@ -2560,6 +2560,57 @@ public class CodeMapper
 		return result;
 	}
 	
+	public static ArrayList getArithmeticOffsetList2(byte [] src, int number_of_segments)
+	{
+		//ArrayList <BigDecimal> arithmetic_offset = new ArrayList <BigDecimal> ();
+		BigDecimal [] offset = new BigDecimal[number_of_segments];
+		
+		int n      = number_of_segments;
+		int length = src.length / n;
+		
+		
+        byte [][] segment  = new byte[n][length];
+		
+        try
+        {
+           	int k = 0;
+    		    for(int i = 0; i < n; i++)
+    		    {
+    			    for(int j = 0; j < length; j++)
+    				    segment[i][j] = src[k++];
+    		    }
+        }
+        catch(Exception e)
+        {
+        	    System.out.println("Exception segmenting data.");
+        	    System.out.println(e.toString());
+        	    System.exit(0);
+        }
+		
+        int [] frequency = new int[256];
+        for(int i = 0; i < src.length; i++)
+        {
+        	    int j = src[i];
+        	    if(j < 0)
+        	    	    j += 256;
+        	    frequency[j]++;
+        }
+        
+        int [] f = frequency.clone();
+		for(int i = 0; i < n; i++)
+		{
+			byte []    current_segment = segment[i];
+			offset[i] = getArithmeticOffset(current_segment, f);
+		}
+		
+		ArrayList result = new ArrayList();
+		result.add(offset);
+		result.add(frequency);
+		
+		return result;
+	}
+	
+	
 	public static BigInteger [] getArithmeticOffset(byte [] src)
 	{
 		 boolean [] isSymbol = new boolean[256];
@@ -2598,6 +2649,53 @@ public class CodeMapper
 		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
 		 return offset;
 	}
+	
+	// This method modifies the input frequency table as well as returning the offset.
+	public static BigDecimal getArithmeticOffset(byte [] src, int [] frequency)
+	{
+		 boolean [] isSymbol   = new boolean[256];
+		 int     [] frequency2 = new int[256];
+		    
+		 for(int i = 0; i < src.length; i++)
+		 {
+		    	 int j = src[i];
+		    	 if(j < 0)
+		    	    	j += 256;
+		    	 isSymbol[j] = true;
+		    	 frequency2[j]++;
+		 }
+		 
+		 int number_of_symbols = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		     if(isSymbol[i]) 
+		    	     number_of_symbols++; 
+		 }
+		    
+		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+		 int [] f = new int[number_of_symbols];
+		    
+		 int j = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		    	if(isSymbol[i])
+		    	{
+		    	    	symbol_table.put(i, j);
+		    	    	f[j] = frequency2[i];
+		    	    	j++;
+		    	}
+		 }
+		 
+		 BigInteger [] offset     = getArithmeticOffset(src, symbol_table, f);
+		 BigDecimal normal_offset = getNormalFraction(offset[0], offset[1]);
+		 
+		 for(int i = 0; i < frequency.length; i++)
+			 frequency[i] -= frequency2[i];
+		 
+		 return normal_offset;
+	}
+	
+	
 	
 	public static ArrayList getArithmeticOffset2(byte [] src)
 	{
