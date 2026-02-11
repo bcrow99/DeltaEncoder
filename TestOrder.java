@@ -15,8 +15,8 @@ public class TestOrder
 	
 	public TestOrder()
 	{
-		int xdim = 16;
-		int ydim = 16;
+		int xdim = 24;
+		int ydim = 24;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -132,7 +132,7 @@ public class TestOrder
 	    */
 		
 	    
-	    for(int i = 0; i < 5; i++)
+	    for(int i = 3; i < 5; i++)
 	    {
 	    	    long start = System.nanoTime();
 	        BigInteger [] offset = CodeMapper.getArithmeticOffset(message, symbol_table, f, i);
