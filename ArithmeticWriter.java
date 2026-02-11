@@ -25,8 +25,8 @@ public class ArithmeticWriter
 	
 	public ArithmeticWriter()
 	{
-		xdim = 256;
-		ydim = 256;
+		xdim = 16;
+		ydim = 16;
 		
 		int size = xdim * ydim;
 		byte [] message = new byte [size];
@@ -102,13 +102,38 @@ public class ArithmeticWriter
 			}
 		}
 		
-	    System.out.println("Offsets:");
+		int [][]        scale         = new int[number_of_processors][number_of_segments];
+	    BigInteger [][] unscaled_value = new BigInteger[number_of_processors][number_of_segments];
+		
+	    
+		System.out.println("Offsets:");
 	    for(int i = 0; i < n; i++)
 	    {
 	    	    for(int j = 0; j < number_of_segments; j++)
+	    	    {
 	    	    	    System.out.print(String.format("%.6f", arithmetic_offset[i][j]) + " ");
+	    	    	    scale[i][j]           = arithmetic_offset[i][j].scale();
+	    	    	    unscaled_value[i][j] = arithmetic_offset[i][j].unscaledValue();
+	    	    }
 	    	    System.out.println();
 	    }
+	    
+	    int min_scale = scale[0][0];
+	    BigInteger min_unscaled_value = unscaled_value[0][0];
+	    
+	    for(int i = 0; i < n; i++)
+	    {
+	    	    for(int j = 0; j < number_of_segments; j++)
+	    	    {
+	    	    	    if(scale[i][j] < min_scale)
+	    	    	    	    min_scale = scale[i][j];
+	    	    	    if(unscaled_value[i][j].compareTo(min_unscaled_value) == -1)
+			        	    min_unscaled_value = unscaled_value[i][j];  
+	    	    }
+	    }
+	    
+	    //System.out.println("Min scale is " + min_scale);
+	    //System.out.println("Min unscaled value is " + min_unscaled_value);
 	    
 	    try
 		{
@@ -117,26 +142,48 @@ public class ArithmeticWriter
 			out.writeInt(number_of_segments);
 			out.writeInt(segment_length);
 			
+			out.writeInt(min_scale);
+			
+			/*
+			byte [] min_byte_array = min_unscaled_value.toByteArray();
+			out.writeInt(min_byte_array.length);
+	        out.write(min_byte_array, 0, min_byte_array.length);
+			*/
+			
 			for(int i = 0; i < n; i++)
 			{
 				for(int j = 0; j < number_of_segments; j++)
 				{
-				    BigInteger unscaled_value = arithmetic_offset[i][j].unscaledValue();
-			        int        scale          = arithmetic_offset[i][j].scale();
-			        byte []    byte_array     = unscaled_value.toByteArray(); 
-			    
-			        out.writeInt(scale);
+					int delta = scale[i][j] - min_scale;
+					out.writeInt(delta);
+					
+					/*
+					BigInteger delta2 = unscaled_value[i][j].subtract(min_unscaled_value);
+					System.out.println("Unscaled value is     " + unscaled_value[i][j]);
+					System.out.println("Min unscaled value is " + min_unscaled_value);
+					System.out.println("Delta is              " + delta2);
+					System.out.println();
+					
+					System.out.println("Bit length of unscaled value is     " + unscaled_value[i][j].bitLength());
+					System.out.println("Bit length of min unscaled value is " + min_unscaled_value.bitLength());
+					System.out.println("Bit length of delta is              " + delta2.bitLength());
+					System.out.println();
+					byte [] byte_array = delta2.toByteArray();
+					*/
+					byte [] byte_array = unscaled_value[i][j].toByteArray();
 			        out.writeInt(byte_array.length);
 			        out.write(byte_array, 0, byte_array.length);
 				}
 			}
 			
+			/*
 			for(int i = 0; i < n; i++)
 			{
 				int [] current_table = frequency[i];
 				for(int j = 0; j < 256; j++)
 					out.writeInt(current_table[j]);
 			}
+			*/
 			
 			out.close();
 			
@@ -176,4 +223,5 @@ public class ArithmeticWriter
 		    frequency[index]         = freq;
 		}
 	}
+
 }
