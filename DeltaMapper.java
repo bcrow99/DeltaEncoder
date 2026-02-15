@@ -227,6 +227,49 @@ public class DeltaMapper
 		return sum;
 	}
 	
+	// We would expect this to produce an average between the 
+	// greatest value and the least value, but it is frequently
+	// the least value.
+	public static int getAverageSum(int src[], int xdim, int ydim)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+				sum += Math.abs(delta);	
+				
+				k++;	
+			}
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getAverageSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum        = 0;
+		int delta      = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+				sum += Math.abs(delta);
+				
+				k += interval;	
+			}
+			k = (i + 1) * xdim + 1;	
+		}
+		return sum;
+	}
+	
 	public static int getPaethSum(int src[], int xdim, int ydim)
 	{
 		int sum   = 0;
