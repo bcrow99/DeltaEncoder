@@ -70,88 +70,21 @@ public class DeltaMapper
 		}
 		return pixel;
 	}
-
+	
 	public static int getIdealSum(int src[], int xdim, int ydim)
 	{
-		int init_value = src[0];
-		int value = init_value;
+		int sum   = 0;
 		int delta = 0;
-
-		int sum = 0;
-		int k = 0;
-
-		k = 0;
-		for(int i = 0; i < ydim; i++)
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
 		{
-			if(i == 0)
-			{
-				for(int j = 0; j < xdim; j++)
-				{
-					if(j == 0)
-						k++;
-					else
-					{
-						delta = src[k] - value;
-						value += delta;
-						k++;
-						sum += Math.abs(delta);
-					}
-				}
-			} 
-			else
-			{
-				for(int j = 0; j < xdim; j++)
-				{
-					if(j == 0)
-					{
-						delta = src[k] - init_value;
-						init_value = src[k];
-						k++;
-						sum += Math.abs(delta);
-					} 
-					else
-					{
-						int a = src[k - 1];
-						int b = src[k - xdim];
-						int c = src[k - xdim - 1];
-						int d = src[k - xdim + 1];
-						int e = src[k];
-
-						int delta_a = Math.abs(a - e);
-						int delta_b = Math.abs(b - e);
-						int delta_c = Math.abs(c - e);
-						int delta_d = Math.abs(d - e);
-
-						if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
-							delta = delta_a;
-						else if(delta_b <= delta_c && delta_b <= delta_d)
-							delta = delta_b;
-						else if(delta_c <= delta_d)
-							delta = delta_c;
-						else
-							delta = delta_d;
-						k++;
-						sum += Math.abs(delta);
-					}
-				}
-			}
-		}
-		return sum;
-	}
-
-	public static int getIdealSum(int src[], int xdim, int ydim, int interval)
-	{
-		int sum = 0;
-		int delta = 0;
-		for(int i = 1; i < ydim; i++)
-		{
-			int k = i * xdim + 1;
-			for(int j = 1; j < xdim - 1; j += interval)
+			for(int j = 1; j < xdim - 1; j++)
 			{
 				int a = src[k - 1];
 				int b = src[k - xdim];
 				int c = src[k - xdim - 1];
-				int d = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
 				int e = src[k];
 
 				int delta_a = Math.abs(a - e);
@@ -167,13 +100,364 @@ public class DeltaMapper
 					delta = delta_c;
 				else
 					delta = delta_d;
-				sum += delta;
-				k += interval;
+				sum += Math.abs(delta);	
+				
+				k++;		
 			}
+			k = (i + 1) * xdim + 1;	
+			
 		}
 		return sum;
 	}
+	
+	public static int getIdealSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum        = 0;
+		int delta      = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+				int e = src[k];
 
+				int delta_a = Math.abs(a - e);
+				int delta_b = Math.abs(b - e);
+				int delta_c = Math.abs(c - e);
+				int delta_d = Math.abs(d - e);
+
+				if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+					delta = delta_a;
+				else if(delta_b <= delta_c && delta_b <= delta_d)
+					delta = delta_b;
+				else if(delta_c <= delta_d)
+					delta = delta_c;
+				else
+					delta = delta_d;
+				sum += Math.abs(delta);	
+				
+				k += interval;
+					
+			}
+			k = (i + 1) * xdim + 1;	
+		}
+		return sum;
+	}
+	
+	public static int getHorizontalSum(int src[], int xdim, int ydim)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				delta = src[k - 1] - src[k];
+				sum += Math.abs(delta);	
+				
+				k++;	
+			}
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getHorizontalSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum        = 0;
+		int delta      = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				delta = src[k - 1] - src[k];
+				sum += Math.abs(delta);	
+				k += interval;	
+			}
+			k = (i + 1) * xdim + 1;	
+		}
+		return sum;
+	}
+	
+	public static int getVerticalSum(int src[], int xdim, int ydim)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				delta = src[k - xdim] - src[k];
+				sum += Math.abs(delta);	
+				
+				k++;	
+			}
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getVerticalSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum        = 0;
+		int delta      = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				delta = src[k - xdim] - src[k];
+				sum += Math.abs(delta);	
+				k += interval;	
+			}
+			k = (i + 1) * xdim + 1;	
+		}
+		return sum;
+	}
+	
+	public static int getPaethSum(int src[], int xdim, int ydim)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];
+    	    	        int b = src[k - xdim];
+    	    	        int c = src[k - xdim - 1];
+    	    	        int d = a + b - c;
+    	    	
+    	          	// Prediction deltas assuming a smooth gradient.
+    	    	        int delta_a = Math.abs(a - d);
+    	    	        int delta_b = Math.abs(b - d);
+    	    	        int delta_c = Math.abs(c - d);
+    	    	
+    	    	        if(delta_a <= delta_b && delta_a <= delta_c)
+    	    	            delta = src[k] - src[k - 1];
+    	    	        else if(delta_b <= delta_c)
+    	    	            delta =	src[k] - src[k - xdim];   
+    	       	    else
+    	    	            delta = src[k] - src[k - xdim - 1];
+    	    	        sum += Math.abs(delta);
+    	    	      	k++;
+    	    	    }
+			
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getPaethSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				int a = src[k - 1];
+    	    	        int b = src[k - xdim];
+    	    	        int c = src[k - xdim - 1];
+    	    	        int d = a + b - c;
+    	    	
+    	          	// Prediction deltas assuming a smooth gradient.
+    	    	        int delta_a = Math.abs(a - d);
+    	    	        int delta_b = Math.abs(b - d);
+    	    	        int delta_c = Math.abs(c - d);
+    	    	
+    	    	        if(delta_a <= delta_b && delta_a <= delta_c)
+    	    	            delta = src[k] - src[k - 1];
+    	    	        else if(delta_b <= delta_c)
+    	    	            delta =	src[k] - src[k - xdim];   
+    	       	    else
+    	    	            delta = src[k] - src[k - xdim - 1];
+    	    	        sum += Math.abs(delta);
+    	    	      	
+    	    	        k += interval;
+    	    	    }
+			
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getGradientSum(int src[], int xdim, int ydim)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			if(i == 1)
+			{
+				// Use the Paeth filter as the nearest approximation.
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+	    	    	        int b = src[k - xdim];
+	    	    	        int c = src[k - xdim - 1];
+	    	    	        int d = a + b - c;
+	    	    	
+	    	    	        int delta_a = Math.abs(a - d);
+	    	    	        int delta_b = Math.abs(b - d);
+	    	    	        int delta_c = Math.abs(c - d);
+	    	    	
+	    	    	        if(delta_a <= delta_b && delta_a <= delta_c)
+	    	    	            delta = src[k] - src[k - 1];
+	    	    	        else if(delta_b <= delta_c)
+	    	    	            delta =	src[k] - src[k - xdim];   
+	    	       	    else
+	    	    	            delta = src[k] - src[k - xdim - 1];
+	    	    	        sum += Math.abs(delta);
+	    	    	      	
+	    	    	        k++;
+	    	    	    }
+			}
+			else
+			{   // Now that we have two preceding rows, try all
+				// four preceding values assuming a smooth gradient.
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = src[k - xdim + 1];
+					int e = src[k - 2 * xdim - 1];
+
+					int[] gradient = new int[4];
+					gradient[0] = Math.abs(a - e);
+					gradient[1] = Math.abs(c - d);
+					gradient[2] = Math.abs(a - d);
+					gradient[3] = Math.abs(b - e);
+
+					int max_value = gradient[0];
+					int max_index = 0;
+					for(int m = 1; m < 4; m++)
+					{
+						if(gradient[m] > max_value)
+						{
+							max_value = gradient[m];
+							max_index = m;
+						}
+					}
+
+					if(max_index == 0)
+						delta = src[k] - src[k - 1];
+					else if(max_index == 1)
+						delta = src[k] - src[k - xdim];
+					else if(max_index == 2)
+						delta = src[k] - src[k - xdim - 1];
+					else
+						delta = src[k] - src[k - xdim + 1];
+	    	    	        sum += Math.abs(delta);
+	    	    	      	
+	    	    	        k++;
+	    	    	    }	
+			}
+			
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
+	public static int getGradientSum(int src[], int xdim, int ydim, int interval)
+	{
+		int sum   = 0;
+		int delta = 0;
+		
+		int k = xdim + 1;
+		for(int i = 1; i < ydim - 1; i++)
+		{
+			if(i == 1)
+			{
+				// Use the Paeth filter as the nearest approximation.
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int a = src[k - 1];
+	    	    	        int b = src[k - xdim];
+	    	    	        int c = src[k - xdim - 1];
+	    	    	        int d = a + b - c;
+	    	    	
+	    	    	        int delta_a = Math.abs(a - d);
+	    	    	        int delta_b = Math.abs(b - d);
+	    	    	        int delta_c = Math.abs(c - d);
+	    	    	
+	    	    	        if(delta_a <= delta_b && delta_a <= delta_c)
+	    	    	            delta = src[k] - src[k - 1];
+	    	    	        else if(delta_b <= delta_c)
+	    	    	            delta =	src[k] - src[k - xdim];   
+	    	       	    else
+	    	    	            delta = src[k] - src[k - xdim - 1];
+	    	    	        sum += Math.abs(delta);
+	    	    	      	
+	    	    	        k += interval;
+	    	    	    }
+			}
+			else
+			{   // Now that we have two preceding rows, try all
+				// four preceding values assuming a smooth gradient.
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = src[k - xdim + 1];
+					int e = src[k - 2 * xdim - 1];
+
+					int[] gradient = new int[4];
+					gradient[0] = Math.abs(a - e);
+					gradient[1] = Math.abs(c - d);
+					gradient[2] = Math.abs(a - d);
+					gradient[3] = Math.abs(b - e);
+
+					int max_value = gradient[0];
+					int max_index = 0;
+					for(int m = 1; m < 4; m++)
+					{
+						if(gradient[m] > max_value)
+						{
+							max_value = gradient[m];
+							max_index = m;
+						}
+					}
+
+					if(max_index == 0)
+						delta = src[k] - src[k - 1];
+					else if(max_index == 1)
+						delta = src[k] - src[k - xdim];
+					else if(max_index == 2)
+						delta = src[k] - src[k - xdim - 1];
+					else
+						delta = src[k] - src[k - xdim + 1];
+	    	    	        sum += Math.abs(delta);
+	    	    	      	
+	    	    	        k += interval;
+	    	    	    }	
+			}
+			
+			k = (i + 1) * xdim + 1;		
+		}
+		return sum;
+	}
+	
 	public static ArrayList getHorizontalDeltasFromValues(int src[], int xdim, int ydim)
 	{
 		int[] dst = new int[xdim * ydim];
@@ -3021,5 +3305,6 @@ public class DeltaMapper
 		}
 		return channel;
 	}
+
 
 }
