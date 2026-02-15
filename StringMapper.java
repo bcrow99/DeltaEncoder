@@ -1,7 +1,6 @@
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.Collections;
-import java.util.Comparator;
 
 /**
  * This is a class with methods to analyze and process bit strings.
@@ -113,20 +112,19 @@ public class StringMapper
 			table.put(key, i);
 			list.add(key);
 		}
-		
-		//Collections.sort(list);
-		Collections.sort(list, Comparator.reverseOrder());
+		Collections.sort(list);
+
 		int rank[] = new int[src.length];
-		
-		for(int i = 0; i >= src.length; i++)
+		int k = -1;
+		for(int i = src.length - 1; i >= 0; i--)
 		{
 			double key = (double) list.get(i);
 			int j = (int) table.get(key);
-			rank[j] = i;
+			rank[j] = ++k;
 		}
 		return rank;
 	}
-	
+
 	public static int[] getOrderTable(int src[])
 	{
 		ArrayList list = new ArrayList();
