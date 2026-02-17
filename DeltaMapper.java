@@ -494,14 +494,14 @@ public class DeltaMapper
 
 		for(int i = 1; i < ydim; i++)
 		{
-			int[] sum = new int[4];
+			int[][] delta = new int[4][xdim - 2];
 
 			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
-				sum[0] += Math.abs(src[k] - src[k - 1]);
-				sum[1] += Math.abs(src[k] - src[k - xdim]);
-				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+				delta[0][j - 1] = src[k] - src[k - 1];
+				delta[1][j - 1] = src[k] - src[k - xdim];
+				delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
 
 				int a = src[k - 1];
 				int b = src[k - xdim];
@@ -512,25 +512,49 @@ public class DeltaMapper
 				int f = Math.abs(b - d);
 				int g = Math.abs(c - d);
 
-				int delta;
+				int current_delta;
 				if(e <= f && e <= g)
-					delta = src[k] - src[k - 1];
+					current_delta = src[k] - src[k - 1];
 				else if(f <= g)
-					delta = src[k] - src[k - xdim];
+					current_delta = src[k] - src[k - xdim];
 				else
-					delta = src[k] - src[k - xdim - 1];
-				sum[3] += Math.abs(delta);
-				
+					current_delta = src[k] - src[k - xdim - 1];
+				delta[3][j - 1] = current_delta;
 				k++;
 			}
-		
-			int value = sum[0];
+			
+			int [] limit = new int[4];
+			for(int j = 0; j < 4; j++)
+			{
+			    int [] current_delta = delta[j];
+			    
+			    int delta_min = current_delta[0];
+			    int delta_max = current_delta[0];
+			    for(k = 1; k < current_delta.length; k++)
+			    {
+			    	    if(current_delta[k] < delta_min)
+			    	    	    delta_min = current_delta[k];
+			    	    else if(current_delta[k] > delta_max)
+			    	      	delta_max = current_delta[k];
+			    }
+			    
+			    for(k = 0; k < current_delta.length; k++)
+			    	    current_delta[k] -= delta_min;
+			    int range = delta_max - delta_min;
+			    int [] frequency = new int[range + 1];
+			    for(k = 0; k < current_delta.length; k++)
+			    	    frequency[current_delta[k]]++;
+                double shannon_limit = CodeMapper.getShannonLimit(frequency);
+                limit[j] = (int)Math.floor(shannon_limit);
+			}
+
+			int value = limit[0];
 			int index = 0;
 			for(k = 1; k < 4; k++)
 			{
-				if(sum[k] < value)
+				if(limit[k] < value)
 				{
-					value = sum[k];
+					value = limit[k];
 					index = k;
 				}
 			}
@@ -1844,6 +1868,225 @@ public class DeltaMapper
 	{
 		byte[] map = new byte[ydim - 1];
 
+		/*
+		for(int i = 1; i < ydim; i++)
+		{
+			int[] sum = new int[4];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				sum[0] += Math.abs(src[k] - src[k - 1]);
+				sum[1] += Math.abs(src[k] - src[k - xdim]);
+				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = a + b - c;
+
+				int e = Math.abs(a - d);
+				int f = Math.abs(b - d);
+				int g = Math.abs(c - d);
+
+				int delta;
+				if(e <= f && e <= g)
+					delta = src[k] - src[k - 1];
+				else if(f <= g)
+					delta = src[k] - src[k - xdim];
+				else
+					delta = src[k] - src[k - xdim - 1];
+				sum[3] += Math.abs(delta);
+				k++;
+			}
+
+			int value = sum[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(sum[k] < value)
+				{
+					value = sum[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+        */
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int[][] delta = new int[4][xdim - 2];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				delta[0][j - 1] = src[k] - src[k - 1];
+				delta[1][j - 1] = src[k] - src[k - xdim];
+				delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = a + b - c;
+
+				int e = Math.abs(a - d);
+				int f = Math.abs(b - d);
+				int g = Math.abs(c - d);
+
+				int current_delta;
+				if(e <= f && e <= g)
+					current_delta = src[k] - src[k - 1];
+				else if(f <= g)
+					current_delta = src[k] - src[k - xdim];
+				else
+					current_delta = src[k] - src[k - xdim - 1];
+				delta[3][j - 1] = current_delta;
+				k++;
+			}
+			
+			int [] limit = new int[4];
+			for(int j = 0; j < 4; j++)
+			{
+			    int [] current_delta = delta[j];
+			    
+			    int delta_min = current_delta[0];
+			    int delta_max = current_delta[0];
+			    for(k = 1; k < current_delta.length; k++)
+			    {
+			    	    if(current_delta[k] < delta_min)
+			    	    	    delta_min = current_delta[k];
+			    	    else if(current_delta[k] > delta_max)
+			    	      	delta_max = current_delta[k];
+			    }
+			    
+			    for(k = 0; k < current_delta.length; k++)
+			    	    current_delta[k] -= delta_min;
+			    int range = delta_max - delta_min;
+			    int [] frequency = new int[range + 1];
+			    for(k = 0; k < current_delta.length; k++)
+			    	    frequency[current_delta[k]]++;
+                double shannon_limit = CodeMapper.getShannonLimit(frequency);
+                limit[j] = (int)Math.floor(shannon_limit);
+			}
+
+			int value = limit[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(limit[k] < value)
+				{
+					value = limit[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+		
+		
+		// Now go back and collect the deltas.
+		int[] dst = new int[xdim * ydim];
+		int init_value = src[0];
+
+		int sum = 0;
+		int k = 0;
+		dst[k++] = 0;
+		int delta = src[k] - init_value;
+		int value = src[k];
+		dst[k++] = delta;
+		sum += Math.abs(delta);
+
+		for(int i = 2; i < xdim; i++)
+		{
+			delta = src[k] - value;
+			value = src[k];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+		}
+
+		for(int i = 1; i < ydim; i++)
+		{
+			delta = src[k] - init_value;
+			init_value = src[k];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+
+			byte m = map[i - 1];
+
+			if(m == 0)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					delta = src[k] - src[k - 1];
+					dst[k++] = delta;
+				}
+				delta = src[k] - src[k - 1];
+				dst[k++] = delta;
+				sum += Math.abs(delta);
+			} 
+			else if(m == 1)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					delta = src[k] - src[k - xdim];
+					dst[k++] = delta;
+				}
+				delta = src[k] - src[k - 1];
+				dst[k++] = delta;
+				sum += Math.abs(delta);
+			} 
+			else if(m == 2)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+					dst[k++] = delta;
+				}
+				delta = src[k] - src[k - 1];
+				dst[k++] = delta;
+				sum += Math.abs(delta);
+			} 
+			else if(m == 3)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = a + b - c;
+
+					int e = Math.abs(a - d);
+					int f = Math.abs(b - d);
+					int g = Math.abs(c - d);
+
+					if(e <= f && e <= g)
+						delta = src[k] - src[k - 1];
+					else if(f <= g)
+						delta = src[k] - src[k - xdim];
+					else
+						delta = src[k] - src[k - xdim - 1];
+					dst[k++] = delta;
+					sum += Math.abs(delta);
+				}
+				delta = src[k] - src[k - 1];
+				dst[k++] = delta;
+			}
+		}
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(map);
+		result.add(init_value);
+		return result;
+	}
+	
+	
+	
+	/*
+	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
+	{
+		byte[] map = new byte[ydim - 1];
+
 		for(int i = 1; i < ydim; i++)
 		{
 			int[] sum = new int[4];
@@ -1983,7 +2226,8 @@ public class DeltaMapper
 		result.add(init_value);
 		return result;
 	}
-
+    */
+	
 	public static int[] getValuesFromMixedDeltas(int[] src, int xdim, int ydim, int init_value, byte[] map)
 	{
 		/*
