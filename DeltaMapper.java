@@ -644,6 +644,133 @@ public class DeltaMapper
 		return frequency;
 	}
 	
+	public static int [] getScanline2Frequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		byte[] map = new byte[ydim - 1];
+
+		for(int i = 1; i < ydim; i++)
+		{
+			int[][] delta = new int[4][xdim - 2];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				delta[0][j - 1] = src[k] - src[k - 1];
+				delta[1][j - 1] = src[k] - src[k - xdim];
+				delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+				delta[3][j - 1] = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
+				
+				k++;
+			}
+			
+			int [] limit = new int[4];
+			for(int j = 0; j < 4; j++)
+			{
+			    int [] current_delta = delta[j];
+			    
+			    int delta_min = current_delta[0];
+			    int delta_max = current_delta[0];
+			    for(k = 1; k < current_delta.length; k++)
+			    {
+			    	    if(current_delta[k] < delta_min)
+			    	    	    delta_min = current_delta[k];
+			    	    else if(current_delta[k] > delta_max)
+			    	      	delta_max = current_delta[k];
+			    }
+			    
+			    for(k = 0; k < current_delta.length; k++)
+			    	    current_delta[k] -= delta_min;
+			    int range = delta_max - delta_min;
+			    int [] frequency = new int[range + 1];
+			    for(k = 0; k < current_delta.length; k++)
+			    	    frequency[current_delta[k]]++;
+                double shannon_limit = CodeMapper.getShannonLimit(frequency);
+                limit[j] = (int)Math.floor(shannon_limit);
+			}
+
+			int value = limit[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(limit[k] < value)
+				{
+					value = limit[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			byte m = map[i - 1];
+            
+			if(m == 0)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - 1];
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 1)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - xdim];
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 2)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 3)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
+					delta_list.add(delta);
+					k++;
+				}
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
 	
 	public static int getHorizontalSum(int src[], int xdim, int ydim)
 	{
@@ -1868,52 +1995,6 @@ public class DeltaMapper
 	{
 		byte[] map = new byte[ydim - 1];
 
-		/*
-		for(int i = 1; i < ydim; i++)
-		{
-			int[] sum = new int[4];
-
-			int k = i * xdim + 1;
-			for(int j = 1; j < xdim - 1; j++)
-			{
-				sum[0] += Math.abs(src[k] - src[k - 1]);
-				sum[1] += Math.abs(src[k] - src[k - xdim]);
-				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
-
-				int a = src[k - 1];
-				int b = src[k - xdim];
-				int c = src[k - xdim - 1];
-				int d = a + b - c;
-
-				int e = Math.abs(a - d);
-				int f = Math.abs(b - d);
-				int g = Math.abs(c - d);
-
-				int delta;
-				if(e <= f && e <= g)
-					delta = src[k] - src[k - 1];
-				else if(f <= g)
-					delta = src[k] - src[k - xdim];
-				else
-					delta = src[k] - src[k - xdim - 1];
-				sum[3] += Math.abs(delta);
-				k++;
-			}
-
-			int value = sum[0];
-			int index = 0;
-			for(k = 1; k < 4; k++)
-			{
-				if(sum[k] < value)
-				{
-					value = sum[k];
-					index = k;
-				}
-			}
-			map[i - 1] = (byte) index;
-		}
-        */
-		
 		for(int i = 1; i < ydim; i++)
 		{
 			int[][] delta = new int[4][xdim - 2];

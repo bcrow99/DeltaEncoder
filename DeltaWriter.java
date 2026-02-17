@@ -960,13 +960,6 @@ public class DeltaWriter
 				// Replace the original data with the modified data.
 				quantized_channel_list.set(i, quantized_channel);
 
-				// We could get the ideal delta sum for each channel.
-				//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim);
-				
-				// Or we subsample to speed up processing.  It seems to almost always produce a 
-				// similar result to adding all the deltas.
-				//channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
-				
 				int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
 				double shannon_limit = CodeMapper.getShannonLimit(frequency);
 				channel_sum[i]       = (int)Math.floor(shannon_limit);
@@ -999,7 +992,7 @@ public class DeltaWriter
 			file_compression_rate = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
-			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
+			System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_index]);
 			System.out.println();
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
@@ -1025,7 +1018,7 @@ public class DeltaWriter
 				
 				double horizontal_ratio = shannon_sum;
 				horizontal_ratio       /= current_sum;
-				System.out.println("Ideal horizontal ratio is " + String.format("%.2f", horizontal_ratio));
+				
 				
 				frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
@@ -1033,7 +1026,7 @@ public class DeltaWriter
 				
 				double vertical_ratio = shannon_sum;
 				vertical_ratio       /= current_sum;
-				System.out.println("Ideal vertical ratio is " + String.format("%.2f", vertical_ratio));
+				
 				
 				frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
@@ -1041,7 +1034,7 @@ public class DeltaWriter
 				
 				double average_ratio = shannon_sum;
 				average_ratio       /= current_sum;
-				System.out.println("Ideal average ratio is " + String.format("%.2f", average_ratio));
+				
 				
 				frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
@@ -1049,7 +1042,7 @@ public class DeltaWriter
 				
 				double paeth_ratio = shannon_sum;
 				paeth_ratio       /= current_sum;
-				System.out.println("Ideal paeth ratio is " + String.format("%.2f", paeth_ratio));
+				
 				
 				frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
@@ -1057,7 +1050,7 @@ public class DeltaWriter
 				
 				double gradient_ratio = shannon_sum;
 				gradient_ratio       /= current_sum;
-				System.out.println("Ideal gradient ratio is " + String.format("%.2f", gradient_ratio));
+				
 				
 				frequency     = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
@@ -1065,49 +1058,23 @@ public class DeltaWriter
 				
 				double scanline_ratio = shannon_sum;
 				scanline_ratio       /= current_sum;
-				System.out.println("Ideal scan line ratio is " + String.format("%.2f", scanline_ratio));
-				/*
-				double current_sum = channel_sum[j];
 				
 				
-				int    horizontal_sum   = DeltaMapper.getHorizontalSum(quantized_channel, new_xdim, new_ydim);
-				double horizontal_ratio = horizontal_sum;
-				horizontal_ratio       /= current_sum;
+				frequency     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+				shannon_limit = CodeMapper.getShannonLimit(frequency);
+				shannon_sum   = (int)Math.floor(shannon_limit);
+				
+				double scanline2_ratio = shannon_sum;
+				scanline2_ratio        /= current_sum;
+				
+				
 				System.out.println("Ideal horizontal ratio is " + String.format("%.2f", horizontal_ratio));
-				
-				
-			
-				int vertical_sum      = DeltaMapper.getVerticalSum(quantized_channel, new_xdim, new_ydim);
-				double vertical_ratio = vertical_sum;
-				vertical_ratio       /= current_sum;
-				System.out.println("Ideal vertical ratio is " + String.format("%.2f", vertical_ratio));
-				
-				
-				
-				int average_sum    = DeltaMapper.getAverageSum(quantized_channel, new_xdim, new_ydim);
-				double average_ratio = average_sum;
-				average_ratio       /= current_sum;
-				System.out.println("Ideal average ratio is " + String.format("%.2f", average_ratio));
-				
-				
-				int paeth_sum      = DeltaMapper.getPaethSum(quantized_channel, new_xdim, new_ydim);
-				double paeth_ratio = paeth_sum;
-				paeth_ratio       /= current_sum;
-				System.out.println("Ideal paeth ratio is " + String.format("%.2f", paeth_ratio));
-				
-				
-				int gradient_sum   = DeltaMapper.getGradientSum(quantized_channel, new_xdim, new_ydim);
-				double gradient_ratio = gradient_sum;
-				gradient_ratio       /= current_sum;
-				System.out.println("Ideal gradient ratio is " + String.format("%.2f", gradient_ratio));
-			
-				
-				int scanline_sum   = DeltaMapper.getScanlineSum(quantized_channel, new_xdim, new_ydim);
-				double scanline_ratio = scanline_sum;
-				scanline_ratio       /= current_sum;
-				System.out.println("Ideal scan line ratio is " + String.format("%.2f", scanline_ratio));
-				*/
-				
+				System.out.println("Ideal vertical ratio is   " + String.format("%.2f", vertical_ratio));
+				System.out.println("Ideal average ratio is    " + String.format("%.2f", average_ratio));
+				System.out.println("Ideal paeth ratio is      " + String.format("%.2f", paeth_ratio));
+				System.out.println("Ideal gradient ratio is   " + String.format("%.2f", gradient_ratio));
+				System.out.println("Ideal scanline ratio is   " + String.format("%.2f", scanline_ratio));
+				System.out.println("Ideal scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
 				
 				ArrayList<Object> result = new ArrayList<Object>();
 				
