@@ -71,14 +71,75 @@ public class DeltaMapper
 		return pixel;
 	}
 	
+	public static int [] getIdealFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+				int e = src[k];
+
+				int delta_a = Math.abs(a - e);
+				int delta_b = Math.abs(b - e);
+				int delta_c = Math.abs(c - e);
+				int delta_d = Math.abs(d - e);
+                 
+				int delta = 0;
+				if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+					delta = a - e;
+				else if(delta_b <= delta_c && delta_b <= delta_d)
+					delta = b - e;
+				else if(delta_c <= delta_d)
+					delta = c - e;
+				else
+					delta = d - e;
+				delta_list.add(delta);
+				
+				k++;		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	
 	public static int getIdealSum(int src[], int xdim, int ydim)
 	{
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				int a = src[k - 1];
@@ -104,8 +165,6 @@ public class DeltaMapper
 				
 				k++;		
 			}
-			k = (i + 1) * xdim + 1;	
-			
 		}
 		return sum;
 	}
@@ -115,9 +174,9 @@ public class DeltaMapper
 		int sum        = 0;
 		int delta      = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j += interval)
 			{
 				int a = src[k - 1];
@@ -143,28 +202,439 @@ public class DeltaMapper
 				
 				k += interval;
 					
-			}
-			k = (i + 1) * xdim + 1;	
+			}	
 		}
 		return sum;
 	}
+	
+	public static int [] getHorizontalFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+			    int delta = src[k - 1] - src[k];
+				delta_list.add(delta);
+				k++;		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	public static int [] getVerticalFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+			    int delta = src[k - xdim] - src[k];
+				delta_list.add(delta);
+				k++;		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	public static int [] getAverageFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				int delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+				delta_list.add(delta);
+				k++;		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	public static int [] getPaethFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+    	            int d = a + b - c;
+    	
+    	            int delta = 0;
+          	
+    	            int delta_a = Math.abs(a - d);
+    	            int delta_b = Math.abs(b - d);
+    	            int delta_c = Math.abs(c - d);
+    	
+    	            if(delta_a <= delta_b && delta_a <= delta_c)
+    	                delta = src[k] - src[k - 1];
+    	            else if(delta_b <= delta_c)
+    	                delta =	src[k] - src[k - xdim];   
+       	        else
+    	                delta = src[k] - src[k - xdim - 1];
+    	      
+				delta_list.add(delta);
+				k++;		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	public static int [] getGradientFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			if(i == 1)
+			{
+				int k = i * xdim + 1;
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+	    	            int d = a + b - c;
+	    	
+	    	            int delta = 0;
+	          	
+	    	            int delta_a = Math.abs(a - d);
+	    	            int delta_b = Math.abs(b - d);
+	    	            int delta_c = Math.abs(c - d);
+	    	
+	    	            if(delta_a <= delta_b && delta_a <= delta_c)
+	    	                delta = src[k] - src[k - 1];
+	    	            else if(delta_b <= delta_c)
+	    	                delta =	src[k] - src[k - xdim];   
+	       	        else
+	    	                delta = src[k] - src[k - xdim - 1];
+	    	      
+					delta_list.add(delta);
+					k++;		
+				}
+			}
+			else
+			{
+				int k = i * xdim + 1;
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = src[k - xdim + 1];
+					int e = src[k - 2 * xdim - 1];
+
+					int[] gradient = new int[4];
+					gradient[0] = Math.abs(a - e);
+					gradient[1] = Math.abs(c - d);
+					gradient[2] = Math.abs(a - d);
+					gradient[3] = Math.abs(b - e);
+
+					int max_value = gradient[0];
+					int max_index = 0;
+					for(int m = 1; m < 4; m++)
+					{
+						if(gradient[m] > max_value)
+						{
+							max_value = gradient[m];
+							max_index = m;
+						}
+					}
+ 
+					int delta = 0;
+					
+					if(max_index == 0)
+						delta = src[k] - src[k - 1];
+					else if(max_index == 1)
+						delta = src[k] - src[k - xdim];
+					else if(max_index == 2)
+						delta = src[k] - src[k - xdim - 1];
+					else
+						delta = src[k] - src[k - xdim + 1];
+					delta_list.add(delta);
+	    	    	        k++;
+	    	    	    }		
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
+	public static int [] getScanlineFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList <Integer> delta_list = new ArrayList <Integer> ();
+		
+		byte[] map = new byte[ydim - 1];
+
+		for(int i = 1; i < ydim; i++)
+		{
+			int[] sum = new int[4];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				sum[0] += Math.abs(src[k] - src[k - 1]);
+				sum[1] += Math.abs(src[k] - src[k - xdim]);
+				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = a + b - c;
+
+				int e = Math.abs(a - d);
+				int f = Math.abs(b - d);
+				int g = Math.abs(c - d);
+
+				int delta;
+				if(e <= f && e <= g)
+					delta = src[k] - src[k - 1];
+				else if(f <= g)
+					delta = src[k] - src[k - xdim];
+				else
+					delta = src[k] - src[k - xdim - 1];
+				sum[3] += Math.abs(delta);
+				
+				k++;
+			}
+		
+			int value = sum[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(sum[k] < value)
+				{
+					value = sum[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+		
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			byte m = map[i - 1];
+            
+			if(m == 0)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - 1];
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 1)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - xdim];
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 2)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+					delta_list.add(delta);
+					k++;
+				}
+			} 
+			else if(m == 3)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = a + b - c;
+
+					int e = Math.abs(a - d);
+					int f = Math.abs(b - d);
+					int g = Math.abs(c - d);
+
+					int delta = 0;
+					if(e <= f && e <= g)
+						delta = src[k] - src[k - 1];
+					else if(f <= g)
+						delta = src[k] - src[k - xdim];
+					else
+						delta = src[k] - src[k - xdim - 1];
+					delta_list.add(delta);
+					k++;
+				}
+			}
+		}
+		
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for(int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if(current_delta < delta_min)
+				delta_min = current_delta;
+			if(current_delta > delta_max)
+			    delta_max = current_delta;
+		}
+		
+		int range = delta_max - delta_min;
+		
+		int [] frequency = new int[range + 1];
+		for(int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value    -= delta_min;
+			frequency[current_value]++;
+		}
+		
+		return frequency;
+	}
+	
 	
 	public static int getHorizontalSum(int src[], int xdim, int ydim)
 	{
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				delta = src[k - 1] - src[k];
 				sum += Math.abs(delta);	
-				
 				k++;	
-			}
-			k = (i + 1) * xdim + 1;		
+			}	
 		}
 		return sum;
 	}
@@ -172,18 +642,15 @@ public class DeltaMapper
 	public static int getHorizontalSum(int src[], int xdim, int ydim, int interval)
 	{
 		int sum        = 0;
-		int delta      = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
 			for(int j = 1; j < xdim - 1; j += interval)
 			{
-				delta = src[k - 1] - src[k];
-				sum += Math.abs(delta);	
-				k += interval;	
+				int k = i * xdim + j;
+	            int delta = src[k - 1] - src[k];
+				sum += Math.abs(delta);		
 			}
-			k = (i + 1) * xdim + 1;	
 		}
 		return sum;
 	}
@@ -193,17 +660,17 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				delta = src[k - xdim] - src[k];
 				sum += Math.abs(delta);	
 				
 				k++;	
-			}
-			k = (i + 1) * xdim + 1;		
+			}		
 		}
 		return sum;
 	}
@@ -213,16 +680,14 @@ public class DeltaMapper
 		int sum        = 0;
 		int delta      = 0;
 		
-		int k = xdim + 1;
 		for(int i = 1; i < ydim - 1; i++)
 		{
 			for(int j = 1; j < xdim - 1; j += interval)
 			{
+				int k = i * xdim + j;
 				delta = src[k - xdim] - src[k];
 				sum += Math.abs(delta);	
-				k += interval;	
 			}
-			k = (i + 1) * xdim + 1;	
 		}
 		return sum;
 	}
@@ -235,17 +700,16 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
 				sum += Math.abs(delta);	
 				
 				k++;	
-			}
-			k = (i + 1) * xdim + 1;		
+			}		
 		}
 		return sum;
 	}
@@ -255,9 +719,9 @@ public class DeltaMapper
 		int sum        = 0;
 		int delta      = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j += interval)
 			{
 				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
@@ -265,7 +729,6 @@ public class DeltaMapper
 				
 				k += interval;	
 			}
-			k = (i + 1) * xdim + 1;	
 		}
 		return sum;
 	}
@@ -275,9 +738,9 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				int a = src[k - 1];
@@ -298,9 +761,7 @@ public class DeltaMapper
     	    	            delta = src[k] - src[k - xdim - 1];
     	    	        sum += Math.abs(delta);
     	    	      	k++;
-    	    	    }
-			
-			k = (i + 1) * xdim + 1;		
+    	    	    }	
 		}
 		return sum;
 	}
@@ -310,11 +771,11 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
 			for(int j = 1; j < xdim - 1; j += interval)
 			{
+				int k = i * xdim + j;
 				int a = src[k - 1];
     	    	        int b = src[k - xdim];
     	    	        int c = src[k - xdim - 1];
@@ -332,11 +793,7 @@ public class DeltaMapper
     	       	    else
     	    	            delta = src[k] - src[k - xdim - 1];
     	    	        sum += Math.abs(delta);
-    	    	      	
-    	    	        k += interval;
-    	    	    }
-			
-			k = (i + 1) * xdim + 1;		
+    	    	    }	
 		}
 		return sum;
 	}
@@ -346,9 +803,9 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			if(i == 1)
 			{
 				// Use the Paeth filter as the nearest approximation.
@@ -426,9 +883,9 @@ public class DeltaMapper
 		int sum   = 0;
 		int delta = 0;
 		
-		int k = xdim + 1;
-		for(int i = 1; i < ydim - 1; i++)
+		for(int i = 1; i < ydim; i++)
 		{
+			int k = i * xdim + 1;
 			if(i == 1)
 			{
 				// Use the Paeth filter as the nearest approximation.
@@ -494,10 +951,231 @@ public class DeltaMapper
 	    	    	      	
 	    	    	        k += interval;
 	    	    	    }	
-			}
-			
-			k = (i + 1) * xdim + 1;		
+			}		
 		}
+		return sum;
+	}
+	
+	public static int getScanlineSum(int src[], int xdim, int ydim)
+	{
+		byte[] map = new byte[ydim - 1];
+
+		for(int i = 1; i < ydim; i++)
+		{
+			int[] sum = new int[4];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				sum[0] += Math.abs(src[k] - src[k - 1]);
+				sum[1] += Math.abs(src[k] - src[k - xdim]);
+				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = a + b - c;
+
+				int e = Math.abs(a - d);
+				int f = Math.abs(b - d);
+				int g = Math.abs(c - d);
+
+				int delta;
+				if(e <= f && e <= g)
+					delta = src[k] - src[k - 1];
+				else if(f <= g)
+					delta = src[k] - src[k - xdim];
+				else
+					delta = src[k] - src[k - xdim - 1];
+				sum[3] += Math.abs(delta);
+				
+				k++;
+			}
+		
+			int value = sum[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(sum[k] < value)
+				{
+					value = sum[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+		
+		int sum = 0;
+		for(int i = 1; i < ydim; i++)
+		{
+			byte m = map[i - 1];
+            int k = i * xdim + 1;
+			if(m == 0)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - 1];
+					sum      += Math.abs(delta);
+					k++;
+				}
+			} 
+			else if(m == 1)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - src[k - xdim];
+					sum      += Math.abs(delta);
+					k++;
+				}
+			} 
+			else if(m == 2)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+					sum      += Math.abs(delta);
+					k++;
+				}
+			} 
+			else if(m == 3)
+			{
+				for(int j = 1; j < xdim - 1; j++)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = a + b - c;
+
+					int e = Math.abs(a - d);
+					int f = Math.abs(b - d);
+					int g = Math.abs(c - d);
+
+					int delta = 0;
+					if(e <= f && e <= g)
+						delta = src[k] - src[k - 1];
+					else if(f <= g)
+						delta = src[k] - src[k - xdim];
+					else
+						delta = src[k] - src[k - xdim - 1];
+					
+					sum += Math.abs(delta);
+					k++;
+				}
+				
+			}
+		}
+		
+		return sum;
+	}
+	
+	public static int getScanlineSum(int src[], int xdim, int ydim, int interval)
+	{
+		byte[] map = new byte[ydim - 1];
+
+		for(int i = 1; i < ydim; i++)
+		{
+			int[] sum = new int[4];
+
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j += interval)
+			{
+				sum[0] += Math.abs(src[k] - src[k - 1]);
+				sum[1] += Math.abs(src[k] - src[k - xdim]);
+				sum[2] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = a + b - c;
+
+				int e = Math.abs(a - d);
+				int f = Math.abs(b - d);
+				int g = Math.abs(c - d);
+
+				int delta;
+				if(e <= f && e <= g)
+					delta = src[k] - src[k - 1];
+				else if(f <= g)
+					delta = src[k] - src[k - xdim];
+				else
+					delta = src[k] - src[k - xdim - 1];
+				sum[3] += Math.abs(delta);
+				
+				k += interval;
+			}
+		
+			int value = sum[0];
+			int index = 0;
+			for(k = 1; k < 4; k++)
+			{
+				if(sum[k] < value)
+				{
+					value = sum[k];
+					index = k;
+				}
+			}
+			map[i - 1] = (byte) index;
+		}
+		
+		int sum = 0;
+		for(int i = 1; i < ydim; i++)
+		{
+			byte m = map[i - 1];
+            int k = i * xdim + 1;
+			if(m == 0)
+			{
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int delta = src[k] - src[k - 1];
+					sum      += Math.abs(delta);
+					k += interval;
+				}
+			} 
+			else if(m == 1)
+			{
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int delta = src[k] - src[k - xdim];
+					sum      += Math.abs(delta);
+					k += interval;
+				}
+			} 
+			else if(m == 2)
+			{
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+					sum      += Math.abs(delta);
+					k += interval;
+				}
+			} 
+			else if(m == 3)
+			{
+				for(int j = 1; j < xdim - 1; j += interval)
+				{
+					int a = src[k - 1];
+					int b = src[k - xdim];
+					int c = src[k - xdim - 1];
+					int d = a + b - c;
+
+					int e = Math.abs(a - d);
+					int f = Math.abs(b - d);
+					int g = Math.abs(c - d);
+
+					int delta = 0;
+					if(e <= f && e <= g)
+						delta = src[k] - src[k - 1];
+					else if(f <= g)
+						delta = src[k] - src[k - xdim];
+					else
+						delta = src[k] - src[k - xdim - 1];
+					
+					sum += Math.abs(delta);
+					k += interval;
+				}
+			}
+		}
+		
 		return sum;
 	}
 	
@@ -540,6 +1218,7 @@ public class DeltaMapper
 		return result;
 	}
 
+	
 	// Going back and forth between setting the first delta value to 0 or a code.
 	// The code can be a useful debugging tool but is an extra complication, and
 	// reduces the compression by a miniscule amount.
