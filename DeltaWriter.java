@@ -1068,13 +1068,13 @@ public class DeltaWriter
 				scanline2_ratio        /= current_sum;
 				
 				
-				System.out.println("Ideal horizontal ratio is " + String.format("%.2f", horizontal_ratio));
-				System.out.println("Ideal vertical ratio is   " + String.format("%.2f", vertical_ratio));
-				System.out.println("Ideal average ratio is    " + String.format("%.2f", average_ratio));
-				System.out.println("Ideal paeth ratio is      " + String.format("%.2f", paeth_ratio));
-				System.out.println("Ideal gradient ratio is   " + String.format("%.2f", gradient_ratio));
-				System.out.println("Ideal scanline ratio is   " + String.format("%.2f", scanline_ratio));
-				System.out.println("Ideal scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
+				System.out.println("Horizontal to ideal ratio is " + String.format("%.2f", horizontal_ratio));
+				System.out.println("Vertical to ideal ratio is   " + String.format("%.2f", vertical_ratio));
+				System.out.println("Average to ideal ratio is    " + String.format("%.2f", average_ratio));
+				System.out.println("Paeth to ideal ratio is      " + String.format("%.2f", paeth_ratio));
+				System.out.println("Gradient to ideal ratio is   " + String.format("%.2f", gradient_ratio));
+				System.out.println("Scanline to ideal ratio is   " + String.format("%.2f", scanline_ratio));
+				System.out.println("Scanline2 to ideal ratio is  " + String.format("%.2f", scanline2_ratio));
 				
 				ArrayList<Object> result = new ArrayList<Object>();
 				
