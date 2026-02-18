@@ -61,7 +61,7 @@ public class DeltaWriter
 
 	long file_length;
 	double file_compression_rate;
-	
+	JRadioButtonMenuItem[] delta_button;
 
 	ArrayList <Object>channel_list, table_list, string_list, cat_string_list, map_list, segment_list;
 
@@ -75,8 +75,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
-		//String prefix = new String("");
+		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix = new String("");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -88,6 +88,171 @@ public class DeltaWriter
 	    System.out.println("Loaded file.");
 	    System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
 	    System.out.println();
+	    ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
+		ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
+		
+		int new_xdim = image_xdim;
+		int new_ydim = image_ydim;
+		if (pixel_quant != 0)
+		{
+			double factor = pixel_quant;
+			factor /= 10;
+			new_xdim = image_xdim - (int) (factor * (image_xdim / 2 - 2));
+			new_ydim = image_ydim - (int) (factor * (image_ydim / 2 - 2));
+		}
+		
+		// Quantize.
+		for(int i = 0; i < 3; i++)
+		{
+			int[] channel = (int[]) channel_list.get(i);
+			if(pixel_quant == 0)
+			{
+				if(pixel_shift == 0)
+					quantized_channel_list.add(channel);	
+				else
+				{
+					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+					quantized_channel_list.add(shifted_channel);
+				}
+			}
+			else
+			{
+				int [] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
+				if(pixel_shift == 0)
+					quantized_channel_list.add(resized_channel);	
+				else
+				{
+					int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
+					quantized_channel_list.add(shifted_channel);
+				}
+			}
+		}
+		
+		// Get the set of channels with deltas that have a minimum sum, including difference channels.
+		int[] quantized_blue = quantized_channel_list.get(0);
+		int[] quantized_green = quantized_channel_list.get(1);
+		int[] quantized_red = quantized_channel_list.get(2);
+     
+		int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
+		int[] quantized_red_green = DeltaMapper.getDifference(quantized_red, quantized_green);
+		int[] quantized_red_blue = DeltaMapper.getDifference(quantized_red, quantized_blue);
+
+		quantized_channel_list.add(quantized_blue_green);
+		quantized_channel_list.add(quantized_red_green);
+		quantized_channel_list.add(quantized_red_blue);
+
+		for (int i = 0; i < 6; i++)
+		{
+			int min = 256;
+			int[] quantized_channel = quantized_channel_list.get(i);
+
+			// Find the channel minimums.
+			for (int j = 0; j < quantized_channel.length; j++)
+				if (quantized_channel[j] < min)
+					min = quantized_channel[j];
+			channel_min[i] = min;
+
+			// Get rid of the negative numbers in the difference channels.
+			if (i > 2)
+				for (int j = 0; j < quantized_channel.length; j++)
+					quantized_channel[j] -= min;
+
+			// Save the initial value.
+			channel_init[i] = quantized_channel[0];
+
+			// Replace the original data with the modified data.
+			quantized_channel_list.set(i, quantized_channel);
+
+			int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(frequency);
+			channel_sum[i]       = (int)Math.floor(shannon_limit);
+		}
+
+		// Find the optimal set.
+		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
+		set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
+		set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
+		set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
+		set_sum[4] = channel_sum[0] + channel_sum[3] + channel_sum[5];
+		set_sum[5] = channel_sum[3] + channel_sum[1] + channel_sum[2];
+		set_sum[6] = channel_sum[3] + channel_sum[4] + channel_sum[2];
+		set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
+		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
+		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+
+		int min_index = 0;
+		int min_delta_sum = Integer.MAX_VALUE;
+		for (int i = 0; i < 10; i++)
+		{
+			if (set_sum[i] < min_delta_sum)
+			{
+				min_delta_sum = set_sum[i];
+				min_index = i;
+			}
+		}
+		min_set_id = min_index;
+		
+		System.out.println("Minimum set with current settings is " + set_string[min_set_id]);
+		System.out.println();
+		
+		int [] channel_id = DeltaMapper.getChannels(min_set_id);
+		
+		int [] channel_delta_sum = new int[7];
+		
+		for(int i = 0; i < 3; i++)
+		{
+		    int j = channel_id[i];	
+		    int[] quantized_channel = quantized_channel_list.get(j);
+		    
+		    int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(frequency);
+			int    shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[0] += shannon_sum;
+
+		    frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[1] += shannon_sum;
+			
+			frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[2] += shannon_sum;
+			
+			frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[3] += shannon_sum;
+			
+			frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[4] += shannon_sum;
+			
+			frequency     = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[5] += shannon_sum;
+			
+			frequency     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[6] += shannon_sum;
+		}
+		
+		min_delta_sum = channel_delta_sum[0];
+		min_index     = 0;
+		
+		for(int i = 1; i < 7; i++)
+		{
+			if(channel_delta_sum[i] < min_delta_sum)
+			{
+				min_delta_sum = channel_delta_sum[i];
+				min_index = i;
+			}
+		}
+		delta_button[delta_type].doClick();
+		System.out.println("The delta type that produces the smallest shannon sum is " + min_index);
 	}
 	
 	public DeltaWriter(String _filename)
@@ -808,7 +973,7 @@ public class DeltaWriter
 
 				JMenu delta_menu = new JMenu("Delta");
 
-				JRadioButtonMenuItem[] delta_button = new JRadioButtonMenuItem[8];
+				delta_button = new JRadioButtonMenuItem[8];
 
 				delta_button[0] = new JRadioButtonMenuItem("H");
 				delta_button[1] = new JRadioButtonMenuItem("V");
@@ -1068,13 +1233,13 @@ public class DeltaWriter
 				scanline2_ratio        /= current_sum;
 				
 				
-				System.out.println("Horizontal to ideal ratio is " + String.format("%.2f", horizontal_ratio));
-				System.out.println("Vertical to ideal ratio is   " + String.format("%.2f", vertical_ratio));
-				System.out.println("Average to ideal ratio is    " + String.format("%.2f", average_ratio));
-				System.out.println("Paeth to ideal ratio is      " + String.format("%.2f", paeth_ratio));
-				System.out.println("Gradient to ideal ratio is   " + String.format("%.2f", gradient_ratio));
-				System.out.println("Scanline to ideal ratio is   " + String.format("%.2f", scanline_ratio));
-				System.out.println("Scanline2 to ideal ratio is  " + String.format("%.2f", scanline2_ratio));
+				System.out.println("Ideal horizontal ratio is " + String.format("%.2f", horizontal_ratio));
+				System.out.println("Ideal vertical ratio is   " + String.format("%.2f", vertical_ratio));
+				System.out.println("Ideal average ratio is    " + String.format("%.2f", average_ratio));
+				System.out.println("Ideal paeth ratio is      " + String.format("%.2f", paeth_ratio));
+				System.out.println("Ideal gradient ratio is   " + String.format("%.2f", gradient_ratio));
+				System.out.println("Ideal scanline ratio is   " + String.format("%.2f", scanline_ratio));
+				System.out.println("Ideal scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
 				
 				ArrayList<Object> result = new ArrayList<Object>();
 				
