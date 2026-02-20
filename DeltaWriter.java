@@ -36,13 +36,14 @@ public class DeltaWriter
 	
 	int delta_type      = 5;
 	
-	boolean precompress = true;
+	boolean precompress = false;
 	int deflate_type    = 0;
 	
 	double scale       = 1.;
 
 	int[] set_sum, channel_sum;
 	String[] set_string;
+	String[] delta_type_string;
 	String[] channel_string;
 
 	int[] channel_init;
@@ -264,7 +265,7 @@ public class DeltaWriter
 			}
 		}
 		delta_button[min_index].doClick();
-		System.out.println("The delta type that produces the smallest shannon sum is " + min_index);
+		System.out.println("The delta type that produces the smallest shannon sum is " + delta_type_string[min_index]);
 	}
 	
 	public DeltaWriter(String _filename)
@@ -306,6 +307,16 @@ public class DeltaWriter
 			set_string[7] = new String("green, blue-green, and red-green.");
 			set_string[8] = new String("green, red-green, and red-blue.");
 			set_string[9] = new String("red, red-green, red-blue.");
+			
+			delta_type_string = new String[8];
+			delta_type_string[0] = new String("horizontal");
+			delta_type_string[1] = new String("vertical");
+			delta_type_string[2] = new String("average");
+			delta_type_string[3] = new String("paeth");
+			delta_type_string[4] = new String("gradient");
+			delta_type_string[5] = new String("scanline (1)");
+			delta_type_string[6] = new String("scanline (2)");
+			delta_type_string[7] = new String("frame map");
 
 			channel_init      = new int[6];
 			channel_min       = new int[6];
@@ -1220,7 +1231,6 @@ public class DeltaWriter
 				double paeth_ratio = shannon_sum;
 				paeth_ratio       /= current_sum;
 				
-				
 				frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
@@ -1234,10 +1244,8 @@ public class DeltaWriter
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
 				
-				frequency = f_result.get(1);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   += (int)Math.floor(shannon_limit);
 				
+				shannon_sum += (new_ydim - 1) / 4;
 				double scanline_ratio = shannon_sum;
 				scanline_ratio       /= current_sum;
 				
@@ -1247,20 +1255,17 @@ public class DeltaWriter
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
 				
-				frequency = f_result.get(1);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   += (int)Math.floor(shannon_limit);
+				shannon_sum += (new_ydim - 1) / 4;
 				double scanline2_ratio = shannon_sum;
-				scanline2_ratio        /= current_sum;
+				scanline2_ratio       /= current_sum;
 				
-				
-				System.out.println("Ideal horizontal ratio is " + String.format("%.2f", horizontal_ratio));
-				System.out.println("Ideal vertical ratio is   " + String.format("%.2f", vertical_ratio));
-				System.out.println("Ideal average ratio is    " + String.format("%.2f", average_ratio));
-				System.out.println("Ideal paeth ratio is      " + String.format("%.2f", paeth_ratio));
-				System.out.println("Ideal gradient ratio is   " + String.format("%.2f", gradient_ratio));
-				System.out.println("Ideal scanline ratio is   " + String.format("%.2f", scanline_ratio));
-				System.out.println("Ideal scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
+				System.out.println("Horizontal ratio is " + String.format("%.2f", horizontal_ratio));
+				System.out.println("Vertical ratio is   " + String.format("%.2f", vertical_ratio));
+				System.out.println("Average ratio is    " + String.format("%.2f", average_ratio));
+				System.out.println("Paeth ratio is      " + String.format("%.2f", paeth_ratio));
+				System.out.println("Gradient ratio is   " + String.format("%.2f", gradient_ratio));
+				System.out.println("Scanline ratio is   " + String.format("%.2f", scanline_ratio));
+				System.out.println("Scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
 				
 				ArrayList<Object> result = new ArrayList<Object>();
 				
@@ -2082,7 +2087,7 @@ public class DeltaWriter
 				double compression_rate = file_length;
 				compression_rate /= image_xdim * image_ydim * 3;
 				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				System.out.println("Delta type is " + delta_type);
+				System.out.println("Delta type is " + delta_type_string[delta_type]);
 				System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
 				System.out.println();
 			} 
@@ -2093,6 +2098,3 @@ public class DeltaWriter
 		}
 	}
 }
-
-
-
