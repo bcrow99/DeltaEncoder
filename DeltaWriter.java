@@ -75,8 +75,8 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		//String prefix = new String("C:/Users/Brian Crowley/Desktop/");
-		String prefix = new String("");
+		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		//String prefix = new String("");
 		String filename = new String(args[0]);
 
 		DeltaWriter writer = new DeltaWriter(prefix + filename);
@@ -229,15 +229,27 @@ public class DeltaWriter
 			shannon_sum   = (int)Math.floor(shannon_limit);
 			channel_delta_sum[4] += shannon_sum;
 			
-			frequency     = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			ArrayList <int []> result = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			frequency     = result.get(0);
 			shannon_limit = CodeMapper.getShannonLimit(frequency);
 			shannon_sum   = (int)Math.floor(shannon_limit);
 			channel_delta_sum[5] += shannon_sum;
 			
-			frequency     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			int [] map = result.get(1);
+			shannon_limit = CodeMapper.getShannonLimit(map);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[5] += shannon_sum;
+			
+			result     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			frequency     = result.get(0);
 			shannon_limit = CodeMapper.getShannonLimit(frequency);
 			shannon_sum   = (int)Math.floor(shannon_limit);
 			channel_delta_sum[6] += shannon_sum;
+			
+			map = result.get(1);
+			shannon_limit = CodeMapper.getShannonLimit(map);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[5] += shannon_sum;
 		}
 		
 		min_delta_sum = channel_delta_sum[0];
@@ -251,7 +263,7 @@ public class DeltaWriter
 				min_index = i;
 			}
 		}
-		delta_button[delta_type].doClick();
+		delta_button[min_index].doClick();
 		System.out.println("The delta type that produces the smallest shannon sum is " + min_index);
 	}
 	
@@ -1217,18 +1229,27 @@ public class DeltaWriter
 				gradient_ratio       /= current_sum;
 				
 				
-				frequency     = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+				ArrayList <int []> f_result  = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+				frequency = f_result.get(0);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
+				
+				frequency = f_result.get(1);
+				shannon_limit = CodeMapper.getShannonLimit(frequency);
+				shannon_sum   += (int)Math.floor(shannon_limit);
 				
 				double scanline_ratio = shannon_sum;
 				scanline_ratio       /= current_sum;
 				
 				
-				frequency     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+				f_result     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+				frequency = f_result.get(0);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
 				
+				frequency = f_result.get(1);
+				shannon_limit = CodeMapper.getShannonLimit(frequency);
+				shannon_sum   += (int)Math.floor(shannon_limit);
 				double scanline2_ratio = shannon_sum;
 				scanline2_ratio        /= current_sum;
 				
@@ -1277,7 +1298,7 @@ public class DeltaWriter
 				} 
 				else if (delta_type == 7)
 				{
-					result = DeltaMapper.getIdealDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
+					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 					byte[] map = (byte[]) result.get(2);
 					map_list.add(map);
 				}
@@ -1447,7 +1468,7 @@ public class DeltaWriter
 				else if (delta_type == 7)
 				{
 					byte[] map = (byte[]) map_list.get(i);
-					channel    = DeltaMapper.getValuesFromIdealDeltas4(delta, new_xdim, new_ydim, channel_init[j], map);
+					channel    = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim, new_ydim, channel_init[j], map);
 				}
                 
 				// Remove the negative numbers from difference channels.
@@ -1680,19 +1701,12 @@ public class DeltaWriter
 					if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 					{
 						byte[] map = (byte[]) map_list.get(i);
-						ArrayList map_string_list = StringMapper.getStringList2(map);
-						int map_min = (int) map_string_list.get(0);
-						//int map_bit_length = (int) map_string_list.get(1);
-						int[] string_table = (int[]) map_string_list.get(2);
-						byte[] compressed_map = (byte[]) map_string_list.get(3);
-
-						out.writeShort(string_table.length);
-						for (int k = 0; k < string_table.length; k++)
-							out.writeShort(string_table[k]);
-						out.writeInt(compressed_map.length);
-						out.write(compressed_map, 0, compressed_map.length);
-						out.writeByte(map_min);
+						
+						byte [] packed_map = SegmentMapper.packBits(map, 2);
+						
 						out.writeInt(map.length);
+						out.writeInt(packed_map.length);
+						out.write(packed_map, 0, packed_map.length);
 					}
 
 					ArrayList segments = (ArrayList) segment_list.get(i);
