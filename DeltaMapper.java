@@ -2877,7 +2877,19 @@ public class DeltaMapper
 			{
 				int k = i * xdim + j;
 
-				if(j > 0 && j < xdim - 1)
+				if(j == 0)
+				{
+					int a = 	Math.abs(src[k] - src[k - xdim]);
+				    int b = Math.abs(src[k] - src[k - xdim + 1]);
+				    		
+				    if(a <= b)
+				    	    map[m] = 1;
+				    else
+				    	    map[m] = 3;
+				    
+				    m++;	
+				}
+				else if(j < xdim - 1)
 				{
 				    int a = Math.abs(src[k] - src[k - 1]);
 				    int b = Math.abs(src[k] - src[k - xdim]);
@@ -2890,18 +2902,6 @@ public class DeltaMapper
 				    	    map[m] = 1;
 				    else if(c <= d)
 				    	    map[m] = 2;
-				    else
-				    	    map[m] = 3;
-				    
-				    m++;
-				}
-				else if(j == 0)
-				{
-				    int a = 	Math.abs(src[k] - src[k - xdim]);
-				    int b = Math.abs(src[k] - src[k - xdim + 1]);
-				    		
-				    if(a <= b)
-				    	    map[m] = 1;
 				    else
 				    	    map[m] = 3;
 				    
@@ -2929,7 +2929,20 @@ public class DeltaMapper
 		
 		for(int j = 0; j < xdim; j++)
 		{
-			if(j > 0 && j < xdim - 1)
+			if(j == 0)
+			{
+			    int a = 	Math.abs(src[k] - src[k - xdim]);
+			    int b = Math.abs(src[k] - src[k - xdim + 1]);
+			    		
+			    if(a <= b)
+			    	    map[m] = 1;
+			    else
+			    	    map[m] = 3;
+			    
+			    k++;
+			    m++;
+			}
+			else if(j > 0 && j < xdim - 1)
 			{
 			    int a = Math.abs(src[k] - src[k - 1]);
 			    int b = Math.abs(src[k] - src[k - xdim]);
@@ -2942,19 +2955,6 @@ public class DeltaMapper
 			    	    map[m] = 1;
 			    else if(c <= d)
 			    	    map[m] = 2;
-			    else
-			    	    map[m] = 3;
-			    
-			    k++;
-			    m++;
-			}
-			else if(j == 0)
-			{
-			    int a = 	Math.abs(src[k] - src[k - xdim]);
-			    int b = Math.abs(src[k] - src[k - xdim + 1]);
-			    		
-			    if(a <= b)
-			    	    map[m] = 1;
 			    else
 			    	    map[m] = 3;
 			    
@@ -2980,6 +2980,7 @@ public class DeltaMapper
 		}	
 		
 
+		// Get the deltas.
 		k         = 0;
 		m         = 0;
 		int delta = 0;
@@ -3002,7 +3003,7 @@ public class DeltaMapper
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-					int n = map[m];
+					int n = map[m++];
 					if(n == 0)
 						delta = src[k] - src[k - 1];
 					else if(n == 1)
@@ -3045,6 +3046,8 @@ public class DeltaMapper
 			for(int j = 0; j < xdim; j++)
 			{
 				int n = map[m];
+				
+				
 				if(n == 0)
 					dst[k] = dst[k - 1] + src[k];
 				else if(n == 1)
@@ -4429,6 +4432,7 @@ public class DeltaMapper
 		}
 		return channel;
 	}
+
 
 
 }

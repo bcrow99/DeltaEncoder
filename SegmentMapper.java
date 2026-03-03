@@ -2155,19 +2155,19 @@ public class SegmentMapper
 			return 1;
 	}
 
-	public static void setBit(byte[] string, int position, int value)
+	public static void setBit(byte[] buffer, int position, int value)
 	{
 		int byte_offset = position / 8;
-		int bit_offset = position % 8;
+		int bit_offset  = position % 8;
 		if(value == 0)
 		{
 			byte mask = getNegativeMask(bit_offset);
-			string[byte_offset] &= mask;
+			buffer[byte_offset] &= mask;
 		} 
 		else
 		{
 			byte mask = getPositiveMask(bit_offset);
-			string[byte_offset] |= mask;
+			buffer[byte_offset] |= mask;
 		}
 	}
 	
@@ -2273,80 +2273,7 @@ public class SegmentMapper
 			current_byte = offset / 8;
 		}
 		
-		System.out.println("First output byte is " + dst[0]);
-		System.out.println();
-		
-		
-		/*
-		for(int i = 0; i < number_of_bytes; i++)
-		{ 
-			byte value = src[current_byte];
-		    if(current_bit + j <= 8)
-		    {
-		    	    if(current_bit != 0)
-		    	    	    value >>= current_bit;
-		        value &= leading_mask[j];
-		        dst[i] = value;
-		        
-		        offset += j;
-		        current_bit = offset % 8;
-		        current_byte = offset / 8;
-		    }
-		    else
-		    {
-		    	    int number_of_leading_bits  = (current_bit + j) % 8;
-	    	        int number_of_trailing_bits = j - number_of_leading_bits;  
-	    	       
-		    }
-		}
-		*/
-		
 		return dst;
-		
-		
-		/*
-		int j               = number_of_pack_bits;
-		int number_of_bits  = src.length * j;
-		int number_of_bytes = number_of_bits / 8;
-		if(number_of_bits % 8 != 0)
-			number_of_bytes++;
-		byte [] dst = new byte[number_of_bytes];
-	
-		int offset       = 0;
-		int current_bit  = 0;
-		int current_byte = 0;
-		
-		for(int i = 0; i < src.length; i++)
-		{
-		    byte value = src[i];
-		    if(current_bit + j <= 8)
-		    {
-		    	    if(current_bit == 0)
-		    	    	    dst[current_byte] = value;
-		    	    else
-		    	    	    dst[current_byte] |= value << current_bit;
-		    	    
-		    	    current_bit += j;
-		    	    offset      += j;
-		    }
-		    else
-		    {
-		    	    dst[current_byte]  |= (byte) (value << current_bit);
-		    	    
-		    	    int number_of_leading_bits  = (current_bit + j) % 8;
-		    	    int number_of_trailing_bits = j - number_of_leading_bits;
-		    	    int k                       = 8 - number_of_trailing_bits;
-		    	    dst[current_byte + 1]       = (byte) (value >> k);
-		    	 
-		    	    offset      += j;
-		    	    current_bit  = offset % 8;
-		    	    current_byte = offset / 8;
-		    }
-		}
-		
-		System.out.println("Destination length is " + dst.length + ", current byte is " + current_byte);
-		return dst;
-		*/
 	}
 	
 }
