@@ -59,7 +59,7 @@ public class SimpleWriter
 	double file_compression_rate;
 	JRadioButtonMenuItem[] delta_button;
 
-	ArrayList <Object>channel_list, table_list, string_list, cat_string_list, map_list, segment_list;
+	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
 
 	boolean initialized = false;
 
@@ -274,9 +274,8 @@ public class SimpleWriter
 			channel_list = new ArrayList<Object>();
 			table_list   = new ArrayList<Object>();
 			string_list  = new ArrayList<Object>();
-			cat_string_list  = new ArrayList<Object>();
 			map_list     = new ArrayList<Object>();
-			segment_list = new ArrayList<Object>();
+			delta_list   = new ArrayList<Object>();
 
 			channel_string = new String[6];
 			channel_string[0] = new String("blue");
@@ -721,13 +720,13 @@ public class SimpleWriter
 			}
 			
 			// Get the set of channels with deltas that have a minimum sum, including difference channels.
-			int[] quantized_blue = quantized_channel_list.get(0);
+			int[] quantized_blue  = quantized_channel_list.get(0);
 			int[] quantized_green = quantized_channel_list.get(1);
-			int[] quantized_red = quantized_channel_list.get(2);
+			int[] quantized_red   = quantized_channel_list.get(2);
          
 			int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-			int[] quantized_red_green = DeltaMapper.getDifference(quantized_red, quantized_green);
-			int[] quantized_red_blue = DeltaMapper.getDifference(quantized_red, quantized_blue);
+			int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red, quantized_green);
+			int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red, quantized_blue);
 
 			quantized_channel_list.add(quantized_blue_green);
 			quantized_channel_list.add(quantized_red_green);
@@ -794,8 +793,8 @@ public class SimpleWriter
 
 			table_list.clear();
 			string_list.clear();
-			segment_list.clear();
 			map_list.clear();
+			delta_list.clear();
 
 			// Create the segment strings for each reference or difference channel
 			// in the minimum set that will be used by the save handler.
@@ -916,6 +915,15 @@ public class SimpleWriter
 				}
 
 				int[] delta = (int[]) result.get(1);
+				
+				/*
+				byte [] delta_bytes = new byte[delta.length];
+			    for(int k = 0; k < delta.length; k++)
+			    {
+			    	    delta_bytes[k] = (byte)(delta[k] + channel_delta_min[j]);
+			    }
+			    delta_list.add(delta_bytes);
+			    */
 
 				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
 				System.out.println();
@@ -1235,17 +1243,27 @@ public class SimpleWriter
 						out.writeInt(packed_map.length);
 						out.write(packed_map, 0, packed_map.length);
 					}
+					
+					
 					Deflater deflater;
 					
-					byte [] string = (byte []) string_list.get(i);
-					byte [] zipped_data = new byte[2 * string.length];
 					if(deflate_type == 0)
 						deflater = new Deflater(Deflater.BEST_COMPRESSION);
 					else if(deflate_type == 1)
 						deflater = new Deflater(Deflater.HUFFMAN_ONLY);
 					else
 						deflater = new Deflater(Deflater.FILTERED);
+
+					
+					byte [] string = (byte []) string_list.get(i);
+					byte [] zipped_data = new byte[2 * string.length];
 					deflater.setInput(string);
+					
+					/*
+					byte [] delta_bytes = (byte[]) delta_list.get(i);
+					byte [] zipped_data = new byte[2 * delta_bytes.length];
+					deflater.setInput(delta_bytes);
+					*/
 					
 					deflater.finish();
 					int zipped_length = deflater.deflate(zipped_data);
