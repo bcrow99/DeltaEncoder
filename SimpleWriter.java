@@ -1,6 +1,7 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
+import java.math.BigDecimal;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
@@ -31,7 +32,7 @@ public class SimpleWriter
 	
 	int delta_type      = 5;
 	
-	boolean precompress = false;
+	boolean precompress = true;
 	int deflate_type    = 0;
 	
 	double scale       = 1.;
@@ -189,7 +190,7 @@ public class SimpleWriter
 		min_set_id = min_index;
 		
 		//System.out.println("Minimum set with current settings is " + set_string[min_set_id]);
-		System.out.println();
+		//System.out.println();
 		
 		int [] channel_id = DeltaMapper.getChannels(min_set_id);
 		
@@ -256,7 +257,8 @@ public class SimpleWriter
 			}
 		}
 		delta_button[min_index].doClick();
-		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
+		System.out.println("The delta type that produces the lowest entropy sum is " + delta_type_string[min_index]);
+		System.out.println();
 	}
 	
 	public SimpleWriter(String _filename)
@@ -599,9 +601,7 @@ public class SimpleWriter
 				correction_dialog.add(correction_panel);
 
 				settings_menu.add(correction_item);
-				
-				
-
+			
 				JMenu delta_menu = new JMenu("Delta");
 
 				delta_button = new JRadioButtonMenuItem[8];
@@ -865,13 +865,13 @@ public class SimpleWriter
 				double scanline2_ratio = shannon_sum;
 				scanline2_ratio       /= current_sum;
 				
-				System.out.println("Horizontal ratio is " + String.format("%.2f", horizontal_ratio));
-				System.out.println("Vertical ratio is   " + String.format("%.2f", vertical_ratio));
-				System.out.println("Average ratio is    " + String.format("%.2f", average_ratio));
-				System.out.println("Paeth ratio is      " + String.format("%.2f", paeth_ratio));
-				System.out.println("Gradient ratio is   " + String.format("%.2f", gradient_ratio));
-				System.out.println("Scanline ratio is   " + String.format("%.2f", scanline_ratio));
-				System.out.println("Scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
+				//System.out.println("Horizontal ratio is " + String.format("%.2f", horizontal_ratio));
+				//System.out.println("Vertical ratio is   " + String.format("%.2f", vertical_ratio));
+				//System.out.println("Average ratio is    " + String.format("%.2f", average_ratio));
+				//System.out.println("Paeth ratio is      " + String.format("%.2f", paeth_ratio));
+				//System.out.println("Gradient ratio is   " + String.format("%.2f", gradient_ratio));
+				//System.out.println("Scanline ratio is   " + String.format("%.2f", scanline_ratio));
+				//System.out.println("Scanline2 ratio is  " + String.format("%.2f", scanline2_ratio));
 				
 				ArrayList<Object> result = new ArrayList<Object>();
 				
@@ -916,18 +916,15 @@ public class SimpleWriter
 
 				int[] delta = (int[]) result.get(1);
 				
-				/*
+				
 				byte [] delta_bytes = new byte[delta.length];
 			    for(int k = 0; k < delta.length; k++)
 			    {
 			    	    delta_bytes[k] = (byte)(delta[k] + channel_delta_min[j]);
 			    }
 			    delta_list.add(delta_bytes);
-			    */
 
-				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
-				System.out.println();
-				
+				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);				
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
 				int[] string_table          = (int[]) delta_string_list.get(2);
@@ -1244,6 +1241,30 @@ public class SimpleWriter
 						out.write(packed_map, 0, packed_map.length);
 					}
 					
+					byte [] string = (byte []) string_list.get(i);
+					
+                    int number_of_segments = 250;
+                    
+                    long start = System.nanoTime();
+					ArrayList result = CodeMapper.getArithmeticOffsetList(string, number_of_segments);
+					
+					
+					BigDecimal [] offset = (BigDecimal [])result.get(0);
+					
+
+					long stop = System.nanoTime();
+					long time = stop - start;
+					System.out.println("It took " + (time / 1000000) + " ms to get arithmetic offsets for channel " + i);
+					System.out.println();
+					
+					/*
+					System.out.println("Arithmetic offsets:");
+					for(int k = 0; k < number_of_segments; k++)
+						System.out.print(String.format("%.2f", offset[k]) + " ");
+					System.out.println();
+					*/
+					
+					
 					
 					Deflater deflater;
 					
@@ -1255,15 +1276,14 @@ public class SimpleWriter
 						deflater = new Deflater(Deflater.FILTERED);
 
 					
-					byte [] string = (byte []) string_list.get(i);
 					byte [] zipped_data = new byte[2 * string.length];
 					deflater.setInput(string);
 					
-					/*
-					byte [] delta_bytes = (byte[]) delta_list.get(i);
-					byte [] zipped_data = new byte[2 * delta_bytes.length];
-					deflater.setInput(delta_bytes);
-					*/
+					
+					//byte [] delta_bytes = (byte[]) delta_list.get(i);
+					//byte [] zipped_data = new byte[2 * delta_bytes.length];
+					//deflater.setInput(delta_bytes);
+					
 					
 					deflater.finish();
 					int zipped_length = deflater.deflate(zipped_data);
@@ -1281,10 +1301,10 @@ public class SimpleWriter
 				long file_length = file.length();
 				double compression_rate = file_length;
 				compression_rate /= image_xdim * image_ydim * 3;
-				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				System.out.println("Delta type is " + delta_type_string[delta_type]);
-				System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
-				System.out.println();
+				//System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
+				//System.out.println("Delta type is " + delta_type_string[delta_type]);
+				//System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
+				//System.out.println();
 			} 
 			catch (Exception e)
 			{
