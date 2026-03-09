@@ -2488,8 +2488,59 @@ public class CodeMapper
 	    return last_table;	
 	}	
 
-	
 	public static ArrayList getArithmeticOffsetList(byte [] src, int number_of_segments)
+	{
+		BigDecimal [] offset   = new BigDecimal[number_of_segments];
+		int [][] frequency     = new int[number_of_segments][256];
+		 
+		int segment_length     = src.length / number_of_segments;
+		
+		int odd_segment_length = segment_length + src.length % number_of_segments;
+		
+        byte [][] segment  = new byte[number_of_segments][segment_length];
+        if(odd_segment_length != segment_length)
+        	    segment[number_of_segments - 1] = new byte[odd_segment_length];
+		
+        try
+        {
+           	int k = 0;
+    		    for(int i = 0; i < number_of_segments; i++)
+    		    {
+    			    for(int j = 0; j < segment[i].length; j++)
+    				    segment[i][j] = src[k++];
+    		    }
+        }
+        catch(Exception e)
+        {
+        	    System.out.println("Exception segmenting data.");
+        	    System.out.println(e.toString());
+        	    System.exit(0);
+        }
+		
+        int k = 0;
+        for(int i = 0; i < number_of_segments; i++)
+        {
+            int [] f = new int[256];
+            for(int j = 0; j < segment[i].length; j++)
+            {
+        	        int m = src[k++];
+        	        if(m < 0)
+        	    	        m += 256;
+        	        f[m]++;
+            }
+            frequency[i] = f;
+            //System.out.println("Getting offset for segment " + i);
+            offset[i] = getArithmeticOffset(segment[i], f);  
+        }
+		
+		ArrayList result = new ArrayList();
+		result.add(offset);
+		result.add(frequency);
+		
+		return result;
+	}
+	
+	public static ArrayList getArithmeticOffsetList2(byte [] src, int number_of_segments)
 	{
 		BigDecimal [] offset = new BigDecimal[number_of_segments];
 		
@@ -3161,7 +3212,6 @@ public class CodeMapper
         return value;
 	}
 	
-
 	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int order_type)
 	{
 		int [] f = frequency.clone();
@@ -3563,6 +3613,19 @@ public class CodeMapper
 		}
 	}
 	
+	public static BigInteger [] getQuotient(BigDecimal fraction)
+	{
+		BigInteger p = fraction.unscaledValue();
+		int scale    = fraction.scale();
+		BigInteger q = BigInteger.TEN;
+		
+		for(int i = 1; i < scale; i++)
+			q = q.multiply(BigInteger.TEN);
+		
+		BigInteger [] quotient = {p, q};		
+		return quotient;
+	}
+	
 	// This method uses a renormalization technique suggested by Moffet.  It produces an approximation of the offset/range.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
@@ -3712,6 +3775,135 @@ public class CodeMapper
 	    result.add(bitlength);
 	    
 	    return result;
+	}
+	
+	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
+	{
+		byte [] value = new byte[n];
+		
+		boolean [] isSymbol = new boolean[256];
+	    
+		int number_of_symbols = 0;
+		for(int i = 0; i < frequency.length; i++)
+	    {
+	    	    if(frequency[i] != 0)
+	    	    {
+	    	        isSymbol[i] = true;
+	    	        number_of_symbols++;
+	    	    }
+	    }
+		int [] f = new int[number_of_symbols];
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	    
+	 
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    inverse_table.put(j,  i);
+	    	    	    f[j] = frequency[i];
+	    	    	    j++;
+	    	    }
+	    }
+	    
+        int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m    += f[i];
+		}	
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	        
+				        j        = inverse_table.get(j);
+				        value[i] = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return value;
 	}
 	
 	public static byte [] getMessage(BigInteger [] v, Hashtable <Integer, Integer>inverse_symbol_table, int [] frequency)

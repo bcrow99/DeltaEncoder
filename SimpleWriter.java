@@ -1,7 +1,7 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
-import java.math.BigDecimal;
+import java.math.*;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
@@ -257,8 +257,7 @@ public class SimpleWriter
 			}
 		}
 		delta_button[min_index].doClick();
-		System.out.println("The delta type that produces the lowest entropy sum is " + delta_type_string[min_index]);
-		System.out.println();
+		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	
 	public SimpleWriter(String _filename)
@@ -924,7 +923,9 @@ public class SimpleWriter
 			    }
 			    delta_list.add(delta_bytes);
 
-				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);				
+				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
+				//System.out.println();
+				
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
 				int[] string_table          = (int[]) delta_string_list.get(2);
@@ -1243,14 +1244,75 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-                    int number_of_segments = 250;
+                    int number_of_segments = 100;
                     
                     long start = System.nanoTime();
 					ArrayList result = CodeMapper.getArithmeticOffsetList(string, number_of_segments);
 					
 					
-					BigDecimal [] offset = (BigDecimal [])result.get(0);
+					BigDecimal []   offset    = (BigDecimal [])result.get(0);
+					int        [][] frequency = (int [][])     result.get(1);
 					
+					/*
+					BigInteger [] quotient = CodeMapper.getQuotient(offset[0]);
+					
+					BigDecimal numerator    = new BigDecimal(quotient[0]);
+					BigDecimal denominator = new BigDecimal(quotient[1]);
+					
+					BigDecimal fraction = numerator.divide(denominator);
+					
+					if(fraction.compareTo(offset[0]) == 0)
+					{
+					    System.out.println("Fraction and original offset are the same.");	
+					}
+					else
+					{
+						System.out.println("Fraction and original offset are not the same.");		
+					}
+					*/
+					
+					byte [] string2 = new byte[string.length];
+					
+					int segment_length = string.length / number_of_segments;
+					int odd_segment_length = segment_length + string.length % number_of_segments;
+					
+					int string_offset = 0;
+					for(int k = 0; k < number_of_segments - 1; k++)
+					{
+						BigInteger [] quotient = CodeMapper.getQuotient(offset[k]);
+					    byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency[k], segment_length);	
+					    for(int m = string_offset; m < string_offset + segment_length; m++)
+					    	    string2[m] = segment[m - string_offset];
+					    string_offset += segment_length;
+					}
+
+                    int k = number_of_segments - 1;
+                    BigInteger [] quotient = CodeMapper.getQuotient(offset[k]);
+                    byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency[k], odd_segment_length);	
+                    for(int m = string_offset; m < string_offset + odd_segment_length; m++)
+			    	        string2[m] = segment[m - string_offset];
+                    
+                    int first_index = 0;
+                    boolean isSame = true;
+                    for(k = 0; k < string.length; k++)
+                    {
+                    	    if(isSame)
+                    	    {
+                    	        if(string[k] != string2[k])
+                    	    	        isSame = false;
+                    	        first_index = k;
+                    	    }
+                    }
+                    
+                    if(isSame)
+                    	    System.out.println("Strings are equal.");
+                    else
+                    {
+                     	System.out.println("Strings are not equal.");
+                     	System.out.println("String differed at index " + first_index);
+                     	System.out.println("String length is " + string.length);
+                     	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
+                    }
 
 					long stop = System.nanoTime();
 					long time = stop - start;
@@ -1263,8 +1325,6 @@ public class SimpleWriter
 						System.out.print(String.format("%.2f", offset[k]) + " ");
 					System.out.println();
 					*/
-					
-					
 					
 					Deflater deflater;
 					
