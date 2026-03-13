@@ -2490,6 +2490,63 @@ public class CodeMapper
 
 	public static ArrayList getArithmeticOffsetList(byte [] src, int number_of_segments)
 	{
+		int n                     = number_of_segments;
+		BigInteger [][] offset    = new BigInteger[n][2];
+		int        [][] frequency = new int[n][256];
+		
+		int segment_length     = src.length / n;
+		int odd_segment_length = segment_length + src.length % n;
+        byte [][] segment      = new byte[n][segment_length];
+		segment[n - 1]         = new byte[odd_segment_length];
+		
+        try
+        {
+           	int k = 0;
+    		    for(int i = 0; i < n - 1; i++)
+    		    {
+    			    for(int j = 0; j < segment_length; j++)
+    			    {
+    				    segment[i][j] = src[k];
+    			        int value = src[k];
+    			        if(value < 0)
+    			    	        value += 256;
+    			        frequency[i][value]++;
+    			        k++;
+    			    }
+    			    
+    		    }
+    		    int i = n - 1;
+    		    for(int j = 0; j < odd_segment_length; j++)
+    		    {
+				segment[i][j] = src[k];  
+				int value = src[k];
+			    if(value < 0)
+			    	    value += 256;
+			    frequency[i][value]++;
+			    k++;
+    		    }
+        }
+        catch(Exception e)
+        {
+        	    System.out.println("Exception segmenting data.");
+        	    System.out.println(e.toString());
+        	    System.exit(0);
+        }
+		
+		for(int i = 0; i < n; i++)
+		{
+			int [] f = frequency[i].clone();
+			byte []    current_segment = segment[i];
+			offset[i] = getArithmeticOffset2(current_segment, f);
+		}
+		
+		ArrayList result = new ArrayList();
+		result.add(offset);
+		result.add(frequency);
+		return result;
+		
+		
+		/*
 		BigDecimal [] offset   = new BigDecimal[number_of_segments];
 		int [][] frequency     = new int[number_of_segments][256];
 		 
@@ -2538,25 +2595,45 @@ public class CodeMapper
 		result.add(frequency);
 		
 		return result;
+		*/
 	}
 	
 	public static ArrayList getArithmeticOffsetList2(byte [] src, int number_of_segments)
 	{
-		BigDecimal [] offset = new BigDecimal[number_of_segments];
+		int n                     = number_of_segments;
+		BigInteger [][] offset    = new BigInteger[n][2];
+		int        [][] frequency = new int[n][256];
 		
-		int n      = number_of_segments;
-		int length = src.length / n;
-		
-		
-        byte [][] segment  = new byte[n][length];
+		int segment_length     = src.length / n;
+		int odd_segment_length = segment_length + src.length % n;
+        byte [][] segment      = new byte[n][segment_length];
+		segment[n - 1]         = new byte[odd_segment_length];
 		
         try
         {
            	int k = 0;
-    		    for(int i = 0; i < n; i++)
+    		    for(int i = 0; i < n - 1; i++)
     		    {
-    			    for(int j = 0; j < length; j++)
-    				    segment[i][j] = src[k++];
+    			    for(int j = 0; j < segment_length; j++)
+    			    {
+    				    segment[i][j] = src[k];
+    			        int value = src[k];
+    			        if(value < 0)
+    			    	        value += 256;
+    			        frequency[i][value]++;
+    			        k++;
+    			    }
+    			    
+    		    }
+    		    int i = n - 1;
+    		    for(int j = 0; j < odd_segment_length; j++)
+    		    {
+				segment[i][j] = src[k];  
+				int value = src[k];
+			    if(value < 0)
+			    	    value += 256;
+			    frequency[i][value]++;
+			    k++;
     		    }
         }
         catch(Exception e)
@@ -2566,27 +2643,16 @@ public class CodeMapper
         	    System.exit(0);
         }
 		
-        
-        int [] frequency = new int[256];
-        for(int i = 0; i < src.length; i++)
-        {
-        	    int j = src[i];
-        	    if(j < 0)
-        	    	    j += 256;
-        	    frequency[j]++;
-        }
-        
-        int [] f = frequency.clone();
 		for(int i = 0; i < n; i++)
 		{
+			int [] f = frequency[i].clone();
 			byte []    current_segment = segment[i];
-			offset[i] = getArithmeticOffset(current_segment, f);
+			offset[i] = getArithmeticOffset2(current_segment, f);
 		}
 		
 		ArrayList result = new ArrayList();
 		result.add(offset);
 		result.add(frequency);
-		
 		return result;
 	}
 	
@@ -2675,7 +2741,52 @@ public class CodeMapper
 		 return normal_offset;
 	}
 	
-
+	
+	// This method modifies the input frequency table as well as returning the offset.
+	public static BigInteger [] getArithmeticOffset2(byte [] src, int [] frequency)
+	{
+		 boolean [] isSymbol   = new boolean[256];
+		 int     [] frequency2 = new int[256];
+		    
+		 for(int i = 0; i < src.length; i++)
+		 {
+		    	 int j = src[i];
+		    	 if(j < 0)
+		    	    	j += 256;
+		    	 isSymbol[j] = true;
+		    	 frequency2[j]++;
+		 }
+		 
+		 int number_of_symbols = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		     if(isSymbol[i]) 
+		    	     number_of_symbols++; 
+		 }
+		    
+		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+		 int [] f = new int[number_of_symbols];
+		    
+		 int j = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		    	if(isSymbol[i])
+		    	{
+		    	    	symbol_table.put(i, j);
+		    	    	f[j] = frequency2[i];
+		    	    	j++;
+		    	}
+		 }
+		 
+		 BigInteger [] offset     = getArithmeticOffset(src, symbol_table, f);
+		 //BigDecimal normal_offset = getNormalFraction(offset[0], offset[1]);
+		 
+		 for(int i = 0; i < frequency.length; i++)
+			 frequency[i] -= frequency2[i];
+		 
+		 return offset;
+	}
+	
 	
 	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
@@ -3396,10 +3507,6 @@ public class CodeMapper
         return value;
 	}
 	
-	
-	
-	
-	
 	public static BigInteger [] getRangeQuotient2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int process_type)
 	{
 		int [] f = frequency.clone();
@@ -3777,7 +3884,7 @@ public class CodeMapper
 	    return result;
 	}
 	
-	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
+	public static byte [] getArithmeticValues2(BigInteger [] v, int [] frequency, int n)
 	{
 		byte [] value = new byte[n];
 		

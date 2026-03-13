@@ -72,8 +72,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("C:/Users/bcrow/Desktop/");
-		//String prefix = new String("");
+		//String prefix = new String("C:/Users/bcrow/Desktop/");
+		String prefix = new String("");
 		String filename = new String(args[0]);
 
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -1247,29 +1247,11 @@ public class SimpleWriter
                     int number_of_segments = 100;
                     
                     long start = System.nanoTime();
-					ArrayList result = CodeMapper.getArithmeticOffsetList(string, number_of_segments);
+                    
+					ArrayList result = CodeMapper.getArithmeticOffsetList2(string, number_of_segments);
 					
-					
-					BigDecimal []   offset    = (BigDecimal [])result.get(0);
+					BigInteger [][]   offset  = (BigInteger [][])result.get(0);
 					int        [][] frequency = (int [][])     result.get(1);
-					
-					/*
-					BigInteger [] quotient = CodeMapper.getQuotient(offset[0]);
-					
-					BigDecimal numerator    = new BigDecimal(quotient[0]);
-					BigDecimal denominator = new BigDecimal(quotient[1]);
-					
-					BigDecimal fraction = numerator.divide(denominator);
-					
-					if(fraction.compareTo(offset[0]) == 0)
-					{
-					    System.out.println("Fraction and original offset are the same.");	
-					}
-					else
-					{
-						System.out.println("Fraction and original offset are not the same.");		
-					}
-					*/
 					
 					byte [] string2 = new byte[string.length];
 					
@@ -1279,16 +1261,16 @@ public class SimpleWriter
 					int string_offset = 0;
 					for(int k = 0; k < number_of_segments - 1; k++)
 					{
-						BigInteger [] quotient = CodeMapper.getQuotient(offset[k]);
-					    byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency[k], segment_length);	
+						BigInteger [] quotient = offset[k];
+					    byte [] segment = CodeMapper.getArithmeticValues2(quotient, frequency[k], segment_length);	
 					    for(int m = string_offset; m < string_offset + segment_length; m++)
 					    	    string2[m] = segment[m - string_offset];
 					    string_offset += segment_length;
 					}
 
                     int k = number_of_segments - 1;
-                    BigInteger [] quotient = CodeMapper.getQuotient(offset[k]);
-                    byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency[k], odd_segment_length);	
+                    BigInteger [] quotient = offset[k];
+                    byte [] segment = CodeMapper.getArithmeticValues2(quotient, frequency[k], odd_segment_length);	
                     for(int m = string_offset; m < string_offset + odd_segment_length; m++)
 			    	        string2[m] = segment[m - string_offset];
                     
