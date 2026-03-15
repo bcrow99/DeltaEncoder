@@ -3691,33 +3691,76 @@ public class CodeMapper
         return value;
 	}
 	
+	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b, int scale)
+	{
+		BigInteger m = BigInteger.TWO;
+		for(int i = 1; i < b.bitLength(); i++)
+		    	m = m.multiply(BigInteger.TWO);
+		
+		
+		BigInteger n = a.multiply(m);
+		BigDecimal p = new BigDecimal(n);
+		BigDecimal q = new BigDecimal(b);
+		p = p.divide(q, scale, RoundingMode.HALF_EVEN);
+		
+		BigDecimal s = new BigDecimal(m);
+		
+		p = p.divide(s, scale, RoundingMode.HALF_EVEN);
+		
+		return p;	
+	}
+	
+	
 	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b)
 	{
-        BigInteger q = BigInteger.TWO;
+        BigInteger m = BigInteger.TWO;
 		for(int i = 1; i < b.bitLength(); i++)
-		    	q = q.multiply(BigInteger.TWO);
-		BigInteger p = a.multiply(q);
+		    	m = m.multiply(BigInteger.TWO);
+		
+		
+		BigInteger n = a.multiply(m);
+		BigDecimal p = new BigDecimal(n);
+		BigDecimal q = new BigDecimal(b);
+		p = p.divide(q, 100, RoundingMode.HALF_EVEN);
+		
+		BigDecimal s = new BigDecimal(m);
+		
+		p = p.divide(s, 100, RoundingMode.HALF_EVEN);
+		
+		return p;
+		
+		/*
 		p        = p.divide(b);
 		    
 		BigInteger r = q.mod(b);
 		if(r.compareTo(q.divide(BigInteger.TWO)) == 1)
 		    	p = p.add(BigInteger.ONE);
-		   
+		*/
+	
+		/*
 		try
 		{
-		    	BigDecimal s = new BigDecimal(p);
-		    BigDecimal t  = new BigDecimal(q);
-		    s            = s.divide(t);
-		    return s;
+			BigInteger value = BigInteger.TEN;
+			int        scale = 1;
+			while(value.compareTo(a.multiply(b)) == -1)
+			{
+				value = value.multiply(BigInteger.TEN);
+				scale++;
+			}
+			
+			BigDecimal numerator   = new BigDecimal(a);
+			BigDecimal denominator = new BigDecimal(b);
+			
+			BigDecimal fraction = numerator.divide(denominator, scale, RoundingMode.HALF_EVEN);
+			return fraction;
 		}
 		catch(Exception e)
 		{
 		    	System.out.println("Exception getting decimal value for fraction:");
 		    	System.out.println(e.toString());
-		    	System.out.println("Numerator is " + p);
-		    	System.out.println("Denominator is " + q);
 		    	return BigDecimal.ZERO;
 		}
+		*/
 	}
 	
 	public static BigInteger [] getQuotient(BigDecimal fraction)
@@ -3882,6 +3925,138 @@ public class CodeMapper
 	    result.add(bitlength);
 	    
 	    return result;
+	}
+	
+	
+	public static byte [] getArithmeticValues(BigDecimal fraction, int [] frequency, int n)
+	{
+		BigInteger [] v = getQuotient(fraction);
+		
+		byte [] value = new byte[n];
+		
+		boolean [] isSymbol = new boolean[256];
+	    
+		int number_of_symbols = 0;
+		for(int i = 0; i < frequency.length; i++)
+	    {
+	    	    if(frequency[i] != 0)
+	    	    {
+	    	        isSymbol[i] = true;
+	    	        number_of_symbols++;
+	    	    }
+	    }
+		int [] f = new int[number_of_symbols];
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	    
+	 
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    inverse_table.put(j,  i);
+	    	    	    f[j] = frequency[i];
+	    	    	    j++;
+	    	    }
+	    }
+	    
+        int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m    += f[i];
+		}	
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	        
+				        j        = inverse_table.get(j);
+				        value[i] = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return value;
 	}
 	
 	public static byte [] getArithmeticValues2(BigInteger [] v, int [] frequency, int n)
