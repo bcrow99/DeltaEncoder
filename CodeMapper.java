@@ -2046,6 +2046,44 @@ public class CodeMapper
 		return a;
 	}
 	
+	/*
+	public static ArrayList long_divide(int a, int b)
+	{
+	    ArrayList result         = new ArrayList();
+	    ArrayList dividend_list  = new ArrayList();
+	    ArrayList remainder_list = new ArrayList();
+	    
+	    boolean remainder_repeated = false;
+	    int     remainder_index    = 0;
+	    
+	    while(!remainder_repeated)
+	    {
+	    	    int dividend  = a / b;  
+	    	    int remainder = a % b; 
+	    	    dividend_list.add(dividend);
+	    	    if(!remainder_list.contains(remainder))
+	    	        remainder_list.add(remainder);
+	    	    else
+	    	    {
+	    	    	    
+	    	    }
+	    }
+	    
+	    return result;
+	}
+	*/
+	
+	public static ArrayList long_divide(int a, int b)
+	{
+		String numerator   = String.valueOf(a);
+		String denominator = String.valueOf(b);
+		
+		ArrayList result = new ArrayList();
+		result.add(numerator);
+		result.add(denominator);
+		return result;
+	}
+	
 	public static boolean isProbablePrime(long n)
 	{
 		long b = 2;
@@ -3693,19 +3731,9 @@ public class CodeMapper
 	
 	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b, int scale)
 	{
-		BigInteger m = BigInteger.TWO;
-		for(int i = 1; i < b.bitLength(); i++)
-		    	m = m.multiply(BigInteger.TWO);
-		
-		
-		BigInteger n = a.multiply(m);
-		BigDecimal p = new BigDecimal(n);
+		BigDecimal p = new BigDecimal(a);
 		BigDecimal q = new BigDecimal(b);
 		p = p.divide(q, scale, RoundingMode.HALF_EVEN);
-		
-		BigDecimal s = new BigDecimal(m);
-		
-		p = p.divide(s, scale, RoundingMode.HALF_EVEN);
 		
 		return p;	
 	}
@@ -3713,6 +3741,32 @@ public class CodeMapper
 	
 	public static BigDecimal getNormalFraction(BigInteger a, BigInteger b)
 	{
+		BigDecimal p = new BigDecimal(a);
+		BigDecimal q = new BigDecimal(b);
+		
+		try
+		{
+		    BigDecimal r = p.divide(q);	
+		    System.out.println("Terminating decimal expansion.");
+		    return r;
+		}
+		catch(Exception e)
+		{
+		    //System.out.println(e.toString());
+		    try
+		    {
+		    	    BigDecimal r = p.divide(q, b.bitLength(), RoundingMode.HALF_EVEN);
+		    	    return r;
+		    }
+		    catch(Exception e2)
+		    {
+		    	    //System.out.println(e.toString());
+		    	    BigDecimal r = BigDecimal.ZERO;
+		    	    return r;
+		    }
+		}
+		
+		/*
         BigInteger m = BigInteger.TWO;
 		for(int i = 1; i < b.bitLength(); i++)
 		    	m = m.multiply(BigInteger.TWO);
@@ -3729,7 +3783,7 @@ public class CodeMapper
 		
 		return p;
 		
-		/*
+		
 		p        = p.divide(b);
 		    
 		BigInteger r = q.mod(b);
