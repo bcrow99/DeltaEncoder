@@ -2341,34 +2341,25 @@ public class CodeMapper
 		}
 		else
 		{
-			String start = decimal.substring(0, start_digits + 2);
-			String end   = decimal.substring(0, start_digits + 3);
+			double value   = Double.parseDouble(decimal);
+			int    factor1 = (int)Math.pow(10, start_digits);
+			double a       = Math.floor(factor1 * value);
+			int    factor2 = (int)Math.pow(10, start_digits + repeating_digits);
+			double b       = factor2 * value;
+			double c       = b - a;
 			
-			int denominator1 = (int)Math.pow(10, start_digits);
-			double value    = Double.parseDouble(start);
-			value *= denominator1;
-			
-			int numerator1 = (int)Math.floor(value);
-			
-			int denominator2 = (int)Math.pow(10, start_digits + repeating_digits);
-			denominator2    -= denominator1;
-			int numerator2   = Integer.parseInt(end);
-		
-			int a = numerator1 * denominator2;
-			int b = denominator2 * denominator1;
-			int c = numerator2 * denominator1;
-			int d = a + b;
-			
-			ratio[0] = a + b;
-			ratio[1] = c;
-			
-			int gcd = gcd(ratio[0], ratio[1]);
-			ratio[0] /= gcd;
-			ratio[1] /= gcd;
+			int numerator = (int)Math.floor(c);
+			int denominator = factor2 - factor1;
+			int gcd = gcd(numerator, denominator);
+			numerator /= gcd;
+			denominator /= gcd;
+			ratio[0] = numerator;
+			ratio[1] = denominator;
 			
 		    return ratio;	
 		}
 	}
+	
 	public static boolean isProbablePrime(long n)
 	{
 		long b = 2;
