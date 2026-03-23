@@ -11,6 +11,7 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
+
 public class SimpleWriter
 {
 	BufferedImage original_image;
@@ -61,6 +62,11 @@ public class SimpleWriter
 	JRadioButtonMenuItem[] delta_button;
 
 	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
+	
+	BigInteger [][] offset;
+	byte       [][] frequency;
+	byte       [][] decoded_segment;
+	
 
 	boolean initialized = false;
 
@@ -812,7 +818,6 @@ public class SimpleWriter
 				double horizontal_ratio = shannon_sum;
 				horizontal_ratio       /= current_sum;
 				
-				
 				frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
 				shannon_limit = CodeMapper.getShannonLimit(frequency);
 				shannon_sum   = (int)Math.floor(shannon_limit);
@@ -853,7 +858,6 @@ public class SimpleWriter
 				shannon_sum += (new_ydim - 1) / 4;
 				double scanline_ratio = shannon_sum;
 				scanline_ratio       /= current_sum;
-				
 				
 				f_result     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
 				frequency = f_result.get(0);
@@ -1244,69 +1248,145 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-                    int number_of_segments = 100;
-                    
-                    long start = System.nanoTime();
-                    
-					ArrayList result = CodeMapper.getArithmeticOffsetList2(string, number_of_segments);
 					
-					BigInteger [][]   offset  = (BigInteger [][])result.get(0);
-					int        [][] frequency = (int [][])     result.get(1);
+					int number_of_processors             = Runtime.getRuntime().availableProcessors();
+					int number_of_segments_per_processor = 4;
+					int number_of_segments               = number_of_processors * number_of_segments_per_processor;
 					
-					byte [] string2 = new byte[string.length];
-					
-					int segment_length = string.length / number_of_segments;
+					int segment_length     = string.length / number_of_segments;
 					int odd_segment_length = segment_length + string.length % number_of_segments;
+			        byte    [][] segment   = new byte[number_of_segments][segment_length];
+					segment[number_of_segments - 1] = new byte[odd_segment_length];
+					frequency  = new byte[number_of_segments][256];
 					
-					int string_offset = 0;
-					for(int k = 0; k < number_of_segments - 1; k++)
+					decoded_segment   = new byte[number_of_segments][segment_length];
+					decoded_segment[number_of_segments - 1] = new byte[odd_segment_length];
+					
+					int k = 0;
+					for(int m = 0; m < number_of_segments - 1; m++)
+	    		        {
+	    			        for(int n = 0; n < segment_length; n++)
+	    			        {
+	    				        segment[m][n] = string[k];
+	    			            int p         = string[k];
+	    			            if(p < 0)
+	    			    	            p += 256;
+	    			            frequency[m][p]++;
+	    			            k++;
+	    			        }
+	    			    
+	    		        }
+	    		        int m = number_of_segments - 1;
+	    		        for(int n = 0; n < odd_segment_length; n++)
+	    		        {
+					    segment[m][n] = string[k];  
+					    int p = string[k];
+				        if(p < 0)
+				    	        p += 256;
+				        frequency[m][p]++;
+				        k++;
+	    		        }
+					
+					offset    = new BigInteger[number_of_segments][2];
+					
+					long start = System.nanoTime();
+					
+					Thread [] encoder_thread = new Thread[number_of_processors]; 
+					
+					k = 0;
+					
+					for(m = 0; m < number_of_segments_per_processor; m++) 
 					{
-						BigInteger [] quotient = offset[k];
-					    byte [] segment = CodeMapper.getArithmeticValues2(quotient, frequency[k], segment_length);	
-					    for(int m = string_offset; m < string_offset + segment_length; m++)
-					    	    string2[m] = segment[m - string_offset];
-					    string_offset += segment_length;
-					}
-
-                    int k = number_of_segments - 1;
-                    BigInteger [] quotient = offset[k];
-                    byte [] segment = CodeMapper.getArithmeticValues2(quotient, frequency[k], odd_segment_length);	
-                    for(int m = string_offset; m < string_offset + odd_segment_length; m++)
-			    	        string2[m] = segment[m - string_offset];
-                    
-                    int first_index = 0;
-                    boolean isSame = true;
-                    for(k = 0; k < string.length; k++)
-                    {
-                    	    if(isSame)
-                    	    {
-                    	        if(string[k] != string2[k])
-                    	    	        isSame = false;
-                    	        first_index = k;
-                    	    }
-                    }
-                    
-                    if(isSame)
-                    	    System.out.println("Strings are equal.");
-                    else
-                    {
-                     	System.out.println("Strings are not equal.");
-                     	System.out.println("String differed at index " + first_index);
-                     	System.out.println("String length is " + string.length);
-                     	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
-                    }
-
+						for(int n = 0; n < number_of_processors; n++)
+						{
+					        encoder_thread[n] = new Thread(new ArithmeticEncoder(segment[k], frequency[k], k));
+					        encoder_thread[n].start(); 
+					        k++;
+						}
+						for(int n = 0; n < number_of_processors; n++)
+						{
+							try
+							{
+						        encoder_thread[n].join();
+							}
+							catch(Exception e)
+							{
+								System.out.println("Exception waiting for thread to finish:");
+								System.out.println(e.toString());
+							}
+						}
+					} 
+					
 					long stop = System.nanoTime();
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to get arithmetic offsets for channel " + i);
 					System.out.println();
 					
-					/*
-					System.out.println("Arithmetic offsets:");
-					for(int k = 0; k < number_of_segments; k++)
-						System.out.print(String.format("%.2f", offset[k]) + " ");
+                    start = System.nanoTime();
+					
+					Thread [] decoder_thread = new Thread[number_of_processors]; 
+					
+					k = 0;
+					
+					for(m = 0; m < number_of_segments_per_processor; m++) 
+					{
+						for(int n = 0; n < number_of_processors; n++)
+						{
+							int current_length = segment[k].length;
+					        decoder_thread[n] = new Thread(new ArithmeticDecoder(offset[k], frequency[k], current_length, k));
+					        decoder_thread[n].start(); 
+					        k++;
+						}
+						for(int n = 0; n < number_of_processors; n++)
+						{
+							try
+							{
+						        decoder_thread[n].join();
+							}
+							catch(Exception e)
+							{
+								System.out.println("Exception waiting for thread to finish:");
+								System.out.println(e.toString());
+							}
+						}
+					} 
+					
+					stop = System.nanoTime();
+					time = stop - start;
+					System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
 					System.out.println();
-					*/
+					
+					byte [] string2 = new byte[string.length];
+					int     string_offset = 0;
+					
+					for(m = 0; m < decoded_segment.length; m++)
+					{
+						for(int n = 0; n  < decoded_segment[m].length; n++)
+							string2[string_offset + n] = decoded_segment[m][n];
+						string_offset += decoded_segment[m].length;	
+					}
+					
+					int first_index = 0;
+                    boolean isSame = true;
+                    for(k = 0; k < string.length; k++)
+                    {
+                   	    if(isSame)
+                   	    {
+                   	        if(string[k] != string2[k])
+                   	    	        isSame = false;
+                   	        first_index = k;
+                   	    }
+                    }
+                   
+                    if(isSame)
+                   	    System.out.println("Strings are equal.");
+                    else
+                    {
+                    	    System.out.println("Strings are not equal.");
+                    	    System.out.println("String differed at index " + first_index);
+                    	    System.out.println("String length is " + string.length);
+                      	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
+                    }
 					
 					Deflater deflater;
 					
@@ -1352,6 +1432,48 @@ public class SimpleWriter
 			{
 				System.out.println(e.toString());
 			}
+		}
+	}
+	
+	class ArithmeticEncoder implements Runnable
+	{
+		byte [] src;
+		byte [] frequency;
+		int     index;
+
+		public ArithmeticEncoder(byte [] src, byte [] frequency, int index)
+		{
+			this.src       = src;
+			this.frequency = frequency;
+			this.index     = index;
+		}
+
+		public void run()
+		{
+			BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, frequency);
+		    offset[index] = quotient;
+		}
+	}
+	
+	class ArithmeticDecoder implements Runnable
+	{
+		BigInteger [] quotient;
+		byte []       frequency;
+		int           n;
+		int           index;
+
+		public ArithmeticDecoder(BigInteger [] quotient, byte [] frequency, int n, int index)
+		{
+			this.quotient  = quotient;
+			this.frequency = frequency;
+			this.index     = index;
+			this.n         = n;
+		}
+
+		public void run()
+		{
+			byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency, n);
+		    decoded_segment[index] = segment;
 		}
 	}
 }

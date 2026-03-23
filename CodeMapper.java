@@ -2046,38 +2046,45 @@ public class CodeMapper
 		return a;
 	}
 	
-    /*
-	public static ArrayList long_divide(int a, int b)
+	
+	public static ArrayList long_divide(BigInteger a, BigInteger b)
 	{
-		
-		ArrayList result = new ArrayList();
+		ArrayList result = new ArrayList();	
 		
 		StringBuffer fraction = new StringBuffer();
 		fraction.append('0');
 		fraction.append('.');
 		
-		ArrayList <Integer> quotient_list = new ArrayList <Integer>();
-		ArrayList <Integer> remainder_list = new ArrayList <Integer>();
+		ArrayList <BigInteger> quotient_list = new ArrayList <BigInteger>();
+		ArrayList <BigInteger> remainder_list = new ArrayList <BigInteger>();
 		
-		
-		quotient_list.add(0);
+		quotient_list.add(BigInteger.ZERO);
 		remainder_list.add(a);
 		
-		a *= 10;
-		while(a < b)
+		a = a.multiply(BigInteger.TEN);
+		while(a.compareTo(b) == -1)
 		{
 			fraction.append('0');
-			quotient_list.add(0);
-			remainder_list.add(a);	
-			
-			a *= 10;
+			quotient_list.add(BigInteger.ZERO);
+			remainder_list.add(a);
+			a = a.multiply(BigInteger.TEN);	
 		}
 		
-		int c = a / b;
+		BigInteger c = a.divide(b);
+		BigInteger d = a.mod(b);
 		String c_string = String.valueOf(c);
 		fraction.append(c_string);
 		
-		int d = a % b;
+		if(d.compareTo(BigInteger.ZERO) == 0)
+		{
+			int number_of_start_digits     = c_string.length();
+			int number_of_repeating_digits = 0;
+			
+			result.add(fraction.toString());
+			result.add(number_of_start_digits);
+			result.add(number_of_repeating_digits);
+			return result;	
+		}
 		
 		if(remainder_list.contains(d))
 		{
@@ -2104,77 +2111,58 @@ public class CodeMapper
 		    }
 		}
 		
+		quotient_list.add(c);
+		remainder_list.add(d);
 		
-		if(d == 0)
+		while(d.compareTo(BigInteger.ZERO) != 0)
 		{
-			int number_of_start_digits = c_string.length();
-			int number_of_repeating_digits = 0;
+			a = d.multiply(BigInteger.TEN);
+			c = a.divide(b);
+			d = a.mod(b);
 			
-			result.add(fraction.toString());
-			result.add(number_of_start_digits);
-			result.add(number_of_repeating_digits);
-			return result;
-		}
-		else
-		{
+			c_string = String.valueOf(c);
+			fraction.append(c_string);
 			
-			quotient_list.add(c);
-			remainder_list.add(d);
-			
-			while(d != 0)
+			if(d.compareTo(BigInteger.ZERO) == 0)
 			{
-				a = d * 10;
-				c = a / b;
-				d = a % b;
+				int number_of_start_digits = fraction.length() - 2;
+				int number_of_repeating_digits = 0;
 				
-				c_string = String.valueOf(c);
-				if(!quotient_list.contains(c))
-				    fraction.append(c_string);
-				
-				if(d == 0)
-				{
-					int number_of_start_digits = fraction.length() - 2;
-					int number_of_repeating_digits = 0;
-					
+				result.add(fraction.toString());
+				result.add(number_of_start_digits);
+				result.add(number_of_repeating_digits);
+				return result;
+			}
+			if(remainder_list.contains(d))
+			{
+			    int index            = remainder_list.indexOf(d);	
+			    int number_of_digits = fraction.length() - 2;
+			    
+			    if(!quotient_list.contains(c))
+			    {
+			    	    int number_of_start_digits = index; 
+			    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
+			    	    result.add(fraction.toString());
+					result.add(number_of_start_digits);
+					result.add(number_of_repeating_digits);
+					return result;	
+			    }
+			    else
+			    {
+			    	    int number_of_repeating_digits = number_of_digits - index;
+					int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
 					result.add(fraction.toString());
 					result.add(number_of_start_digits);
 					result.add(number_of_repeating_digits);
-					return result;
-				}
-				if(remainder_list.contains(d))
-				{
-				    int index            = remainder_list.indexOf(d);	
-				    int number_of_digits = fraction.length() - 2;
-				    
-				    if(!quotient_list.contains(c))
-				    {
-				    	    int number_of_start_digits = index; 
-				    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-				    	    result.add(fraction.toString());
-						result.add(number_of_start_digits);
-						result.add(number_of_repeating_digits);
-						return result;	
-				    }
-				    else
-				    {
-				    	    int number_of_repeating_digits = number_of_digits - index;
-						int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-						result.add(fraction.toString());
-						result.add(number_of_start_digits);
-						result.add(number_of_repeating_digits);
-						return result;	
-				    }
-				    
-				   
-				}
-				quotient_list.add(c);
-				remainder_list.add(d);
+					return result;	
+			    }
 			}
-			
-			return result;
+			quotient_list.add(c);
+			remainder_list.add(d);	
 		}
+		
+		return result;
 	}
-	*/
 	
 	public static ArrayList long_divide(int a, int b)
 	{
@@ -2198,7 +2186,6 @@ public class CodeMapper
 			fraction.append('0');
 			quotient_list.add(0);
 			remainder_list.add(a);	
-			
 			a *= 10;
 		}
 		
@@ -2298,6 +2285,67 @@ public class CodeMapper
 		return result;
 	}
 	
+	
+	public static int [] getRatio(String decimal, int start_digits, int repeating_digits)
+	{
+		if(repeating_digits == 0)
+		{
+			double a = Double.parseDouble(decimal);
+			double b = Math.pow(10, start_digits);
+			double c = a * b;
+			
+			int numerator   = (int)c;
+			int denominator = (int)b;
+		    
+			int gcd      = gcd(numerator, denominator);
+		    numerator   /= gcd;
+		    denominator /= gcd;
+		    int [] ratio = {numerator, denominator};
+		    
+		    return ratio;
+		}
+		else if(start_digits == 0)
+		{
+			double a = Double.parseDouble(decimal);
+			double b = Math.pow(10, repeating_digits);
+			double c = a * b;
+			
+			int numerator  = (int)c;
+			int denominator = (int)(b - 1);
+			
+			int gcd      = gcd(numerator, denominator);
+		    numerator   /= gcd;
+		    denominator /= gcd;
+			
+		    int [] ratio = {numerator, denominator};
+		    return ratio;	
+		}
+		else
+		{
+			double a = Double.parseDouble(decimal);
+			double b = Math.pow(10, start_digits);
+			double c = Math.pow(10, start_digits + repeating_digits);
+			
+			double d = Math.floor(a * b);
+			double e = a * c;
+			
+			double f = e - d;
+			double g = c - b;
+			
+			int numerator   = (int)f;
+			int denominator = (int)g;
+		
+			int gcd      = gcd(numerator, denominator);
+			numerator   /= gcd;
+			denominator /= gcd;
+			int [] ratio = {numerator, denominator};
+			
+		    return ratio;	
+		}
+	}
+	
+	
+	/*
 	public static int [] getRatio(String decimal, int start_digits, int repeating_digits)
 	{
 		int [] ratio = new int[2];
@@ -2359,6 +2407,79 @@ public class CodeMapper
 		    return ratio;	
 		}
 	}
+	*/
+	
+	
+	public static BigInteger [] getRatio2(String decimal, int start_digits, int repeating_digits)
+	{
+		BigInteger [] ratio = new BigInteger[2];
+		ratio[0] = BigInteger.ONE;
+		ratio[1] = BigInteger.TWO;
+		if(repeating_digits == 0)
+		{
+			BigDecimal a = new BigDecimal(decimal);
+			BigDecimal b = new BigDecimal(Math.pow(10, start_digits));
+			a            = a.multiply(b);
+		    
+		    BigInteger numerator   = a.toBigInteger();
+		    BigInteger denominator = b.toBigInteger();
+		    
+		    BigInteger gcd = numerator.gcd(denominator);
+		    numerator      = numerator.divide(gcd);
+		    denominator    = denominator.divide(gcd);
+		    
+		    ratio[0] = numerator;
+		    ratio[1] = denominator;
+		    
+		    return ratio;
+		}
+		else if(start_digits == 0)
+		{
+			BigDecimal a = new BigDecimal(decimal);
+			BigDecimal b = new BigDecimal(Math.pow(10, repeating_digits));
+			a            = a.multiply(b);
+			
+		    BigInteger numerator   = a.toBigInteger();
+		    BigInteger denominator = b.toBigInteger();
+		    denominator            = denominator.subtract(BigInteger.ONE);
+		    
+		    BigInteger gcd = numerator.gcd(denominator);
+		    numerator      = numerator.divide(gcd);
+		    denominator    = denominator.divide(gcd);
+			
+		    ratio[0] = numerator;
+		    ratio[1] = denominator;
+			
+		    return ratio;	
+		}
+		else
+		{
+		    BigDecimal a = new BigDecimal(decimal);
+		    BigDecimal b = new BigDecimal(Math.pow(10, start_digits));
+		    BigDecimal c = new BigDecimal(Math.pow(10, start_digits + repeating_digits));
+		  
+		    BigDecimal d = a.multiply(b);
+		    BigDecimal e = a.multiply(c);
+		    
+		    BigInteger f = d.toBigInteger();
+		    BigInteger g = e.toBigInteger();
+		    BigDecimal h = c.subtract(b);
+		    
+		    
+		    BigInteger numerator   = g.subtract(f);
+		    BigInteger denominator = h.toBigInteger();
+			
+		    BigInteger gcd = numerator.gcd(denominator);
+		    numerator      = numerator.divide(gcd);
+		    denominator    = denominator.divide(gcd);
+			
+			ratio[0] = numerator;
+			ratio[1] = denominator;
+			
+		    return ratio;	
+		}
+	}
+	
 	
 	public static boolean isProbablePrime(long n)
 	{
@@ -2970,6 +3091,46 @@ public class CodeMapper
 		return result;
 	}
 	
+	/*
+	public static BigInteger [] getArithmeticOffset(byte [] src, int [] freq)
+	{
+		 boolean [] isSymbol = new boolean[256];
+		 
+		    
+		 for(int i = 0; i < src.length; i++)
+		 {
+		    	 int j = src[i];
+		    	 if(j < 0)
+		    	    	j += 256;
+		    	 isSymbol[j] = true;
+		    	 freq[j]++;
+		 }
+		 
+		 int number_of_symbols = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		     if(isSymbol[i]) 
+		    	     number_of_symbols++; 
+		 }
+		    
+		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+		 int [] f = new int[number_of_symbols];
+		    
+		 int j = 0;
+		 for(int i = 0; i < 256; i++)
+		 {
+		    	if(isSymbol[i])
+		    	{
+		    	    	symbol_table.put(i, j);
+		    	    	f[j] = freq[i];
+		    	    	j++;
+		    	}
+		 }
+		 
+		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
+		 return offset;
+	}
+	*/
 	
 	public static BigInteger [] getArithmeticOffset(byte [] src)
 	{
@@ -3010,19 +3171,14 @@ public class CodeMapper
 		 return offset;
 	}
 	
-	// This method modifies the input frequency table as well as returning the offset.
-	public static BigDecimal getArithmeticOffset(byte [] src, int [] frequency)
+	public static BigInteger[] getArithmeticOffset(byte [] src, byte [] frequency)
 	{
 		 boolean [] isSymbol   = new boolean[256];
-		 int     [] frequency2 = new int[256];
-		    
-		 for(int i = 0; i < src.length; i++)
+		
+		 for(int i = 0; i < 256; i++)
 		 {
-		    	 int j = src[i];
-		    	 if(j < 0)
-		    	    	j += 256;
-		    	 isSymbol[j] = true;
-		    	 frequency2[j]++;
+			 if(frequency[i] != 0)
+		    	     isSymbol[i] = true;
 		 }
 		 
 		 int number_of_symbols = 0;
@@ -3041,18 +3197,15 @@ public class CodeMapper
 		    	if(isSymbol[i])
 		    	{
 		    	    	symbol_table.put(i, j);
-		    	    	f[j] = frequency2[i];
+		    	    	f[j] = frequency[i];
+		    	    	if(f[j] < 0)
+		    	    		f[j] += 256;
 		    	    	j++;
 		    	}
 		 }
 		 
-		 BigInteger [] offset     = getArithmeticOffset(src, symbol_table, f);
-		 BigDecimal normal_offset = getNormalFraction(offset[0], offset[1]);
-		 
-		 for(int i = 0; i < frequency.length; i++)
-			 frequency[i] -= frequency2[i];
-		 
-		 return normal_offset;
+		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
+		 return offset;
 	}
 	
 	
@@ -4257,10 +4410,276 @@ public class CodeMapper
 	    return result;
 	}
 	
+	public static byte [] getArithmeticValues(BigInteger [] v, byte [] frequency, int n)
+	{
+		byte [] value = new byte[n];
+		
+		boolean [] isSymbol = new boolean[256];
+	    
+		int number_of_symbols = 0;
+		for(int i = 0; i < frequency.length; i++)
+	    {
+	    	    if(frequency[i] != 0)
+	    	    {
+	    	        isSymbol[i] = true;
+	    	        number_of_symbols++;
+	    	    }
+	    }
+		int [] f = new int[number_of_symbols];
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	    
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    inverse_table.put(j,  i);
+	    	    	    f[j] = frequency[i];
+	    	    	    if(f[j] < 0)
+	    	    	    	    f[j] += 256;
+	    	    	    j++;
+	    	    }
+	    }
+	    
+        int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m    += f[i];
+		}	
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	        
+				        j        = inverse_table.get(j);
+				        value[i] = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return value;
+	}
+	
 	
 	public static byte [] getArithmeticValues(BigDecimal fraction, int [] frequency, int n)
 	{
 		BigInteger [] v = getQuotient(fraction);
+		
+		byte [] value = new byte[n];
+		
+		boolean [] isSymbol = new boolean[256];
+	    
+		int number_of_symbols = 0;
+		for(int i = 0; i < frequency.length; i++)
+	    {
+	    	    if(frequency[i] != 0)
+	    	    {
+	    	        isSymbol[i] = true;
+	    	        number_of_symbols++;
+	    	    }
+	    }
+		int [] f = new int[number_of_symbols];
+	    
+	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
+	    
+	 
+	    int j = 0;
+	    for(int i = 0; i < 256; i++)
+	    {
+	    	    if(isSymbol[i])
+	    	    {
+	    	    	    symbol_table.put(i, j);
+	    	    	    inverse_table.put(j,  i);
+	    	    	    f[j] = frequency[i];
+	    	    	    j++;
+	    	    }
+	    }
+	    
+        int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m    += f[i];
+		}	
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+	
+		for(int i = 0; i < n; i++)
+		{
+			BigInteger [] w = new BigInteger[] {v[0], v[1]};
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+				    BigInteger [] lower = new BigInteger [] {range[0], range[1]};
+				    lower[0]            = lower[0].multiply(BigInteger.valueOf(s[j]));
+				    lower[1]            = lower[1].multiply(BigInteger.valueOf(m));
+				   
+				    BigInteger [] upper = new BigInteger [] {range[0], lower[1]};
+				    upper[0]            = upper[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+				    
+				    BigInteger [] a     = new BigInteger [] {lower[0], lower[1]};
+    	                BigInteger [] b     = new BigInteger [] {w[0], w[1]};
+    	                BigInteger [] c     = new BigInteger [] {upper[0], upper[1]};
+				
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+					    BigInteger [] addend = new BigInteger [] {range[0], range[1]};
+					    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
+					    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
+					
+					    offset[0]            = offset[0].multiply(addend[1]);
+					    offset[0]            = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1]            = offset[1].multiply(addend[1]);
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				  
+				        range[0]         = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1]         = range[1].multiply(BigInteger.valueOf(m));
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+		    	        
+				        j        = inverse_table.get(j);
+				        value[i] = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+		return value;
+	}
+	
+	public static byte [] getArithmeticValues(String fraction, int start_bits, int repeat_bits, int [] frequency, int n)
+	{
+		System.out.println("Got here 1.");
+	
+		BigInteger [] v = getRatio2(fraction, start_bits, repeat_bits);
+		
+		System.out.println("Got here 2.");
+		System.out.println();
 		
 		byte [] value = new byte[n];
 		
