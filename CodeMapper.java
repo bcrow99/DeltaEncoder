@@ -2454,9 +2454,11 @@ public class CodeMapper
 		}
 		else
 		{
+			
 		    BigDecimal a = new BigDecimal(decimal);
-		    BigDecimal b = new BigDecimal(Math.pow(10, start_digits));
-		    BigDecimal c = new BigDecimal(Math.pow(10, start_digits + repeating_digits));
+		    BigDecimal b = a.pow(start_digits);
+		    BigDecimal c = a.pow(start_digits + repeating_digits);
+		    
 		  
 		    BigDecimal d = a.multiply(b);
 		    BigDecimal e = a.multiply(c);
@@ -2469,10 +2471,16 @@ public class CodeMapper
 		    BigInteger numerator   = g.subtract(f);
 		    BigInteger denominator = h.toBigInteger();
 			
+		   
 		    BigInteger gcd = numerator.gcd(denominator);
-		    numerator      = numerator.divide(gcd);
-		    denominator    = denominator.divide(gcd);
+		    
+		    if(gcd.compareTo(BigInteger.ZERO) != 0)
+		    {
+		        numerator      = numerator.divide(gcd);
+		        denominator    = denominator.divide(gcd);
+		    }
 			
+		    
 			ratio[0] = numerator;
 			ratio[1] = denominator;
 			

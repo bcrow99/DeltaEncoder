@@ -33,7 +33,7 @@ public class SimpleWriter
 	
 	int delta_type      = 5;
 	
-	boolean precompress = true;
+	boolean precompress = false;
 	int deflate_type    = 0;
 	
 	double scale       = 1.;
@@ -1317,6 +1317,38 @@ public class SimpleWriter
 						}
 					} 
 					
+					BigDecimal numerator   = new BigDecimal(offset[0][0]);
+					BigDecimal denominator = new BigDecimal(offset[0][1]);
+					
+					
+					
+					
+					ArrayList <BigInteger> prime_factors = CodeMapper.getPrimeFactors(offset[0][1]);
+					
+					int number_of_nonrepeating_digits = 0;
+					for(k = 0; k < prime_factors.size(); k++)
+					{
+						BigInteger factor = prime_factors.get(k);
+						if(factor.compareTo(BigInteger.TWO) == 0)
+							number_of_nonrepeating_digits++;
+						if(factor.compareTo(BigInteger.valueOf(5)) == 0)
+							number_of_nonrepeating_digits++;
+					}
+					
+				    System.out.println("Number of nonrepeating digits is " + number_of_nonrepeating_digits);
+					
+					int scale = 2 * number_of_nonrepeating_digits;
+					
+					BigDecimal fraction = numerator.divide(denominator, scale, RoundingMode.HALF_EVEN);
+					System.out.println("Fraction is " + fraction);
+					String fraction_string = fraction.toString();
+					System.out.println("String is " + fraction_string);
+				    
+				    BigInteger[] offset2 = CodeMapper.getRatio2(fraction_string, scale / 2, scale / 2);
+				    
+				    System.out.println("Exact denominator is " + offset[0][1]);
+				    System.out.println("Aprox denominator is " + offset[0][1]);
+					
 					long stop = System.nanoTime();
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to get arithmetic offsets for channel " + i);
@@ -1389,31 +1421,30 @@ public class SimpleWriter
                     }
 					
 					Deflater deflater;
+				
+					byte [] frequency_bytes = new byte[number_of_segments * 256];
 					
-					if(deflate_type == 0)
-						deflater = new Deflater(Deflater.BEST_COMPRESSION);
-					else if(deflate_type == 1)
-						deflater = new Deflater(Deflater.HUFFMAN_ONLY);
-					else
-						deflater = new Deflater(Deflater.FILTERED);
-
+					int frequency_offset = 0;
 					
-					byte [] zipped_data = new byte[2 * string.length];
+					for(k = 0; k < number_of_segments; k++)
+					{
+						for(m = 0; m < frequency[k].length; m++)
+							frequency_bytes[frequency_offset + m] = frequency[k][m];	
+						frequency_offset += frequency[k].length;
+					}
+					
+					/*
+					zipped_data = new byte[2 * string.length];
 					deflater.setInput(string);
 					
-					
-					//byte [] delta_bytes = (byte[]) delta_list.get(i);
-					//byte [] zipped_data = new byte[2 * delta_bytes.length];
-					//deflater.setInput(delta_bytes);
-					
-					
 					deflater.finish();
-					int zipped_length = deflater.deflate(zipped_data);
+					zipped_length = deflater.deflate(zipped_data);
 					deflater.end();
 					
 					
 					out.writeInt(zipped_length);
 					out.write(zipped_data, 0, zipped_length);
+					*/
 				}
 
 				out.flush();
