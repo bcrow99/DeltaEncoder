@@ -2436,6 +2436,7 @@ public class CodeMapper
 		else if(start_digits == 0)
 		{
 			BigDecimal a = new BigDecimal(decimal);
+			
 			BigDecimal b = new BigDecimal(Math.pow(10, repeating_digits));
 			a            = a.multiply(b);
 			
@@ -2456,9 +2457,12 @@ public class CodeMapper
 		{
 			
 		    BigDecimal a = new BigDecimal(decimal);
-		    BigDecimal b = a.pow(start_digits);
-		    BigDecimal c = a.pow(start_digits + repeating_digits);
-		    
+		    BigDecimal b = BigDecimal.TEN;
+		    for(int i = 1; i < start_digits; i++)
+		    	    b = b.multiply(BigDecimal.TEN);
+		    BigDecimal c = BigDecimal.TEN;
+		    for(int i = 1; i < start_digits + repeating_digits; i++)
+	    	        c = c.multiply(BigDecimal.TEN);
 		  
 		    BigDecimal d = a.multiply(b);
 		    BigDecimal e = a.multiply(c);
