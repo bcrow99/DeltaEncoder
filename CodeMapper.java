@@ -2047,6 +2047,81 @@ public class CodeMapper
 	}
 	
 	
+	public static int [] getDigits(long a, long b)
+	{
+		ArrayList <Long> prime_factors = getPrimeFactors(b);
+		
+		int c = 0;
+		
+		long q = 1;
+		for(int i = 0; i < prime_factors.size(); i++)
+		{
+			long factor = prime_factors.get(i);
+			if(factor == 2 || factor == 5)
+				c++;
+			else
+				q *= factor;
+		}
+		
+		int        d = 1;
+		BigInteger k = BigInteger.TEN;
+		BigInteger m = BigInteger.valueOf(q);
+		
+		while(k.compareTo(m) == -1)
+		{
+			d++;
+			k = k.multiply(BigInteger.TEN);
+		}
+		k = k.subtract(BigInteger.ONE);
+		
+		while(k.mod(m).compareTo(BigInteger.ZERO) != 0)
+		{
+			d++;
+			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
+		}
+		
+		int [] digits = {c, d};
+		return digits;
+	}
+	
+	public static int [] getDigits(BigInteger a, BigInteger b)
+	{
+		ArrayList <BigInteger> prime_factors = getPrimeFactors(b);
+		
+		int c = 0;
+		
+		BigInteger q = BigInteger.ONE;
+		for(int i = 0; i < prime_factors.size(); i++)
+		{
+			BigInteger factor = prime_factors.get(i);
+			
+			if((factor.compareTo(BigInteger.TWO) == 0) || (factor.compareTo(BigInteger.valueOf(5)) == 0))
+				c++;
+			else
+				q = q.multiply(factor);
+		}
+		
+		int        d = 1;
+		BigInteger k = BigInteger.TEN;
+		
+		
+		while(k.compareTo(q) == -1)
+		{
+			d++;
+			k = k.multiply(BigInteger.TEN);
+		}
+		k = k.subtract(BigInteger.ONE);
+		
+		while(k.mod(q).compareTo(BigInteger.ZERO) != 0)
+		{
+			d++;
+			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
+		}
+		
+		int [] digits = {c, d};
+		return digits;
+	}
+	
 	public static ArrayList long_divide(BigInteger a, BigInteger b)
 	{
 		ArrayList result = new ArrayList();	
@@ -2285,6 +2360,127 @@ public class CodeMapper
 		return result;
 	}
 	
+	public static ArrayList long_divide(long a, long b)
+	{
+		
+		ArrayList result = new ArrayList();
+		
+		StringBuffer fraction = new StringBuffer();
+		fraction.append('0');
+		fraction.append('.');
+		
+		ArrayList <Long> quotient_list = new ArrayList <Long>();
+		ArrayList <Long> remainder_list = new ArrayList <Long>();
+		
+		
+		quotient_list.add(0L);
+		remainder_list.add(a);
+		
+		a *= 10;
+		while(a < b)
+		{
+			fraction.append('0');
+			quotient_list.add(0L);
+			remainder_list.add(a);	
+			a *= 10;
+		}
+		
+		long c = a / b;
+		long d = a % b;
+		String c_string = String.valueOf(c);
+		fraction.append(c_string);
+		
+		if(d == 0L)
+		{
+			int number_of_start_digits = c_string.length();
+			int number_of_repeating_digits = 0;
+			
+			result.add(fraction.toString());
+			result.add(number_of_start_digits);
+			result.add(number_of_repeating_digits);
+			return result;
+		}
+		
+		if(remainder_list.contains(d))
+		{
+		    int index            = remainder_list.indexOf(d);	
+		    int number_of_digits = fraction.length() - 2;
+		    
+		    if(!quotient_list.contains(c))
+		    {
+		    	    int number_of_start_digits = index; 
+		    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
+		    	    result.add(fraction.toString());
+				result.add(number_of_start_digits);
+				result.add(number_of_repeating_digits);
+				return result;	
+		    }
+		    else
+		    {
+		    	    int number_of_repeating_digits = number_of_digits - index;
+				int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
+				result.add(fraction.toString());
+				result.add(number_of_start_digits);
+				result.add(number_of_repeating_digits);
+				return result;	
+		    }
+		}
+		
+		quotient_list.add(c);
+		remainder_list.add(d);
+		
+		while(d != 0)
+		{
+			a = d * 10;
+			c = a / b;
+			d = a % b;
+			
+			c_string = String.valueOf(c);
+			fraction.append(c_string);
+			
+			if(d == 0)
+			{
+				int number_of_start_digits = fraction.length() - 2;
+				int number_of_repeating_digits = 0;
+				
+				result.add(fraction.toString());
+				result.add(number_of_start_digits);
+				result.add(number_of_repeating_digits);
+				return result;
+			}
+			if(remainder_list.contains(d))
+			{
+			    int index            = remainder_list.indexOf(d);	
+			    int number_of_digits = fraction.length() - 2;
+			    
+			    if(!quotient_list.contains(c))
+			    {
+			    	    int number_of_start_digits = index; 
+			    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
+			    	    result.add(fraction.toString());
+					result.add(number_of_start_digits);
+					result.add(number_of_repeating_digits);
+					return result;	
+			    }
+			    else
+			    {
+			    	    int number_of_repeating_digits = number_of_digits - index;
+					int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
+					result.add(fraction.toString());
+					result.add(number_of_start_digits);
+					result.add(number_of_repeating_digits);
+					return result;	
+			    }
+			    
+			   
+			}
+			quotient_list.add(c);
+			remainder_list.add(d);
+		}
+		
+		return result;
+	}
+	
 	
 	public static int [] getRatio(String decimal, int start_digits, int repeating_digits)
 	{
@@ -2343,72 +2539,6 @@ public class CodeMapper
 		    return ratio;	
 		}
 	}
-	
-	
-	/*
-	public static int [] getRatio(String decimal, int start_digits, int repeating_digits)
-	{
-		int [] ratio = new int[2];
-		ratio[0] = 1;
-		ratio[1] = 2;
-		if(repeating_digits == 0)
-		{
-		    int denominator  = (int)Math.pow(10, start_digits);
-		    double value = Double.parseDouble(decimal);
-		    value *= denominator;
-		    int numerator = (int)Math.floor(value);
-		    
-		    int gcd = gcd(numerator, denominator);
-		    
-		    numerator /= gcd;
-		    denominator /= gcd;
-		    
-		    ratio[0] = numerator;
-		    ratio[1] = denominator;
-		    
-		    return ratio;
-		}
-		else if(start_digits == 0)
-		{
-			int factor   = (int)Math.pow(10, repeating_digits);
-			double value = Double.parseDouble(decimal);
-		    value       *= factor;
-		    
-		    int denominator = factor - 1;
-		    int numerator   = (int)value;
-		    
-            int gcd = gcd(numerator, denominator);
-		    
-		    numerator /= gcd;
-		    denominator /= gcd;
-		    
-		    ratio[0] = numerator;
-		    ratio[1] = denominator;
-			
-		    return ratio;	
-		}
-		else
-		{
-			double value   = Double.parseDouble(decimal);
-			int    factor1 = (int)Math.pow(10, start_digits);
-			double a       = Math.floor(factor1 * value);
-			int    factor2 = (int)Math.pow(10, start_digits + repeating_digits);
-			double b       = factor2 * value;
-			double c       = b - a;
-			
-			int numerator = (int)Math.floor(c);
-			int denominator = factor2 - factor1;
-			int gcd = gcd(numerator, denominator);
-			numerator /= gcd;
-			denominator /= gcd;
-			ratio[0] = numerator;
-			ratio[1] = denominator;
-			
-		    return ratio;	
-		}
-	}
-	*/
-	
 	
 	public static BigInteger [] getRatio2(String decimal, int start_digits, int repeating_digits)
 	{
