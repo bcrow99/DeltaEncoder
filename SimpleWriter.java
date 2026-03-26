@@ -1248,10 +1248,15 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					
+					int minimum_number_of_segments       = 500;
 					int number_of_processors             = Runtime.getRuntime().availableProcessors();
-					int number_of_segments_per_processor = 4;
+					int number_of_segments_per_processor = 1;
+					
+					while(number_of_processors * number_of_segments_per_processor < minimum_number_of_segments)
+						number_of_segments_per_processor++;
 					int number_of_segments               = number_of_processors * number_of_segments_per_processor;
+					
+					System.out.println("Number of segments is " + number_of_segments);
 					
 					int segment_length     = string.length / number_of_segments;
 					int odd_segment_length = segment_length + string.length % number_of_segments;
@@ -1316,118 +1321,6 @@ public class SimpleWriter
 							}
 						}
 					} 
-					
-					
-					long numerator = 31;
-					long denominator = 678;
-					
-					ArrayList <Long> prime_factors = CodeMapper.getPrimeFactors(denominator);
-					int p = 0;
-					
-					long q = 1;
-					for(k = 0; k < prime_factors.size(); k++)
-					{
-						long factor = prime_factors.get(k);
-						if(factor == 2 || factor == 5)
-							p++;
-						else
-							q *= factor;
-					}
-					
-					System.out.println("Number of start digits generated from prime factors is " + p);
-					ArrayList result = CodeMapper.long_divide(numerator, denominator);
-					
-					p = (int)result.get(1);
-					System.out.println("Number of start digits generated from long division is " + p);
-					
-					p = (int)result.get(2);
-					System.out.println("Number of repeating digits generated from long division is " + p);
-					
-					System.out.println("Denominator is " + denominator + ", q is " + q);
-					
-					long value = (long)Math.pow(10, p);
-					value--;
-					
-					long mod_value = value % q;
-					System.out.println("Mod value is " + mod_value);
-					
-					/*
-					k = 1;
-					
-					
-					long value = (long)(Math.pow(10, k) - 1);
-					while(value < q)
-					{
-						k++;
-						value = (long)(Math.pow(10, k) - 1);
-					}
-					
-					while(value % q != 0)
-					{
-						k++;
-						value = (long)(Math.pow(10, k) - 1);
-						System.out.println("k = " + k);
-					}
-					
-					int number_of_repeating_digits = k;
-					
-					double fraction = (double)numerator;
-					fraction /= (double)denominator;
-					
-					String fraction_string = Double.toString(fraction);
-					
-					int [] ratio = CodeMapper.getRatio(fraction_string, number_of_nonrepeating_digits, number_of_repeating_digits);
-					
-					System.out.println("Numerator is " + numerator + ", denominator is " + denominator);
-					System.out.println("Ratio from string is " + ratio[0] + ":" + ratio[0]);
-					*/
-					
-					/*
-					BigDecimal numerator   = new BigDecimal(offset[0][0]);
-					BigDecimal denominator = new BigDecimal(offset[0][1]);
-					
-					
-					ArrayList <BigInteger> prime_factors = CodeMapper.getPrimeFactors(offset[0][1]);
-					
-					int number_of_nonrepeating_digits = 0;
-					
-					BigInteger q = BigInteger.ONE;
-					for(k = 0; k < prime_factors.size(); k++)
-					{
-						BigInteger factor = prime_factors.get(k);
-						if(factor.compareTo(BigInteger.TWO) == 0)
-							number_of_nonrepeating_digits++;
-						else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
-							number_of_nonrepeating_digits++;
-						else
-							q = q.multiply(factor);
-					}
-					
-					k = 1;
-				 
-					BigInteger value = BigInteger.TEN.pow(k).subtract(BigInteger.ONE);
-					while(value.compareTo(q) == -1)
-					{
-						k++;
-						value = BigInteger.TEN.pow(k).subtract(BigInteger.ONE);
-					}
-					
-					
-				    System.out.println("Number of nonrepeating digits is " + number_of_nonrepeating_digits);
-				    System.out.println("Number of repeating digits is " + k);
-					
-					int scale = number_of_nonrepeating_digits + k;
-					
-					BigDecimal fraction = numerator.divide(denominator, scale, RoundingMode.HALF_EVEN);
-					System.out.println("Fraction is " + fraction);
-					String fraction_string = fraction.toString();
-					System.out.println("String is " + fraction_string);
-				    
-				    BigInteger[] foo = CodeMapper.getRatio2(fraction_string, number_of_nonrepeating_digits, k);
-				    
-				    System.out.println("Exact denominator is " + offset[0][1]);
-				    System.out.println("Aprox denominator is " + foo[0]);
-					*/
 					
 					
 					long stop = System.nanoTime();
@@ -1501,7 +1394,6 @@ public class SimpleWriter
                       	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
                     }
 					
-					Deflater deflater;
 				
 					byte [] frequency_bytes = new byte[number_of_segments * 256];
 					
@@ -1514,18 +1406,25 @@ public class SimpleWriter
 						frequency_offset += frequency[k].length;
 					}
 					
-					/*
-					zipped_data = new byte[2 * string.length];
+					Deflater deflater;
+					if(deflate_type == 0)
+						deflater = new Deflater(Deflater.BEST_COMPRESSION);
+					else if(deflate_type == 1)
+						deflater = new Deflater(Deflater.HUFFMAN_ONLY);
+					else
+						deflater = new Deflater(Deflater.FILTERED);
+					
+					byte [] zipped_data = new byte[2 * string.length];
 					deflater.setInput(string);
 					
 					deflater.finish();
-					zipped_length = deflater.deflate(zipped_data);
+					int zipped_length = deflater.deflate(zipped_data);
 					deflater.end();
 					
 					
 					out.writeInt(zipped_length);
 					out.write(zipped_data, 0, zipped_length);
-					*/
+					
 				}
 
 				out.flush();
