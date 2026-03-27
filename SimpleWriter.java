@@ -78,8 +78,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 
-		//String prefix = new String("C:/Users/bcrow/Desktop/");
-		String prefix = new String("");
+		String prefix = new String("C:/Users/bcrow/Desktop/");
+		//String prefix = new String("");
 		String filename = new String(args[0]);
 
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -1248,7 +1248,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_number_of_segments       = 2048;
+					int minimum_number_of_segments       = 1024;
 					int number_of_processors             = Runtime.getRuntime().availableProcessors();
 					int number_of_segments_per_processor = 1;
 					
@@ -1335,6 +1335,10 @@ public class SimpleWriter
 					BigInteger a = offset[0][0];
 					BigInteger b = offset[0][1];
 				
+					byte [] a_bytes = a.toByteArray();
+					byte [] b_bytes = b.toByteArray();
+					
+					int integer_length = a_bytes.length + b_bytes.length;
 					
 				
 					ArrayList result = CodeMapper.long_divide(a, b);
@@ -1342,11 +1346,11 @@ public class SimpleWriter
 					String fraction_string = (String)result.get(0);
 					int start_digits = (int)result.get(1);
 					int repeat_digits = (int)result.get(2);
-					System.out.println("Start digits from long division are " + start_digits + ", repeating digits are " + repeat_digits);
+					//System.out.println("Start digits from long division are " + start_digits + ", repeating digits are " + repeat_digits);
 					
 					
 					int [] digit = CodeMapper.getDigits(a, b);
-					System.out.println("Start digits from factorization are " + digit[0] + ", repeating digits are " + digit[1]);
+					//System.out.println("Start digits from factorization are " + digit[0] + ", repeating digits are " + digit[1]);
 					
 					int scale = digit[0] + digit[1];
 					
@@ -1355,20 +1359,26 @@ public class SimpleWriter
 					
 					BigDecimal fraction = c.divide(d, scale + 1, RoundingMode.HALF_DOWN);
 					
+					BigInteger e = fraction.unscaledValue();
+					
+					byte [] fraction_bytes = e.toByteArray();
+					
+					int decimal_length = fraction_bytes.length;
+					decimal_length += 4;
+					
+					System.out.println("Integer length is " + integer_length + ", decimal length is " + decimal_length);
+					
+					
+					
 					String fraction_string2 = fraction.toPlainString();
 					
-					System.out.println("Fraction is " + fraction_string);
-					System.out.println("Fraction is " + fraction_string2);
+					
 					
 					BigInteger [] ratio = CodeMapper.getRatio2(fraction_string2, digit[0], digit[1]);
 					//BigInteger [] ratio = CodeMapper.getRatio2(fraction_string, start_digits, repeat_digits);
 					
 					
-					System.out.println("Numerator is    " + a);
-					System.out.println("Numerator2 is   " + ratio[0]);
-					
-					System.out.println("Denominator is  " + b);
-					System.out.println("Denominator2 is " + ratio[1]);
+				
 				
 					
 					System.out.println();
@@ -1395,10 +1405,10 @@ public class SimpleWriter
 							{
 						        decoder_thread[n].join();
 							}
-							catch(Exception e)
+							catch(Exception e2)
 							{
 								System.out.println("Exception waiting for thread to finish:");
-								System.out.println(e.toString());
+								System.out.println(e2.toString());
 							}
 						}
 					} 
