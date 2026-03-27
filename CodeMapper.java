@@ -2047,9 +2047,14 @@ public class CodeMapper
 	}
 	
 	
+	
 	public static int [] getDigits(long a, long b)
 	{
 		ArrayList <Long> prime_factors = getPrimeFactors(b);
+		
+		long gcd = gcd(a, b);
+		if(gcd > 1)
+			b /= gcd;
 		
 		int c = 0;
 		
@@ -2086,31 +2091,44 @@ public class CodeMapper
 	
 	public static int [] getDigits(BigInteger a, BigInteger b)
 	{
+		BigInteger gcd = a.gcd(b);
+		
+		if(gcd.compareTo(BigInteger.ONE) == 1)	
+		    b = b.divide(gcd);
+		
 		ArrayList <BigInteger> prime_factors = getPrimeFactors(b);
 		
 		int c = 0;
 		
+		int two_multiple = 0;
+		int five_multiple = 0;
 		BigInteger q = BigInteger.ONE;
 		for(int i = 0; i < prime_factors.size(); i++)
 		{
 			BigInteger factor = prime_factors.get(i);
 			
-			if((factor.compareTo(BigInteger.TWO) == 0) || (factor.compareTo(BigInteger.valueOf(5)) == 0))
-				c++;
+			if(factor.compareTo(BigInteger.TWO) == 0)
+				two_multiple++;
+			else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
+				five_multiple++;
 			else
 				q = q.multiply(factor);
 		}
+		
+		if(two_multiple > five_multiple)
+			c = two_multiple;
+		else
+			c = five_multiple;
 		
 		int        d = 1;
 		BigInteger k = BigInteger.TEN;
 		
 		
-		while(k.compareTo(q) == -1)
+		while(k.compareTo(q) < 1)
 		{
 			d++;
-			k = k.multiply(BigInteger.TEN);
+			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
 		}
-		k = k.subtract(BigInteger.ONE);
 		
 		while(k.mod(q).compareTo(BigInteger.ZERO) != 0)
 		{
@@ -2585,7 +2603,6 @@ public class CodeMapper
 		}
 		else
 		{
-			
 		    BigDecimal a = new BigDecimal(decimal);
 		    BigDecimal b = BigDecimal.TEN;
 		    for(int i = 1; i < start_digits; i++)
@@ -2599,21 +2616,21 @@ public class CodeMapper
 		    
 		    BigInteger f = d.toBigInteger();
 		    BigInteger g = e.toBigInteger();
+		    BigInteger numerator = g.subtract(f);
+		    
 		    BigDecimal h = c.subtract(b);
-		    
-		    
-		    BigInteger numerator   = g.subtract(f);
 		    BigInteger denominator = h.toBigInteger();
 			
-		   
 		    BigInteger gcd = numerator.gcd(denominator);
-		    
+		    numerator      = numerator.divide(gcd);
+	        denominator    = denominator.divide(gcd);
+		    /*
 		    if(gcd.compareTo(BigInteger.ZERO) != 0)
 		    {
 		        numerator      = numerator.divide(gcd);
 		        denominator    = denominator.divide(gcd);
 		    }
-			
+			*/
 		    
 			ratio[0] = numerator;
 			ratio[1] = denominator;
@@ -3121,58 +3138,6 @@ public class CodeMapper
 		result.add(offset);
 		result.add(frequency);
 		return result;
-		
-		
-		/*
-		BigDecimal [] offset   = new BigDecimal[number_of_segments];
-		int [][] frequency     = new int[number_of_segments][256];
-		 
-		int segment_length     = src.length / number_of_segments;
-		
-		int odd_segment_length = segment_length + src.length % number_of_segments;
-		
-        byte [][] segment  = new byte[number_of_segments][segment_length];
-        if(odd_segment_length != segment_length)
-        	    segment[number_of_segments - 1] = new byte[odd_segment_length];
-		
-        try
-        {
-           	int k = 0;
-    		    for(int i = 0; i < number_of_segments; i++)
-    		    {
-    			    for(int j = 0; j < segment[i].length; j++)
-    				    segment[i][j] = src[k++];
-    		    }
-        }
-        catch(Exception e)
-        {
-        	    System.out.println("Exception segmenting data.");
-        	    System.out.println(e.toString());
-        	    System.exit(0);
-        }
-		
-        int k = 0;
-        for(int i = 0; i < number_of_segments; i++)
-        {
-            int [] f = new int[256];
-            for(int j = 0; j < segment[i].length; j++)
-            {
-        	        int m = src[k++];
-        	        if(m < 0)
-        	    	        m += 256;
-        	        f[m]++;
-            }
-            frequency[i] = f;
-            //System.out.println("Getting offset for segment " + i);
-            offset[i] = getArithmeticOffset(segment[i], f);  
-        }
-		
-		ArrayList result = new ArrayList();
-		result.add(offset);
-		result.add(frequency);
-		
-		return result;
-		*/
 	}
 	
 	public static ArrayList getArithmeticOffsetList2(byte [] src, int number_of_segments)
@@ -3233,46 +3198,6 @@ public class CodeMapper
 		return result;
 	}
 	
-	/*
-	public static BigInteger [] getArithmeticOffset(byte [] src, int [] freq)
-	{
-		 boolean [] isSymbol = new boolean[256];
-		 
-		    
-		 for(int i = 0; i < src.length; i++)
-		 {
-		    	 int j = src[i];
-		    	 if(j < 0)
-		    	    	j += 256;
-		    	 isSymbol[j] = true;
-		    	 freq[j]++;
-		 }
-		 
-		 int number_of_symbols = 0;
-		 for(int i = 0; i < 256; i++)
-		 {
-		     if(isSymbol[i]) 
-		    	     number_of_symbols++; 
-		 }
-		    
-		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
-		 int [] f = new int[number_of_symbols];
-		    
-		 int j = 0;
-		 for(int i = 0; i < 256; i++)
-		 {
-		    	if(isSymbol[i])
-		    	{
-		    	    	symbol_table.put(i, j);
-		    	    	f[j] = freq[i];
-		    	    	j++;
-		    	}
-		 }
-		 
-		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
-		 return offset;
-	}
-	*/
 	
 	public static BigInteger [] getArithmeticOffset(byte [] src)
 	{
@@ -3349,7 +3274,6 @@ public class CodeMapper
 		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f);
 		 return offset;
 	}
-	
 	
 	// This method modifies the input frequency table as well as returning the offset.
 	public static BigInteger [] getArithmeticOffset2(byte [] src, int [] frequency)
@@ -4681,7 +4605,6 @@ public class CodeMapper
 		
 		return value;
 	}
-	
 	
 	public static byte [] getArithmeticValues(BigDecimal fraction, int [] frequency, int n)
 	{

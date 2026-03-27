@@ -1248,7 +1248,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_number_of_segments       = 500;
+					int minimum_number_of_segments       = 2048;
 					int number_of_processors             = Runtime.getRuntime().availableProcessors();
 					int number_of_segments_per_processor = 1;
 					
@@ -1259,6 +1259,8 @@ public class SimpleWriter
 					System.out.println("Number of segments is " + number_of_segments);
 					
 					int segment_length     = string.length / number_of_segments;
+					
+					System.out.println("Segment length is " + segment_length);
 					int odd_segment_length = segment_length + string.length % number_of_segments;
 			        byte    [][] segment   = new byte[number_of_segments][segment_length];
 					segment[number_of_segments - 1] = new byte[odd_segment_length];
@@ -1327,6 +1329,50 @@ public class SimpleWriter
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to get arithmetic offsets for channel " + i);
 					System.out.println();
+					
+					start = System.nanoTime();
+					
+					BigInteger a = offset[0][0];
+					BigInteger b = offset[0][1];
+				
+					
+				
+					ArrayList result = CodeMapper.long_divide(a, b);
+					
+					String fraction_string = (String)result.get(0);
+					int start_digits = (int)result.get(1);
+					int repeat_digits = (int)result.get(2);
+					System.out.println("Start digits from long division are " + start_digits + ", repeating digits are " + repeat_digits);
+					
+					
+					int [] digit = CodeMapper.getDigits(a, b);
+					System.out.println("Start digits from factorization are " + digit[0] + ", repeating digits are " + digit[1]);
+					
+					int scale = digit[0] + digit[1];
+					
+					BigDecimal c = new BigDecimal(a);
+					BigDecimal d = new BigDecimal(b);
+					
+					BigDecimal fraction = c.divide(d, scale + 1, RoundingMode.HALF_DOWN);
+					
+					String fraction_string2 = fraction.toPlainString();
+					
+					System.out.println("Fraction is " + fraction_string);
+					System.out.println("Fraction is " + fraction_string2);
+					
+					BigInteger [] ratio = CodeMapper.getRatio2(fraction_string2, digit[0], digit[1]);
+					//BigInteger [] ratio = CodeMapper.getRatio2(fraction_string, start_digits, repeat_digits);
+					
+					
+					System.out.println("Numerator is    " + a);
+					System.out.println("Numerator2 is   " + ratio[0]);
+					
+					System.out.println("Denominator is  " + b);
+					System.out.println("Denominator2 is " + ratio[1]);
+				
+					
+					System.out.println();
+					
 					
                     start = System.nanoTime();
 					
