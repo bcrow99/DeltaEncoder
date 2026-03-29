@@ -64,7 +64,7 @@ public class SimpleWriter
 	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
 	
 	BigInteger [][] offset;
-	byte       [][] frequency;
+	int       [][] frequency;
 	byte       [][] decoded_segment;
 	
 
@@ -1248,7 +1248,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_number_of_segments       = 1024;
+					int minimum_number_of_segments       = 64;
 					int number_of_processors             = Runtime.getRuntime().availableProcessors();
 					int number_of_segments_per_processor = 1;
 					
@@ -1264,7 +1264,7 @@ public class SimpleWriter
 					int odd_segment_length = segment_length + string.length % number_of_segments;
 			        byte    [][] segment   = new byte[number_of_segments][segment_length];
 					segment[number_of_segments - 1] = new byte[odd_segment_length];
-					frequency  = new byte[number_of_segments][256];
+					frequency  = new int [number_of_segments][256];
 					
 					decoded_segment   = new byte[number_of_segments][segment_length];
 					decoded_segment[number_of_segments - 1] = new byte[odd_segment_length];
@@ -1324,64 +1324,9 @@ public class SimpleWriter
 						}
 					} 
 					
-					
 					long stop = System.nanoTime();
 					long time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to get arithmetic offsets for channel " + i);
-					System.out.println();
-					
-					start = System.nanoTime();
-					
-					BigInteger a = offset[0][0];
-					BigInteger b = offset[0][1];
-				
-					byte [] a_bytes = a.toByteArray();
-					byte [] b_bytes = b.toByteArray();
-					
-					int integer_length = a_bytes.length + b_bytes.length;
-					
-				
-					ArrayList result = CodeMapper.long_divide(a, b);
-					
-					String fraction_string = (String)result.get(0);
-					int start_digits = (int)result.get(1);
-					int repeat_digits = (int)result.get(2);
-					//System.out.println("Start digits from long division are " + start_digits + ", repeating digits are " + repeat_digits);
-					
-					
-					int [] digit = CodeMapper.getDigits(a, b);
-					//System.out.println("Start digits from factorization are " + digit[0] + ", repeating digits are " + digit[1]);
-					
-					int scale = digit[0] + digit[1];
-					
-					BigDecimal c = new BigDecimal(a);
-					BigDecimal d = new BigDecimal(b);
-					
-					BigDecimal fraction = c.divide(d, scale + 1, RoundingMode.HALF_DOWN);
-					
-					BigInteger e = fraction.unscaledValue();
-					
-					byte [] fraction_bytes = e.toByteArray();
-					
-					int decimal_length = fraction_bytes.length;
-					decimal_length += 4;
-					
-					System.out.println("Integer length is " + integer_length + ", decimal length is " + decimal_length);
-					
-					
-					
-					String fraction_string2 = fraction.toPlainString();
-					
-					
-					
-					BigInteger [] ratio = CodeMapper.getRatio2(fraction_string2, digit[0], digit[1]);
-					//BigInteger [] ratio = CodeMapper.getRatio2(fraction_string, start_digits, repeat_digits);
-					
-					
-				
-				
-					
-					System.out.println();
+					System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
 					
 					
                     start = System.nanoTime();
@@ -1416,7 +1361,7 @@ public class SimpleWriter
 					stop = System.nanoTime();
 					time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
-					System.out.println();
+					
 					
 					byte [] string2 = new byte[string.length];
 					int     string_offset = 0;
@@ -1449,8 +1394,9 @@ public class SimpleWriter
                     	    System.out.println("String length is " + string.length);
                       	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
                     }
-					
-				
+                    System.out.println();
+				 
+                    /*
 					byte [] frequency_bytes = new byte[number_of_segments * 256];
 					
 					int frequency_offset = 0;
@@ -1461,7 +1407,8 @@ public class SimpleWriter
 							frequency_bytes[frequency_offset + m] = frequency[k][m];	
 						frequency_offset += frequency[k].length;
 					}
-					
+					*/
+                    
 					Deflater deflater;
 					if(deflate_type == 0)
 						deflater = new Deflater(Deflater.BEST_COMPRESSION);
@@ -1505,10 +1452,10 @@ public class SimpleWriter
 	class ArithmeticEncoder implements Runnable
 	{
 		byte [] src;
-		byte [] frequency;
+		int [] frequency;
 		int     index;
 
-		public ArithmeticEncoder(byte [] src, byte [] frequency, int index)
+		public ArithmeticEncoder(byte [] src, int [] frequency, int index)
 		{
 			this.src       = src;
 			this.frequency = frequency;
@@ -1525,11 +1472,11 @@ public class SimpleWriter
 	class ArithmeticDecoder implements Runnable
 	{
 		BigInteger [] quotient;
-		byte []       frequency;
+		int []       frequency;
 		int           n;
 		int           index;
 
-		public ArithmeticDecoder(BigInteger [] quotient, byte [] frequency, int n, int index)
+		public ArithmeticDecoder(BigInteger [] quotient, int [] frequency, int n, int index)
 		{
 			this.quotient  = quotient;
 			this.frequency = frequency;

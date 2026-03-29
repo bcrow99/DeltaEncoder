@@ -3238,7 +3238,7 @@ public class CodeMapper
 		 return offset;
 	}
 	
-	public static BigInteger[] getArithmeticOffset(byte [] src, byte [] frequency)
+	public static BigInteger[] getArithmeticOffset(byte [] src, int [] frequency)
 	{
 		 boolean [] isSymbol   = new boolean[256];
 		
@@ -4476,7 +4476,7 @@ public class CodeMapper
 	    return result;
 	}
 	
-	public static byte [] getArithmeticValues(BigInteger [] v, byte [] frequency, int n)
+	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
 	{
 		byte [] value = new byte[n];
 		
