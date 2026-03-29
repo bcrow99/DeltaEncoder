@@ -53,7 +53,6 @@ public class SimpleWriter
 	int[] number_of_segments;
 	byte[] channel_iterations;
 	
-	
 	int[] max_bytelength;
 	int [] min_bytelength;
 
@@ -64,9 +63,8 @@ public class SimpleWriter
 	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
 	
 	BigInteger [][] offset;
-	int       [][] frequency;
+	int        [][] frequency;
 	byte       [][] decoded_segment;
-	
 
 	boolean initialized = false;
 
@@ -78,8 +76,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("C:/Users/bcrow/Desktop/");
-		//String prefix = new String("");
+		//String prefix = new String("C:/Users/bcrow/Desktop/");
+		String prefix = new String("");
 		String filename = new String(args[0]);
 
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -1248,7 +1246,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_number_of_segments       = 64;
+					int minimum_number_of_segments       = 32;
 					int number_of_processors             = Runtime.getRuntime().availableProcessors();
 					int number_of_segments_per_processor = 1;
 					
@@ -1452,9 +1450,9 @@ public class SimpleWriter
 	class ArithmeticEncoder implements Runnable
 	{
 		byte [] src;
-		int [] frequency;
+		int  [] frequency;
 		int     index;
-
+       
 		public ArithmeticEncoder(byte [] src, int [] frequency, int index)
 		{
 			this.src       = src;
@@ -1464,15 +1462,48 @@ public class SimpleWriter
 
 		public void run()
 		{
-			BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, frequency);
-		    offset[index] = quotient;
+			boolean [] isSymbol   = new boolean[256];
+			
+			 for(int i = 0; i < 256; i++)
+			 {
+				 if(frequency[i] != 0)
+			    	     isSymbol[i] = true;
+			 }
+			 
+			 int number_of_symbols = 0;
+			 for(int i = 0; i < 256; i++)
+			 {
+			     if(isSymbol[i]) 
+			    	     number_of_symbols++; 
+			 }
+			    
+			 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
+			 int [] f = new int[number_of_symbols];
+			    
+			 int j = 0;
+			 for(int i = 0; i < 256; i++)
+			 {
+			    	if(isSymbol[i])
+			    	{
+			    	    	symbol_table.put(i, j);
+			    	    	f[j] = frequency[i];
+			    	    	if(f[j] < 0)
+			    	    		f[j] += 256;
+			    	    	j++;
+			    	}
+			 }
+			
+			 //byte [] order = CodeMapper.getLastTable2(src, symbol_table, f);
+			 //BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f, order);
+			 BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f);
+		     offset[index] = quotient;
 		}
 	}
 	
 	class ArithmeticDecoder implements Runnable
 	{
 		BigInteger [] quotient;
-		int []       frequency;
+		int []        frequency;
 		int           n;
 		int           index;
 
@@ -1486,7 +1517,35 @@ public class SimpleWriter
 
 		public void run()
 		{
-			byte [] segment = CodeMapper.getArithmeticValues(quotient, frequency, n);
+			
+			boolean [] isSymbol = new boolean[256];
+		    
+			int number_of_symbols = 0;
+			for(int i = 0; i < frequency.length; i++)
+		    {
+		    	    if(frequency[i] != 0)
+		    	    {
+		    	        isSymbol[i] = true;
+		    	        number_of_symbols++;
+		    	    }
+		    }
+			
+			Hashtable <Integer, Integer> symbol =  new Hashtable <Integer, Integer>();
+			int [] f = new int[number_of_symbols];
+			
+			int j = 0;
+			for(int i = 0; i < 256; i++)
+			{
+			    if(isSymbol[i])
+			    	{
+			    	    	symbol.put(i, j);
+			    	    	f[j] = frequency[i];
+			    	    	j++;
+			    	}
+			} 
+			
+			byte [] segment = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
+			
 		    decoded_segment[index] = segment;
 		}
 	}
