@@ -3302,8 +3302,13 @@ public class CodeMapper
 	    	    
 	    	    // Use reordered frequency.
 	    	    j = (int) order[j];
+	    	    if(j < 0)
+	    	    	    j += 256;
 	    	    
-	    	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
+	    	    BigInteger [] addend = {range[0], range[1]};
+	    	    addend[0] = addend[0].multiply(BigInteger.valueOf(s[j]));
+	    	    addend[1] = addend[1].multiply(BigInteger.valueOf(m));
+	    	    //BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
 	    	    
 	    	    BigInteger gcd = addend[0].gcd(addend[1]);
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
@@ -4141,9 +4146,6 @@ public class CodeMapper
 	    return result;
 	}
 	
-	
-	
-	
 	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] f, int n)
 	{
 		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
@@ -4252,8 +4254,125 @@ public class CodeMapper
 	}
 	
 	
-	
-	
+	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n, byte [] order)
+	{
+		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
+		for(int i = 0; i < 256; i++)
+		{
+			if(symbol.containsKey(i))
+		    {
+				int j = symbol.get(i);
+		        inverse_symbol.put(j, i);
+		    }
+		}
+		int [] f = new int[frequency.length];
+		byte[] inverse_order = new byte[order.length];
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			if(j < 0)
+				j += 256;
+			inverse_order[j] = (byte) i;
+			f[j] = frequency[i];
+		}
+		
+	    byte [] value = new byte[n];
+	    
+        int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m    += f[i];
+		}	
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		BigInteger [] w      = {v[0], v[1]};
+		for(int i = 0; i < n; i++)
+		{
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+				w[0] = v[0];
+				w[1] = v[1];
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			for(int j = 0; j < f.length; j++)
+			{
+				if(f[j] != 0)
+				{
+					BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
+					BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
+				   
+				    BigInteger [] a = {lower[0], lower[1]};
+    	                BigInteger [] b = {w[0], w[1]};
+    	                BigInteger [] c = {upper[0], upper[1]};
+					
+				    if(a[1].compareTo(b[1]) != 0)
+				    {
+				    	    a[0] = a[0].multiply(w[1]);
+					    a[1] = a[1].multiply(w[1]);
+					    c[0] = c[0].multiply(w[1]);
+					    c[1] = c[1].multiply(w[1]);
+					    b[0] = b[0].multiply(lower[1]);
+					    b[1] = b[1].multiply(lower[1]);
+				    }
+	    	        
+				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+				    { 
+				      	BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
+					
+					    offset[0] = offset[0].multiply(addend[1]);
+					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+				        offset[1] = offset[1].multiply(addend[1]);
+				        
+				        BigInteger gcd = offset[0].gcd(offset[1]);
+					    if(gcd.compareTo(BigInteger.ONE) == 1)
+					    {
+						    offset[0] = offset[0].divide(gcd);
+						    offset[1] = offset[1].divide(gcd);;
+					    }
+				   
+				        range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
+				        range[1] = range[1].multiply(BigInteger.valueOf(m));
+				       
+				        gcd = range[0].gcd(range[1]);
+		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
+		    	            {
+		    	    	            range[0] = range[0].divide(gcd);
+				    	        range[1] = range[1].divide(gcd);
+		    	            }
+				   
+		    	            f[j]--;
+			    	        m--;
+			    	        for(int k = j + 1; k < s.length; k++)
+			    	    	        s[k]--;
+			    	        
+			    	        j = inverse_order[j];
+		    	            if(j < 0)
+		    	            	    j += 256;
+			            j = inverse_symbol.get(j);
+			            value[i] = (byte)j;
+				        
+				        break;
+				    }
+			    }
+			}	
+		}
+		
+	    return value;
+	}
 	
 	
 	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
@@ -4381,6 +4500,7 @@ public class CodeMapper
 		return value;
 	}
 	
+	/*
 	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n, byte [] order)
 	{
 		byte [] value = new byte[n];
@@ -4522,7 +4642,7 @@ public class CodeMapper
 		return value;
 	}
 	
-	
+	*/
 	
 	
 	
