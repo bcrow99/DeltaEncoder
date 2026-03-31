@@ -2624,13 +2624,6 @@ public class CodeMapper
 		    BigInteger gcd = numerator.gcd(denominator);
 		    numerator      = numerator.divide(gcd);
 	        denominator    = denominator.divide(gcd);
-		    /*
-		    if(gcd.compareTo(BigInteger.ZERO) != 0)
-		    {
-		        numerator      = numerator.divide(gcd);
-		        denominator    = denominator.divide(gcd);
-		    }
-			*/
 		    
 			ratio[0] = numerator;
 			ratio[1] = denominator;
@@ -2761,7 +2754,6 @@ public class CodeMapper
 		
 		return primes;
 	}
-	
 	
 	public static ArrayList < ArrayList <BigInteger>> getCommonFactors(ArrayList <ArrayList <BigInteger>> factor_list, ArrayList <BigInteger> factors)
 	{
@@ -2933,7 +2925,6 @@ public class CodeMapper
 	    return factor_number;
 	}
 	
-	
 	public static ArrayList getMaxProduct(ArrayList <ArrayList <BigInteger>> factor_list)
 	{
 		int size = factor_list.size();
@@ -2963,7 +2954,7 @@ public class CodeMapper
 	}
 	
 	//This method returns a table of the indices of a frequency table in ascending order, greatest last.
-	public static int[] getAscendingTable(int src[])
+	public static byte [] getAscendingTable(int src[])
 	{
 		ArrayList <Double>          list  = new ArrayList <Double>();
 		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
@@ -2980,19 +2971,19 @@ public class CodeMapper
 		
 		Collections.sort(list);
 		
-		int ascending_table[] = new int[n];
+		byte [] ascending_table = new byte[n];
 		
 		for(int i = 0; i < n; i++)
 		{
 			double key         = list.get(i);
 			int    j           = table.get(key);
-			ascending_table[i] = j;
+			ascending_table[i] = (byte)j;
 		}
 		return ascending_table;
 	}
 	
 	//This method returns a table of the indices of a frequency table in descending order, greatest first.
-	public static int[] getDescendingTable(int src[])
+	public static byte [] getDescendingTable(int src[])
 	{
 		ArrayList <Double>          list  = new ArrayList <Double>();
 		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
@@ -3009,19 +3000,19 @@ public class CodeMapper
 		
 		Collections.sort(list, Comparator.reverseOrder());
 		
-		int descending_table[] = new int[n];
+		byte [] descending_table = new byte[n];
 		
 		for(int i = 0; i < n; i++)
 		{
 			double key          = list.get(i);
 			int    j            = table.get(key);
-			descending_table[j] = i;
+			descending_table[j] = (byte) i;
 		}
 		return descending_table;
 	}	
 		
 	//This method returns a table of the indices of a frequency table in the order that a value is exhausted first.
-	public static int [] getFirstTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	public static byte [] getFirstTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
 		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
 		int [] f = frequency.clone();
@@ -3040,50 +3031,19 @@ public class CodeMapper
 	    }
 	
 		n = frequency.length;
-		int [] first_table = new int[n];
+		byte [] first_table = new byte[n];
 		for(int i = 0; i < n; i++)
 		{
 			int j = exhausted_list.get(i);
-			first_table[i] = j;
+			first_table[i] = (byte)j;
 		}
 		
         return first_table;	
-	}		
+	}	
+	
 	
 	// This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
-	// Using this order reduces the processing.
-	public static int [] getLastTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
-	{
-		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-		int [] f = frequency.clone();
-			
-		int    n = src.length;
-		   
-		for(int i = 0; i < n; i++)
-		{
-		    	int j = src[i];
-		    	if(j < 0)
-		    	    	j += 256;
-		    	j = symbol_table.get(j);
-		    	f[j]--;
-		    	if(f[j] == 0)
-		    	    	exhausted_list.add(j);  
-		}
-		
-		n = frequency.length;
-		int [] last_table = new int[n];
-		
-		int k = 0;
-		for(int i = n - 1; i >= 0; i--)
-		{
-			int j = exhausted_list.get(i);
-			last_table[k++] = j;
-		}
-			
-	    return last_table;	
-	}	
-
-	public static byte [] getLastTable2(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	public static byte [] getLastTable(byte[] src,  Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
 		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
 		int [] f = frequency.clone();
@@ -3112,7 +3072,8 @@ public class CodeMapper
 		}
 			
 	    return last_table;	
-	}
+	}	
+
 	
 	public static BigInteger[] getArithmeticOffset(byte [] src, int [] frequency)
 	{
@@ -3351,150 +3312,6 @@ public class CodeMapper
 	
         return offset;	
 	}	
-
-	/*
-	// If the probabilistic space is ordered so the offset is the fraction that factors to the smallest numbers, 
-    // it will improve the compression rate, but that order does not seem to be a simple function of the probabilities.
-	public static BigInteger [] getArithmeticOffset(byte [] src, int order_type)
-	{
-		 boolean [] isSymbol = new boolean[256];
-		 int     [] freq     = new int[256];
-		    
-		 int sum = 0;
-		 for(int i = 0; i < src.length; i++)
-		 {
-		    	 int j = src[i];
-		    	 if(j < 0)
-		    	    	j += 256;
-		    	 isSymbol[j] = true;
-		    	 freq[j]++;
-		    	 sum++;
-		 }
-		 
-		 int number_of_symbols = 0;
-		 for(int i = 0; i < 256; i++)
-		 {
-		     if(isSymbol[i]) 
-		    	     number_of_symbols++; 
-		 }
-		    
-		 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
-		 int [] f = new int[number_of_symbols];
-		    
-		 int j = 0;
-		 for(int i = 0; i < 256; i++)
-		 {
-		    	if(isSymbol[i])
-		    	{
-		    	    	symbol_table.put(i, j);
-		    	    	f[j] = freq[i];
-		    	    	j++;
-		    	}
-		 }
-		 
-		 BigInteger [] offset = getArithmeticOffset(src, symbol_table, f, order_type);
-		 return offset;
-	}
-	
-	
-	public static BigInteger [] getArithmeticOffset(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int order_type)
-	{
-		int [] order = null;
-		if(order_type == 1)
-			order = getAscendingTable(frequency);
-		else if(order_type == 2)
-			order = getDescendingTable(frequency);
-		else if(order_type == 3)
-			order = getFirstTable(src, symbol_table, frequency);
-		else if(order_type == 4)
-			order = getLastTable(src, symbol_table, frequency);
-			
-		
-		
-        int [] f = new int[frequency.length];
-		
-		for(int i = 0; i < order.length; i++)
-		{
-			int j = order[i];
-			f[j]  = frequency[i];
-		}
-		
-	
-		int    n = src.length;
-	   
-	    int [] s = new int[f.length];
-	    int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m   += f[i];
-		}
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		
-		for(int i = 0; i < n; i++)
-	    {
-	        // Use order in loop.
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    j = symbol_table.get(j);
-	    	    j = order[j];
-	    	  
-	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-	    	    addend[0]            = addend[0].multiply(BigInteger.valueOf(s[j]));
-	    	    addend[1]            = addend[1].multiply(BigInteger.valueOf(m));
-	    	   
-	    	   
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	   
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	     
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
-	    	    
-
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	 
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	        s[k]--;
-	    }
-		
-		BigInteger gcd = offset[0].gcd(offset[1]);
-	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    {
-	    	   offset[0] = offset[0].divide(gcd);
-	       offset[1] = offset[1].divide(gcd);
-	    }
-		
-        return offset;	
-	}
-	*/
-	
 	
 	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
 	{
@@ -3649,16 +3466,17 @@ public class CodeMapper
 	}
 	
 	// Method that allows for any kind of order table.
-	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int [] order)
+	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, byte [] order)
 	{
 		int [] f = new int[frequency.length];
 		
 		for(int i = 0; i < order.length; i++)
 		{
 			int j = order[i];
+			if(j < 0)
+				j += 256;
 			f[j]  = frequency[i];
 		}
-		
 		
 	    int [] s = new int[f.length];
 		
@@ -3687,6 +3505,8 @@ public class CodeMapper
 	    	    	    j += 256;
 	    	    j = symbol_table.get(j);
 	    	    j = order[j];
+	    	    if(j < 256)
+	    	    	    j += 256;
 	    	   
 	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
 	    	    
@@ -3810,192 +3630,8 @@ public class CodeMapper
         return value;
 	}
 	
-	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, int order_type)
-	{
-		int [] f = frequency.clone();
-		
-		int [] order = null;
-		
-		if(order_type == 1)
-	        order = getDescendingTable(frequency);
-		else if(order_type == 2)
-		    order = getAscendingTable(frequency);
-		else if(order_type == 3)
-			order = getFirstTable(src, symbol_table, frequency);
-		else if(order_type == 4)
-		    order = getLastTable(src, symbol_table, frequency);
-		
-		if(order != null)
-		{
-			for(int i = 0; i < order.length; i++)
-			{
-				int j = order[i];
-				f[j]  = frequency[i];
-			}	
-		}
-		
-	    int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = m;
-			m    += f[i];
-		}
-		
-		BigInteger [] offset = new BigInteger[2];
-		offset[0]            = BigInteger.ZERO;
-		offset[1]            = BigInteger.ONE;
-		
-		BigInteger [] range  = new BigInteger[2];
-		range[0]             = BigInteger.ONE;
-		range[1]             = BigInteger.ONE;
-		
-		int    n       = src.length;
-	    
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    j = symbol_table.get(j);
-	    	    if(order != null)
-	    	    {
-	    	    	    j = order[j];
-	    	    }
-	    	   
-	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-	    	    
-	    	    BigInteger factor = BigInteger.ONE;
-	    	    factor            = factor.valueOf(s[j]);
-	    	    addend[0]         = addend[0].multiply(factor);
-	    	    factor            = factor.valueOf(m);
-	    	    addend[1]         = addend[1].multiply(factor);
-	    	    
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	   
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	    
-	    	   
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-	    	    //System.out.println("Range is " + range[0]);
-            factor   = factor.valueOf(f[j]);
-	    	    range[0] = range[0].multiply(factor);
-	    	    factor   = factor.valueOf(m);
-	    	    range[1] = range[1].multiply(factor);
-	    	    
-	    	    //System.out.println("Range is " + range[0] + " after multiplication.");
-	    	    //System.out.println();
-	    	    
-	    	   
-	    	    /*
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	    */
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	    {
-	    	    	    s[k]--;
-	    	    }
-	    }
-	
-		if(offset[1].compareTo(range[1]) != 0)
-		{	//System.out.println("Cross multiplying range and offset.");
-		    BigInteger range_factor  = offset[1];
-		    BigInteger offset_factor = range[1];	
-			offset[0] = offset[0].multiply(offset_factor);
-			offset[1] = offset[1].multiply(offset_factor);
-			//System.out.println("Range is " + range[0]);		
-			range[0] = range[0].multiply(range_factor);
-			range[1] = range[1].multiply(range_factor);
-			//System.out.println("Range is " + range[0] + " after cross multiplying.");	
-		}
-		
-		//System.out.println("Range is " + range[0]);
-	
-		BigInteger delimiter = offset[0].add(range[0]);
-		BigInteger gcd       = offset[1].gcd(offset[0]);
-		
-		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
-		int j = 0;
-		
-		BigInteger factor = BigInteger.ONE;
-		
-		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
-		BigInteger maximum_range = BigInteger.valueOf(100000);
-		int size = factor_list.size() - 1;
-		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
-		{
-			j++;
-			BigInteger next_factor = factor_list.get(j);
-			factor = factor.multiply(next_factor);
-		}
-		
-		if(factor.compareTo(BigInteger.ONE) != 0)
-		{
-		    delimiter = delimiter.divide(factor);
-		    offset[0] = offset[0].divide(factor);
-		    offset[1] = offset[1].divide(factor);
-		    range[0]  = delimiter.subtract(offset[0]);
-		    range[1]  = offset[1];
-		}
-	
-	    System.out.println("Reduced range is " + range[0]);
-		
-		gcd                      = offset[0].gcd(offset[1]);
-		BigInteger    max_gcd    = gcd;  
-        BigInteger largest_index = BigInteger.ZERO;
-       
-		int number_of_searches   = 0;
-		
-		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
-		
-		System.out.println("Searching interval for greatest common divisor:");
-		
-		BigInteger step = BigInteger.valueOf(1);
-		
-        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
-	    {
-	      	value[0]  = value[0].add(BigInteger.ONE);
-	    	    gcd = value[0].gcd(value[1]);
-	        if(gcd.compareTo(max_gcd) == 1)
-	        {
-        	        max_gcd = gcd;
-        	        largest_index = index;
-	        }
-	        number_of_searches++;
-	    }
-		System.out.println("Optimal index is " + largest_index);
-        
-        value[0] = offset[0].add(largest_index);
-        value[0] = value[0].divide(max_gcd);
-        value[1] = value[1].divide(max_gcd);
-       
-        return value;
-	}
-	
-	
-	// This method uses a renormalization technique suggested by Moffet.  It produces an approximation of the offset/range.
+	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
+	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
 		int [] f = frequency.clone();
@@ -4253,7 +3889,6 @@ public class CodeMapper
 	    return value;
 	}
 	
-	
 	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n, byte [] order)
 	{
 		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
@@ -4499,152 +4134,6 @@ public class CodeMapper
 		
 		return value;
 	}
-	
-	/*
-	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n, byte [] order)
-	{
-		byte [] value = new byte[n];
-		
-		byte[] inverse_order = new byte[order.length];
-		for(int i = 0; i < order.length; i++)
-		{
-			int j = order[i];
-			if(j < 0)
-				j += 256;
-			inverse_order[j] = (byte) i;
-		}
-		
-		boolean [] isSymbol = new boolean[256];
-	    
-		int number_of_symbols = 0;
-		for(int i = 0; i < frequency.length; i++)
-	    {
-	    	    if(frequency[i] != 0)
-	    	    {
-	    	        isSymbol[i] = true;
-	    	        number_of_symbols++;
-	    	    }
-	    }
-		int [] f = new int[number_of_symbols];
-		
-	    //Hashtable <Integer, Integer> symbol =  new Hashtable <Integer, Integer>();
-	    Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>();
-	    
-	    int j = 0;
-	    for(int i = 0; i < 256; i++)
-	    {
-	    	    if(isSymbol[i])
-	    	    {
-	    	    	    //symbol.put(i, j);
-	    	    	    inverse_symbol.put(j,  i);
-	    	    	    int k = order[i];
-	    	    	    if(k < 0)
-	    	    	    	    k += 256;
-	    	    	    f[k] = frequency[i];
-	    	    	    j++;
-	    	    }
-	    }
-	    
-        int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		for(int i = 0; i < n; i++)
-		{
-			if(offset[0].compareTo(BigInteger.ZERO) != 0)
-			{
-				w[0] = v[0];
-				w[1] = v[1];
-			    w[0] = w[0].multiply(offset[1]);
-			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-			    w[1] = w[1].multiply(offset[1]);
-			    
-			    BigInteger gcd = w[0].gcd(w[1]);
-	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	        {
-	    	    	        w[0] = w[0].divide(gcd);
-			       	w[1] = w[1].divide(gcd);
-	    	        }
-			}
-			
-			for(j = 0; j < f.length; j++)
-			{
-				if(f[j] != 0)
-				{
-					BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-				   
-				    BigInteger [] a = {lower[0], lower[1]};
-    	                BigInteger [] b = {w[0], w[1]};
-    	                BigInteger [] c = {upper[0], upper[1]};
-					
-				    if(a[1].compareTo(b[1]) != 0)
-				    {
-				    	    a[0] = a[0].multiply(w[1]);
-					    a[1] = a[1].multiply(w[1]);
-					    c[0] = c[0].multiply(w[1]);
-					    c[1] = c[1].multiply(w[1]);
-					    b[0] = b[0].multiply(lower[1]);
-					    b[1] = b[1].multiply(lower[1]);
-				    }
-	    	        
-				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
-				    { 
-				      	BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					
-					    offset[0] = offset[0].multiply(addend[1]);
-					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-				        offset[1] = offset[1].multiply(addend[1]);
-				        
-				        BigInteger gcd = offset[0].gcd(offset[1]);
-					    if(gcd.compareTo(BigInteger.ONE) == 1)
-					    {
-						    offset[0] = offset[0].divide(gcd);
-						    offset[1] = offset[1].divide(gcd);;
-					    }
-				   
-				        range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-				       
-				        gcd = range[0].gcd(range[1]);
-		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	            {
-		    	    	            range[0] = range[0].divide(gcd);
-				    	        range[1] = range[1].divide(gcd);
-		    	            }
-				   
-		    	            f[j]--;
-			    	        m--;
-			    	        for(int k = j + 1; k < s.length; k++)
-			    	    	        s[k]--;
-		    	        
-				        
-		    	            j = inverse_order[j];
-		    	            if(j < 0)
-		    	            	    j += 256;
-			            j = inverse_symbol.get(j);
-			            value[i] = (byte)j;
-				        
-				        break;
-				    }
-			    }
-			}	
-		}
-		
-		return value;
-	}
-	
-	*/
-	
-	
 	
 	public static byte [] getArithmeticValues(String fraction, int start_bits, int repeat_bits, int [] frequency, int n)
 	{
