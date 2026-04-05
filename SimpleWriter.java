@@ -65,6 +65,7 @@ public class SimpleWriter
 	BigInteger [][] offset;
 	int        [][] frequency;
 	byte       [][] decoded_segment;
+	byte       [][] order;
 
 	boolean initialized = false;
 
@@ -1267,6 +1268,8 @@ public class SimpleWriter
 					decoded_segment   = new byte[number_of_segments][segment_length];
 					decoded_segment[number_of_segments - 1] = new byte[odd_segment_length];
 					
+					order             = new byte[number_of_segments][256];
+					
 					int k = 0;
 					for(int m = 0; m < number_of_segments - 1; m++)
 	    		        {
@@ -1281,6 +1284,7 @@ public class SimpleWriter
 	    			        }
 	    			    
 	    		        }
+					
 	    		        int m = number_of_segments - 1;
 	    		        for(int n = 0; n < odd_segment_length; n++)
 	    		        {
@@ -1383,31 +1387,56 @@ public class SimpleWriter
                    	    }
                     }
                    
-                    if(isSame)
-                   	    System.out.println("Strings are equal.");
-                    else
+                    if(!isSame)
                     {
                     	    System.out.println("Strings are not equal.");
                     	    System.out.println("String differed at index " + first_index);
                     	    System.out.println("String length is " + string.length);
                       	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
+                      	System.out.println();
                     }
-                    System.out.println();
-				 
+                    else
+                    {
+                    	    System.out.println("Strings are equal.");
+                    	    System.out.println();
+                    }
+                    
+                    
                     /*
-					byte [] frequency_bytes = new byte[number_of_segments * 256];
-					
-					int frequency_offset = 0;
-					
-					for(k = 0; k < number_of_segments; k++)
+                    int cat_length = 0;
+                    for(k = 0; k < number_of_segments; k++)
+                    	    cat_length += frequency[k].length;
+
+                    int [] cat_frequency = new int[cat_length];
+                    int    cat_offset    = 0;
+                    for(k = 0; k < number_of_segments; k++)
 					{
 						for(m = 0; m < frequency[k].length; m++)
-							frequency_bytes[frequency_offset + m] = frequency[k][m];	
-						frequency_offset += frequency[k].length;
+							cat_frequency[cat_offset + m] = frequency[k][m];	
+						cat_offset += frequency[k].length;
 					}
-					*/
                     
-					Deflater deflater;
+                    ArrayList frequency_string_list = StringMapper.getStringList(cat_frequency, true);
+    				
+    				    int    frequency_min    = (int)    frequency_string_list.get(0);
+    				    int    frequency_length = (int)    frequency_string_list.get(1);
+    				    int[]  frequency_table  = (int[])  frequency_string_list.get(2);
+    				    byte[] frequency_string = (byte[]) frequency_string_list.get(3);
+                    
+                  
+                    
+					Deflater frequency_deflater = new Deflater(Deflater.BEST_COMPRESSION);
+					byte [] zipped_frequency_data = new byte[frequency_string.length];
+					frequency_deflater.setInput(frequency_string);
+					frequency_deflater.finish();
+					int freq_zipped_length = frequency_deflater.deflate(zipped_frequency_data);
+					frequency_deflater.end();
+					
+					System.out.println("Original length of frequency tables is " + (number_of_segments * 256 * 4));
+					System.out.println("Zipped string length is " + freq_zipped_length);
+					*/
+    				    
+    				    Deflater deflater;
 					if(deflate_type == 0)
 						deflater = new Deflater(Deflater.BEST_COMPRESSION);
 					else if(deflate_type == 1)
@@ -1493,9 +1522,12 @@ public class SimpleWriter
 			    	}
 			 }
 			
-			 //byte [] order = CodeMapper.getLastTable2(src, symbol_table, f);
-			 //BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f, order);
-			 BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f);
+			 //order[index] = CodeMapper.getFirstTable(src, symbol_table, f);
+			 //order[index] = CodeMapper.getLastTable(src, symbol_table, f);
+			 //order[index] = CodeMapper.getAscendingTable(f);
+			 order[index] = CodeMapper.getDescendingTable(f);
+			 BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
+			 //BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f);
 		     offset[index] = quotient;
 		}
 	}
@@ -1517,7 +1549,6 @@ public class SimpleWriter
 
 		public void run()
 		{
-			
 			boolean [] isSymbol = new boolean[256];
 		    
 			int number_of_symbols = 0;
@@ -1544,8 +1575,8 @@ public class SimpleWriter
 			    	}
 			} 
 			
-			byte [] segment = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
-			
+			byte [] segment = CodeMapper.getArithmeticValues2(quotient, symbol, f, n, order[index]);
+			//byte [] segment = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
 		    decoded_segment[index] = segment;
 		}
 	}
