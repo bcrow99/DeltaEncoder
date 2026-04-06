@@ -4064,8 +4064,7 @@ public class CodeMapper
 		                m--;
 		                break;
 				    }
-				}
-			    
+				}   
 			}
 			else
 			{
@@ -4091,24 +4090,16 @@ public class CodeMapper
 				    {
 					    if(f[j] != 0)
 					    {
-					    	    BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-							BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-						   
-						    BigInteger [] a = {lower[0], lower[1]};
-		    	                BigInteger [] b = {w[0], w[1]};
-		    	                BigInteger [] c = {upper[0], upper[1]};
-		    	                
-		    	                if(a[1].compareTo(b[1]) != 0)
-		    				    {
-		    				    	    a[0] = a[0].multiply(w[1]);
-		    					    a[1] = a[1].multiply(w[1]);
-		    					    c[0] = c[0].multiply(w[1]);
-		    					    c[1] = c[1].multiply(w[1]);
-		    					    b[0] = b[0].multiply(lower[1]);
-		    					    b[1] = b[1].multiply(lower[1]);
-		    				    }  
-		    	                
-		    	                if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
+					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
+					    	    BigInteger b = w[0];
+					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+					    	    
+					    	    a = a.multiply(w[1]);
+					    	    b = b.multiply(d);
+					    	    c = c.multiply(w[1]);
+					    	    
+		    	                if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
 	                        {
 		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
 		    						
@@ -4166,81 +4157,44 @@ public class CodeMapper
 						}
 						else if(s[j] > m / 2)
 						{
-							BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-							BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-						   
-						    BigInteger [] a = {lower[0], lower[1]};
-		    	                BigInteger [] b = {w[0], w[1]};
-		    	                BigInteger [] c = {upper[0], upper[1]};
-		    	                
-		    	                if(a[1].compareTo(b[1]) != 0)
-		    				    {
-		    				    	    a[0] = a[0].multiply(w[1]);
-		    					    a[1] = a[1].multiply(w[1]);
-		    					    c[0] = c[0].multiply(w[1]);
-		    					    c[1] = c[1].multiply(w[1]);
-		    					    b[0] = b[0].multiply(lower[1]);
-		    					    b[1] = b[1].multiply(lower[1]);
-		    				    }
-		    	                
-		    	                
-		    	                if(a[0].compareTo(b[0]) > 0)
+							BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
+							BigInteger b = w[0];
+							BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+							BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+							
+							a = a.multiply(w[1]);
+							b = b.multiply(d);
+							c = c.multiply(w[1]);
+							
+		    	                if(a.compareTo(b) > 0)
 		    	                	{
-		    	                	     int k = j / 2;
-		    	                	     while(a[0].compareTo(b[0]) > 0) 
-		    	                	     {
-		    	                	    	     j -= k;
-		    	                	    	     if(j < 0)
-		    	                	    	    	     j = 0;
+		    	                	    int k = j / 2;
+		    	                	    while(a.compareTo(b) > 0) 
+		    	                	    {
+		    	                	    	    j -= k;
+		    	                	    	    if(j < 0)
+		    	                	    	    	    j = 0;
 		    	                	    	     
-		    	                	    	     k /= 2;
-		    	                	    	     if(k == 0)
-		    	                	    	    	     k = 1;
+		    	                	    	    k /= 2;
+		    	                	    	    if(k == 0)
+		    	                	    	    	    k = 1;
 		    	                	    	     
-		    	                	    	     lower[0] = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    	     lower[1] = range[1].multiply(BigInteger.valueOf(m));
-		    	                	    	     a[0] = lower[0];
-		    	                	    	     a[1] = lower[1];
-		    	                	    	     b[0] = w[0];
-		    	                	    	     b[1] = w[1];
-		    	                	    	     
-		    	                	    	     if(lower[1].compareTo(w[1]) != 0)
-		    	             			 {
-		    	             		         a[0] = a[0].multiply(w[1]);
-		    	             			     a[1] = a[1].multiply(w[1]);
-		    	             			     b[0] = b[0].multiply(lower[1]);
-		    	    					         b[1] = b[1].multiply(lower[1]);
-		    	             			 }
+		    	                	    	    a = range[0].multiply(BigInteger.valueOf(s[j]));
+		    	                	    	    a = a.multiply(w[1]);
 		    	                	     }
-		    	                	     
-		    	                	     upper[0] = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	     upper[1] = range[1].multiply(BigInteger.valueOf(m));
-		    	                	     c[0] = upper[0];
-		    	                	     c[1] = upper[1];
-		    	                	     if(upper[1].compareTo(w[1]) != 0)
-		    	                	     {
-		    	                	    	     c[0] = c[0].multiply(w[1]);
-		    	                	    	     c[1] = c[1].multiply(w[1]);
-		    	                	     }
-		    	                	     
-		    	                	     if(c[0].compareTo(b[0]) <= 0)
+		    	                	    
+		    	                	     c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+		    	                	     c = c.multiply(w[1]);
+		    	                	     if(c.compareTo(b) <= 0)
 		 		    	             {
-		 		    	                 while(c[0].compareTo(b[0]) <= 0)
+		 		    	                 while(c.compareTo(b) <= 0)
 		 		    	                	 {
 		 		    	                	    	j++;
-		 		    	                	    	upper[0] = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		 			    	                	c[0] = upper[0];
-		 			    	                	c[1] = upper[1];
-		 			    	                	if(upper[1].compareTo(w[1]) != 0)
-		 			    	                	{
-		 			    	                	    	 c[0] = c[0].multiply(w[1]);
-		 			    	                	    	 c[1] = c[1].multiply(w[1]);
-		 			    	                	 }
+		 		    	                	    	c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+		 		    	                	    	c = c.multiply(w[1]);
 		 		    	                	 }
 		 		    	             }
-		    	                	     
-		    	                	     
-		    	                	     		 
+		    	                	     	 
 		    	                	     BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
 		    	    						
 		    	    					 offset[0] = offset[0].multiply(addend[1]);
@@ -4275,10 +4229,10 @@ public class CodeMapper
 		 	    			        value[i] = (byte)j;
 		 	    			        break;
 		    	                	}
-		    	                else if(c[0].compareTo(b[0]) <= 0)
+		    	                else if(c.compareTo(b) <= 0)
 		    	                {
 		    	                	    int k = (f.length - j) / 2;
-		    	                	    while(c[0].compareTo(b[0]) <= 0)
+		    	                	    while(c.compareTo(b) <= 0)
 		    	                	    {
 		    	                	    	    j += k;
 		    	                	    	    if(j > f.length - 1)
@@ -4287,49 +4241,23 @@ public class CodeMapper
 		    	                	    	    if(k == 0)
 		    	                	    	    	    k = 1;
 		    	                	    	    
-		    	                	    	    upper[0] = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		   	                	    	    upper[1] = range[1].multiply(BigInteger.valueOf(m));
-		   	                	    	    c[0] = upper[0];
-		   	                	    	    c[1] = upper[1];
-		   	                	    	    b[0] = w[0];
-		   	                	    	    b[1] = w[1];
-		   	                	    	    if(c[1].compareTo(b[1]) != 0)
-		   	             			{
-		   	             		         c[0] = c[0].multiply(w[1]);
-		   	             			     c[1] = c[1].multiply(w[1]);
-		   	             			     b[0] = b[0].multiply(upper[1]);
-		   	    					         b[1] = b[1].multiply(upper[1]);
-		   	             			}
+		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
+		    	                	    	    c = c.multiply(w[1]);
 		    	                	    }
 		    	                	    
+		    	                	    a = range[0].multiply(BigInteger.valueOf(s[j]));
+		    	                	    a = a.multiply(w[1]);
 		    	                	    
-		    	                	    lower[0] = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    lower[1] = range[1].multiply(BigInteger.valueOf(m));
-		    	                	    a[0] = lower[0];
-		    	                	    a[1] = lower[1];
-		    	                	    if(lower[1].compareTo(w[1]) != 0)
-		    	                	    {
-		    	                	    	     a[0] = a[0].multiply(w[1]);
-		    	                	    	     a[1] = a[1].multiply(w[1]);
-		    	                	    }
-		    	                	    
-		    	                	    if(a[0].compareTo(b[0]) > 0)
+		    	                	    if(a.compareTo(b) > 0)
 			    	                	{
-			    	                	     while(a[0].compareTo(b[0]) > 0)
+			    	                	     while(a.compareTo(b) > 0)
 			    	                	     {
 			    	                	    	     j--;
-			    	                	    	     lower[0] = range[0].multiply(BigInteger.valueOf(s[j]));
-			    	                	    	     a[0] = lower[0];
-				 			    	         a[1] = lower[1];
-				 			    	         if(lower[1].compareTo(w[1]) != 0)
-				 			    	         {
-				 			    	             a[0] = a[0].multiply(w[1]);
-				 			    	             a[1] = a[1].multiply(w[1]);
-				 			    	         }
+			    	                	    	     a = range[0].multiply(BigInteger.valueOf(s[j]));
+			    	                	    	     a = a.multiply(w[1]);
 			    	                	     }
 			    	                	}
 		    	                	     
-		    	                	    
 		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
 			    						
 		   	    					offset[0] = offset[0].multiply(addend[1]);
@@ -4363,7 +4291,7 @@ public class CodeMapper
 			    			        j = inverse_symbol.get(j);
 			    			        value[i] = (byte)j;
 			    			        break;
-		    	                }	
+		    	                }
 						}
 					}
 				}
