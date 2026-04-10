@@ -3216,7 +3216,6 @@ public class CodeMapper
 		BigInteger gcd = offset[0].gcd(offset[1]);
 	    if(gcd.compareTo(BigInteger.ONE) == 1)
 	    {
-	    	   System.out.println("Got here.");
 	    	   offset[0] = offset[0].divide(gcd);
 	       offset[1] = offset[1].divide(gcd);
 	    }
@@ -3468,9 +3467,6 @@ public class CodeMapper
 	
 	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, byte [] order)
 	{
-		if(frequency.length != order.length)
-			System.out.println("Frequency length does not equal order length.");
-		
 		int [] f = new int[frequency.length];
 		int    n = src.length;
 	   
@@ -3486,7 +3482,7 @@ public class CodeMapper
 	    int m = 0;
 		for(int i = 0; i < f.length; i++)
 		{
-			s[i]  = m;
+			s[i] = m;
 			m   += f[i];
 		}
 		
@@ -3565,44 +3561,16 @@ public class CodeMapper
 			range[1] = range[1].multiply(range_factor);	
 		}
 	
-		BigInteger delimiter = offset[0].add(range[0]);
-		BigInteger gcd       = offset[1].gcd(offset[0]);
 		
-		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
-		int j = 0;
-		
-		BigInteger factor = BigInteger.ONE;
-		
-		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
-		BigInteger maximum_range = BigInteger.valueOf(1000);
-		int size = factor_list.size() - 1;
-		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
-		{
-			j++;
-			BigInteger next_factor = factor_list.get(j);
-			factor = factor.multiply(next_factor);
-		}
-		
-		if(factor.compareTo(BigInteger.ONE) != 0)
-		{
-		    delimiter = delimiter.divide(factor);
-		    offset[0] = offset[0].divide(factor);
-		    offset[1] = offset[1].divide(factor);
-		    range[0]  = delimiter.subtract(offset[0]);
-		    range[1]  = offset[1];
-		}
-	
-		
-		gcd                      = offset[0].gcd(offset[1]);
+		BigInteger gcd                      = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
        
-		int number_of_searches   = 0;
 		
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
 		
-		BigInteger step = BigInteger.valueOf(1);
+		BigInteger step = range[0].divide(BigInteger.valueOf(10000));
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
@@ -3613,18 +3581,26 @@ public class CodeMapper
         	        max_gcd = gcd;
         	        largest_index = index;
 	        }
-	        number_of_searches++;
 	    }
         
         value[0] = offset[0].add(largest_index);
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
         
-        /*
-        System.out.println("Offset length is " + offset[0].bitLength());
-        System.out.println("Value length is " + value[0].bitLength());
+        gcd = offset[0].gcd(offset[1]);
+        offset[0] = offset[0].divide(gcd);
+        offset[1] = offset[1].divide(gcd);
+        
+        int offset_bit_length = offset[0].bitLength();
+        int value_bit_length = value[0].bitLength();
+        System.out.println("Offset numerator length is   " + offset_bit_length + ", value length is " + value_bit_length);
+        
+        offset_bit_length = offset[1].bitLength();
+        value_bit_length = value[1].bitLength();
+        System.out.println("Offset denominator length is " + offset_bit_length + ", value length is " + value_bit_length);
+        
         System.out.println();
-       */
+        
         return value;
 	}
 	
@@ -3737,7 +3713,7 @@ public class CodeMapper
 		BigInteger factor = BigInteger.ONE;
 		
 		//BigInteger maximum_range = BigInteger.valueOf(Integer.MAX_VALUE);
-		BigInteger maximum_range = BigInteger.valueOf(1000);
+		BigInteger maximum_range = BigInteger.valueOf(100000);
 		int size = factor_list.size() - 1;
 		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
 		{
@@ -3760,15 +3736,30 @@ public class CodeMapper
 		BigInteger    max_gcd    = gcd;  
         
        
-		int number_of_searches   = 0;
-		
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		
+		
+		/*
+		BigInteger largest_index = BigInteger.valueOf(0);
+		BigInteger step = BigInteger.valueOf(1);
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
+	    {
+	      	value[0]  = value[0].add(BigInteger.ONE);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+        	        max_gcd = gcd;
+        	        largest_index = index;
+	        }
+	    }
+	    */
+		
+		
 		
 		// Because of the way we reduced the resolution of our values,
 		// we know the range can now be represented as an int, although
-		// the offset and delimiter might still require BigIntegers.
-		
-		
+		// the offset and delimiter probably still require BigIntegers.
 		j = range[0].intValue();
 		int k = 0;
 		for(int i = 1; i < j; i++)
@@ -3785,30 +3776,24 @@ public class CodeMapper
 		BigInteger largest_index = BigInteger.valueOf(k);
 		
 		
-		
-		/*
-		BigInteger largest_index = BigInteger.valueOf(0);
-		BigInteger step = BigInteger.valueOf(1);
-		
-        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
-	    {
-	      	value[0]  = value[0].add(BigInteger.ONE);
-	    	    gcd = value[0].gcd(value[1]);
-	        if(gcd.compareTo(max_gcd) == 1)
-	        {
-        	        max_gcd = gcd;
-        	        largest_index = index;
-	        }
-	        number_of_searches++;
-	    }
-	    */
-		
         value[0] = offset[0].add(largest_index);
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
         
-        int bit_length = range[0].bitLength();
-        //System.out.println("Range bit length is " + bit_length);
+        gcd = offset[0].gcd(offset[1]);
+        offset[0] = offset[0].divide(gcd);
+        offset[1] = offset[1].divide(gcd);
+        
+        int offset_bit_length = offset[0].bitLength();
+        int value_bit_length = value[0].bitLength();
+        //System.out.println("Offset numerator length is   " + offset_bit_length + ", value length is " + value_bit_length);
+        
+        offset_bit_length = offset[1].bitLength();
+        value_bit_length = value[1].bitLength();
+        //System.out.println("Offset denominator length is " + offset_bit_length + ", value length is " + value_bit_length);
+        
+        //System.out.println();
+        
         return value;
 	}
 	
