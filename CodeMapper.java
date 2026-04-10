@@ -3574,7 +3574,7 @@ public class CodeMapper
 		BigInteger factor = BigInteger.ONE;
 		
 		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
-		BigInteger maximum_range = BigInteger.valueOf(1000000);
+		BigInteger maximum_range = BigInteger.valueOf(1000);
 		int size = factor_list.size() - 1;
 		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
 		{
@@ -3602,7 +3602,6 @@ public class CodeMapper
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
 		
-		
 		BigInteger step = BigInteger.valueOf(1);
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
@@ -3621,19 +3620,17 @@ public class CodeMapper
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
         
+        /*
         System.out.println("Offset length is " + offset[0].bitLength());
         System.out.println("Value length is " + value[0].bitLength());
         System.out.println();
-       
+       */
         return value;
 	}
 	
 
 	public static BigInteger [] getIntervalValue2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, byte [] order)
 	{
-		if(frequency.length != order.length)
-			System.out.println("Frequency length does not equal order length.");
-		
 		int [] f = new int[frequency.length];
 		int    n = src.length;
 	   
@@ -3661,7 +3658,7 @@ public class CodeMapper
 	    {
 			int j = src[i];
     	        if(j < 0)
-    	    	        j += 256;
+    	    	    j     += 256;
     	        j = symbol_table.get(j);
     	        j = (int)order[j];
     	        if(j < 0)
@@ -3721,61 +3718,26 @@ public class CodeMapper
 		{	
 		    BigInteger range_factor  = offset[1];
 		    BigInteger offset_factor = range[1];	
-		    
 			offset[0] = offset[0].multiply(offset_factor);
 			offset[1] = offset[1].multiply(offset_factor);
 					
 			range[0] = range[0].multiply(range_factor);
 			range[1] = range[1].multiply(range_factor);	
 		}
-	
-		BigInteger a = offset[0];
-		BigInteger b = BigInteger.ONE;
-		BigInteger c = offset[0].add(range[0]);
-		BigInteger d = offset[1];
 		
-		if(a.bitLength() != c.bitLength())
-			System.out.println("Offset and delimiter have different bitlengths.");
-		   
-		//System.out.println("Offset length is      " + a.bitLength());
-	    //System.out.println("Delimiter length is   " + c.bitLength());
-	    //System.out.println("Denominator length is " + d.bitLength());
-	    //System.out.println();
-		/*
-		while(b.compareTo(a) < 0)
-			b = b.multiply(BigInteger.TWO);
-		
-		if(b.compareTo(a) >= 0 && b.compareTo(c) < 0)
-		    System.out.println("Value is in interval.");
-		else
-			System.out.println("Value is not in interval.");
-		*/
-		
-		/*
-		if(b.compareTo(a) >= 0 && b.compareTo(c) < 0)
-		    System.out.println("Value is in interval.");
-		else
-			System.out.println("Value is not in interval.");
-		*/
-		/*
-		BigInteger gcd       = offset[1].gcd(b);
-		
-		b = b.divide(gcd);
-		offset[0] = b;
-		offset[1] = offset[1].divide(gcd);
-		*/
-		
-		/*
 		BigInteger delimiter = offset[0].add(range[0]);
-		BigInteger gcd       = offset[1].gcd(offset[0]);
+		BigInteger gcd       = offset[0].gcd(offset[1]);
+		
+		BigInteger a = offset[1].divide(gcd);
+		int original_bit_length = a.bitLength();
 		
 		ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
 		int j = 0;
 		
 		BigInteger factor = BigInteger.ONE;
 		
-		//BigInteger maximum_range = BigInteger.valueOf(Long.MAX_VALUE);
-		BigInteger maximum_range = BigInteger.valueOf(1000000);
+		//BigInteger maximum_range = BigInteger.valueOf(Integer.MAX_VALUE);
+		BigInteger maximum_range = BigInteger.valueOf(1000);
 		int size = factor_list.size() - 1;
 		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j < size)
 		{
@@ -3796,14 +3758,36 @@ public class CodeMapper
 		
 		gcd                      = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
-        BigInteger largest_index = BigInteger.ZERO;
+        
        
 		int number_of_searches   = 0;
 		
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
+		// Because of the way we reduced the resolution of our values,
+		// we know the range can now be represented as an int, although
+		// the offset and delimiter might still require BigIntegers.
 		
 		
+		j = range[0].intValue();
+		int k = 0;
+		for(int i = 1; i < j; i++)
+		{
+			value[0]  = value[0].add(BigInteger.ONE);
+    	        gcd = value[0].gcd(value[1]);
+            if(gcd.compareTo(max_gcd) == 1)
+            {
+    	            max_gcd = gcd;
+    	            k = i;
+            }	
+		}
+		
+		BigInteger largest_index = BigInteger.valueOf(k);
+		
+		
+		
+		/*
+		BigInteger largest_index = BigInteger.valueOf(0);
 		BigInteger step = BigInteger.valueOf(1);
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
@@ -3817,20 +3801,18 @@ public class CodeMapper
 	        }
 	        number_of_searches++;
 	    }
-        
+	    */
+		
         value[0] = offset[0].add(largest_index);
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
         
-        System.out.println("Offset length is " + offset[0].bitLength());
-        System.out.println("Value length is " + value[0].bitLength());
-        System.out.println();
-       
-		*/
-        BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+        int bit_length = range[0].bitLength();
+        //System.out.println("Range bit length is " + bit_length);
         return value;
 	}
 	
+
 	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
 	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
