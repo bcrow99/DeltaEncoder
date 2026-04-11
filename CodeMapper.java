@@ -3574,7 +3574,7 @@ public class CodeMapper
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
-	      	value[0]  = value[0].add(BigInteger.ONE);
+	      	value[0]  = offset[0].add(index);
 	    	    gcd = value[0].gcd(value[1]);
 	        if(gcd.compareTo(max_gcd) == 1)
 	        {
@@ -3593,13 +3593,13 @@ public class CodeMapper
         
         int offset_bit_length = offset[0].bitLength();
         int value_bit_length = value[0].bitLength();
-        System.out.println("Offset numerator length is   " + offset_bit_length + ", value length is " + value_bit_length);
+        //System.out.println("Offset numerator length is   " + offset_bit_length + ", value length is " + value_bit_length);
         
         offset_bit_length = offset[1].bitLength();
         value_bit_length = value[1].bitLength();
-        System.out.println("Offset denominator length is " + offset_bit_length + ", value length is " + value_bit_length);
+        //System.out.println("Offset denominator length is " + offset_bit_length + ", value length is " + value_bit_length);
         
-        System.out.println();
+        //System.out.println();
         
         return value;
 	}
@@ -3759,7 +3759,10 @@ public class CodeMapper
 		
 		// Because of the way we reduced the resolution of our values,
 		// we know the range can now be represented as an int, although
-		// the offset and delimiter probably still require BigIntegers.
+		// the offset and delimiter still require BigIntegers.
+		
+		
+		
 		j = range[0].intValue();
 		int k = 0;
 		for(int i = 1; i < j; i++)
@@ -3774,7 +3777,6 @@ public class CodeMapper
 		}
 		
 		BigInteger largest_index = BigInteger.valueOf(k);
-		
 		
         value[0] = offset[0].add(largest_index);
         value[0] = value[0].divide(max_gcd);
