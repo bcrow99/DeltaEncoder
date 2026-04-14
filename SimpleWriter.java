@@ -1247,19 +1247,31 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_number_of_segments       = 32;
-					int number_of_processors             = Runtime.getRuntime().availableProcessors();
-					int number_of_segments_per_processor = 1;
+					int minimum_segment_length = 1000;
 					
-					while(number_of_processors * number_of_segments_per_processor < minimum_number_of_segments)
-						number_of_segments_per_processor++;
-					int number_of_segments               = number_of_processors * number_of_segments_per_processor;
+					int number_of_segments     = string.length / minimum_segment_length;
 					
+					int number_of_processors   = Runtime.getRuntime().availableProcessors();
+					
+					if(number_of_segments < number_of_processors)
+					{
+					    number_of_processors = number_of_segments;	
+					}
+					else
+					{
+					    while(number_of_segments % number_of_processors != 0)	
+					    	    number_of_segments++;
+					}
+					
+					// The number of segments is now equal to the number of processors,
+					// or an exact multiple.
+					int number_of_segments_per_processor = number_of_segments / number_of_processors;
+					number_of_segments                   = number_of_processors * number_of_segments_per_processor;
+					int segment_length                   = string.length / number_of_segments;
 					System.out.println("Number of segments is " + number_of_segments);
-					
-					int segment_length     = string.length / number_of_segments;
-					
+					System.out.println("Number of processors is " + number_of_processors);
 					System.out.println("Segment length is " + segment_length);
+					
 					int odd_segment_length = segment_length + string.length % number_of_segments;
 			        byte    [][] segment   = new byte[number_of_segments][segment_length];
 					segment[number_of_segments - 1] = new byte[odd_segment_length];
@@ -1525,10 +1537,9 @@ public class SimpleWriter
 			 //order[index] = CodeMapper.getFirstTable(src, symbol_table, f);
 			 //order[index] = CodeMapper.getLastTable(src, symbol_table, f);
 			 //order[index] = CodeMapper.getAscendingTable(f);
-			 order[index] = CodeMapper.getDescendingTable(f);
-			 BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
-			 //BigInteger [] quotient = CodeMapper.getArithmeticOffset(src, symbol_table, f);
-		     offset[index] = quotient;
+			 order[index]  = CodeMapper.getDescendingTable(f);
+			 offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
+			 //offset[index] = CodeMapper.getIntervalValue(src, symbol_table, f, order[index]);
 		}
 	}
 	
