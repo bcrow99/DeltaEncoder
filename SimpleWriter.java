@@ -1247,7 +1247,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_segment_length = 1000;
+					int minimum_segment_length = 800;
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
@@ -1294,7 +1294,6 @@ public class SimpleWriter
 	    			            frequency[m][p]++;
 	    			            k++;
 	    			        }
-	    			    
 	    		        }
 					
 	    		        int m = number_of_segments - 1;
@@ -1341,7 +1340,6 @@ public class SimpleWriter
 					long stop = System.nanoTime();
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
-					
 					
                     start = System.nanoTime();
 					
@@ -1537,9 +1535,10 @@ public class SimpleWriter
 			 //order[index] = CodeMapper.getFirstTable(src, symbol_table, f);
 			 //order[index] = CodeMapper.getLastTable(src, symbol_table, f);
 			 //order[index] = CodeMapper.getAscendingTable(f);
-			 order[index]  = CodeMapper.getDescendingTable(f);
-			 offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
-			 //offset[index] = CodeMapper.getIntervalValue(src, symbol_table, f, order[index]);
+			 //order[index]  = CodeMapper.getDescendingTable(f);
+			 //offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
+			
+			 offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f);
 		}
 	}
 	
@@ -1586,9 +1585,10 @@ public class SimpleWriter
 			    	}
 			} 
 			
-			byte [] segment = CodeMapper.getArithmeticValues2(quotient, symbol, f, n, order[index]);
-			//byte [] segment = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
-		    decoded_segment[index] = segment;
+			decoded_segment[index] = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues2(quotient, symbol, f, n);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues(quotient, symbol, f, n, order[index]);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues2(quotient, symbol, f, n, order[index]);
 		}
 	}
 }
