@@ -62,6 +62,7 @@ public class SimpleWriter
 
 	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
 	
+	
 	BigInteger [][] offset;
 	int        [][] frequency;
 	byte       [][] decoded_segment;
@@ -77,8 +78,8 @@ public class SimpleWriter
 			System.exit(0);
 		}
 
-		//String prefix = new String("C:/Users/bcrow/Desktop/");
-		String prefix = new String("");
+		String prefix = new String("C:/Users/bcrow/Desktop/");
+		//String prefix = new String("");
 		String filename = new String(args[0]);
 
 		SimpleWriter writer = new SimpleWriter(prefix + filename);
@@ -92,6 +93,7 @@ public class SimpleWriter
 	    System.out.println();
 	    ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
 		ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
+	
 		
 		int new_xdim = image_xdim;
 		int new_ydim = image_ydim;
@@ -1247,7 +1249,7 @@ public class SimpleWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_segment_length = 800;
+					int minimum_segment_length = 1000;
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
@@ -1412,6 +1414,129 @@ public class SimpleWriter
                     }
                     
                     
+                    int frequency_max = 0;
+                    
+                    for(k = 0; k < number_of_segments; k++)
+                    {
+                    	    for(m = 0; m < frequency[k].length; m++)
+                    	    {
+                    	    	    if(frequency[k][m] > frequency_max)
+                    	    	    	    frequency_max = frequency[k][m];    	    
+                    	    }
+                    }
+                   
+                    
+                   
+                    int length_type = 2;
+                    if(frequency_max < Byte.MAX_VALUE * 2 + 2)
+                    {
+                    	    System.out.println("Frequency max fits in an unsigned byte.");
+                    	    length_type = 0;
+                    }
+                    else if(frequency_max < Short.MAX_VALUE * 2 + 2)
+                    {
+                    	    System.out.println("Frequency max fits in an unsigned short.");
+                    	    length_type = 1;
+                    }
+                    else
+                    	    System.out.println("Frequency max fits in an integer.");
+                   
+                    System.out.println();
+                    
+                    byte [] frequency_bytes;
+                    
+                    if(length_type == 0)
+                    {
+                    	    frequency_bytes = new byte[256];
+                    	    for(k = 0; k < number_of_segments; k++)
+                        {
+                            	for(m = 0; m < frequency[k].length; m++)
+                            	{
+                            	    frequency_bytes[m] = (byte) frequency[k][m];    
+                            	}
+                        }
+                    }
+                    else if(length_type == 1)
+                    {
+                    	    frequency_bytes = new byte[256 * 2];
+                    	    for(k = 0; k < number_of_segments; k++)
+                        {
+                             for(m = 0; m < frequency[k].length; m++)
+                             {
+                                 int current_frequency = frequency[k][m];
+                                 short a               = (short)current_frequency;
+                                 a                    &= 0x00ff;
+                                 short b               = (short)(current_frequency >> 8);
+      						    b                     &= 0x00ff;
+      						    frequency_bytes[2 * m]     = (byte) a;
+      						    frequency_bytes[2 * m + 1] = (byte) b;
+                             }
+                        }
+                    }
+                    else
+                    {
+                    	    frequency_bytes = new byte[256 * 4];
+                    	    for(m = 0; m < frequency[k].length; m++)
+                        {
+                    	     	int current_frequency = frequency[k][m]; 
+                    	     	int a                 = current_frequency;
+							a                    &= 0x000000ff;
+							int b                 = current_frequency >> 8;
+							b                    &= 0x000000ff;
+							int c                 = current_frequency >> 16;
+							c                    &= 0x000000ff;
+							int d                 = current_frequency >> 24;
+							d                    &= 0x000000ff;
+							frequency_bytes[2 * m]     = (byte)a;
+							frequency_bytes[2 * m + 1] = (byte)b;
+							frequency_bytes[2 * m + 2] = (byte)c;
+			              	frequency_bytes[2 * m + 3] = (byte)d;
+                        }
+                    }
+                    
+                    Deflater frequency_deflater   = new Deflater(Deflater.BEST_COMPRESSION);
+                    byte [] zipped_frequency_data = new byte[frequency_bytes.length];
+                    frequency_deflater.setInput(frequency_bytes);
+					frequency_deflater.finish();
+					int freq_zipped_length = frequency_deflater.deflate(zipped_frequency_data);
+					frequency_deflater.end();
+					
+					System.out.println("Original length of frequency tables is " + (number_of_segments * 256 * 4));
+					System.out.println("Zipped length is " + freq_zipped_length);
+					
+					out.writeInt(number_of_segments);
+					
+					out.write(freq_zipped_length);
+					out.write(zipped_frequency_data, 0, freq_zipped_length);
+					
+					for(k = 0; k < number_of_segments; k++)
+					{
+					    BigInteger [] current_offset = offset[k];
+					    
+					    /*
+					    BigDecimal p = new BigDecimal(current_offset[0]);
+					    BigDecimal q = new BigDecimal(current_offset[1]);
+					    
+					    int bitlength = current_offset[1].bitLength();
+					    
+					   
+					    BigDecimal r = p.divide(q, 100, RoundingMode.HALF_EVEN);
+					    
+					    BigInteger unscaled_value = r.unscaledValue();
+					    byte [] byte_array = unscaled_value.toByteArray();
+					    out.writeInt(byte_array.length);
+				        out.write(byte_array, 0, byte_array.length);
+				        */
+				        
+					 
+					    byte [] p_byte_array = current_offset[0].toByteArray();
+						out.writeInt(p_byte_array.length);
+				        out.write(p_byte_array, 0, p_byte_array.length);
+				        byte [] q_byte_array = current_offset[1].toByteArray();
+						out.writeInt(q_byte_array.length);
+				        out.write(q_byte_array, 0, q_byte_array.length);
+					}
+					
                     /*
                     int cat_length = 0;
                     for(k = 0; k < number_of_segments; k++)
@@ -1444,7 +1569,7 @@ public class SimpleWriter
 					
 					System.out.println("Original length of frequency tables is " + (number_of_segments * 256 * 4));
 					System.out.println("Zipped string length is " + freq_zipped_length);
-					*/
+					
     				    
     				    Deflater deflater;
 					if(deflate_type == 0)
@@ -1464,6 +1589,7 @@ public class SimpleWriter
 					
 					out.writeInt(zipped_length);
 					out.write(zipped_data, 0, zipped_length);
+					*/
 					
 				}
 
@@ -1474,10 +1600,10 @@ public class SimpleWriter
 				long file_length = file.length();
 				double compression_rate = file_length;
 				compression_rate /= image_xdim * image_ydim * 3;
-				//System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				//System.out.println("Delta type is " + delta_type_string[delta_type]);
-				//System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
-				//System.out.println();
+				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
+				System.out.println("Delta type is " + delta_type_string[delta_type]);
+				System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
+				System.out.println();
 			} 
 			catch (Exception e)
 			{
