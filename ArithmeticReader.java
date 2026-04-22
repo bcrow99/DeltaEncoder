@@ -34,7 +34,11 @@ public class ArithmeticReader
 	int  length[]         = new int[3];
 	int  compressed_length[] = new int[3];
 	byte channel_iterations[] = new byte[3];
-
+	
+	ArrayList <int [][]>        frequency_list = new ArrayList <int [][]> ();
+	ArrayList <BigInteger [][]> offset_list = new ArrayList <BigInteger [][]> ();
+	ArrayList <byte [][]>       segment_list      = new ArrayList <byte [][]> ();
+	
 	public static void main(String[] args)
 	{
 		if (args.length != 1)
@@ -108,18 +112,11 @@ public class ArithmeticReader
 					map_list.add(map);
 				}
 				
-				int string_length = compressed_length[i] / 8;
-				if(compressed_length[i] % 8 != 0)
-					string_length++;
-				string_length++;
-				byte [] string = new byte[string_length];
 				
 				int number_of_segments = in.readInt();
 				int length_type        = in.readInt();
 				int freq_zipped_length = in.readInt();
-				
-				System.out.println("Number of segments is " + number_of_segments);
-				
+			
 				byte [] freq_zipped_data = new byte[freq_zipped_length];
 				in.read(freq_zipped_data, 0, freq_zipped_length);
 				
@@ -204,73 +201,100 @@ public class ArithmeticReader
 					}		
 				}
 				
-				BigInteger [][] quotient = new BigInteger[number_of_segments][2];
+				frequency_list.add(frequency);
+				
+				BigInteger [][] offset = new BigInteger[number_of_segments][2];
 				for(int k = 0; k < number_of_segments; k++)
 				{
 					int length = in.readInt();
 					byte [] byte_array = new byte[length];
 					in.read(byte_array, 0, length);
 					
-					quotient[k][0] = new BigInteger(byte_array);
+					offset[k][0] = new BigInteger(byte_array);
 					
 					length = in.readInt();
 					byte_array = new byte[length];
 					in.read(byte_array, 0, length);
 					
-					quotient[k][1] = new BigInteger(byte_array);
+					offset[k][1] = new BigInteger(byte_array);
 				}
 				
-				int segment_length = string.length / number_of_segments;
+				offset_list.add(offset);
 				
-				int odd_segment_length = segment_length + string.length % number_of_segments;
-				
-				long start_time = System.nanoTime();
-				for(int k = 0; k < number_of_segments - 1; k++)
-				{
-				    byte [] segment = CodeMapper.getArithmeticValues(quotient[k], frequency[k], segment_length);
-				    for(int m = 0; m < segment_length; m++)
-				    	    string[k * segment_length + m] = segment[m];
-				}
-				
-				byte [] segment = CodeMapper.getArithmeticValues(quotient[number_of_segments - 1], frequency[number_of_segments - 1], odd_segment_length);
-				for(int m = 0; m < odd_segment_length; m++)
-		    	        string[(number_of_segments - 1) * segment_length + m] = segment[m];
-				long stop_time = System.nanoTime();
-				
-				long time = stop_time - start_time;
-				
-				System.out.println("It took " + (time / 1000000) + " ms get arithmetic values for channel " + i);
-				System.out.println();
-				
-				
-				/*
-				int zipped_length = in.readInt();
-				byte [] zipped_data = new byte[zipped_length];
-				in.read(zipped_data, 0, zipped_length);
-				
-				Inflater inflater = new Inflater();
-				inflater.setInput(zipped_data, 0, zipped_length);
-				int unzipped_length = inflater.inflate(string);
-				if(unzipped_length != string_length)
-				{
-					System.out.println("Unzipped data not expected length.");	
-				}
-				*/
-				
-				
-				string_list.add(string);
+				byte [][] segment = new byte[number_of_segments][0];
+				segment_list.add(segment);
 			}
 
 			long stop = System.nanoTime();
 			long time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to read file.");
 			
-
-			int cores = Runtime.getRuntime().availableProcessors();
-			System.out.println("There are " + cores + " processors available.");
+			
+			start = System.nanoTime();
+			
+			int number_of_processors = Runtime.getRuntime().availableProcessors();
+            for(int i = 0; i < 3; i++)
+            {
+            	    int string_length = compressed_length[i] / 8;
+				if(compressed_length[i] % 8 != 0)
+					string_length++;
+				string_length++;
+				byte [] string = new byte[string_length];  
+				
+				int [][] frequency = frequency_list.get(i);
+				BigInteger [][] offset = offset_list.get(i);
+				
+				int number_of_segments = frequency.length;
+				
+                int segment_length = string.length / number_of_segments;
+				
+				int odd_segment_length = segment_length + string.length % number_of_segments;
+				
+				/*
+				if(number_of_segments <= number_of_processors)
+				{
+					Thread [] decoder_thread = new Thread[number_of_segments]; 
+					for(int j = 0; j < number_of_segments; j++) 
+					{
+						int n = segment_length;
+						if(j == number_of_segments - 1)
+							n = odd_segment_length;
+					    decoder_thread[j] = new Thread(new Decoder(n, i, j);
+					    decoder_thread[j].start(); 
+					} 
+					for(int j = 0; j < number_of_segments; j++)
+					    decoder_thread[j].join();	
+				}
+				else
+				{
+					
+				}
+				*/
+				
+				for(int k = 0; k < number_of_segments - 1; k++)
+				{
+				    byte [] segment = CodeMapper.getArithmeticValues(offset[k], frequency[k], segment_length);
+				    for(int m = 0; m < segment_length; m++)
+				    	    string[k * segment_length + m] = segment[m];
+				}
+				
+				byte [] segment = CodeMapper.getArithmeticValues(offset[number_of_segments - 1], frequency[number_of_segments - 1], odd_segment_length);
+				for(int m = 0; m < odd_segment_length; m++)
+		    	        string[(number_of_segments - 1) * segment_length + m] = segment[m];
+			    
+				string_list.add(string);
+            }
+            
+			stop = System.nanoTime();
+			time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to get arithmetic values.");
+			
+			
+			
 			start = System.nanoTime();
 
-			Thread [] decompression_thread = new Thread[3]; for(int i = 0; i < 3; i++) 
+			Thread [] decompression_thread = new Thread[3]; 
+			for(int i = 0; i < 3; i++) 
 			{
 			    decompression_thread[i] = new Thread(new Decompressor(i));
 			    decompression_thread[i].start(); 
@@ -549,6 +573,28 @@ public class ArithmeticReader
 		{
 			System.out.println(e.toString());
 		}
+	}
+	
+	class Decoder implements Runnable
+	{
+	    BigInteger [] offset; 
+	    int [] frequency;
+	    int n, i, j;
+	    
+	    public Decoder(int n, int i, int j)
+		{
+			//this.offset    = offset;
+			//this.frequency = frequency;
+			this.n         = n;
+			this.i         = i;
+			this.j         = j;
+		}
+	    
+	    public void run()
+	    {
+	    	    byte [][] segment = segment_list.get(i);
+	    	    //segment[j] = CodeMapper.getArithmeticValues(offset, frequency, n);
+	    }
 	}
 
 	class Decompressor implements Runnable
