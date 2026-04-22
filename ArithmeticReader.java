@@ -4,16 +4,37 @@ import java.io.*;
 import java.awt.event.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.math.*;
 import java.util.zip.*;
 import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import java.math.*;
-import java.lang.Math.*;
 
 public class ArithmeticReader
 {
+	int  xdim              = 0;
+	int  ydim              = 0;
+	int  intermediate_xdim = 0;
+	int  intermediate_ydim = 0;
+	int  pixel_shift       = 0;
+	int  pixel_quant       = 0;
+	int  set_id            = 0;
+	byte delta_type        = 0;
+
+	ArrayList string_list = new ArrayList();
+	ArrayList table_list  = new ArrayList();
+	ArrayList map_list    = new ArrayList();
+	int[][] channel_array = new int[3][0];
+	int  min[]            = new int[3];
+	int  init[]           = new int[3];
+	int  delta_min[]      = new int[3];
+	byte type[]           = new byte[3];
+	byte compressed[]     = new byte[3];
+	int  length[]         = new int[3];
+	int  compressed_length[] = new int[3];
+	byte channel_iterations[] = new byte[3];
+
 	public static void main(String[] args)
 	{
 		if (args.length != 1)
@@ -31,68 +52,600 @@ public class ArithmeticReader
 		{
 			File file          = new File(filename);
 			DataInputStream in = new DataInputStream(new FileInputStream(file));
-			
-			int n = in.readInt();
-			int number_of_segments = in.readInt();
-			int segment_length = in.readInt();
-			BigDecimal [][] offset = new BigDecimal[n][number_of_segments];
-			
-			int min_scale             = in.readInt();
-			/*
-			int min_byte_array_length = in.readInt();
-			byte [] min_byte_array    = new byte[min_byte_array_length];
-	        in.read(min_byte_array, 0, min_byte_array.length);
-	        
-	        BigInteger min_unscaled_value = new BigInteger(min_byte_array);
-			*/
-			for (int i = 0; i < n; i++)
+			xdim               = in.readShort();
+			ydim               = in.readShort();
+			pixel_shift        = in.readByte();
+			pixel_quant        = in.readByte();
+			set_id             = in.readByte();
+			delta_type         = in.readByte();
+			int[] channel_id   = DeltaMapper.getChannels(set_id);
+
+			if (delta_type > 7)
 			{
-				for(int j = 0; j < number_of_segments; j++)
+				System.out.println("Delta type not supported.");
+				System.exit(0);
+			}
+			System.out.println("Set id is " + set_id);
+
+			long start = System.nanoTime();
+			for (int i = 0; i < 3; i++)
+			{
+				// System.out.println("Getting channel " + i);
+				int j                 = channel_id[i];
+				min[i]                = in.readInt();
+				init[i]               = in.readInt();
+				delta_min[i]          = in.readInt();
+				length[i]             = in.readInt();
+				compressed_length[i]  = in.readInt();
+				channel_iterations[i] = in.readByte();
+
+				int table_length = in.readShort();
+				int[] table = new int[table_length];
+				int max_byte_value = Byte.MAX_VALUE * 2 + 1;
+				if(table.length <= max_byte_value)
 				{
-				    int scale = in.readInt();
-				    scale    += min_scale;
-				    
-				    int size  = in.readInt();
-				    byte [] byte_array = new byte[size];
-			        in.read(byte_array, 0, size);
-			    
-			        BigInteger a = new BigInteger(byte_array);
-			        BigDecimal b = new BigDecimal(a);
-			        BigDecimal c = b.movePointLeft(scale);
-			        offset[i][j] = c;
-			        /*
-			        BigInteger a = new BigInteger(byte_array);
-			        BigInteger b = a.add(min_unscaled_value);
-			        BigDecimal c = new BigDecimal(b);
-			        BigDecimal d = c.movePointLeft(scale);
-			        offset[i][j] = d;
-			        */
+					for (int k = 0; k < table_length; k++)
+					{
+						table[k] = in.readByte();
+						if (table[k] < 0)
+							table[k] = max_byte_value + 1 + table[k];
+					}
+				} 
+				else
+				{
+					for (int k = 0; k < table_length; k++)
+						table[k] = in.readShort();
+				}
+				table_list.add(table);
+
+				if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+				{
+					int map_length        = in.readInt();
+					int packed_map_length = in.readInt();	
+					byte [] packed_map    = new byte[packed_map_length];
+					in.read(packed_map, 0, packed_map_length);
+					byte [] map           = SegmentMapper.unpackBits(packed_map, map_length, 2);
+					map_list.add(map);
+				}
+				
+				int string_length = compressed_length[i] / 8;
+				if(compressed_length[i] % 8 != 0)
+					string_length++;
+				string_length++;
+				byte [] string = new byte[string_length];
+				
+				int number_of_segments = in.readInt();
+				int length_type        = in.readInt();
+				int freq_zipped_length = in.readInt();
+				
+				System.out.println("Number of segments is " + number_of_segments);
+				
+				byte [] freq_zipped_data = new byte[freq_zipped_length];
+				in.read(freq_zipped_data, 0, freq_zipped_length);
+				
+				int number_of_bytes = 0;
+				
+				if(length_type == 0)
+					number_of_bytes = number_of_segments * 256;
+				else if(length_type == 1)
+					number_of_bytes = number_of_segments * 256 * 2;
+				else if(length_type == 2)
+					number_of_bytes = number_of_segments * 256 * 4;
+				
+				byte [] frequency_bytes = new byte[number_of_bytes];
+				
+				Inflater inflater = new Inflater();
+				inflater.setInput(freq_zipped_data, 0, freq_zipped_length);
+				int unzipped_length = inflater.inflate(frequency_bytes);
+				if(unzipped_length != frequency_bytes.length)
+				{
+					System.out.println("Unzipped data not expected length.");	
+				}
+				
+				int [][] frequency = new int [number_of_segments][256];
+				
+				if(length_type == 0)
+				{
+					for(int k = 0; k < number_of_segments; k++)
+					{
+						for(int m = 0; m < 256; m++)
+						{
+							frequency[k][m] = frequency_bytes[k * 256 + m];
+							if(frequency[k][m] < 0)
+								frequency[k][m] += 256;
+						}
+					}
+				}
+				else if(length_type == 1)
+				{
+					for(int k = 0; k < number_of_segments; k++)
+					{
+						for(int m = 0; m < 256; m++)
+						{
+							int a = frequency_bytes[k * 512 + 2 * m];
+							if(a < 0)
+								a += 256;
+							int b = frequency_bytes[k * 512 + 2 * m + 1];
+							if(b < 0)
+								b += 256;
+							b <<= 8;
+							
+							frequency[k][m] = a | b;
+						}
+					}	
+				}
+				else if(length_type == 2)
+				{
+					for(int k = 0; k < number_of_segments; k++)
+					{
+						for(int m = 0; m < 256; m++)
+						{
+							int a = frequency_bytes[k * 1024 + 4 * m];
+							if(a < 0)
+								a += 256;
+							
+							int b = frequency_bytes[k * 1024 + 4 * m + 1];
+							if(b < 0)
+								b += 256;
+							b <<= 8;
+							
+							int c = frequency_bytes[k * 1024 + 4 * m + 2];
+							if(c < 0)
+								c += 256;
+							c <<= 16;
+							
+							int d = frequency_bytes[k * 1024 + 4 * m + 3];
+							if(c < 0)
+								c += 256;
+							c <<= 24;
+							
+							frequency[k][m] = a | b | c | d;
+						}
+					}		
+				}
+				
+				BigInteger [][] quotient = new BigInteger[number_of_segments][2];
+				for(int k = 0; k < number_of_segments; k++)
+				{
+					int length = in.readInt();
+					byte [] byte_array = new byte[length];
+					in.read(byte_array, 0, length);
+					
+					quotient[k][0] = new BigInteger(byte_array);
+					
+					length = in.readInt();
+					byte_array = new byte[length];
+					in.read(byte_array, 0, length);
+					
+					quotient[k][1] = new BigInteger(byte_array);
+				}
+				
+				int segment_length = string.length / number_of_segments;
+				
+				int odd_segment_length = segment_length + string.length % number_of_segments;
+				
+				long start_time = System.nanoTime();
+				for(int k = 0; k < number_of_segments - 1; k++)
+				{
+				    byte [] segment = CodeMapper.getArithmeticValues(quotient[k], frequency[k], segment_length);
+				    for(int m = 0; m < segment_length; m++)
+				    	    string[k * segment_length + m] = segment[m];
+				}
+				
+				byte [] segment = CodeMapper.getArithmeticValues(quotient[number_of_segments - 1], frequency[number_of_segments - 1], odd_segment_length);
+				for(int m = 0; m < odd_segment_length; m++)
+		    	        string[(number_of_segments - 1) * segment_length + m] = segment[m];
+				long stop_time = System.nanoTime();
+				
+				long time = stop_time - start_time;
+				
+				System.out.println("It took " + (time / 1000000) + " ms get arithmetic values for channel " + i);
+				System.out.println();
+				
+				
+				/*
+				int zipped_length = in.readInt();
+				byte [] zipped_data = new byte[zipped_length];
+				in.read(zipped_data, 0, zipped_length);
+				
+				Inflater inflater = new Inflater();
+				inflater.setInput(zipped_data, 0, zipped_length);
+				int unzipped_length = inflater.inflate(string);
+				if(unzipped_length != string_length)
+				{
+					System.out.println("Unzipped data not expected length.");	
+				}
+				*/
+				
+				
+				string_list.add(string);
+			}
+
+			long stop = System.nanoTime();
+			long time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to read file.");
+			
+
+			int cores = Runtime.getRuntime().availableProcessors();
+			System.out.println("There are " + cores + " processors available.");
+			start = System.nanoTime();
+
+			Thread [] decompression_thread = new Thread[3]; for(int i = 0; i < 3; i++) 
+			{
+			    decompression_thread[i] = new Thread(new Decompressor(i));
+			    decompression_thread[i].start(); 
+			} 
+			for(int i = 0; i < 3; i++)
+			    decompression_thread[i].join();
+
+			
+			// This higher level abstraction makes the program more opaque and
+			// does not improve the performance.
+			//ExecutorService executorService = Executors.newFixedThreadPool(3);
+			//for (int i = 0; i < 3; i++)
+			//{
+			//	executorService.submit(new Decompressor(i));
+			//}
+			//executorService.shutdown();
+			//executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+			
+			
+			stop = System.nanoTime();
+			time = stop - start;
+
+			System.out.println("It took " + (time / 1000000) + " ms to process data.");
+
+			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+
+			start = System.nanoTime();
+			if (set_id == 0)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] pixel = DeltaMapper.getPixel(channel_array[0], channel_array[1], channel_array[2], xdim,
+							pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] resized_blue = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(channel_array[1], intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(channel_array[2], intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 1)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] green = DeltaMapper.getDifference(channel_array[1], channel_array[2]);
+					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = channel_array[0];
+					int[] green = DeltaMapper.getDifference(channel_array[1], channel_array[2]);
+					int[] red = channel_array[1];
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 2)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = channel_array[0];
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+					int[] red = channel_array[1];
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 3)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+					int[] red = DeltaMapper.getSum(channel_array[2], green);
+					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = channel_array[0];
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+					int[] red = DeltaMapper.getSum(channel_array[2], green);
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 4)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = channel_array[0];
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 5)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] blue = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], channel_array[1], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+					int[] green = channel_array[0];
+					int[] red = channel_array[1];
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 6)
+			{
+				if (pixel_quant == 0)
+				{
+					for (int i = 0; i < channel_array[2].length; i++)
+						channel_array[2][i] = -channel_array[2][i];
+					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+					int[] blue = DeltaMapper.getSum(channel_array[1], green);
+					int[] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					for (int i = 0; i < channel_array[2].length; i++)
+						channel_array[2][i] = -channel_array[2][i];
+					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+					int[] blue = DeltaMapper.getSum(channel_array[1], green);
+					int[] red = channel_array[0];
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 7)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+					int[] green = channel_array[0];
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 8)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+					int[] blue = DeltaMapper.getDifference(red, channel_array[2]);
+					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+					int[] blue = DeltaMapper.getDifference(red, channel_array[2]);
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				}
+			} 
+			else if (set_id == 9)
+			{
+				if (pixel_quant == 0)
+				{
+					int[] blue = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+
+					int[] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+				} 
+				else
+				{
+					int[] blue = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
+					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+					int[] red = channel_array[0];
+
+					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
+					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
+					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+
+					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				}
 			}
-			
-			/*
-			int [][] frequency = new int[n][256];
-			
-			for(int i = 0; i < n; i++)
+			stop = System.nanoTime();
+			time = stop - start;
+			System.out.println("It took " + (time / 1000000) + " ms to assemble and load rgb files.");
+
+			JFrame frame = new JFrame("Delta Reader");
+			WindowAdapter window_handler = new WindowAdapter()
 			{
-				for(int j = 0; j < 256; j++)
-					frequency[i][j] = in.readInt();
-			}
-			*/
-			
-			System.out.println("Offsets:");
-		    for(int i = 0; i < n; i++)
-		    {
-		    	    for(int j = 0; j < number_of_segments; j++)
-		    	    	    System.out.print(String.format("%.6f", offset[i][j]) + " ");
-		    	    System.out.println();
-		    }
-		    
-		}
-		catch(Exception e)
+				public void windowClosing(WindowEvent event)
+				{
+					System.exit(0);
+				}
+			};
+			frame.addWindowListener(window_handler);
+
+			Canvas image_canvas = new Canvas()
+			{
+				public synchronized void paint(Graphics g)
+				{
+					g.drawImage(image, 0, 0, this);
+				}
+			};
+
+			image_canvas.setSize(xdim, ydim);
+			frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
+			frame.pack();
+			frame.setLocation(400, 200);
+			frame.setVisible(true);
+		} 
+		catch (Exception e)
 		{
-			System.out.println("Exception reading file:");
-			
+			System.out.println(e.toString());
+		}
+	}
+
+	class Decompressor implements Runnable
+	{
+		int i;
+
+		public Decompressor(int i)
+		{
+			this.i = i;
+		}
+
+		public void run()
+		{
+			int[] channel_id = DeltaMapper.getChannels(set_id);
+
+			if (delta_type < 8)
+			{
+				byte[] string  = (byte[]) string_list.get(i);
+				int[] table    = (int[]) table_list.get(i);
+				int iterations = StringMapper.getIterations(string);
+				int bitlength  = StringMapper.getBitlength(string);
+				string         =  StringMapper.decompressStrings2(string);
+				
+				if(channel_iterations[i] != iterations)
+					System.out.println("Iterations appended to string does not agree with channel " + i + " information.");
+				if(compressed_length[i] != bitlength)
+					System.out.println("Bit length appended to string does not agree with channel " + i + " information.");
+				
+				int[] delta;
+				int   number_unpacked = 0;
+				int   current_xdim    = 0;
+				int   current_ydim    = 0;
+				
+				if (pixel_quant == 0)
+				{
+					delta = new int[xdim * ydim];
+					number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+
+					for (int j = 1; j < delta.length; j++)
+						delta[j] += delta_min[i];
+
+					current_xdim = xdim;
+					current_ydim = ydim;
+				} 
+				else
+				{
+					double factor = pixel_quant;
+					factor /= 10;
+					intermediate_xdim = xdim - (int) (factor * (xdim / 2 - 2));
+					intermediate_ydim = ydim - (int) (factor * (ydim / 2 - 2));
+					delta = new int[intermediate_xdim * intermediate_ydim];
+					number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+					for (int j = 1; j < delta.length; j++)
+						delta[j] += delta_min[i];
+
+					current_xdim = intermediate_xdim;
+					current_ydim = intermediate_ydim;
+				}
+
+				int[] current_channel = new int[1];
+				if (delta_type == 0)
+					current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 1)
+					current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 2)
+					current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 3)
+					current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 4)
+					current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 5)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim, current_ydim, init[i], map);
+				} 
+				else if (delta_type == 6)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim, current_ydim, init[i], map);
+				} 
+				else if (delta_type == 7)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], map);
+				}
+
+				if (channel_id[i] > 2)
+					for (int j = 0; j < current_channel.length; j++)
+						current_channel[j] += min[i];
+
+				channel_array[i] = current_channel;
+			} 
+			else
+			{
+				System.out.println("Delta type " + delta_type + " not supported.");
+				System.exit(0);
+			}
 		}
 	}
 
