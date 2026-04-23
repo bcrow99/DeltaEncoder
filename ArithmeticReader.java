@@ -134,11 +134,7 @@ public class ArithmeticReader
 				Inflater inflater = new Inflater();
 				inflater.setInput(freq_zipped_data, 0, freq_zipped_length);
 				int unzipped_length = inflater.inflate(frequency_bytes);
-				if(unzipped_length != frequency_bytes.length)
-				{
-					System.out.println("Unzipped data not expected length.");	
-				}
-				
+			
 				int [][] frequency = new int [number_of_segments][256];
 				
 				if(length_type == 0)
@@ -232,6 +228,7 @@ public class ArithmeticReader
 			
 			start = System.nanoTime();
 			
+			
 			int number_of_processors = Runtime.getRuntime().availableProcessors();
             for(int i = 0; i < 3; i++)
             {
@@ -250,46 +247,35 @@ public class ArithmeticReader
 				
 				int odd_segment_length = segment_length + string.length % number_of_segments;
 				
-				/*
-				if(number_of_segments <= number_of_processors)
+				
+				
+				Thread [] decoder_thread = new Thread[number_of_segments]; 
+				for(int j = 0; j < number_of_segments; j++) 
 				{
-					Thread [] decoder_thread = new Thread[number_of_segments]; 
-					for(int j = 0; j < number_of_segments; j++) 
+					int n = segment_length;
+					if(j == number_of_segments - 1)
+						n = odd_segment_length;
+				    decoder_thread[j] = new Thread(new Decoder(offset[j], frequency[j], n, i, j));
+				    decoder_thread[j].start(); 
+				} 
+				for(int j = 0; j < number_of_segments; j++)
+				    decoder_thread[j].join();	
+				
+				byte [][] segment = segment_list.get(i);
+				for(int j = 0; j < segment.length; j++)
+				{
+					for(int k = 0; k < segment[j].length; k++)
 					{
-						int n = segment_length;
-						if(j == number_of_segments - 1)
-							n = odd_segment_length;
-					    decoder_thread[j] = new Thread(new Decoder(n, i, j);
-					    decoder_thread[j].start(); 
-					} 
-					for(int j = 0; j < number_of_segments; j++)
-					    decoder_thread[j].join();	
-				}
-				else
-				{
-					
-				}
-				*/
-				
-				for(int k = 0; k < number_of_segments - 1; k++)
-				{
-				    byte [] segment = CodeMapper.getArithmeticValues(offset[k], frequency[k], segment_length);
-				    for(int m = 0; m < segment_length; m++)
-				    	    string[k * segment_length + m] = segment[m];
+					    string[j * segment_length + k] = segment[j][k];	
+					}
 				}
 				
-				byte [] segment = CodeMapper.getArithmeticValues(offset[number_of_segments - 1], frequency[number_of_segments - 1], odd_segment_length);
-				for(int m = 0; m < odd_segment_length; m++)
-		    	        string[(number_of_segments - 1) * segment_length + m] = segment[m];
-			    
 				string_list.add(string);
             }
             
 			stop = System.nanoTime();
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to get arithmetic values.");
-			
-			
 			
 			start = System.nanoTime();
 
@@ -304,7 +290,7 @@ public class ArithmeticReader
 
 			
 			// This higher level abstraction makes the program more opaque and
-			// does not improve the performance.
+			// does not improve the performance when last checked.
 			//ExecutorService executorService = Executors.newFixedThreadPool(3);
 			//for (int i = 0; i < 3; i++)
 			//{
@@ -567,6 +553,7 @@ public class ArithmeticReader
 			frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
 			frame.pack();
 			frame.setLocation(400, 200);
+			frame.setExtendedState(JFrame.NORMAL);
 			frame.setVisible(true);
 		} 
 		catch (Exception e)
@@ -581,10 +568,10 @@ public class ArithmeticReader
 	    int [] frequency;
 	    int n, i, j;
 	    
-	    public Decoder(int n, int i, int j)
+	    public Decoder(BigInteger [] offset, int [] frequency, int n, int i, int j)
 		{
-			//this.offset    = offset;
-			//this.frequency = frequency;
+			this.offset    = offset;
+			this.frequency = frequency;
 			this.n         = n;
 			this.i         = i;
 			this.j         = j;
@@ -593,7 +580,7 @@ public class ArithmeticReader
 	    public void run()
 	    {
 	    	    byte [][] segment = segment_list.get(i);
-	    	    //segment[j] = CodeMapper.getArithmeticValues(offset, frequency, n);
+	    	    segment[j] = CodeMapper.getArithmeticValues(offset, frequency, n);
 	    }
 	}
 
