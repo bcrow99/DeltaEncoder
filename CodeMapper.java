@@ -3503,8 +3503,6 @@ public class CodeMapper
 		    range[1]  = offset[1];
 		}
 	
-	    System.out.println("Reduced range is " + range[0]);
-		
 		gcd                      = offset[0].gcd(offset[1]);
 		BigInteger    max_gcd    = gcd;  
         BigInteger largest_index = BigInteger.ZERO;
@@ -3513,7 +3511,6 @@ public class CodeMapper
 		
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
-		System.out.println("Searching interval for greatest common divisor:");
 		
 		BigInteger step = BigInteger.valueOf(1);
 		
@@ -3528,7 +3525,6 @@ public class CodeMapper
 	        }
 	        number_of_searches++;
 	    }
-		System.out.println("Optimal index is " + largest_index);
         
         value[0] = offset[0].add(largest_index);
         value[0] = value[0].divide(max_gcd);
@@ -3872,6 +3868,7 @@ public class CodeMapper
 	
 	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
 	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
+	// We think the problem with this is it doesn't produce a static set of start digits and then repeating digits, whether binary or decimal.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
 		int [] f = frequency.clone();
@@ -4022,7 +4019,7 @@ public class CodeMapper
 	    return result;
 	}
 	
-	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] f, int n)
+	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
 	{
 		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
 		for(int i = 0; i < 256; i++)
@@ -4035,19 +4032,27 @@ public class CodeMapper
 		}
 		
 	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
+	   
+        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
 		
 		int m = 0;
-		for(int i = 0; i < f.length; i++)
+		for(int i = 0; i < frequency.length; i++)
 		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
+		    ArrayList <Integer> list = new ArrayList <Integer> ();
+		    
+		    list.add(i);
+		    list.add(frequency[i]);
+		    list.add(m);
+		    
+		    arithmetic_list.add(list);
+		    
+		    m += frequency[i];
+		}
+	    
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		BigInteger [] w      = {v[0], v[1]};
+		
 		for(int i = 0; i < n; i++)
 		{
 			if(offset[0].compareTo(BigInteger.ZERO) != 0)
@@ -4066,64 +4071,288 @@ public class CodeMapper
 	    	        }
 			}
 			
-			for(int j = 0; j < f.length; j++)
+			// Start j at middle of list.
+			int j = arithmetic_list.size() / 2;
+		    ArrayList <Integer> list = arithmetic_list.get(j);
+			
+		    int f = list.get(1);
+		    int s = list.get(2);
+				
+			BigInteger a = range[0].multiply(BigInteger.valueOf(s));
+		    	BigInteger b = w[0];
+		    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
+		    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+		    	    
+		    	a = a.multiply(w[1]);
+		    	b = b.multiply(d);
+		    	c = c.multiply(w[1]);
+		    	    	
+			if(a.compareTo(b) > 0)
+            {
+                while(a.compareTo(b) > 0) 
+                	{
+                	    j--;
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    a    = range[0].multiply(BigInteger.valueOf(s));
+                	    a    = a.multiply(w[1]);
+                	}
+             }
+			 else if(c.compareTo(b) <= 0)
+             {
+                	while(c.compareTo(b) <= 0) 
+                	{
+                	    j++;
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
+                	    c    = c.multiply(w[1]);
+                	}
+            }
+			
+			// Finished getting j and list.
+			
+			
+			// Reset offset and range.
+			BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
+				
+			offset[0] = offset[0].multiply(addend[1]);
+			offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+		    offset[1] = offset[1].multiply(addend[1]);
+		        
+		    BigInteger gcd = offset[0].gcd(offset[1]);
+			if(gcd.compareTo(BigInteger.ONE) == 1)
 			{
-				if(f[j] != 0)
-				{
-					BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-				   
-				    BigInteger [] a = {lower[0], lower[1]};
-    	                BigInteger [] b = {w[0], w[1]};
-    	                BigInteger [] c = {upper[0], upper[1]};
-					
-				    if(a[1].compareTo(b[1]) != 0)
-				    {
-				    	    a[0] = a[0].multiply(w[1]);
-					    a[1] = a[1].multiply(w[1]);
-					    c[0] = c[0].multiply(w[1]);
-					    c[1] = c[1].multiply(w[1]);
-					    b[0] = b[0].multiply(lower[1]);
-					    b[1] = b[1].multiply(lower[1]);
-				    }
-	    	        
-				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
-				    { 
-				      	BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					
-					    offset[0] = offset[0].multiply(addend[1]);
-					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-				        offset[1] = offset[1].multiply(addend[1]);
-				        
-				        BigInteger gcd = offset[0].gcd(offset[1]);
-					    if(gcd.compareTo(BigInteger.ONE) == 1)
-					    {
-						    offset[0] = offset[0].divide(gcd);
-						    offset[1] = offset[1].divide(gcd);;
-					    }
-				   
-				        range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-				       
-				        gcd = range[0].gcd(range[1]);
-		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	            {
-		    	    	            range[0] = range[0].divide(gcd);
-				    	        range[1] = range[1].divide(gcd);
-		    	            }
-				   
-		    	            f[j]--;
-			    	        m--;
-			    	        for(int k = j + 1; k < s.length; k++)
-			    	    	        s[k]--;
-		    	        
-				        j = inverse_symbol.get(j);
-				        value[i] = (byte)j;
-				        
-				        break;
-				    }
-			    }
-			}	
+				offset[0] = offset[0].divide(gcd);
+				offset[1] = offset[1].divide(gcd);;
+			}
+		   
+		    range[0] = range[0].multiply(BigInteger.valueOf(f));
+		    range[1] = range[1].multiply(BigInteger.valueOf(m));
+		       
+		    gcd = range[0].gcd(range[1]);
+    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+    	        {
+    	    	        range[0] = range[0].divide(gcd);
+		    	    range[1] = range[1].divide(gcd);
+    	        }
+		   
+    	        // Reset sums.
+    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
+	    	    {
+	    	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
+	    	        	s = list2.get(2);
+	    	        	s--;
+	    	        	list2.set(2, s);
+	    	        	arithmetic_list.set(p, list2);	
+	    	    }
+    	          
+    	        // Reset frequency and m.
+    	        // Remove list if frequency is zero.
+    	        f--;
+	    	    m--;   
+	    	    if(f != 0)
+	    	    {
+	    	        list.set(1, f);
+	    	        arithmetic_list.set(j,  list);
+	    	    }
+	    	    else
+	    	        	arithmetic_list.remove(j);
+	    	     
+	    	    int k    = list.get(0);
+		    k        = inverse_symbol.get(k);
+		    value[i] = (byte)k;	
+		}
+		
+	    return value;
+	}
+	
+	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
+	{
+		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
+		for(int i = 0; i < 256; i++)
+		{
+			if(symbol.containsKey(i))
+		    {
+				int j = symbol.get(i);
+		        inverse_symbol.put(j, i);
+		    }
+		}
+		
+	    byte [] value = new byte[n];
+	   
+        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
+		
+		int m = 0;
+		for(int i = 0; i < frequency.length; i++)
+		{
+		    ArrayList <Integer> list = new ArrayList <Integer> ();
+		    
+		    list.add(i);
+		    list.add(frequency[i]);
+		    list.add(m);
+		    
+		    arithmetic_list.add(list);
+		    
+		    m += frequency[i];
+		}
+	    
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		BigInteger [] w      = {v[0], v[1]};
+		
+		for(int i = 0; i < n; i++)
+		{
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+				w[0] = v[0];
+				w[1] = v[1];
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
+			}
+			
+			int j = arithmetic_list.size() / 2;
+		    ArrayList <Integer> list = arithmetic_list.get(j);
+			
+		    int f = list.get(1);
+		    int s = list.get(2);
+				
+			BigInteger a = range[0].multiply(BigInteger.valueOf(s));
+		    	BigInteger b = w[0];
+		    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
+		    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+		    	    
+		    	a = a.multiply(w[1]);
+		    	b = b.multiply(d);
+		    	c = c.multiply(w[1]);
+		    	    	
+			if(a.compareTo(b) > 0)
+            {
+			    int k = j / 2;
+                while(a.compareTo(b) > 0) 
+                	{
+                	    j -= k;
+                	    
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    a    = range[0].multiply(BigInteger.valueOf(s));
+                	    a    = a.multiply(w[1]);
+                	    
+                	    k /= 2;
+                	    if(k == 0)
+                	    	    k = 1;
+                	}
+                
+                // Check if we passed value.
+                c = range[0].multiply(BigInteger.valueOf(s + f));
+       	        c = c.multiply(w[1]);
+       	        if(c.compareTo(b) <= 0)
+                {
+                    while(c.compareTo(b) <= 0)
+                    {
+                	    	    j++;
+                	    	    list = arithmetic_list.get(j);
+                        	f    = list.get(1);
+                        	s    = list.get(2);
+                	    	    
+                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
+	                	    c = c.multiply(w[1]);
+                	    }
+                } 
+             }
+			 else if(c.compareTo(b) <= 0)
+             {
+				int size = arithmetic_list.size();
+			    int k = (size - j) / 2;
+                	
+			    while(c.compareTo(b) <= 0) 
+                	{
+                	    j += k;
+                	     
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
+                	    c    = c.multiply(w[1]);
+                	    
+                	    k /= 2;
+                	    if(k == 0)
+                	    	    k = 1;
+                	}
+                	
+			    // Check if we passed value.
+			    a = range[0].multiply(BigInteger.valueOf(s));
+        	        a = a.multiply(w[1]);
+        	        if(a.compareTo(b) > 0)
+            	    {
+            	        while(a.compareTo(b) > 0)
+            	        {
+            	    	        j--; 
+            	    	        list = arithmetic_list.get(j);
+                        	f    = list.get(1);
+                        	s    = list.get(2);
+            	    	        a    = range[0].multiply(BigInteger.valueOf(s));
+            	    	        a = a.multiply(w[1]);
+            	        }
+            	    }
+            }
+			
+			BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
+				
+			offset[0] = offset[0].multiply(addend[1]);
+			offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+		    offset[1] = offset[1].multiply(addend[1]);
+		        
+		    BigInteger gcd = offset[0].gcd(offset[1]);
+			if(gcd.compareTo(BigInteger.ONE) == 1)
+			{
+				offset[0] = offset[0].divide(gcd);
+				offset[1] = offset[1].divide(gcd);;
+			}
+		   
+		    range[0] = range[0].multiply(BigInteger.valueOf(f));
+		    range[1] = range[1].multiply(BigInteger.valueOf(m));
+		       
+		    gcd = range[0].gcd(range[1]);
+    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+    	        {
+    	    	        range[0] = range[0].divide(gcd);
+		    	    range[1] = range[1].divide(gcd);
+    	        }
+		   
+    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
+	    	    {
+	    	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
+	    	        	s = list2.get(2);
+	    	        	s--;
+	    	        	list2.set(2, s);
+	    	        	arithmetic_list.set(p, list2);	
+	    	    }
+    	          
+    	        f--;
+	    	    m--;   
+	    	    if(f != 0)
+	    	    {
+	    	        list.set(1, f);
+	    	        arithmetic_list.set(j,  list);
+	    	    }
+	    	    else
+	    	        	arithmetic_list.remove(j);
+	    	     
+	    	    int k    = list.get(0);
+		    k        = inverse_symbol.get(k);
+		    value[i] = (byte)k;	
 		}
 		
 	    return value;
@@ -4131,6 +4360,8 @@ public class CodeMapper
 	
 	public static byte [] getArithmeticValues(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n, byte [] order)
 	{
+		int [] frequency2 = new int[frequency.length];
+		
 		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
 		for(int i = 0; i < 256; i++)
 		{
@@ -4140,32 +4371,38 @@ public class CodeMapper
 		        inverse_symbol.put(j, i);
 		    }
 		}
-		int [] f = new int[frequency.length];
+		
+		// Reorder frequency table.
 		byte[] inverse_order = new byte[order.length];
 		for(int i = 0; i < order.length; i++)
 		{
 			int j = order[i];
 			if(j < 0)
-				j += 256;
+			    j += 256;
+			
+			frequency2[j]    = frequency[i];
 			inverse_order[j] = (byte) i;
-			f[j] = frequency[i];
 		}
 		
-	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
-		
+        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
 		int m = 0;
-		for(int i = 0; i < f.length; i++)
+		for(int i = 0; i < frequency.length; i++)
 		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
+		    ArrayList <Integer> list = new ArrayList <Integer> ();
+		    list.add(i);
+		    
+		    
+		    list.add(frequency2[i]);
+		    list.add(m);
+		    arithmetic_list.add(list);
+		    m += frequency2[i];
+		}
+	    
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		BigInteger [] w      = {v[0], v[1]};
 		
+		byte [] value = new byte[n];
 		for(int i = 0; i < n; i++)
 		{
 			if(offset[0].compareTo(BigInteger.ZERO) != 0)
@@ -4184,1378 +4421,104 @@ public class CodeMapper
 	    	        }
 			}
 			
-			for(int j = 0; j < f.length; j++)
-			{
-				if(f[j] != 0)
-				{
-					BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-				   
-				    BigInteger [] a = {lower[0], lower[1]};
-    	                BigInteger [] b = {w[0], w[1]};
-    	                BigInteger [] c = {upper[0], upper[1]};
-					
-				    if(a[1].compareTo(b[1]) != 0)
-				    {
-				    	    a[0] = a[0].multiply(w[1]);
-					    a[1] = a[1].multiply(w[1]);
-					    c[0] = c[0].multiply(w[1]);
-					    c[1] = c[1].multiply(w[1]);
-					    b[0] = b[0].multiply(lower[1]);
-					    b[1] = b[1].multiply(lower[1]);
-				    }
-	    	        
-				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
-				    { 
-				      	BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					
-					    offset[0] = offset[0].multiply(addend[1]);
-					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-				        offset[1] = offset[1].multiply(addend[1]);
-				        
-				        BigInteger gcd = offset[0].gcd(offset[1]);
-					    if(gcd.compareTo(BigInteger.ONE) == 1)
-					    {
-						    offset[0] = offset[0].divide(gcd);
-						    offset[1] = offset[1].divide(gcd);;
-					    }
-				   
-				        range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-				       
-				        gcd = range[0].gcd(range[1]);
-		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	            {
-		    	    	            range[0] = range[0].divide(gcd);
-				    	        range[1] = range[1].divide(gcd);
-		    	            }
-				   
-		    	            f[j]--;
-			    	        m--;
-			    	        for(int k = j + 1; k < s.length; k++)
-			    	    	        s[k]--;
-			    	        
-			    	        j = inverse_order[j];
-		    	            if(j < 0)
-		    	            	    j += 256;
-			            j = inverse_symbol.get(j);
-			            value[i] = (byte)j;
-				        
-				        break;
-				    }
-			    }
-			}	
-		}
-		
-	    return value;
-	}
-	
-	/*
-	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
-	{
-		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
-		for(int i = 0; i < 256; i++)
-		{
-			if(symbol.containsKey(i))
-		    {
-				int j = symbol.get(i);
-		        inverse_symbol.put(j, i);
-		    }
-		}
-		
-		int [] f = new int[frequency.length];
-		
-	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		
-		for(int i = 0; i < n; i++)
-		{
-			if(m == 1)
-			{
-			    for(int j = 0; j < f.length; j++)
-			    {
-				    if(f[j] != 0)
-				    { 
-		                j = inverse_symbol.get(j);
-		                value[i] = (byte)j;	
-		                m--;
-		                break;
-				    }
-				}   
-			}
-			else
-			{
-				if(offset[0].compareTo(BigInteger.ZERO) != 0)
-				{
-					w[0] = v[0];
-					w[1] = v[1];
-				    w[0] = w[0].multiply(offset[1]);
-				    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-				    w[1] = w[1].multiply(offset[1]);
-				    
-				    BigInteger gcd = w[0].gcd(w[1]);
-		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	        {
-		    	    	        w[0] = w[0].divide(gcd);
-				       	w[1] = w[1].divide(gcd);
-		    	        }
-				}
-				
-				if(m == 2)
-				{
-					for(int j = 0; j < f.length; j++)
-				    {
-					    if(f[j] != 0)
-					    {
-					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-					    	    BigInteger b = w[0];
-					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-					    	    
-					    	    a = a.multiply(w[1]);
-					    	    b = b.multiply(d);
-					    	    c = c.multiply(w[1]);
-					    	    
-		    	                if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
-	                        {
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    						
-	   	    					    offset[0] = offset[0].multiply(addend[1]);
-	   	    					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	   	    				        offset[1] = offset[1].multiply(addend[1]);
-	   	    				        
-	   	    				        BigInteger gcd = offset[0].gcd(offset[1]);
-	   	    					    if(gcd.compareTo(BigInteger.ONE) == 1)
-	   	    					    {
-	   	    						    offset[0] = offset[0].divide(gcd);
-	   	    						    offset[1] = offset[1].divide(gcd);;
-	   	    					    }
-	   	    					    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		    				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-		    				       
-		    				        gcd = range[0].gcd(range[1]);
-		    		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    		    	            {
-		    		    	    	           range[0] = range[0].divide(gcd);
-		    				    	       range[1] = range[1].divide(gcd);
-		    		    	           }
-		    				   
-		    		    	           f[j]--;
-		    			    	       m--;
-		    			    	       for(int k = j + 1; k < s.length; k++)
-		    			    	    	       s[k]--;
-		    			    	        
-		    			           j = inverse_symbol.get(j);
-		    			           value[i] = (byte)j;
-		    			           break;
-	                        }
-					    }
-					}
-				}
-				else
-				{
-					for(int j = 0; j < f.length; j++)
-					{
-						if(f[j] == m)
-						{
- 			                j = inverse_symbol.get(j);
-							while(m > 0)
-							{
-								value[i] = (byte)j;
-								i++;
-								m--;
-							}
-						}
-						else if(s[j] > m / 2)
-						{
-							BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-							BigInteger b = w[0];
-							BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-							BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-							
-							a = a.multiply(w[1]);
-							b = b.multiply(d);
-							c = c.multiply(w[1]);
-							
-		    	                if(a.compareTo(b) > 0)
-		    	                	{
-		    	                	    int k = j / 2;
-		    	                	    while(a.compareTo(b) > 0) 
-		    	                	    {
-		    	                	    	    j -= k;
-		    	                	    	    if(j < 0)
-		    	                	    	    	    j = 0;
-		    	                	    	     
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	    	     
-		    	                	    	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    	    a = a.multiply(w[1]);
-		    	                	     }
-		    	                	    
-		    	                	     c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	     c = c.multiply(w[1]);
-		    	                	     if(c.compareTo(b) <= 0)
-		 		    	             {
-		 		    	                 while(c.compareTo(b) <= 0)
-		 		    	                	 {
-		 		    	                	    	j++;
-		 		    	                	    	c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		 		    	                	    	c = c.multiply(w[1]);
-		 		    	                	 }
-		 		    	             }
-		    	                	     	 
-		    	                	     BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    	    						
-		    	    					 offset[0] = offset[0].multiply(addend[1]);
-		    	    					 offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		    	    				     offset[1] = offset[1].multiply(addend[1]);
-		    	    				        
-		    	    				     BigInteger gcd = offset[0].gcd(offset[1]);
-		    	    					 if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	    					 {
-		    	    						 offset[0] = offset[0].divide(gcd);
-		    	    						 offset[1] = offset[1].divide(gcd);;
-		    	    					 }
-		    	    					 range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		 	    				     range[1] = range[1].multiply(BigInteger.valueOf(m));
-		 	    				       
-		 	    				     gcd = range[0].gcd(range[1]);
-		 	    		    	         if(gcd.compareTo(BigInteger.ONE) == 1)
-		 	    		    	         {
-		 	    		    	    	        range[0] = range[0].divide(gcd);
-		 	    				    	    range[1] = range[1].divide(gcd);
-		 	    		    	        }
-		 	    				   
-		 	    		    	        f[j]--;
-		 	    			    	    m--;
-		 	    			    	    for(k = j + 1; k < s.length; k++)
-		 	    			    	    	    s[k]--;
-		 	    			    	        
-		 	    			        j = inverse_symbol.get(j);
-		 	    			        value[i] = (byte)j;
-		 	    			        break;
-		    	                	}
-		    	                else if(c.compareTo(b) <= 0)
-		    	                {
-		    	                	    int k = (f.length - j) / 2;
-		    	                	    while(c.compareTo(b) <= 0)
-		    	                	    {
-		    	                	    	    j += k;
-		    	                	    	    if(j > f.length - 1)
-		    	                	    	    	    j = f.length - 1;
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	    	    
-		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	    	    c = c.multiply(w[1]);
-		    	                	    }
-		    	                	    
-		    	                	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    a = a.multiply(w[1]);
-		    	                	    
-		    	                	    if(a.compareTo(b) > 0)
-			    	                	{
-			    	                	     while(a.compareTo(b) > 0)
-			    	                	     {
-			    	                	    	     j--;
-			    	                	    	     a = range[0].multiply(BigInteger.valueOf(s[j]));
-			    	                	    	     a = a.multiply(w[1]);
-			    	                	     }
-			    	                	}
-		    	                	     
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-			    						
-		   	    					offset[0] = offset[0].multiply(addend[1]);
-		   	    					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		   	    				    offset[1] = offset[1].multiply(addend[1]);
-		   	    				        
-		   	    				    BigInteger gcd = offset[0].gcd(offset[1]);
-		   	    					if(gcd.compareTo(BigInteger.ONE) == 1)
-		   	    					{
-		   	    						offset[0] = offset[0].divide(gcd);
-		   	    						offset[1] = offset[1].divide(gcd);
-		   	    					}
-		   	    					range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-			    				    range[1] = range[1].multiply(BigInteger.valueOf(m));
-			    				       
-			    				    gcd = range[0].gcd(range[1]);
-			    		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-			    		    	        {
-			    		    	    	        range[0] = range[0].divide(gcd);
-			    				    	    range[1] = range[1].divide(gcd);
-			    		    	        }
-			    				   
-			    		    	        f[j]--;
-			    			    	    m--;
-			    			    	    for(k = j + 1; k < s.length; k++)
-			    			    	    	    s[k]--;
-			    			    	        
-			    			        j = inverse_symbol.get(j);
-			    			        value[i] = (byte)j;
-			    			        break;
-		    	                }
-						}
-					}
-				}
-			}
-		}
-		
-	    return value;
-	}
-	*/
-	
-	/*
-	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
-	{
-		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
-		for(int i = 0; i < 256; i++)
-		{
-			if(symbol.containsKey(i))
-		    {
-				int j = symbol.get(i);
-		        inverse_symbol.put(j, i);
-		    }
-		}
-		int [] f = frequency.clone();
-		
-	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		
-		for(int i = 0; i < n; i++)
-		{
-			if(m == 1)
-			{
-			    for(int j = 0; j < f.length; j++)
-			    {
-				    if(f[j] != 0)
-				    { 
-		                j = inverse_symbol.get(j);
-		                value[i] = (byte)j;	
-		                m--;
-		                break;
-				    }
-				}   
-			}
-			else
-			{
-				if(offset[0].compareTo(BigInteger.ZERO) != 0)
-				{
-					w[0] = v[0];
-					w[1] = v[1];
-				    w[0] = w[0].multiply(offset[1]);
-				    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-				    w[1] = w[1].multiply(offset[1]);
-				    
-				    BigInteger gcd = w[0].gcd(w[1]);
-		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	        {
-		    	    	        w[0] = w[0].divide(gcd);
-				       	w[1] = w[1].divide(gcd);
-		    	        }
-				}
-				
-				if(m == 2)
-				{
-					for(int j = 0; j < f.length; j++)
-				    {
-					    if(f[j] != 0)
-					    {
-					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-					    	    BigInteger b = w[0];
-					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-					    	    
-					    	    a = a.multiply(w[1]);
-					    	    b = b.multiply(d);
-					    	    c = c.multiply(w[1]);
-					    	    
-		    	                if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
-	                        {
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    						
-	   	    					    offset[0] = offset[0].multiply(addend[1]);
-	   	    					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	   	    				        offset[1] = offset[1].multiply(addend[1]);
-	   	    				        
-	   	    				        BigInteger gcd = offset[0].gcd(offset[1]);
-	   	    					    if(gcd.compareTo(BigInteger.ONE) == 1)
-	   	    					    {
-	   	    						    offset[0] = offset[0].divide(gcd);
-	   	    						    offset[1] = offset[1].divide(gcd);;
-	   	    					    }
-	   	    					    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		    				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-		    				       
-		    				        gcd = range[0].gcd(range[1]);
-		    		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    		    	            {
-		    		    	    	           range[0] = range[0].divide(gcd);
-		    				    	       range[1] = range[1].divide(gcd);
-		    		    	           }
-		    				   
-		    		    	           f[j]--;
-		    			    	       m--;
-		    			    	       for(int k = j + 1; k < s.length; k++)
-		    			    	    	       s[k]--;
-		    			    	        
-		    			           j = inverse_symbol.get(j);
-		    			           value[i] = (byte)j;
-		    			           break;
-	                        }
-					    }
-					}
-				}
-				else
-				{
-					for(int j = 0; j < f.length; j++)
-					{
-						if(f[j] == m)
-						{
- 			                j = inverse_symbol.get(j);
-							while(m > 0)
-							{
-								value[i] = (byte)j;
-								i++;
-								m--;
-							}
-						}
-						else if(s[j] > m / 2)
-						{
-							BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-							BigInteger b = w[0];
-							BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-							BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-							
-							a = a.multiply(w[1]);
-							b = b.multiply(d);
-							c = c.multiply(w[1]);
-							
-		    	                if(a.compareTo(b) > 0)
-		    	                	{
-		    	                	    int k = j / 2;
-		    	                	    while(a.compareTo(b) > 0) 
-		    	                	    {
-		    	                	    	    j -= k;
-		    	                	    	    if(j < 0)
-		    	                	    	    	    j = 0;
-		    	                	    	    
-		    	                	    	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-	    	                	    	        a = a.multiply(w[1]);
-	    	                	    	        
-	    	                	    	        if(a.compareTo(b) <= 0 && f[j] == 0)
-	    	                	    	        {
-	    	                	    	        	    while(f[j] == 0) 
-	    	                	    	        	    	    j++;
-	    	                	    	        }
-	    	                	    	        
-		    	                	    	     
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	     }
-		    	                	    
-		    	                	     c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	     c = c.multiply(w[1]);
-		    	                	     if(c.compareTo(b) <= 0)
-		 		    	             {
-		 		    	                 while(c.compareTo(b) <= 0)
-		 		    	                	 {
-		 		    	                	    	 j++;
-		 		    	                	    	 c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-			 		    	                	 c = c.multiply(w[1]);
-		 		    	                	 }
-		 		    	             }
-		    	                	     	 
-		    	                	     BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    	    						
-		    	    					 offset[0] = offset[0].multiply(addend[1]);
-		    	    					 offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		    	    				     offset[1] = offset[1].multiply(addend[1]);
-		    	    				        
-		    	    				     BigInteger gcd = offset[0].gcd(offset[1]);
-		    	    					 if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	    					 {
-		    	    						 offset[0] = offset[0].divide(gcd);
-		    	    						 offset[1] = offset[1].divide(gcd);;
-		    	    					 }
-		    	    					 range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		 	    				     range[1] = range[1].multiply(BigInteger.valueOf(m));
-		 	    				       
-		 	    				     gcd = range[0].gcd(range[1]);
-		 	    		    	         if(gcd.compareTo(BigInteger.ONE) == 1)
-		 	    		    	         {
-		 	    		    	    	        range[0] = range[0].divide(gcd);
-		 	    				    	    range[1] = range[1].divide(gcd);
-		 	    		    	        }
-		 	    				   
-		 	    		    	        f[j]--;
-		 	    			    	    m--;
-		 	    			    	    for(k = j + 1; k < s.length; k++)
-		 	    			    	    	    s[k]--;
-		 	    			    	        
-		 	    			        j = inverse_symbol.get(j);
-		 	    			        value[i] = (byte)j;
-		 	    			        break;
-		    	                	}
-		    	                else if(c.compareTo(b) <= 0)
-		    	                {
-		    	                	    int k = (f.length - j) / 2;
-		    	                	    while(c.compareTo(b) <= 0)
-		    	                	    {
-		    	                	    	    j += k;
-		    	                	    	    if(j > f.length - 1)
-		    	                	    	    	    j = f.length - 1;
-		    	                	    	    
-		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	    	    c = c.multiply(w[1]);
-		    	                	    	    
-		    	                	    	    if(c.compareTo(b) == 1 && f[j] == 0)
-		    	                	    	    {
-		    	                	    	    	    while(f[j] == 0)
-		    	                	    	    	    	    j--;
-		    	                	    	    }
-		    	                	    	    
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	    	   
-		    	                	    }
-		    	                	    
-		    	                	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    a = a.multiply(w[1]);
-		    	                	    
-		    	                	    if(a.compareTo(b) > 0)
-			    	                	{
-			    	                	     while(a.compareTo(b) > 0)
-			    	                	     {
-			    	                	    	     j--; 
-			    	                	    	     
-			    	                	    	     a = range[0].multiply(BigInteger.valueOf(s[j]));
-			    	                	    	     a = a.multiply(w[1]);
-			    	                	    	     if(a.compareTo(b) <= 0 && f[j] == 0)
-			    	                	    	     {
-			    	                	    	    	     while(f[j] == 0)
-			    	                	    	    	    	     j--;
-			    	                	    	     }
-			    	                	     }
-			    	                	}
-		    	                	     
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-			    						
-		   	    					offset[0] = offset[0].multiply(addend[1]);
-		   	    					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		   	    				    offset[1] = offset[1].multiply(addend[1]);
-		   	    				        
-		   	    				    BigInteger gcd = offset[0].gcd(offset[1]);
-		   	    					if(gcd.compareTo(BigInteger.ONE) == 1)
-		   	    					{
-		   	    						offset[0] = offset[0].divide(gcd);
-		   	    						offset[1] = offset[1].divide(gcd);
-		   	    					}
-		   	    					range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-			    				    range[1] = range[1].multiply(BigInteger.valueOf(m));
-			    				       
-			    				    gcd = range[0].gcd(range[1]);
-			    		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-			    		    	        {
-			    		    	    	        range[0] = range[0].divide(gcd);
-			    				    	    range[1] = range[1].divide(gcd);
-			    		    	        }
-			    				   
-			    		    	        f[j]--;
-			    		    	        
-			    			    	    m--;
-			    			    	    for(k = j + 1; k < s.length; k++)
-			    			    	    	    s[k]--;
-			    			    	        
-			    			        j = inverse_symbol.get(j);
-			    			        value[i] = (byte)j;
-			    			        break;
-		    	                }
-						}
-					}
-				}
-			}
-		}
-		
-	    return value;
-	}
-	*/
-	
-	
-	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
-	{
-		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
-		
-		for(int i = 0; i < 256; i++)
-		{
-			// The symbol table might or might not contain all possible unsigned byte values.
-			if(symbol.containsKey(i))
-		    {
-				int j = symbol.get(i);
-		        inverse_symbol.put(j, i);
-		    }
-		}
-		
-		ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
-		
-		// Assuming that all values in frequency array are non-zero.
-		// If a frequency value becomes zero, it is removed from the list.
-		int sum = 0;
-		for(int i = 0; i < frequency.length; i++)
-		{
-		    ArrayList <Integer> list = new ArrayList <Integer> ();
-		    
-		    list.add(i);
-		    list.add(frequency[i]);
-		    list.add(sum);
-		    
-		    arithmetic_list.add(list);
-		    
-		    sum += frequency[i];
-		}
-		
-		
-		
-		
-		
-		int [] f = frequency.clone();
-		
-	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		
-		for(int i = 0; i < n; i++)
-		{
-			if(m == 1)
-			{
-				/*
-				int index = 0;
-				if(arithmetic_list.size() != 1)
-					System.out.println("List is longer than number of elements.");
-				else
-				{
-					ArrayList <Integer> list = arithmetic_list.get(0);
-					index = list.get(0);
-				}
-				*/
-				
-				
-			    for(int j = 0; j < f.length; j++)
-			    {
-				    if(f[j] != 0)
-				    { 
-		                j = inverse_symbol.get(j);
-		                value[i] = (byte)j;	
-		                m--;
-		                break;
-				    }
-				}   
-			}
-			else
-			{
-				if(offset[0].compareTo(BigInteger.ZERO) != 0)
-				{
-					w[0] = v[0];
-					w[1] = v[1];
-				    w[0] = w[0].multiply(offset[1]);
-				    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-				    w[1] = w[1].multiply(offset[1]);
-				    
-				    BigInteger gcd = w[0].gcd(w[1]);
-		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	        {
-		    	    	        w[0] = w[0].divide(gcd);
-				       	w[1] = w[1].divide(gcd);
-		    	        }
-				}
-				
-				if(m == 2)
-				{
-					for(int j = 0; j < f.length; j++)
-				    {
-					    if(f[j] != 0)
-					    {
-					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-					    	    BigInteger b = w[0];
-					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-					    	    
-					    	    a = a.multiply(w[1]);
-					    	    b = b.multiply(d);
-					    	    c = c.multiply(w[1]);
-					    	    
-		    	                if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
-	                        {
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    						
-	   	    					    offset[0] = offset[0].multiply(addend[1]);
-	   	    					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	   	    				        offset[1] = offset[1].multiply(addend[1]);
-	   	    				        
-	   	    				        BigInteger gcd = offset[0].gcd(offset[1]);
-	   	    					    if(gcd.compareTo(BigInteger.ONE) == 1)
-	   	    					    {
-	   	    						    offset[0] = offset[0].divide(gcd);
-	   	    						    offset[1] = offset[1].divide(gcd);;
-	   	    					    }
-	   	    					    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		    				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-		    				       
-		    				        gcd = range[0].gcd(range[1]);
-		    		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    		    	            {
-		    		    	    	           range[0] = range[0].divide(gcd);
-		    				    	       range[1] = range[1].divide(gcd);
-		    		    	           }
-		    				   
-		    		    	           f[j]--;
-		    			    	       m--;
-		    			    	       for(int k = j + 1; k < s.length; k++)
-		    			    	    	       s[k]--;
-		    			    	        
-		    			           j = inverse_symbol.get(j);
-		    			           value[i] = (byte)j;
-		    			           break;
-	                        }
-					    }
-					}
-				}
-				else
-				{
-					for(int j = 0; j < f.length; j++)
-					{
-						if(f[j] == m)
-						{
- 			                j = inverse_symbol.get(j);
-							while(m > 0)
-							{
-								value[i] = (byte)j;
-								i++;
-								m--;
-							}
-						}
-						else if(s[j] > m / 2)
-						{
-							BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-							BigInteger b = w[0];
-							BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-							BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-							
-							a = a.multiply(w[1]);
-							b = b.multiply(d);
-							c = c.multiply(w[1]);
-							
-		    	                if(a.compareTo(b) > 0)
-		    	                	{
-		    	                	    int k = j / 2;
-		    	                	    while(a.compareTo(b) > 0) 
-		    	                	    {
-		    	                	    	    j -= k;
-		    	                	    	    if(j < 0)
-		    	                	    	    	    j = 0;
-		    	                	    	    
-		    	                	    	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-	    	                	    	        a = a.multiply(w[1]);
-	    	                	    	        
-	    	                	    	        if(a.compareTo(b) <= 0 && f[j] == 0)
-	    	                	    	        {
-	    	                	    	        	    while(f[j] == 0) 
-	    	                	    	        	    	    j++;
-	    	                	    	        }
-	    	                	    	        
-		    	                	    	     
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	     }
-		    	                	    
-		    	                	     c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	     c = c.multiply(w[1]);
-		    	                	     if(c.compareTo(b) <= 0)
-		 		    	             {
-		 		    	                 while(c.compareTo(b) <= 0)
-		 		    	                	 {
-		 		    	                	    	 j++;
-		 		    	                	    	 c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-			 		    	                	 c = c.multiply(w[1]);
-		 		    	                	 }
-		 		    	             }
-		    	                	     	 
-		    	                	     BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    	    						
-		    	    					 offset[0] = offset[0].multiply(addend[1]);
-		    	    					 offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		    	    				     offset[1] = offset[1].multiply(addend[1]);
-		    	    				        
-		    	    				     BigInteger gcd = offset[0].gcd(offset[1]);
-		    	    					 if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	    					 {
-		    	    						 offset[0] = offset[0].divide(gcd);
-		    	    						 offset[1] = offset[1].divide(gcd);;
-		    	    					 }
-		    	    					 range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		 	    				     range[1] = range[1].multiply(BigInteger.valueOf(m));
-		 	    				       
-		 	    				     gcd = range[0].gcd(range[1]);
-		 	    		    	         if(gcd.compareTo(BigInteger.ONE) == 1)
-		 	    		    	         {
-		 	    		    	    	        range[0] = range[0].divide(gcd);
-		 	    				    	    range[1] = range[1].divide(gcd);
-		 	    		    	        }
-		 	    				   
-		 	    		    	        f[j]--;
-		 	    			    	    m--;
-		 	    			    	    for(k = j + 1; k < s.length; k++)
-		 	    			    	    	    s[k]--;
-		 	    			    	        
-		 	    			        j = inverse_symbol.get(j);
-		 	    			        value[i] = (byte)j;
-		 	    			        break;
-		    	                	}
-		    	                else if(c.compareTo(b) <= 0)
-		    	                {
-		    	                	    int k = (f.length - j) / 2;
-		    	                	    while(c.compareTo(b) <= 0)
-		    	                	    {
-		    	                	    	    j += k;
-		    	                	    	    if(j > f.length - 1)
-		    	                	    	    	    j = f.length - 1;
-		    	                	    	    
-		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	    	    c = c.multiply(w[1]);
-		    	                	    	    
-		    	                	    	    if(c.compareTo(b) == 1 && f[j] == 0)
-		    	                	    	    {
-		    	                	    	    	    while(f[j] == 0)
-		    	                	    	    	    	    j--;
-		    	                	    	    }
-		    	                	    	    
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	    	   
-		    	                	    }
-		    	                	    
-		    	                	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    a = a.multiply(w[1]);
-		    	                	    
-		    	                	    if(a.compareTo(b) > 0)
-			    	                	{
-			    	                	     while(a.compareTo(b) > 0)
-			    	                	     {
-			    	                	    	     j--; 
-			    	                	    	     
-			    	                	    	     a = range[0].multiply(BigInteger.valueOf(s[j]));
-			    	                	    	     a = a.multiply(w[1]);
-			    	                	    	     if(a.compareTo(b) <= 0 && f[j] == 0)
-			    	                	    	     {
-			    	                	    	    	     while(f[j] == 0)
-			    	                	    	    	    	     j--;
-			    	                	    	     }
-			    	                	     }
-			    	                	}
-		    	                	     
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-			    						
-		   	    					offset[0] = offset[0].multiply(addend[1]);
-		   	    					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		   	    				    offset[1] = offset[1].multiply(addend[1]);
-		   	    				        
-		   	    				    BigInteger gcd = offset[0].gcd(offset[1]);
-		   	    					if(gcd.compareTo(BigInteger.ONE) == 1)
-		   	    					{
-		   	    						offset[0] = offset[0].divide(gcd);
-		   	    						offset[1] = offset[1].divide(gcd);
-		   	    					}
-		   	    					range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-			    				    range[1] = range[1].multiply(BigInteger.valueOf(m));
-			    				       
-			    				    gcd = range[0].gcd(range[1]);
-			    		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-			    		    	        {
-			    		    	    	        range[0] = range[0].divide(gcd);
-			    				    	    range[1] = range[1].divide(gcd);
-			    		    	        }
-			    				   
-			    		    	        f[j]--;
-			    		    	        
-			    			    	    m--;
-			    			    	    for(k = j + 1; k < s.length; k++)
-			    			    	    	    s[k]--;
-			    			    	        
-			    			        j = inverse_symbol.get(j);
-			    			        value[i] = (byte)j;
-			    			        break;
-		    	                }
-						}
-					}
-				}
-			}
-		}
-		
-	    return value;
-	}
-	
-	
-	
-	
-	/*
-	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n)
-	{
-		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
-		for(int i = 0; i < 256; i++)
-		{
-			if(symbol.containsKey(i))
-		    {
-				int j = symbol.get(i);
-		        inverse_symbol.put(j, i);
-		    }
-		}
-		byte [] value = new byte[n];
-		
-		
-		Hashtable <Integer, Integer> freq = new Hashtable <Integer, Integer>();
-		Hashtable <Integer, Integer> sum  = new Hashtable <Integer, Integer>();
-		
-		int m = 0;
-		for(int i = 0; i < frequency.length; i++)
-		{
-		    if(frequency[i] != 0)
-		    {
-		    	    freq.put(i, frequency[i]);
-		    	    sum.put(i, m);
-		    	    
-		    	    m += frequency[i];
-		    }
-		}
-		
-		Enumeration keys = freq.keys();
-		ArrayList <Integer> key_list = new ArrayList <Integer> ();
-		while(keys.hasMoreElements())
-		{
-			int j = (Integer)keys.nextElement();
-			key_list.add(j);
-		}
-		
-		// The keys were added in ascending order, but produced in descending order
-		// so we need to sort the key list in the opposite direction.
-		Collections.sort(key_list);
-		
-		
-        
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		
-		for(int i = 0; i < n; i++)
-		{
-			//System.out.println("i = " + i);
+			int j = arithmetic_list.size() / 2;
+		    ArrayList <Integer> list = arithmetic_list.get(j);
 			
-			if(m == 1)
-			{
+		    int f = list.get(1);
+		    int s = list.get(2);
 				
-				int         j    = (Integer) keys.nextElement();
-				j                = inverse_symbol.get(j);
-				value[i]         = (byte)j;
-			}
-			else
-			{
-				if(offset[0].compareTo(BigInteger.ZERO) != 0)
-				{
-					w[0] = v[0];
-					w[1] = v[1];
-				    w[0] = w[0].multiply(offset[1]);
-				    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-				    w[1] = w[1].multiply(offset[1]);
-				    
-				    BigInteger gcd = w[0].gcd(w[1]);
-		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	        {
-		    	    	        w[0] = w[0].divide(gcd);
-				       	w[1] = w[1].divide(gcd);
-		    	        }
-				}
+			BigInteger a = range[0].multiply(BigInteger.valueOf(s));
+		    	BigInteger b = w[0];
+		    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
+		    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+		    	    
+		    	a = a.multiply(w[1]);
+		    	b = b.multiply(d);
+		    	c = c.multiply(w[1]);
+		    	    	
+			if(a.compareTo(b) > 0)
+            {
+                while(a.compareTo(b) > 0) 
+                	{
+                	    j--;
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    a    = range[0].multiply(BigInteger.valueOf(s));
+                	    a    = a.multiply(w[1]);
+                	}
+             }
+			 else if(c.compareTo(b) <= 0)
+             {
+                	while(c.compareTo(b) <= 0) 
+                	{
+                	    j++;
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
+                	    c    = c.multiply(w[1]);
+                	}
+            }
+			
+			BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
 				
-				if(m == 2)
-				{
-					if(key_list.size() == 1)
-					{
-					    int j    = key_list.get(0);
-					    j        = inverse_symbol.get(j);
-						value[i] = (byte)j;
-						i++;
-						value[i] = (byte)j;
-					}
-					else
-					{
-					    for(int j = 0; j < 2; j++)
-					    {
-					    	    int k = key_list.get(j);
-					    	    
-					    	    int f = freq.get(k);
-					    	    int s = sum.get(k);
-					    	    
-					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s));
-					    	    BigInteger b = w[0];
-					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
-					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-					    	    
-					    	    a = a.multiply(w[1]);
-					    	    b = b.multiply(d);
-					    	    c = c.multiply(w[1]);
-					    	    
-					    	    if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
-		                    {
-			    	                BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-			    						
-		   	    					offset[0] = offset[0].multiply(addend[1]);
-		   	    					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		   	    				    offset[1] = offset[1].multiply(addend[1]);
-		   	    				        
-		   	    				    BigInteger gcd = offset[0].gcd(offset[1]);
-		   	    					if(gcd.compareTo(BigInteger.ONE) == 1)
-		   	    					{
-		   	    						offset[0] = offset[0].divide(gcd);
-		   	    						offset[1] = offset[1].divide(gcd);;
-		   	    					}
-		   	    					
-		   	    					range[0] = range[0].multiply(BigInteger.valueOf(f));
-			    				    range[1] = range[1].multiply(BigInteger.valueOf(m));
-			    				       
-			    				    gcd = range[0].gcd(range[1]);
-			    		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-			    		    	        {
-			    		    	    	       range[0] = range[0].divide(gcd);
-			    				    	   range[1] = range[1].divide(gcd);
-			    		    	        }
-			    		    	        
-			    		    	        if(j == 0)
-			    		    	        {
-			    		    	        	    k = inverse_symbol.get(k);
-			    		    	        	    value[i] = (byte) k;
-			    		    	        	    i++;
-			    		    	        	    
-			    		    	        	    k = key_list.get(1);
-			    		    	        	    k = inverse_symbol.get(k);
-			    		    	        	    value[i] = (byte) k;
-			    		    	        	    
-			    		    	        	    break;
-			    		    	        }
-			    		    	        else
-			    		    	        {
-			    		    	        	    k = inverse_symbol.get(k);
-		    		    	        	        value[i] = (byte) k;
-		    		    	        	        i++;
-		    		    	        	    
-		    		    	        	        k = key_list.get(0);
-		    		    	        	        k = inverse_symbol.get(k);
-		    		    	        	        value[i] = (byte) k;
-			    		    	        }
-		                     }
-					    }
-					}
-				}
-				else
-				{   
-					
-					if(key_list.size() == 1)
-					{
-						int j = key_list.get(0);
-						int k = freq.get(j);
-						
-						if(k != m)
-						{
-							// Return with unassigned values at end of string.
-							System.out.println("Frequency not equal to number of elements.");
-							i = n;
-						}
-						else
-						{
-							j = inverse_symbol.get(j);
-							for(k = 0; k < m; k++)
-							{	 
-		    	        	            value[i] = (byte) j;
-		    	        	            i++;   	
-							}
-						}
-						
-					}
-					else
-					{
-						
-						// Skipping checking the sum of the first element, since it has to be zero.
-						for(int j = 1; j < key_list.size(); j++)
-						{
-							int k = key_list.get(j);
-							
-							int s = sum.get(k);
-							
-							if(s > m / 2)
-							{
-								//System.out.println("Got here 1.");
-							    int f = freq.get(k);
-							    
-							    BigInteger a = range[0].multiply(BigInteger.valueOf(s));
-								BigInteger b = w[0];
-								BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
-								BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-								
-								a = a.multiply(w[1]);
-								b = b.multiply(d);
-								c = c.multiply(w[1]);
-								
-								if(a.compareTo(b) > 0)
-	    	                	        {
-									System.out.println("Got here 2.");
-									int p = j / 2;
-									while(a.compareTo(b) > 0)
-	                	                {
-	                	            	        j -= p;
-	                	            	        if(j < 0)
-	                	            	        	    j = 0;
-	                	            	        
-	                	            	        k = key_list.get(j);
-	                	            	        
-	                	            	        s = sum.get(k);
-	                	            	        
-	                	            	        //System.out.println("j = " + j + ", k = " + k + ", s = " + s);
-	                	            	        
-	                	            	        a = range[0].multiply(BigInteger.valueOf(s));
-	                	            	        a = a.multiply(w[1]); 
-	                	            	        
-	                	            	        p /= 2;
-	                	            	        if(p == 0)
-	                	            	        	    p = 1;
-	                	                }
-									
-									System.out.println("Got here 2.");
-									f = freq.get(k);
-									c = range[0].multiply(BigInteger.valueOf(s + f));
-									c = c.multiply(w[1]);
-									
-									if(c.compareTo(b) <= 0)
-		 		    	                {
-		 		    	                    while(c.compareTo(b) <= 0)
-		 		    	                    {
-		 		    	                	    	    j++;
-		 		    	                	    	    
-		 		    	                	    	    k = key_list.get(j);
-		 		    	                	    	    s = sum.get(k);
-		 		    	                	    	    f = freq.get(k);
-		 		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
-			 		    	                	    c = c.multiply(w[1]);
-		 		    	                	    } 
-		 		    	                }
-									
-									
-									p    = inverse_symbol.get(k);
-									value[i] = (byte)p;
-									
-									if(i == 0)
-										System.out.println("Value 0 is " + value[0]);
-									
-									BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-    	    						
-	    	    					        offset[0] = offset[0].multiply(addend[1]);
-	    	    					        offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	    	    				            offset[1] = offset[1].multiply(addend[1]);
-	    	    				        
-	    	    				            BigInteger gcd = offset[0].gcd(offset[1]);
-	    	    					        if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    					        {
-	    	    						        offset[0] = offset[0].divide(gcd);
-	    	    						        offset[1] = offset[1].divide(gcd);;
-	    	    					        }
-	    	    					        range[0] = range[0].multiply(BigInteger.valueOf(f));
-	 	    				            range[1] = range[1].multiply(BigInteger.valueOf(m));
-	 	    				       
-	 	    				            gcd = range[0].gcd(range[1]);
-	 	    		    	                if(gcd.compareTo(BigInteger.ONE) == 1)
-	 	    		    	                {
-	 	    		    	    	                range[0] = range[0].divide(gcd);
-	 	    				    	            range[1] = range[1].divide(gcd);
-	 	    		    	                }
-	 	    		    	                
-	 	    		    	                for(p = j + 1; p < key_list.size(); p++)
-	 	    		    	                {
-	 	    		    	                	    int q         = key_list.get(p);
-	 	    		    	                	    int current_s = sum.get(q);
-	 	    		    	                	    current_s--;
-	 	    		    	                	    sum.put(q, current_s);
-	 	    		    	                }
-	 	    		    	                
-	 	    		    	               
-	 	    		    	                if(f != 1)
-	 	    		    	                {
-	 	    		    	                	    freq.put(k,  f - 1);
-	 	    		    	                }
-	 	    		    	                else
-	 	    		    	                {
-	 	    		    	                	    freq.remove(k);
-	 	    		    	                	    sum.remove(k);
-	 	    		    	                	    key_list.remove(j);
-	 	    		    	                }
-	 	    		    	                
-	 	    		    	                m--;
-	 	    		    	                break;
-	 	    		    	                
-	    	                	        }
-								else if(c.compareTo(b) <= 0)
-		    	                    {
-									System.out.println("Got here 3.");
-									k = (key_list.size() - j) / 2;
-	    	                	            while(c.compareTo(b) <= 0)
-	    	                	            {
-	    	                	            	    j += k;
-	    	                	            	    if(j >= key_list.size())
-	    	                	            	    	    j = key_list.size() - 1;
-	    	                	            	    
-	    	                	            	    int p = key_list.get(j);
-	    	                	            	    
-	    	                	            	    f = freq.get(p);
-	    	                	            	    s = sum.get(p);
-	    	                	            	    
-	    	                	            	    c = range[0].multiply(BigInteger.valueOf(s + f));
-			    	                	    	    c = c.multiply(w[1]);
-			    	                	    	    
-			    	                	    	    k /= 2;
-			    	                	    	    if(k == 0)
-			    	                	    	    	    k = 1;
-	    	                	            }
-	    	                	            
-	    	                	            a = range[0].multiply(BigInteger.valueOf(s));
-			    	                	    a = a.multiply(w[1]);
-			    	                	    
-			    	                	    if(a.compareTo(b) > 0)
-				    	                	{
-				    	                	     while(a.compareTo(b) > 0)
-				    	                	     {
-				    	                	    	     j--; 
-				    	                	    	     
-				    	                	    	     k = key_list.get(j);
-				    	                	    	     
-				    	                	    	     s = sum.get(k);
-				    	                	    	     
-				    	                	    	     a = range[0].multiply(BigInteger.valueOf(s));
-				    	                	    	     a = a.multiply(w[1]);
-				    	                	     }
-				    	                	     
-				    	                	     k = inverse_symbol.get(k);
-				    	                	     value[i] = (byte) k;
-				    	                	     
-				    	                	     if(i == 0)
-										     System.out.println("Value 0 is " + value[0]);
-				    	                	     
-				    	                	     for(int p = j + 1; p < key_list.size(); p++)
-				    	                	     {
-				    	                	    	     k = key_list.get(p);
-				    	                	    	     s = sum.get(k);
-				    	                	    	     s--;  
-				    	                	    	     sum.put(k, s);
-				    	                	     }
-				    	                	     
-				    	                	     k = key_list.get(j);
-				    	                	     f = freq.get(k);
-				    	                	     
-				    	                	     if(f != 1)
-				    	                	     {
-				    	                	    	     freq.put(k,  f - 1);
-				    	                	     }
-				    	                	     else
-				    	                	     {
-				    	                	    	     freq.remove(k);
-				    	                	    	     sum.remove(k);
-				    	                	    	     key_list.remove(j);
-				    	                	     }
-				    	                	     m--;  
-				    	                	     break;
-				    	                	}
-		    	                    }
-								else
-								{
-									System.out.println("Got here 4.");
-									k        = inverse_symbol.get(k);
-									value[i] = (byte)k;
-									
-									for(int p = j + 1; p < key_list.size(); p++)
-								    {
-								    	    k = key_list.get(p);
-								    	    int current_s = sum.get(k);
-								    	    current_s--;
-								    	    sum.put(k,  current_s);
-								    }
-									
-									k = key_list.get(j);
-									if(f != 1)
-									{
-										f = freq.get(k);
-							    	        f--;
-							    	        freq.put(k,  f);      
-									}
-									else
-									{
-									    freq.remove(k);
-									    sum.remove(k);
-									    key_list.remove(j);
-									}
-									
-									m--;
-									break;
-								}
-							}
-						}
-					}
-					
-				}
+			offset[0] = offset[0].multiply(addend[1]);
+			offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+		    offset[1] = offset[1].multiply(addend[1]);
+		        
+		    BigInteger gcd = offset[0].gcd(offset[1]);
+			if(gcd.compareTo(BigInteger.ONE) == 1)
+			{
+				offset[0] = offset[0].divide(gcd);
+				offset[1] = offset[1].divide(gcd);;
 			}
+		   
+		    range[0] = range[0].multiply(BigInteger.valueOf(f));
+		    range[1] = range[1].multiply(BigInteger.valueOf(m));
+		       
+		    gcd = range[0].gcd(range[1]);
+    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+    	        {
+    	    	        range[0] = range[0].divide(gcd);
+		    	    range[1] = range[1].divide(gcd);
+    	        }
+		   
+    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
+	    	    {
+	    	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
+	    	        	s = list2.get(2);
+	    	        	s--;
+	    	        	list2.set(2, s);
+	    	        	arithmetic_list.set(p, list2);	
+	    	    }
+    	          
+    	        f--;
+	    	    m--;   
+	    	    if(f != 0)
+	    	    {
+	    	        list.set(1, f);
+	    	        arithmetic_list.set(j,  list);
+	    	    }
+	    	    else
+	    	        	arithmetic_list.remove(j);
+	    	     
+	    	    int k    = list.get(0); 
+	    	    // Get original order.
+	    	    k = inverse_order[k];
+	        if(k < 0)
+	            k += 256;
+            k = inverse_symbol.get(k);
+            value[i] = (byte)k;
 		}
 		
 	    return value;
 	}
-	*/
-	
 	
 	public static byte [] getArithmeticValues2(BigInteger [] v, Hashtable <Integer, Integer> symbol, int [] frequency, int n, byte [] order)
 	{
+		int [] frequency2 = new int[frequency.length];
+		
 		Hashtable <Integer, Integer> inverse_symbol = new Hashtable <Integer, Integer>(symbol.size());
 		for(int i = 0; i < 256; i++)
 		{
@@ -5565,312 +4528,191 @@ public class CodeMapper
 		        inverse_symbol.put(j, i);
 		    }
 		}
-		int [] f = new int[frequency.length];
+		
 		byte[] inverse_order = new byte[order.length];
 		for(int i = 0; i < order.length; i++)
 		{
 			int j = order[i];
 			if(j < 0)
-				j += 256;
+			    j += 256;
+			
+			frequency2[j]    = frequency[i];
 			inverse_order[j] = (byte) i;
-			f[j] = frequency[i];
 		}
 		
-	    byte [] value = new byte[n];
-	    
-        int [] s = new int[f.length];
-		
+        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
 		int m = 0;
-		for(int i = 0; i < f.length; i++)
+		for(int i = 0; i < frequency.length; i++)
 		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
+		    ArrayList <Integer> list = new ArrayList <Integer> ();
+		    list.add(i);
+		    
+		    
+		    list.add(frequency2[i]);
+		    list.add(m);
+		    arithmetic_list.add(list);
+		    m += frequency2[i];
+		}
+	    
+	    
 		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
 		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
 		BigInteger [] w      = {v[0], v[1]};
 		
+		byte [] value = new byte[n];
 		for(int i = 0; i < n; i++)
 		{
-			if(m == 1)
+			if(offset[0].compareTo(BigInteger.ZERO) != 0)
 			{
-			    for(int j = 0; j < f.length; j++)
-			    {
-				    if(f[j] != 0)
-				    { 
-				    	    j = inverse_order[j];
-			            if(j < 0)
-			            	    j += 256;
-		                j = inverse_symbol.get(j);
-		                value[i] = (byte)j;	
-		                m--;
-		                break;
-				    }
-				}   
+				w[0] = v[0];
+				w[1] = v[1];
+			    w[0] = w[0].multiply(offset[1]);
+			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
+			    w[1] = w[1].multiply(offset[1]);
+			    
+			    BigInteger gcd = w[0].gcd(w[1]);
+	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	        {
+	    	    	        w[0] = w[0].divide(gcd);
+			       	w[1] = w[1].divide(gcd);
+	    	        }
 			}
-			else
-			{
-				if(offset[0].compareTo(BigInteger.ZERO) != 0)
-				{
-					w[0] = v[0];
-					w[1] = v[1];
-				    w[0] = w[0].multiply(offset[1]);
-				    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-				    w[1] = w[1].multiply(offset[1]);
-				    
-				    BigInteger gcd = w[0].gcd(w[1]);
-		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	        {
-		    	    	        w[0] = w[0].divide(gcd);
-				       	w[1] = w[1].divide(gcd);
-		    	        }
-				}
+			
+			int j = arithmetic_list.size() / 2;
+		    ArrayList <Integer> list = arithmetic_list.get(j);
+			
+		    int f = list.get(1);
+		    int s = list.get(2);
 				
-				if(m == 2)
-				{
-					for(int j = 0; j < f.length; j++)
-				    {
-					    if(f[j] != 0)
-					    {
-					    	    BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-					    	    BigInteger b = w[0];
-					    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-					    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-					    	    
-					    	    a = a.multiply(w[1]);
-					    	    b = b.multiply(d);
-					    	    c = c.multiply(w[1]);
-					    	    
-		    	                if((a.compareTo(b) <= 0) && (c.compareTo(b) > 0))
-	                        {
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    						
-	   	    					    offset[0] = offset[0].multiply(addend[1]);
-	   	    					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	   	    				        offset[1] = offset[1].multiply(addend[1]);
-	   	    				        
-	   	    				        BigInteger gcd = offset[0].gcd(offset[1]);
-	   	    					    if(gcd.compareTo(BigInteger.ONE) == 1)
-	   	    					    {
-	   	    						    offset[0] = offset[0].divide(gcd);
-	   	    						    offset[1] = offset[1].divide(gcd);;
-	   	    					    }
-	   	    					    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		    				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-		    				       
-		    				        gcd = range[0].gcd(range[1]);
-		    		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    		    	            {
-		    		    	    	           range[0] = range[0].divide(gcd);
-		    				    	       range[1] = range[1].divide(gcd);
-		    		    	           }
-		    				   
-		    		    	           f[j]--;
-		    			    	       m--;
-		    			    	       for(int k = j + 1; k < s.length; k++)
-		    			    	    	       s[k]--;
-		    			    	        
-		    			    	       j = inverse_order[j];
-		    		    	           if(j < 0)
-		    		    	            	   j += 256;
-		    			           j = inverse_symbol.get(j);
-		    			           value[i] = (byte)j;
-		    			           break;
-	                        }
-					    }
-					}
-				}
-				else
-				{
-					for(int j = 0; j < f.length; j++)
-					{
-						if(f[j] == m)
-						{
-							j = inverse_order[j];
- 		    	                if(j < 0)
- 		    	            	       j += 256;
- 			                j = inverse_symbol.get(j);
-							while(m > 0)
-							{
-								value[i] = (byte)j;
-								i++;
-								m--;
-							}
-						}
-						else if(s[j] > m / 2)
-						{
-							BigInteger a = range[0].multiply(BigInteger.valueOf(s[j]));
-							BigInteger b = w[0];
-							BigInteger c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-							BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-							
-							a = a.multiply(w[1]);
-							b = b.multiply(d);
-							c = c.multiply(w[1]);
-							
-		    	                if(a.compareTo(b) > 0)
-		    	                	{
-		    	                	    int k = j / 2;
-		    	                	    while(a.compareTo(b) > 0) 
-		    	                	    {
-		    	                	    	    j -= k;
-		    	                	    	    if(j < 0)
-		    	                	    	    	    j = 0;
-		    	                	    	    
-		    	                	    	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-	    	                	    	        a = a.multiply(w[1]);
-	    	                	    	        
-	    	                	    	        if(a.compareTo(b) <= 0 && f[j] == 0)
-	    	                	    	        {
-	    	                	    	        	    while(f[j] == 0) 
-	    	                	    	        	    	    j++;
-	    	                	    	        }
-	    	                	    	        
-		    	                	    	     
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	     }
-		    	                	    
-		    	                	     c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	     c = c.multiply(w[1]);
-		    	                	     if(c.compareTo(b) <= 0)
-		 		    	             {
-		 		    	                 while(c.compareTo(b) <= 0)
-		 		    	                	 {
-		 		    	                	    	 j++;
-		 		    	                	    	 c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-			 		    	                	 c = c.multiply(w[1]);
-		 		    	                	    	
-		 		    	                	    	
-		 		    	                	    	if(c.compareTo(b) > 0 && f[j] == 0)
-		 		    	                	    	    j--;
-		 		    	                	    	/*
-		 		    	                	    	if(f[j] != 0)
-		 		    	                	    	{
-		 		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		 		    	                	      	c = c.multiply(w[1]);
-		 		    	                	    	}
-		 		    	                	    	*/
-		 		    	                	 }
-		 		    	             }
-		    	                	     	 
-		    	                	     BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-		    	    						
-		    	    					 offset[0] = offset[0].multiply(addend[1]);
-		    	    					 offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		    	    				     offset[1] = offset[1].multiply(addend[1]);
-		    	    				        
-		    	    				     BigInteger gcd = offset[0].gcd(offset[1]);
-		    	    					 if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	    					 {
-		    	    						 offset[0] = offset[0].divide(gcd);
-		    	    						 offset[1] = offset[1].divide(gcd);;
-		    	    					 }
-		    	    					 range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-		 	    				     range[1] = range[1].multiply(BigInteger.valueOf(m));
-		 	    				       
-		 	    				     gcd = range[0].gcd(range[1]);
-		 	    		    	         if(gcd.compareTo(BigInteger.ONE) == 1)
-		 	    		    	         {
-		 	    		    	    	        range[0] = range[0].divide(gcd);
-		 	    				    	    range[1] = range[1].divide(gcd);
-		 	    		    	        }
-		 	    				   
-		 	    		    	        f[j]--;
-		 	    			    	    m--;
-		 	    			    	    for(k = j + 1; k < s.length; k++)
-		 	    			    	    	    s[k]--;
-		 	    			    	        
-		 	    			    	    j = inverse_order[j];
-		 	    		    	        if(j < 0)
-		 	    		    	            	j += 256;
-		 	    			        j = inverse_symbol.get(j);
-		 	    			        value[i] = (byte)j;
-		 	    			        break;
-		    	                	}
-		    	                else if(c.compareTo(b) <= 0)
-		    	                {
-		    	                	    int k = (f.length - j) / 2;
-		    	                	    while(c.compareTo(b) <= 0)
-		    	                	    {
-		    	                	    	    j += k;
-		    	                	    	    if(j > f.length - 1)
-		    	                	    	    	    j = f.length - 1;
-		    	                	    	    
-		    	                	    	    c = range[0].multiply(BigInteger.valueOf(s[j] + f[j]));
-		    	                	    	    c = c.multiply(w[1]);
-		    	                	    	    
-		    	                	    	    if(c.compareTo(b) == 1 && f[j] == 0)
-		    	                	    	    {
-		    	                	    	    	    while(f[j] == 0)
-		    	                	    	    	    	    j--;
-		    	                	    	    }
-		    	                	    	    
-		    	                	    	    k /= 2;
-		    	                	    	    if(k == 0)
-		    	                	    	    	    k = 1;
-		    	                	    	   
-		    	                	    }
-		    	                	    
-		    	                	    a = range[0].multiply(BigInteger.valueOf(s[j]));
-		    	                	    a = a.multiply(w[1]);
-		    	                	    
-		    	                	    if(a.compareTo(b) > 0)
-			    	                	{
-			    	                	     while(a.compareTo(b) > 0)
-			    	                	     {
-			    	                	    	     j--; 
-			    	                	    	     
-			    	                	    	     a = range[0].multiply(BigInteger.valueOf(s[j]));
-			    	                	    	     a = a.multiply(w[1]);
-			    	                	    	     if(a.compareTo(b) <= 0 && f[j] == 0)
-			    	                	    	     {
-			    	                	    	    	     while(f[j] == 0)
-			    	                	    	    	    	     j--;
-			    	                	    	     }
-			    	                	     }
-			    	                	}
-		    	                	     
-		    	                	    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-			    						
-		   	    					offset[0] = offset[0].multiply(addend[1]);
-		   	    					offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		   	    				    offset[1] = offset[1].multiply(addend[1]);
-		   	    				        
-		   	    				    BigInteger gcd = offset[0].gcd(offset[1]);
-		   	    					if(gcd.compareTo(BigInteger.ONE) == 1)
-		   	    					{
-		   	    						offset[0] = offset[0].divide(gcd);
-		   	    						offset[1] = offset[1].divide(gcd);
-		   	    					}
-		   	    					range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-			    				    range[1] = range[1].multiply(BigInteger.valueOf(m));
-			    				       
-			    				    gcd = range[0].gcd(range[1]);
-			    		    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-			    		    	        {
-			    		    	    	        range[0] = range[0].divide(gcd);
-			    				    	    range[1] = range[1].divide(gcd);
-			    		    	        }
-			    				   
-			    		    	        f[j]--;
-			    			    	    m--;
-			    			    	    for(k = j + 1; k < s.length; k++)
-			    			    	    	    s[k]--;
-			    			    	        
-			    			    	    j = inverse_order[j];
-			    		    	        if(j < 0)
-			    		    	            	j += 256;
-			    			        j = inverse_symbol.get(j);
-			    			        value[i] = (byte)j;
-			    			        break;
-		    	                }
-						}
-					}
-				}
+			BigInteger a = range[0].multiply(BigInteger.valueOf(s));
+		    	BigInteger b = w[0];
+		    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
+		    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
+		    	    
+		    	a = a.multiply(w[1]);
+		    	b = b.multiply(d);
+		    	c = c.multiply(w[1]);
+		    	    	
+			if(a.compareTo(b) > 0)
+            {
+			    int k = j / 2;
+                while(a.compareTo(b) > 0) 
+                	{
+                	    j -= k;
+                	    
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    a    = range[0].multiply(BigInteger.valueOf(s));
+                	    a    = a.multiply(w[1]);
+                	    
+                	    k /= 2;
+                	    if(k == 0)
+                	    	    k = 1;
+                	}
+                
+                // Check if we passed actual value.
+                c = range[0].multiply(BigInteger.valueOf(s + f));
+       	        c = c.multiply(w[1]);
+       	        if(c.compareTo(b) <= 0)
+                {
+                    while(c.compareTo(b) <= 0)
+                    {
+                	    	    j++;
+                	    	    list = arithmetic_list.get(j);
+                        	f    = list.get(1);
+                        	s    = list.get(2);
+                	    	    
+                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
+	                	    c = c.multiply(w[1]);
+                	    }
+                } 
+             }
+			 else if(c.compareTo(b) <= 0)
+             {
+				int size = arithmetic_list.size();
+			    int k = (size - j) / 2;
+                	
+			    while(c.compareTo(b) <= 0) 
+                	{
+                	    j += k;
+                	     
+                	    list = arithmetic_list.get(j);
+                	    f    = list.get(1);
+                	    s    = list.get(2);
+                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
+                	    c    = c.multiply(w[1]);
+                	    
+                	    k /= 2;
+                	    if(k == 0)
+                	    	    k = 1;
+                	}
+                	
+			    // Check if we passed actual value.
+			    a = range[0].multiply(BigInteger.valueOf(s));
+        	        a = a.multiply(w[1]);
+        	        if(a.compareTo(b) > 0)
+            	    {
+            	        while(a.compareTo(b) > 0)
+            	        {
+            	    	        j--; 
+            	    	        list = arithmetic_list.get(j);
+                        	f    = list.get(1);
+                        	s    = list.get(2);
+            	    	        a    = range[0].multiply(BigInteger.valueOf(s));
+            	    	        a = a.multiply(w[1]);
+            	        }
+            	    }
+            }
+			
+			BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
+				
+			offset[0] = offset[0].multiply(addend[1]);
+			offset[0] = offset[0].add(addend[0].multiply(offset[1]));
+		    offset[1] = offset[1].multiply(addend[1]);
+		        
+		    BigInteger gcd = offset[0].gcd(offset[1]);
+			if(gcd.compareTo(BigInteger.ONE) == 1)
+			{
+				offset[0] = offset[0].divide(gcd);
+				offset[1] = offset[1].divide(gcd);;
 			}
+		   
+		    range[0] = range[0].multiply(BigInteger.valueOf(f));
+		    range[1] = range[1].multiply(BigInteger.valueOf(m));
+		       
+		    gcd = range[0].gcd(range[1]);
+    	        if(gcd.compareTo(BigInteger.ONE) == 1)
+    	        {
+    	    	        range[0] = range[0].divide(gcd);
+		    	    range[1] = range[1].divide(gcd);
+    	        }
+		  
+    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
+	    	    {
+	    	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
+	    	        	s = list2.get(2);
+	    	        	s--;
+	    	        	list2.set(2, s);
+	    	        	arithmetic_list.set(p, list2);	
+	    	    }
+    	          
+    	        f--;
+	    	    m--;   
+	    	    if(f != 0)
+	    	    {
+	    	        list.set(1, f);
+	    	        arithmetic_list.set(j,  list);
+	    	    }
+	    	    else
+	    	        	arithmetic_list.remove(j);
+	    	     
+	    	    int k    = list.get(0);
+	    	    k = inverse_order[k];
+		    if(k < 0)
+		        k += 256;
+	        k = inverse_symbol.get(k);
+	        value[i] = (byte)k;	
 		}
 		
 	    return value;
@@ -5878,8 +4720,6 @@ public class CodeMapper
 	
 	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
 	{
-		byte [] value = new byte[n];
-		
 		boolean [] isSymbol = new boolean[256];
 	    
 		int number_of_symbols = 0;
@@ -5894,112 +4734,23 @@ public class CodeMapper
 		int [] f = new int[number_of_symbols];
 	    
 	    Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
-	    Hashtable <Integer, Integer> inverse_table = new Hashtable <Integer, Integer>();
-	    
+	   
 	    int j = 0;
 	    for(int i = 0; i < 256; i++)
 	    {
 	    	    if(isSymbol[i])
 	    	    {
 	    	    	    symbol_table.put(i, j);
-	    	    	    inverse_table.put(j,  i);
 	    	    	    f[j] = frequency[i];
 	    	    	    j++;
 	    	    }
 	    }
 	    
-        int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m    += f[i];
-		}	
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		for(int i = 0; i < n; i++)
-		{
-			if(offset[0].compareTo(BigInteger.ZERO) != 0)
-			{
-				w[0] = v[0];
-				w[1] = v[1];
-			    w[0] = w[0].multiply(offset[1]);
-			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-			    w[1] = w[1].multiply(offset[1]);
-			    
-			    BigInteger gcd = w[0].gcd(w[1]);
-	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	        {
-	    	    	        w[0] = w[0].divide(gcd);
-			       	w[1] = w[1].divide(gcd);
-	    	        }
-			}
-			
-			for(j = 0; j < f.length; j++)
-			{
-				if(f[j] != 0)
-				{
-					BigInteger [] lower = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					BigInteger [] upper = {range[0].multiply(BigInteger.valueOf(s[j] + f[j])), lower[1]};
-				   
-				    BigInteger [] a = {lower[0], lower[1]};
-    	                BigInteger [] b = {w[0], w[1]};
-    	                BigInteger [] c = {upper[0], upper[1]};
-					
-				    if(a[1].compareTo(b[1]) != 0)
-				    {
-				    	    a[0] = a[0].multiply(w[1]);
-					    a[1] = a[1].multiply(w[1]);
-					    c[0] = c[0].multiply(w[1]);
-					    c[1] = c[1].multiply(w[1]);
-					    b[0] = b[0].multiply(lower[1]);
-					    b[1] = b[1].multiply(lower[1]);
-				    }
-	    	        
-				    if((a[0].compareTo(b[0]) <= 0) && (c[0].compareTo(b[0]) > 0))
-				    { 
-				      	BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s[j])), range[1].multiply(BigInteger.valueOf(m))};
-					
-					    offset[0] = offset[0].multiply(addend[1]);
-					    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-				        offset[1] = offset[1].multiply(addend[1]);
-				        
-				        BigInteger gcd = offset[0].gcd(offset[1]);
-					    if(gcd.compareTo(BigInteger.ONE) == 1)
-					    {
-						    offset[0] = offset[0].divide(gcd);
-						    offset[1] = offset[1].divide(gcd);;
-					    }
-				   
-				        range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-				        range[1] = range[1].multiply(BigInteger.valueOf(m));
-				       
-				        gcd = range[0].gcd(range[1]);
-		    	            if(gcd.compareTo(BigInteger.ONE) == 1)
-		    	            {
-		    	    	            range[0] = range[0].divide(gcd);
-				    	        range[1] = range[1].divide(gcd);
-		    	            }
-				   
-		    	            f[j]--;
-			    	        m--;
-			    	        for(int k = j + 1; k < s.length; k++)
-			    	    	        s[k]--;
-		    	        
-				        j = inverse_table.get(j);
-				        value[i] = (byte)j;
-				        
-				        break;
-				    }
-			    }
-			}	
-		}
-		
-		return value;
+	    byte [] value = getArithmeticValues2(v, symbol_table, f, n); 
+	    return value;
 	}
+	
+	
 	
 	public static byte [] getArithmeticValues(String fraction, int start_bits, int repeat_bits, int [] frequency, int n)
 	{
