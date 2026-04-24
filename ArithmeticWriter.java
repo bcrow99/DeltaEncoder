@@ -1253,27 +1253,11 @@ public class ArithmeticWriter
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
+					
 					int number_of_processors   = Runtime.getRuntime().availableProcessors();
+				
 					
-					if(number_of_segments < number_of_processors)
-					{
-					    number_of_processors = number_of_segments;	
-					}
-					else
-					{
-					    while(number_of_segments % number_of_processors != 0)	
-					    	    number_of_segments++;
-					}
-					
-					// The number of segments is now equal to the number of processors,
-					// or an exact multiple.
-					int number_of_segments_per_processor = number_of_segments / number_of_processors;
-					number_of_segments                   = number_of_processors * number_of_segments_per_processor;
 					int segment_length                   = string.length / number_of_segments;
-					System.out.println("Number of segments is " + number_of_segments);
-					System.out.println("Number of processors is " + number_of_processors);
-					System.out.println("Segment length is " + segment_length);
-					
 					int odd_segment_length = segment_length + string.length % number_of_segments;
 			        byte    [][] segment   = new byte[number_of_segments][segment_length];
 					segment[number_of_segments - 1] = new byte[odd_segment_length];
@@ -1313,31 +1297,25 @@ public class ArithmeticWriter
 					
 					long start = System.nanoTime();
 					
-					Thread [] encoder_thread = new Thread[number_of_processors]; 
-					
-					k = 0;
-					
-					for(m = 0; m < number_of_segments_per_processor; m++) 
+					Thread [] encoder_thread = new Thread[number_of_segments];
+					for(k = 0; k < number_of_segments; k++)
 					{
-						for(int n = 0; n < number_of_processors; n++)
+						encoder_thread[k] = new Thread(new ArithmeticEncoder(segment[k], frequency[k], k));
+				        encoder_thread[k].start();	
+					}
+					
+					for(k = 0; k < number_of_segments; k++)
+					{
+						try
 						{
-					        encoder_thread[n] = new Thread(new ArithmeticEncoder(segment[k], frequency[k], k));
-					        encoder_thread[n].start(); 
-					        k++;
+					        encoder_thread[k].join();
 						}
-						for(int n = 0; n < number_of_processors; n++)
+						catch(Exception e)
 						{
-							try
-							{
-						        encoder_thread[n].join();
-							}
-							catch(Exception e)
-							{
-								System.out.println("Exception waiting for thread to finish:");
-								System.out.println(e.toString());
-							}
+							System.out.println("Exception waiting for thread to finish:");
+							System.out.println(e.toString());
 						}
-					} 
+					}
 					
 					long stop = System.nanoTime();
 					long time = stop - start;
@@ -1346,33 +1324,29 @@ public class ArithmeticWriter
 					
                     start = System.nanoTime();
 					
-					Thread [] decoder_thread = new Thread[number_of_processors]; 
-					
-					k = 0;
-					
-					for(m = 0; m < number_of_segments_per_processor; m++) 
-					{
-						for(int n = 0; n < number_of_processors; n++)
+                    
+                    Thread [] decoder_thread = new Thread[number_of_segments];
+                    
+                    for(k = 0; k < number_of_segments; k++)
+                    {
+                    	    int n = segment[k].length;
+                    	    decoder_thread[k] = new Thread(new ArithmeticDecoder(offset[k], frequency[k], n, k));
+                    	    decoder_thread[k].start(); 
+                    }
+                    
+                    for(k = 0; k < number_of_segments; k++)
+                    {
+                    	    try
 						{
-							int current_length = segment[k].length;
-					        decoder_thread[n] = new Thread(new ArithmeticDecoder(offset[k], frequency[k], current_length, k));
-					        decoder_thread[n].start(); 
-					        k++;
-						}
-						for(int n = 0; n < number_of_processors; n++)
+						    decoder_thread[k].join();
+					    }
+					    catch(Exception e2)
 						{
-							try
-							{
-						        decoder_thread[n].join();
-							}
-							catch(Exception e2)
-							{
-								System.out.println("Exception waiting for thread to finish:");
-								System.out.println(e2.toString());
-							}
+							System.out.println("Exception waiting for thread to finish:");
+							System.out.println(e2.toString());
 						}
-					} 
-					
+                    }
+                     
 					stop = System.nanoTime();
 					time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
@@ -1388,7 +1362,7 @@ public class ArithmeticWriter
 						string_offset += decoded_segment[m].length;	
 					}
 					
-					int first_index = 0;
+				    int first_index = 0;
                     boolean isSame = true;
                     for(k = 0; k < string.length; k++)
                     {
@@ -1523,19 +1497,6 @@ public class ArithmeticWriter
 						out.writeInt(q_byte_array.length);
 				        out.write(q_byte_array, 0, q_byte_array.length);
 					}
-					
-					/*
-					Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION);
-					byte [] zipped_data = new byte[2 * string.length];
-					deflater.setInput(string);
-						
-					deflater.finish();
-					int zipped_length = deflater.deflate(zipped_data);
-						deflater.end();
-						
-					out.writeInt(zipped_length);
-					out.write(zipped_data, 0, zipped_length);	
-					*/
 				}
 
 				out.flush();
