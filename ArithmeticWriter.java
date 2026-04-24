@@ -263,7 +263,9 @@ public class ArithmeticWriter
 				min_index = i;
 			}
 		}
-		delta_button[min_index].doClick();
+		
+		delta_type = min_index;
+		//elta_button[min_index].doClick();
 		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	

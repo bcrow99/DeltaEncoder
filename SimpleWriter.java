@@ -263,8 +263,8 @@ public class SimpleWriter
 				min_index = i;
 			}
 		}
-		delta_button[min_index].doClick();
-		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
+		delta_type = min_index;
+		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	
 	public SimpleWriter(String _filename)
@@ -793,6 +793,7 @@ public class SimpleWriter
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
 			System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_index]);
+			System.out.println("Set id is " + min_set_id);
 			System.out.println();
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
