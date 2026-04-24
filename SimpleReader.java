@@ -33,6 +33,8 @@ public class SimpleReader
 	int  length[]         = new int[3];
 	int  compressed_length[] = new int[3];
 	byte channel_iterations[] = new byte[3];
+	
+	int [][] resize_array = new int[3][0];
 
 	public static void main(String[] args)
 	{
@@ -137,7 +139,8 @@ public class SimpleReader
 			start = System.nanoTime();
 
 			// Simplest possible threading.
-			Thread [] decompression_thread = new Thread[3]; for(int i = 0; i < 3; i++) 
+			Thread [] decompression_thread = new Thread[3]; 
+			for(int i = 0; i < 3; i++) 
 			{
 			    decompression_thread[i] = new Thread(new Decompressor(i));
 			    decompression_thread[i].start(); 
@@ -146,8 +149,6 @@ public class SimpleReader
 			    decompression_thread[i].join();
 
 			
-			// This higher level abstraction makes the program more opaque and
-			// does not improve the performance.
 			//ExecutorService executorService = Executors.newFixedThreadPool(3);
 			//for (int i = 0; i < 3; i++)
 			//{
@@ -162,9 +163,10 @@ public class SimpleReader
 
 			System.out.println("It took " + (time / 1000000) + " ms to process data.");
 
-			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-
-			start = System.nanoTime();
+			BufferedImage image   = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+            int[][]       channel = new int[3][0];
+			
+            start = System.nanoTime();
 			if (set_id == 0)
 			{
 				if (pixel_quant == 0)
@@ -175,10 +177,10 @@ public class SimpleReader
 				} 
 				else
 				{
-					int[] resized_blue = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
+					int[] resized_blue  = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
 					int[] resized_green = ResizeMapper.resize(channel_array[1], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(channel_array[2], intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					int[] resized_red   = ResizeMapper.resize(channel_array[2], intermediate_xdim, xdim, ydim);
+					int[] pixel         = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				}
 			} 
@@ -248,23 +250,31 @@ public class SimpleReader
 			} 
 			else if (set_id == 4)
 			{
+				channel[0] = channel_array[0];
+				channel[1] = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
+				channel[2] = DeltaMapper.getSum(channel_array[0], channel_array[2]);
 				if (pixel_quant == 0)
 				{
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
+					int[] pixel = DeltaMapper.getPixel(channel[0], channel[1],channel[2], xdim, pixel_shift);
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				} 
 				else
 				{
-					int[] blue = channel_array[0];
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					Thread [] resize_thread = new Thread[3]; 
+					for(int i = 0; i < 3; i++) 
+					{
+					    resize_thread[i] = new Thread(new Resizer(channel[i], intermediate_xdim, xdim, ydim, i));
+					    resize_thread[i].start(); 
+					} 
+					for(int i = 0; i < 3; i++)
+					    resize_thread[i].join();
+					int[] pixel = DeltaMapper.getPixel(resize_array[0], resize_array[1], resize_array[2], xdim, pixel_shift);
+					
+					//int[] resized_blue  = ResizeMapper.resize(channel[0], intermediate_xdim, xdim, ydim);
+					//int[] resized_green = ResizeMapper.resize(channel[1], intermediate_xdim, xdim, ydim);
+					//int[] resized_red   = ResizeMapper.resize(channel[2], intermediate_xdim, xdim, ydim);
+					//int[] pixel         = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+				   
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				}
 			} 
@@ -291,50 +301,69 @@ public class SimpleReader
 			} 
 			else if (set_id == 6)
 			{
-				if (pixel_quant == 0)
+				for (int i = 0; i < channel_array[2].length; i++)
+					channel_array[2][i] = -channel_array[2][i];
+				channel[1] = DeltaMapper.getSum(channel_array[2], channel_array[0]);
+				channel[0] = DeltaMapper.getSum(channel_array[1], channel[1]);
+				channel[2] = channel_array[0];
+				
+				if(pixel_quant == 0)
 				{
-					for (int i = 0; i < channel_array[2].length; i++)
-						channel_array[2][i] = -channel_array[2][i];
-					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] blue = DeltaMapper.getSum(channel_array[1], green);
-					int[] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
+					int[] pixel = DeltaMapper.getPixel(channel[0], channel[1], channel[2], xdim, pixel_shift);
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
+				}
 				else
 				{
-					for (int i = 0; i < channel_array[2].length; i++)
-						channel_array[2][i] = -channel_array[2][i];
-					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] blue = DeltaMapper.getSum(channel_array[1], green);
-					int[] red = channel_array[0];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+					Thread [] resize_thread = new Thread[3]; 
+					for(int i = 0; i < 3; i++) 
+					{
+					    resize_thread[i] = new Thread(new Resizer(channel[i], intermediate_xdim, xdim, ydim, i));
+					    resize_thread[i].start(); 
+					} 
+					for(int i = 0; i < 3; i++)
+					    resize_thread[i].join();
+					int[] pixel = DeltaMapper.getPixel(resize_array[0], resize_array[1], resize_array[2], xdim, pixel_shift);
+					
+						
+					//int[] resized_blue  = ResizeMapper.resize(channel[0], intermediate_xdim, xdim, ydim);
+					//int[] resized_green = ResizeMapper.resize(channel[1], intermediate_xdim, xdim, ydim);
+					//int[] resized_red   = ResizeMapper.resize(channel[2], intermediate_xdim, xdim, ydim);
+					//int[] pixel         = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+				    
+					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);	
 				}
 			} 
 			else if (set_id == 7)
 			{
+				channel[0] = DeltaMapper.getSum(channel_array[0], channel_array[1]);
+				channel[1] = channel_array[0];
+				channel[2] = DeltaMapper.getSum(channel_array[0], channel_array[2]);
+				
+				
 				if (pixel_quant == 0)
 				{
-					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
+					int[] pixel = DeltaMapper.getPixel(channel[0], channel[1], channel[2], xdim, pixel_shift);
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				} 
 				else
 				{
-					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] green = channel_array[0];
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					Thread [] resize_thread = new Thread[3]; 
+					for(int i = 0; i < 3; i++) 
+					{
+					    resize_thread[i] = new Thread(new Resizer(channel[i], intermediate_xdim, xdim, ydim, i));
+					    resize_thread[i].start(); 
+					} 
+					for(int i = 0; i < 3; i++)
+					    resize_thread[i].join();
+					int[] pixel = DeltaMapper.getPixel(resize_array[0], resize_array[1], resize_array[2], xdim, pixel_shift);
+					
+					
+					
+					//int[] resized_blue  = ResizeMapper.resize(channel[0], intermediate_xdim, xdim, ydim);
+					//int[] resized_green = ResizeMapper.resize(channel[1], intermediate_xdim, xdim, ydim);
+					//int[] resized_red   = ResizeMapper.resize(channel[2], intermediate_xdim, xdim, ydim);
+					//int[] pixel         = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+					
 					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
 				}
 			} 
@@ -417,7 +446,28 @@ public class SimpleReader
 			System.out.println(e.toString());
 		}
 	}
-
+	//int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
+	class Resizer implements Runnable
+	{
+		int [] src;
+		int    xdim, new_xdim, new_ydim, i;
+		
+		public Resizer(int [] src, int xdim, int new_xdim, int new_ydim, int i)
+		{
+			this.src      = src;
+			this.xdim     = xdim;
+			this.new_xdim = new_xdim;
+			this.new_ydim = new_ydim;
+			this.i        = i;	
+		}
+		
+		public void run()
+		{
+			int[] dst       = ResizeMapper.resize(src, xdim, new_xdim, new_ydim);	
+			resize_array[i] = dst;
+		}
+	}
+	
 	class Decompressor implements Runnable
 	{
 		int i;
