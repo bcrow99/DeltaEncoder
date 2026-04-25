@@ -3,12 +3,8 @@ import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.zip.*;
-import javax.imageio.*;
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 public class SimpleReader
 {
@@ -59,11 +55,11 @@ public class SimpleReader
 			pixel_quant        = in.readByte();
 			set_id             = in.readByte();
 			delta_type         = in.readByte();
-			int[] channel_id   = DeltaMapper.getChannels(set_id);
+			//int[] channel_id   = DeltaMapper.getChannels(set_id);
 
 			if (delta_type > 7)
 			{
-				System.out.println("Delta type not supported.");
+				System.out.println("Delta type " + delta_type + " not supported.");
 				System.exit(0);
 			}
 			System.out.println("Set id is " + set_id);
@@ -71,8 +67,7 @@ public class SimpleReader
 			long start = System.nanoTime();
 			for (int i = 0; i < 3; i++)
 			{
-				// System.out.println("Getting channel " + i);
-				int j                 = channel_id[i];
+				//int j                 = channel_id[i];
 				min[i]                = in.readInt();
 				init[i]               = in.readInt();
 				delta_min[i]          = in.readInt();
@@ -126,15 +121,17 @@ public class SimpleReader
 				{
 					System.out.println("Unzipped data not expected length.");	
 				}
+				inflater.end();
 				string_list.add(string);
 			}
-
+            in.close();
+            
 			long stop = System.nanoTime();
 			long time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to read file.");
 			
 			start = System.nanoTime();
-			// Simplest possible threading.
+
 			Thread [] decompression_thread = new Thread[3]; 
 			for(int i = 0; i < 3; i++) 
 			{
@@ -144,16 +141,6 @@ public class SimpleReader
 			for(int i = 0; i < 3; i++)
 			    decompression_thread[i].join();
 
-			
-			//ExecutorService executorService = Executors.newFixedThreadPool(3);
-			//for (int i = 0; i < 3; i++)
-			//{
-			//	executorService.submit(new Decompressor(i));
-			//}
-			//executorService.shutdown();
-			//executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-			
-			
 			stop = System.nanoTime();
 			time = stop - start;
 
@@ -254,11 +241,11 @@ public class SimpleReader
             	    else
             	    {
 				    // If the image is small enough, serial processing is faster than parallel processing.
-				    int[] resized_blue  = ResizeMapper.resize(channel[0], intermediate_xdim, xdim, ydim);
-				    int[] resized_green = ResizeMapper.resize(channel[1], intermediate_xdim, xdim, ydim);
-				    int[] resized_red   = ResizeMapper.resize(channel[2], intermediate_xdim, xdim, ydim);
-				    
-				    int[] pixel         = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
+            	    	    channel[0] = ResizeMapper.resize(channel[0], intermediate_xdim, xdim, ydim);
+            	    	    channel[1] = ResizeMapper.resize(channel[1], intermediate_xdim, xdim, ydim);
+            	    	    channel[2] = ResizeMapper.resize(channel[2], intermediate_xdim, xdim, ydim);
+            	    	    
+            	    	    int[] pixel = DeltaMapper.getPixel(channel[0], channel[1], channel[2], xdim, pixel_shift);
 				    image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
             	    }
             }
@@ -267,7 +254,7 @@ public class SimpleReader
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to assemble and load rgb files.");
 
-			JFrame frame = new JFrame("Delta Reader");
+			JFrame frame = new JFrame("Simple Reader");
 			WindowAdapter window_handler = new WindowAdapter()
 			{
 				public void windowClosing(WindowEvent event)
@@ -415,5 +402,4 @@ public class SimpleReader
 			}
 		}
 	}
-
 }
