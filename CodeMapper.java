@@ -2660,6 +2660,25 @@ public class CodeMapper
 		return false;
 	}
 	
+	public static int nextPrime(int n)
+	{
+		int m = 0;
+		if(n % 2 == 0)
+			m = n + 1;
+		else
+			m = n + 2;
+		boolean foundPrime = false;
+		while(!foundPrime)
+		{
+		    boolean isPrime = isProbablePrime(m);
+		    if(isPrime)
+		    	    return m;
+		    else
+		    	    m += 2;
+		}
+		return m;
+	}
+	
 	public static long nextPrime(long n)
 	{
 		long m = 0;
@@ -2677,6 +2696,29 @@ public class CodeMapper
 		    	    m += 2;
 		}
 		return m;
+	}
+	
+	public static ArrayList<Integer> getPrimeFactors(int n)
+	{
+		double root = Math.sqrt(n);
+		
+		int j = n;
+		int k = (int)root;
+		
+		ArrayList <Integer> list = new ArrayList<Integer>();
+	   
+		for(int i = 2; i < j && i <= k; i = nextPrime(i))
+	    {   
+	    	    while(j % i == 0)
+	    	    {
+	    	    	    list.add(i);
+	    	    	    j /= i;
+	    	    }
+	    }
+	    if(j > 2)
+	    	    list.add(j);
+	    
+	    return list;
 	}
 	
 	
@@ -3825,7 +3867,6 @@ public class CodeMapper
 	    */
 		
 		
-		
 		// Because of the way we reduced the resolution of our values,
 		// we know the range can now be represented as an int, although
 		// the offset and delimiter still require BigIntegers.
@@ -3868,7 +3909,7 @@ public class CodeMapper
 	
 	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
 	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
-	// We think the problem with this is it doesn't produce a static set of start digits and then repeating digits, whether binary or decimal.
+	// We think the problem with this is it doesn't produce a static set of start bits and then repeating bits.
 	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
 	{
 		int [] f = frequency.clone();

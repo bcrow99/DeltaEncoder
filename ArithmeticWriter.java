@@ -263,9 +263,8 @@ public class ArithmeticWriter
 				min_index = i;
 			}
 		}
-		
 		delta_type = min_index;
-		//elta_button[min_index].doClick();
+		//delta_button[min_index].doClick();
 		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	
@@ -1251,7 +1250,7 @@ public class ArithmeticWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_segment_length = 1000;
+					int minimum_segment_length = 500;
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
@@ -1326,6 +1325,127 @@ public class ArithmeticWriter
 					
                     start = System.nanoTime();
 					
+                    /*
+                    
+                    BigInteger[] quotient = offset[0];
+                    
+                    BigDecimal p = new BigDecimal(quotient[0]);
+                    BigDecimal q = new BigDecimal(quotient[1]);
+                    
+                    ArrayList <BigInteger> factor_list = CodeMapper.getPrimeFactors(quotient[1]);
+                    
+                    int factor2 = 0;
+                    int factor5 = 0;
+                    
+                    int number_of_prime_factors = factor_list.size();
+                    System.out.println("Number of prime factors is " + number_of_prime_factors);
+                    for(k = 0; k < factor_list.size(); k++)
+                    {
+                    	    BigInteger factor = factor_list.get(k);
+                    	    if(factor.compareTo(BigInteger.TWO) == 0)
+                    	    	    factor2++;
+                    	    else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
+                    	    	    factor5++;
+                    }
+                    
+                    int number_of_start_digits = 0;
+                    if(factor2 > factor5)
+                    	    number_of_start_digits = factor2;
+                    else
+                    	    number_of_start_digits = factor5;
+                    	System.out.println("Number of decimal start digits is " + number_of_start_digits);
+                    	
+                    	int d_bitlength = quotient[1].bitLength();
+                    	d_bitlength /= 3;
+                    	
+                    	BigDecimal r = p.divide(q, number_of_start_digits + d_bitlength, RoundingMode.HALF_EVEN);
+                  
+                    	int     number_of_repeating_digits = 1;
+                    	
+                    	String s = r.toPlainString();
+                    s = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
+                    	
+                    	boolean found_repetend             = false;
+                    	BigInteger [] v                    = CodeMapper.getRatio2(s, number_of_start_digits, number_of_repeating_digits);
+                    	
+                    	BigInteger delta = quotient[0].subtract(v[0]);
+                    	BigInteger min_delta = delta;
+                    	
+                  
+                    	if((quotient[0].compareTo(v[0]) == 0) && (quotient[1].compareTo(v[1]) == 0))
+                    	{
+                    		found_repetend = true;
+                    		System.out.println("Found repetend, length is " + number_of_repeating_digits);
+                    	}
+                    	else
+                    	{
+                    	    while(!found_repetend && number_of_repeating_digits < d_bitlength)
+                    	    {
+                    	        number_of_repeating_digits++;
+                    	        s = r.toPlainString();
+                            s = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
+                    	        v = CodeMapper.getRatio2(s, number_of_start_digits, number_of_repeating_digits);
+                    	        delta = quotient[0].subtract(v[0]);
+                    	        if(delta.compareTo(min_delta) < 0)
+                    	        {
+                    	        	    min_delta = delta;
+                    	        }
+                    	        if((quotient[0].compareTo(v[0]) == 0) && (quotient[1].compareTo(v[1]) == 0))
+                    	        {
+                            		found_repetend = true;
+                            		System.out.println("Found repetend, length is " + number_of_repeating_digits);
+                    	        }
+                    	    }
+                    	}
+                    	
+                    	if(!found_repetend)
+                    	{
+                    	    System.out.println("Did not find repetend.");
+                    	    System.out.println("Min delta was " + min_delta);
+                    	}
+                    	*/
+                    
+                    int numerator = 1;
+                    int denominator = 6;
+                    
+                    double decimal = numerator;
+                    decimal /= denominator;
+                    
+                    String s = String.valueOf(decimal);
+                    
+                    ArrayList <Integer> factor_list = CodeMapper.getPrimeFactors(denominator);
+                    
+                    int factor2 = 0;
+                    int factor5 = 0;
+                    
+                    int number_of_prime_factors = factor_list.size();
+                    System.out.println("Number of prime factors is " + number_of_prime_factors);
+                    for(k = 0; k < factor_list.size(); k++)
+                    {
+                    	    int factor = factor_list.get(k);
+                    	    if(factor == 2)
+                    	    	    factor2++;
+                    	    else if(factor == 5)
+                    	    	    factor5++;
+                    }
+                    
+                    int number_of_start_digits = 0;
+                    if(factor2 > factor5)
+                    	    number_of_start_digits = factor2;
+                    else
+                    	    number_of_start_digits = factor5;
+                    	System.out.println("Number of decimal start digits is " + number_of_start_digits);
+                    
+                    	int number_of_repeating_digits = 1;
+                    String t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
+                    
+                    int [] ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
+                    
+                    System.out.println("Ratio is " + ratio[0] + ":" + ratio[1]);
+                    
+                    System.out.println("Decimal fraction is " + t);
+                    	System.out.println();
+                    
                     
                     Thread [] decoder_thread = new Thread[number_of_segments];
                     
