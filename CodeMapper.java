@@ -2632,7 +2632,6 @@ public class CodeMapper
 		}
 	}
 	
-	
 	public static boolean isProbablePrime(long n)
 	{
 		long b = 2;
@@ -3575,6 +3574,137 @@ public class CodeMapper
         return value;
 	}
 	
+	public static BigInteger [] getIntervalValue2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		int    n = src.length;
+	   
+	
+	    int [] s = new int[f.length];
+	    int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m   += f[i];
+		}
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		
+		for(int i = 0; i < n; i++)
+	    {
+			int j = src[i];
+    	        if(j < 0)
+    	    	    j     += 256;
+    	        j = symbol_table.get(j);
+    	        
+    	        
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.ONE;
+	    	    factor            = factor.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = factor.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	   
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+            factor   = factor.valueOf(f[j]);
+	    	    range[0] = range[0].multiply(factor);
+	    	    factor   = factor.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	    
+	    	   
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	   
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
+	
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+					
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+	
+		
+		BigInteger gcd                      = offset[0].gcd(offset[1]);
+		BigInteger    max_gcd    = gcd;  
+        BigInteger largest_index = BigInteger.ZERO;
+       
+		
+		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
+		
+		//BigInteger step = range[0].divide(BigInteger.valueOf(10000));
+		BigInteger step = BigInteger.ONE;
+		
+        for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
+	    {
+	      	value[0]  = offset[0].add(index);
+	    	    gcd = value[0].gcd(value[1]);
+	        if(gcd.compareTo(max_gcd) == 1)
+	        {
+        	        max_gcd = gcd;
+        	        largest_index = index;
+	        }
+	    }
+        
+        value[0] = offset[0].add(largest_index);
+        value[0] = value[0].divide(max_gcd);
+        value[1] = value[1].divide(max_gcd);
+        
+        gcd = offset[0].gcd(offset[1]);
+        offset[0] = offset[0].divide(gcd);
+        offset[1] = offset[1].divide(gcd);
+        
+        int offset_bit_length = offset[0].bitLength();
+        int value_bit_length = value[0].bitLength();
+        //System.out.println("Offset numerator length is   " + offset_bit_length + ", value length is " + value_bit_length);
+        
+        offset_bit_length = offset[1].bitLength();
+        value_bit_length = value[1].bitLength();
+        //System.out.println("Offset denominator length is " + offset_bit_length + ", value length is " + value_bit_length);
+        
+        //System.out.println();
+        
+        return value;
+	}
+	
+	
 	
 	public static BigInteger [] getIntervalValue(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, byte [] order)
 	{
@@ -3680,8 +3810,8 @@ public class CodeMapper
 		
 		BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
 		
-		
-		BigInteger step = range[0].divide(BigInteger.valueOf(10000));
+		//BigInteger step = range[0].divide(BigInteger.valueOf(10000));
+		BigInteger step = BigInteger.ONE;
 		
         for(BigInteger index = step; index.compareTo(range[0]) == -1; index = index.add(step))
 	    {
@@ -3715,7 +3845,7 @@ public class CodeMapper
         return value;
 	}
 	
-
+	
 	public static BigInteger [] getIntervalValue2(byte[] src, Hashtable <Integer, Integer> symbol_table, int [] frequency, byte [] order)
 	{
 		int [] f = new int[frequency.length];

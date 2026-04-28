@@ -33,7 +33,7 @@ public class ArithmeticWriter
 	
 	int delta_type      = 5;
 	
-	boolean precompress = false;
+	boolean precompress = true;
 	int deflate_type    = 0;
 	
 	double scale       = 1.;
@@ -264,7 +264,6 @@ public class ArithmeticWriter
 			}
 		}
 		delta_type = min_index;
-		//delta_button[min_index].doClick();
 		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	
@@ -1191,6 +1190,102 @@ public class ArithmeticWriter
 
 			try
 			{
+				  
+                /*
+                int numerator   = 1;
+                int denominator = 7;
+                
+                double decimal = numerator;
+                decimal /= denominator;
+                
+                String s = String.valueOf(decimal);
+                System.out.println("Decimal fraction is " + s);
+                
+                ArrayList <Integer> factor_list = CodeMapper.getPrimeFactors(denominator);
+                
+                int factor2 = 0;
+                int factor5 = 0;
+                
+                int number_of_prime_factors = factor_list.size();
+                System.out.println("Number of prime factors is " + number_of_prime_factors);
+                for(k = 0; k < factor_list.size(); k++)
+                {
+                	    int factor = factor_list.get(k);
+                	    if(factor == 2)
+                	    	    factor2++;
+                	    else if(factor == 5)
+                	    	    factor5++;
+                }
+                
+                int number_of_start_digits = 0;
+                if(factor2 > factor5)
+                	    number_of_start_digits = factor2;
+                else
+                	    number_of_start_digits = factor5;
+                	System.out.println("Number of decimal start digits is " + number_of_start_digits);
+                
+                	int number_of_repeating_digits = 1;
+                String t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
+                int [] ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
+                
+                while(ratio[0] != numerator || ratio[1] != denominator)
+                {
+                	    number_of_repeating_digits++;
+                	    t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
+                	    ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
+                }
+                
+                System.out.println("Ratio is " + ratio[0] + ":" + ratio[1]);
+                
+                System.out.println("Decimal fraction is " + t);
+                	System.out.println();
+                */
+                
+			    /*
+                BigInteger numerator   = BigInteger.ONE;
+                BigInteger denominator = BigInteger.valueOf(7);
+                
+                BigDecimal _p = new BigDecimal(numerator);
+                BigDecimal _q = new BigDecimal(denominator);
+                
+                ArrayList <BigInteger> factor_list = CodeMapper.getPrimeFactors(denominator);
+                int factor2 = 0;
+                int factor5 = 0;
+                
+                int number_of_prime_factors = factor_list.size();
+                System.out.println("Number of prime factors is " + number_of_prime_factors);
+                for(int k = 0; k < factor_list.size(); k++)
+                {
+                	    BigInteger factor = factor_list.get(k);
+                	    if(factor.compareTo(BigInteger.TWO) == 0)
+                	    	    factor2++;
+                	    else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
+                	    	    factor5++;
+                }
+                
+                int number_of_start_digits = 0;
+                if(factor2 > factor5)
+        	            number_of_start_digits = factor2;
+                else
+        	            number_of_start_digits = factor5;
+        	        System.out.println("Number of decimal start digits is " + number_of_start_digits);
+                
+        	        int denominator_bitlength = denominator.bitLength();
+        	        System.out.println("Denominator bit length is " + denominator_bitlength);
+        	        BigDecimal fraction = _p.divide(_q, number_of_start_digits + 7, RoundingMode.HALF_EVEN);
+        	        
+        	        String s = fraction.toPlainString();
+        	        System.out.println("Fraction is " + s);
+                */
+                
+				
+				
+				
+				
+				
+				
+				
+				
 				DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
 
 				// Dimensions of full sized frame
@@ -1250,7 +1345,12 @@ public class ArithmeticWriter
 					
 					byte [] string = (byte []) string_list.get(i);
 					
-					int minimum_segment_length = 500;
+					// Check to see if two's complement does better than unary strings.
+					// Does not seem to be the case.
+					//byte [] string = (byte []) delta_list.get(i);
+					
+					
+					int minimum_segment_length = 120;
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
@@ -1321,6 +1421,13 @@ public class ArithmeticWriter
 					long stop = System.nanoTime();
 					long time = stop - start;
 					System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
+					
+					
+					BigInteger[] quotient = offset[0];
+					
+					System.out.println("Bitlength of numerator is " + quotient[0].bitLength() + ", denominator is " + quotient[0].bitLength());
+					 
+					 
 					
 					
                     start = System.nanoTime();
@@ -1404,49 +1511,7 @@ public class ArithmeticWriter
                     	    System.out.println("Min delta was " + min_delta);
                     	}
                     	*/
-                    
-                    int numerator = 1;
-                    int denominator = 6;
-                    
-                    double decimal = numerator;
-                    decimal /= denominator;
-                    
-                    String s = String.valueOf(decimal);
-                    
-                    ArrayList <Integer> factor_list = CodeMapper.getPrimeFactors(denominator);
-                    
-                    int factor2 = 0;
-                    int factor5 = 0;
-                    
-                    int number_of_prime_factors = factor_list.size();
-                    System.out.println("Number of prime factors is " + number_of_prime_factors);
-                    for(k = 0; k < factor_list.size(); k++)
-                    {
-                    	    int factor = factor_list.get(k);
-                    	    if(factor == 2)
-                    	    	    factor2++;
-                    	    else if(factor == 5)
-                    	    	    factor5++;
-                    }
-                    
-                    int number_of_start_digits = 0;
-                    if(factor2 > factor5)
-                    	    number_of_start_digits = factor2;
-                    else
-                    	    number_of_start_digits = factor5;
-                    	System.out.println("Number of decimal start digits is " + number_of_start_digits);
-                    
-                    	int number_of_repeating_digits = 1;
-                    String t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
-                    
-                    int [] ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
-                    
-                    System.out.println("Ratio is " + ratio[0] + ":" + ratio[1]);
-                    
-                    System.out.println("Decimal fraction is " + t);
-                    	System.out.println();
-                    
-                    
+                 
                     Thread [] decoder_thread = new Thread[number_of_segments];
                     
                     for(k = 0; k < number_of_segments; k++)
@@ -1609,16 +1674,19 @@ public class ArithmeticWriter
 					out.writeInt(freq_zipped_length); 
 					out.write(zipped_frequency_data, 0, freq_zipped_length);
 					
+					
 					for(k = 0; k < number_of_segments; k++)
 					{
-					    BigInteger [] current_offset = offset[k];
-					    byte [] p_byte_array = current_offset[0].toByteArray();
-						out.writeInt(p_byte_array.length);
-				        out.write(p_byte_array, 0, p_byte_array.length);
-				        byte [] q_byte_array = current_offset[1].toByteArray();
-						out.writeInt(q_byte_array.length);
-				        out.write(q_byte_array, 0, q_byte_array.length);
+						BigInteger [] current_offset = offset[k];
+					    byte []       bytes          = current_offset[0].toByteArray();
+					    out.writeInt(bytes.length);
+					    out.write(bytes, 0, bytes.length);
+					    
+					    bytes          = current_offset[1].toByteArray();
+					    out.writeInt(bytes.length);
+					    out.write(bytes, 0, bytes.length);
 					}
+					
 				}
 
 				out.flush();

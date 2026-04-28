@@ -68,7 +68,7 @@ public class ArithmeticReader
 
 			if (delta_type > 7)
 			{
-				System.out.println("Delta type not supported.");
+				System.out.println("Delta type " + delta_type + " not supported.");
 				System.exit(0);
 			}
 			System.out.println("Set id is " + set_id);
@@ -76,7 +76,6 @@ public class ArithmeticReader
 			long start = System.nanoTime();
 			for (int i = 0; i < 3; i++)
 			{
-				// System.out.println("Getting channel " + i);
 				int j                 = channel_id[i];
 				min[i]                = in.readInt();
 				init[i]               = in.readInt();
@@ -133,9 +132,10 @@ public class ArithmeticReader
 				
 				byte [] frequency_bytes = new byte[number_of_bytes];
 				
-				Inflater inflater = new Inflater();
-				inflater.setInput(freq_zipped_data, 0, freq_zipped_length);
-				int unzipped_length = inflater.inflate(frequency_bytes);
+				Inflater freq_inflater = new Inflater();
+				freq_inflater.setInput(freq_zipped_data, 0, freq_zipped_length);
+				int unzipped_length = freq_inflater.inflate(frequency_bytes);
+				freq_inflater.end();
 			
 				int [][] frequency = new int [number_of_segments][256];
 				
@@ -205,16 +205,14 @@ public class ArithmeticReader
 				for(int k = 0; k < number_of_segments; k++)
 				{
 					int length = in.readInt();
-					byte [] byte_array = new byte[length];
-					in.read(byte_array, 0, length);
-					
-					offset[k][0] = new BigInteger(byte_array);
+					byte [] bytes = new byte[length];
+					in.read(bytes, 0, length);
+					offset[k][0] = new BigInteger(bytes);
 					
 					length = in.readInt();
-					byte_array = new byte[length];
-					in.read(byte_array, 0, length);
-					
-					offset[k][1] = new BigInteger(byte_array);
+					bytes = new byte[length];
+					in.read(bytes, 0, length);
+					offset[k][1] = new BigInteger(bytes);
 				}
 				
 				offset_list.add(offset);
@@ -231,7 +229,6 @@ public class ArithmeticReader
 			start = System.nanoTime();
 			
 			
-			int number_of_processors = Runtime.getRuntime().availableProcessors();
             for(int i = 0; i < 3; i++)
             {
             	    int string_length = compressed_length[i] / 8;
@@ -290,16 +287,6 @@ public class ArithmeticReader
 			for(int i = 0; i < 3; i++)
 			    decompression_thread[i].join();
 
-			
-			//ExecutorService executorService = Executors.newFixedThreadPool(3);
-			//for (int i = 0; i < 3; i++)
-			//{
-			//	executorService.submit(new Decompressor(i));
-			//}
-			//executorService.shutdown();
-			//executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-			
-			
 			stop = System.nanoTime();
 			time = stop - start;
 
@@ -380,7 +367,7 @@ public class ArithmeticReader
             {
             	    if(xdim > 600) 
             	    {
-            	    	    // If the image is larger it might make sense to try to use all the processors,
+            	    	    // If the image is larger enough, it might make sense to try to use all the processors
             	    	    // and do the resizing in segments with each channel done sequentially.
               	    Thread [] resize_thread = new Thread[3]; 
 				    for(int i = 0; i < 3; i++) 
