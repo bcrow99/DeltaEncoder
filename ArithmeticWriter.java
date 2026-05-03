@@ -1723,36 +1723,6 @@ public class ArithmeticWriter
 
 		public void run()
 		{
-			boolean [] isSymbol   = new boolean[256];
-			
-			 for(int i = 0; i < 256; i++)
-			 {
-				 if(frequency[i] != 0)
-			    	     isSymbol[i] = true;
-			 }
-			 
-			 int number_of_symbols = 0;
-			 for(int i = 0; i < 256; i++)
-			 {
-			     if(isSymbol[i]) 
-			    	     number_of_symbols++; 
-			 }
-			    
-			 Hashtable <Integer, Integer> symbol_table =  new Hashtable <Integer, Integer>();
-			 int [] f = new int[number_of_symbols];
-			    
-			 int j = 0;
-			 for(int i = 0; i < 256; i++)
-			 {
-			    	if(isSymbol[i])
-			    	{
-			    	    	symbol_table.put(i, j);
-			    	    	f[j] = frequency[i];
-			    	    	if(f[j] < 0)
-			    	    		f[j] += 256;
-			    	    	j++;
-			    	}
-			 }
 			
 			 //order[index] = CodeMapper.getFirstTable(src, symbol_table, f);
 			 //order[index] = CodeMapper.getLastTable(src, symbol_table, f);
@@ -1760,21 +1730,21 @@ public class ArithmeticWriter
 			 //order[index]  = CodeMapper.getDescendingTable(f);
 			 //offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
 			
-			 offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f);
+			 offset[index] = CodeMapper.getArithmeticOffset(src, frequency);
 			 //offset[index] = CodeMapper.getIntervalValue(src, symbol_table, f);
 		}
 	}
 	
 	class ArithmeticDecoder implements Runnable
 	{
-		BigInteger [] quotient;
+		BigInteger [] offset;
 		int []        frequency;
 		int           n;
 		int           index;
 
-		public ArithmeticDecoder(BigInteger [] quotient, int [] frequency, int n, int index)
+		public ArithmeticDecoder(BigInteger [] offset, int [] frequency, int n, int index)
 		{
-			this.quotient  = quotient;
+			this.offset  = offset;
 			this.frequency = frequency;
 			this.index     = index;
 			this.n         = n;
@@ -1782,36 +1752,10 @@ public class ArithmeticWriter
 
 		public void run()
 		{
-			boolean [] isSymbol = new boolean[256];
-		    
-			int number_of_symbols = 0;
-			for(int i = 0; i < frequency.length; i++)
-		    {
-		    	    if(frequency[i] != 0)
-		    	    {
-		    	        isSymbol[i] = true;
-		    	        number_of_symbols++;
-		    	    }
-		    }
-			
-			Hashtable <Integer, Integer> symbol =  new Hashtable <Integer, Integer>();
-			int [] f = new int[number_of_symbols];
-			
-			int j = 0;
-			for(int i = 0; i < 256; i++)
-			{
-			    if(isSymbol[i])
-			    	{
-			    	    	symbol.put(i, j);
-			    	    	f[j] = frequency[i];
-			    	    	j++;
-			    	}
-			} 
-			
-			//decoded_segment[index] = CodeMapper.getArithmeticValues(quotient, symbol, f, n);
-			decoded_segment[index] = CodeMapper.getArithmeticValues2(quotient, symbol, f, n);
-			//decoded_segment[index] = CodeMapper.getArithmeticValues(quotient, symbol, f, n, order[index]);
-			//decoded_segment[index] = CodeMapper.getArithmeticValues2(quotient, symbol, f, n, order[index]);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, symbol, f, n);
+			decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, frequency, n);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, symbol, f, n, order[index]);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, symbol, f, n, order[index]);
 		}
 	}
 }
