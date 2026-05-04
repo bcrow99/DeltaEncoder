@@ -1190,101 +1190,6 @@ public class ArithmeticWriter
 
 			try
 			{
-				  
-                /*
-                int numerator   = 1;
-                int denominator = 7;
-                
-                double decimal = numerator;
-                decimal /= denominator;
-                
-                String s = String.valueOf(decimal);
-                System.out.println("Decimal fraction is " + s);
-                
-                ArrayList <Integer> factor_list = CodeMapper.getPrimeFactors(denominator);
-                
-                int factor2 = 0;
-                int factor5 = 0;
-                
-                int number_of_prime_factors = factor_list.size();
-                System.out.println("Number of prime factors is " + number_of_prime_factors);
-                for(k = 0; k < factor_list.size(); k++)
-                {
-                	    int factor = factor_list.get(k);
-                	    if(factor == 2)
-                	    	    factor2++;
-                	    else if(factor == 5)
-                	    	    factor5++;
-                }
-                
-                int number_of_start_digits = 0;
-                if(factor2 > factor5)
-                	    number_of_start_digits = factor2;
-                else
-                	    number_of_start_digits = factor5;
-                	System.out.println("Number of decimal start digits is " + number_of_start_digits);
-                
-                	int number_of_repeating_digits = 1;
-                String t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
-                int [] ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
-                
-                while(ratio[0] != numerator || ratio[1] != denominator)
-                {
-                	    number_of_repeating_digits++;
-                	    t = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
-                	    ratio = CodeMapper.getRatio(t, number_of_start_digits, number_of_repeating_digits);
-                }
-                
-                System.out.println("Ratio is " + ratio[0] + ":" + ratio[1]);
-                
-                System.out.println("Decimal fraction is " + t);
-                	System.out.println();
-                */
-                
-			    /*
-                BigInteger numerator   = BigInteger.ONE;
-                BigInteger denominator = BigInteger.valueOf(7);
-                
-                BigDecimal _p = new BigDecimal(numerator);
-                BigDecimal _q = new BigDecimal(denominator);
-                
-                ArrayList <BigInteger> factor_list = CodeMapper.getPrimeFactors(denominator);
-                int factor2 = 0;
-                int factor5 = 0;
-                
-                int number_of_prime_factors = factor_list.size();
-                System.out.println("Number of prime factors is " + number_of_prime_factors);
-                for(int k = 0; k < factor_list.size(); k++)
-                {
-                	    BigInteger factor = factor_list.get(k);
-                	    if(factor.compareTo(BigInteger.TWO) == 0)
-                	    	    factor2++;
-                	    else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
-                	    	    factor5++;
-                }
-                
-                int number_of_start_digits = 0;
-                if(factor2 > factor5)
-        	            number_of_start_digits = factor2;
-                else
-        	            number_of_start_digits = factor5;
-        	        System.out.println("Number of decimal start digits is " + number_of_start_digits);
-                
-        	        int denominator_bitlength = denominator.bitLength();
-        	        System.out.println("Denominator bit length is " + denominator_bitlength);
-        	        BigDecimal fraction = _p.divide(_q, number_of_start_digits + 7, RoundingMode.HALF_EVEN);
-        	        
-        	        String s = fraction.toPlainString();
-        	        System.out.println("Fraction is " + s);
-                */
-                
-				
-				
-				
-				
-				
-				
-				
 				
 				DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
 
@@ -1431,87 +1336,6 @@ public class ArithmeticWriter
 					
 					
                     start = System.nanoTime();
-					
-                    /*
-                    
-                    BigInteger[] quotient = offset[0];
-                    
-                    BigDecimal p = new BigDecimal(quotient[0]);
-                    BigDecimal q = new BigDecimal(quotient[1]);
-                    
-                    ArrayList <BigInteger> factor_list = CodeMapper.getPrimeFactors(quotient[1]);
-                    
-                    int factor2 = 0;
-                    int factor5 = 0;
-                    
-                    int number_of_prime_factors = factor_list.size();
-                    System.out.println("Number of prime factors is " + number_of_prime_factors);
-                    for(k = 0; k < factor_list.size(); k++)
-                    {
-                    	    BigInteger factor = factor_list.get(k);
-                    	    if(factor.compareTo(BigInteger.TWO) == 0)
-                    	    	    factor2++;
-                    	    else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
-                    	    	    factor5++;
-                    }
-                    
-                    int number_of_start_digits = 0;
-                    if(factor2 > factor5)
-                    	    number_of_start_digits = factor2;
-                    else
-                    	    number_of_start_digits = factor5;
-                    	System.out.println("Number of decimal start digits is " + number_of_start_digits);
-                    	
-                    	int d_bitlength = quotient[1].bitLength();
-                    	d_bitlength /= 3;
-                    	
-                    	BigDecimal r = p.divide(q, number_of_start_digits + d_bitlength, RoundingMode.HALF_EVEN);
-                  
-                    	int     number_of_repeating_digits = 1;
-                    	
-                    	String s = r.toPlainString();
-                    s = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
-                    	
-                    	boolean found_repetend             = false;
-                    	BigInteger [] v                    = CodeMapper.getRatio2(s, number_of_start_digits, number_of_repeating_digits);
-                    	
-                    	BigInteger delta = quotient[0].subtract(v[0]);
-                    	BigInteger min_delta = delta;
-                    	
-                  
-                    	if((quotient[0].compareTo(v[0]) == 0) && (quotient[1].compareTo(v[1]) == 0))
-                    	{
-                    		found_repetend = true;
-                    		System.out.println("Found repetend, length is " + number_of_repeating_digits);
-                    	}
-                    	else
-                    	{
-                    	    while(!found_repetend && number_of_repeating_digits < d_bitlength)
-                    	    {
-                    	        number_of_repeating_digits++;
-                    	        s = r.toPlainString();
-                            s = s.substring(0, number_of_start_digits + number_of_repeating_digits + 2);
-                    	        v = CodeMapper.getRatio2(s, number_of_start_digits, number_of_repeating_digits);
-                    	        delta = quotient[0].subtract(v[0]);
-                    	        if(delta.compareTo(min_delta) < 0)
-                    	        {
-                    	        	    min_delta = delta;
-                    	        }
-                    	        if((quotient[0].compareTo(v[0]) == 0) && (quotient[1].compareTo(v[1]) == 0))
-                    	        {
-                            		found_repetend = true;
-                            		System.out.println("Found repetend, length is " + number_of_repeating_digits);
-                    	        }
-                    	    }
-                    	}
-                    	
-                    	if(!found_repetend)
-                    	{
-                    	    System.out.println("Did not find repetend.");
-                    	    System.out.println("Min delta was " + min_delta);
-                    	}
-                    	*/
-                 
                     Thread [] decoder_thread = new Thread[number_of_segments];
                     
                     for(k = 0; k < number_of_segments; k++)
@@ -1723,15 +1547,13 @@ public class ArithmeticWriter
 
 		public void run()
 		{
-			
-			 //order[index] = CodeMapper.getFirstTable(src, symbol_table, f);
-			 //order[index] = CodeMapper.getLastTable(src, symbol_table, f);
-			 //order[index] = CodeMapper.getAscendingTable(f);
-			 //order[index]  = CodeMapper.getDescendingTable(f);
-			 //offset[index] = CodeMapper.getArithmeticOffset(src, symbol_table, f, order[index]);
-			
+			 //order[index] = CodeMapper.getFirstTable(src, frequency);
+			 //order[index] = CodeMapper.getLastTable(src, frequency);
+			 //order[index] = CodeMapper.getAscendingTable(frequency);
+			 //order[index]  = CodeMapper.getDescendingTable(frequency);
 			 offset[index] = CodeMapper.getArithmeticOffset(src, frequency);
-			 //offset[index] = CodeMapper.getIntervalValue(src, symbol_table, f);
+			 //offset[index] = CodeMapper.getIntervalValue(src, frequency);
+			 //offset[index] = CodeMapper.getArithmeticOffset(src, frequency, order[index]);
 		}
 	}
 	
@@ -1752,10 +1574,9 @@ public class ArithmeticWriter
 
 		public void run()
 		{
-			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, symbol, f, n);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, frequency, n);
 			decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, frequency, n);
-			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, symbol, f, n, order[index]);
-			//decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, symbol, f, n, order[index]);
+			//decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, frequency, n, order[index]);
 		}
 	}
 }
