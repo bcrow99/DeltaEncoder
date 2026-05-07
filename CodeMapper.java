@@ -3691,7 +3691,85 @@ public class CodeMapper
 				range_list.add(next_factor);
 			}
 		}
-	
+		
+		BigInteger gcd = range[0].gcd(offset[1]);
+		
+		BigInteger reduced_range  = range[0].divide(gcd);
+		BigInteger reduced_offset = offset[1].divide(gcd);
+		
+		ArrayList <BigInteger> reduced_range_list  = (ArrayList <BigInteger>) range_list.clone();
+		ArrayList <BigInteger> reduced_offset_list = (ArrayList <BigInteger>) offset_list.clone();
+		
+		ArrayList <BigInteger> gcd_list = getPrimeFactors(gcd);
+		System.out.println("GCD list has length " + gcd_list.size());
+		
+		/*
+		if(gcd_list.size() > 0)
+		{
+	    for(int k = 0; k < gcd_list.size(); k++)
+	    {
+	    	    BigInteger factor = gcd_list.get(k);
+	    	    if(reduced_range_list.contains(factor))
+	    	    	    reduced_range_list.remove(reduced_range_list.indexOf(factor));
+	    	    else
+	    	    	    System.out.println("Reduced range list does not contain factor."); 
+	    	    
+	    	    if(reduced_offset_list.contains(factor))
+    	    	        reduced_offset_list.remove(reduced_offset_list.indexOf(factor));
+    	        else
+    	    	        System.out.println("Reduced offset list does not contain factor.");
+	    	    
+	    }  
+		
+		BigInteger range_array[] = new BigInteger[reduced_range_list.size()];
+		for(int k = 0; k < reduced_range_list.size(); k++)
+		{
+			BigInteger factor = reduced_range_list.get(k);
+			range_array[k]    = factor;
+		}
+		Arrays.sort(range_array, Comparator.reverseOrder());
+		
+		BigInteger offset_array[] = new BigInteger[reduced_offset_list.size()];
+		for(int k = 0; k < reduced_offset_list.size(); k++)
+		{
+			BigInteger factor = reduced_offset_list.get(k);
+			offset_array[k]   = factor;
+		}
+		Arrays.sort(offset_array, Comparator.reverseOrder());
+		
+		
+		int [] next_smallest = new int[range_array.length];
+		
+		
+		for(int k = 0; k < range_array.length; k++)
+		{
+		    for(int p = 0; p < offset_array.length; p++)	
+		    {
+		    	    if(offset_array[p].compareTo(range_array[k]) == -1)
+		    	    {
+		    	    	    next_smallest[k] = p;
+		    	    	    break;
+		    	    }
+		    }
+		}
+	    
+		
+		range_list.remove(range_list.indexOf(range_array[0]));
+		range_list.add(offset_array[next_smallest[0]]);
+	    
+		
+		BigInteger product = BigInteger.ONE;
+		for(int k = 0; k < range_list.size(); k++)
+		{
+			BigInteger factor = range_list.get(k);
+			product = product.multiply(factor);
+		}
+		
+		if(product.compareTo(offset[0]) == -1)
+		    System.out.println("The product of the factors is less than the offset numerator.");
+		else
+			System.out.println("The product of the factors is greater than or equal to the offset numerator.");
+		}
 		/*
 		BigInteger product = BigInteger.ONE;
 		for(int k = 0; k < offset_list.size(); k++)
@@ -3719,7 +3797,7 @@ public class CodeMapper
 			System.out.println("The product of the factors does not equal the range numberator.");
 		*/
 		
-		BigInteger gcd       = offset[1].gcd(offset[0]);
+		gcd       = offset[1].gcd(offset[0]);
 		offset[0] = offset[0].divide(gcd);
 		offset[1] = offset[1].divide(gcd);
 		return offset;
