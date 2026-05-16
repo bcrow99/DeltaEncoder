@@ -2046,6 +2046,14 @@ public class CodeMapper
 		return a;
 	}
 	
+	public static BigInteger pow(BigInteger base, BigInteger exp, BigInteger mod)
+	{
+		BigInteger a = base;
+		for(BigInteger i = BigInteger.TWO; i.compareTo(exp) <= 0; i = i.add(BigInteger.ONE))
+		    a = a.multiply(base);
+		a = a.mod(mod);
+		return a;
+	}
 	
 	
 	public static int [] getDigits(long a, long b)
@@ -2634,12 +2642,35 @@ public class CodeMapper
 	
 	public static boolean isProbablePrime(int n)
 	{
-		return BigInteger.valueOf(n).isProbablePrime(100);
+		int b = 2;
+		int d = n - 1;
+		int s = 0;
+		while((d & 1) == 0)
+		{
+			s++;
+			d >>= 1;
+		}
+		
+		long x = pow(b, d, n);
+		if(x == 1 || x == n - 1)
+			return true;
+		
+		for(int i = 1; i < s; i++)
+		{
+			x = (x * x) % n;
+			if(x == 1)
+				return false;
+			else if(x == n - 1)	
+				return true;
+		}
+	
+		return false;
+		
+		//return BigInteger.valueOf(n).isProbablePrime(100);
 	}
 	
 	public static boolean isProbablePrime(long n)
 	{
-		/*
 		long b = 2;
 		long d = n - 1;
 		long s = 0;
@@ -2663,9 +2694,69 @@ public class CodeMapper
 		}
 	
 		return false;
+		
+		//return BigInteger.valueOf(n).isProbablePrime(100);
+	}
+	
+	
+	public static boolean isProbablePrime(BigInteger n)
+	{
+		BigInteger b = BigInteger.TWO;
+		BigInteger d = n.subtract(BigInteger.ONE);
+		BigInteger s = BigInteger.ZERO;
+		
+		BigInteger m = n.subtract(BigInteger.ONE);
+		
+		/*
+		while((d & 1) == 0)
+		{
+			s++;
+			d >>= 1;
+		}
 		*/
 		
-		return BigInteger.valueOf(n).isProbablePrime(100);
+		while(d.and(BigInteger.ONE).equals(BigInteger.ZERO))
+		{
+			s = s.add(BigInteger.ONE);
+			d = d.shiftRight(1);
+		}
+		
+		
+		
+		BigInteger x = pow(b, d, n);
+		
+		/*
+		if(x == 1 || x == n - 1)
+			return true;
+		*/
+		
+		if(x.equals(BigInteger.ONE) || (x.compareTo(m) == 0))
+			return true;
+		
+		/*
+		for(int i = 1; i < s; i++)
+		{
+			x = (x * x) % n;
+			if(x == 1)
+				return false;
+			else if(x == n - 1)	
+				return true;
+		}
+		*/
+		
+		for(BigInteger i = BigInteger.ONE; i.compareTo(s) == -1; i = i.add(BigInteger.ONE))
+		{
+			x = x.multiply(x);
+			x = x.mod(n);
+			if(x.equals(BigInteger.ONE))
+				return false;
+			else if(x.compareTo(m) == 0)
+				return true;
+		}
+	
+		return false;
+		
+		//return BigInteger.valueOf(n).isProbablePrime(100);
 	}
 	
 	public static int nextPrime(int n)
@@ -2793,7 +2884,8 @@ public class CodeMapper
 	    
 	    if(n.equals(BigInteger.ONE))
 	    	    return factors;
-	    else if(n.isProbablePrime(100))
+	    //else if(n.isProbablePrime(100))
+	    else if(isProbablePrime(n))
 	    {
 	    	    factors.add(n);
 	    	    return factors;
@@ -3683,7 +3775,6 @@ public class CodeMapper
 		    	    	    	    range_list.remove(range_list.indexOf(factor));
 		    	    	    else
 		    	    	    {
-		    	    	    	    /*
 		    	    	    	    System.out.println("Range list does not contain factor " + factor + ", gcd is " + gcd); 
 		    	    	    	    System.out.println("GCD list:");
 		    	    	    	    for(int p = 0; p < gcd_list.size(); p++)
@@ -3692,7 +3783,6 @@ public class CodeMapper
 		    	    	    	    	    System.out.print(next_factor + " ");
 		    	    	    	    }
 		    	    	    	    System.out.println();
-		    	    	    	    */
 		    	    	    }
 		    	    }  
 	    	    }
@@ -3713,7 +3803,6 @@ public class CodeMapper
 		
 		if(offset[1].compareTo(range[1]) != 0)
 		{	
-			//System.out.println("Cross multiplying.");
 		    BigInteger range_factor  = offset[1];
 		    BigInteger offset_factor = range[1];	
 			
@@ -3761,7 +3850,7 @@ public class CodeMapper
 		if(product.compareTo(offset[1]) != 0)
 			System.out.println("Offset denominator does not equal product.");
 		
-		/*
+	
 		product = BigInteger.ONE;
 		for(int i = 0; i < range_list.size(); i++)
 		{
@@ -3771,7 +3860,6 @@ public class CodeMapper
 		
 		if(product.compareTo(range[0]) != 0)
 			System.out.println("Range numerator does not equal product.");
-		*/
 		
 		BigInteger range_array[] = new BigInteger[range_list.size()];
 		for(int i = 0; i < range_list.size(); i++)
@@ -3780,30 +3868,26 @@ public class CodeMapper
 			range_array[i] = factor;
 		}
 		Arrays.sort(range_array);
+		//System.out.println("Range 0 is " + range_array[0]);
 		
 		product = BigInteger.ONE;
 		
-		BigInteger interval_length = range[0];
+		BigInteger limit = range[0].add(offset[0]);
 		
-		/*
-		if(interval_length.compareTo(BigInteger.ZERO) == -1)
-			System.out.println("Interval length is negative.");
-		else
-			System.out.println("Interval length is positive.");
-		*/
 		
 		int j = 0;
 		for(int i = 0; i < range_array.length - 1; i++)
 		{
 			product = product.multiply(range_array[i]);
-			if(interval_length.compareTo(product) == -1)
+			if(limit.compareTo(product) == -1)
 			{
 				j = i + 1;
 				break;
 			}	
 		}
 		
-		//System.out.println("Product of first " + j + " factors is less than interval length.");
+		
+		System.out.println("Product of first " + j + " factors is less than the limit.");
 		
 		/*
 		if(interval_length.compareTo(product) == -1)
