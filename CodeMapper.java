@@ -2632,8 +2632,14 @@ public class CodeMapper
 		}
 	}
 	
+	public static boolean isProbablePrime(int n)
+	{
+		return BigInteger.valueOf(n).isProbablePrime(100);
+	}
+	
 	public static boolean isProbablePrime(long n)
 	{
+		/*
 		long b = 2;
 		long d = n - 1;
 		long s = 0;
@@ -2657,6 +2663,9 @@ public class CodeMapper
 		}
 	
 		return false;
+		*/
+		
+		return BigInteger.valueOf(n).isProbablePrime(100);
 	}
 	
 	public static int nextPrime(int n)
@@ -2701,136 +2710,120 @@ public class CodeMapper
 	{
 	    ArrayList <Integer> factors = new ArrayList <Integer> ();
 	    
-	    // Handle even factors.
-	    int divisor = 2;
-	    
-	    while(n % divisor == 0)
+	    if(n == 1)
+	    	    return factors;
+	    else if(isProbablePrime(n))
 	    {
-	    	    factors.add(divisor);
-	    	    n /= divisor;
+	    	    factors.add(n);
+	    	    return factors;
 	    }
-	    
-	    // Handle odd factors.
-	    divisor = 3;
-	    while(divisor * divisor <= n) 
+	    else
 	    {
-            if(n % divisor == 0) 
-            {
-                factors.add(divisor);
-                n /= divisor;
-            } 
-            else 
-            {
-                divisor += 2;
+	        int divisor = 2;
+	    
+	        while(n % divisor == 0)
+	        {
+	    	        factors.add(divisor);
+	    	        n /= divisor;
+	        }
+	  
+	        divisor = 3;
+	        while(divisor * divisor <= n) 
+	        {
+                if(n % divisor == 0) 
+                {
+                    factors.add(divisor);
+                    n /= divisor;
+                } 
+                else 
+                {
+                    divisor += 2;
+                }
             }
-        }
 	    
-	    // If n > 1, the remaining n is the final prime factor
-        if (n > 1) 
-        {
-            factors.add(n);
+            if (n > 1) 
+                factors.add(n);
+            
+            return factors;
         }
-	    
-	    return factors;
 	}
 	
 	public static ArrayList <Long> getPrimeFactors(long n)
 	{
 	    ArrayList <Long> factors = new ArrayList<Long>();
-	    
-	    // Handle even factors.
-	    long divisor = 2;
-	    
-	    while(n % divisor == 0)
+	    if(n == 1)
+	    	    return factors;
+	    else if(isProbablePrime(n))
 	    {
-	    	    factors.add(divisor);
-	    	    n /= divisor;
+	    	    factors.add(n);
+	    	    return factors;
 	    }
-	    
-	    // Handle odd factors.
-	    divisor = 3;
-	    while(divisor * divisor <= n) 
+	    else
 	    {
-            if(n % divisor == 0) 
-            {
-                factors.add(divisor);
-                n /= divisor;
-            } 
-            else 
-            {
-                divisor += 2;
+	        long divisor = 2;
+	    
+	        while(n % divisor == 0)
+	        {
+	    	        factors.add(divisor);
+	    	        n /= divisor;
+	        }
+	    
+	        divisor = 3;
+	        while(divisor * divisor <= n) 
+	        {
+                if(n % divisor == 0) 
+                {
+                    factors.add(divisor);
+                    n /= divisor;
+                } 
+                else 
+                    divisor += 2;
             }
-        }
-	    
-	    // If n > 1, the remaining n is the final prime factor
-        if (n > 1) 
-        {
-            factors.add(n);
-        }
-	    
-	    return factors;
+        
+	        if (n > 1) 
+                factors.add(n);
+        
+	        return factors;
+	    }
 	}
 	
 	public static ArrayList <BigInteger> getPrimeFactors(BigInteger n)
 	{
 	    ArrayList <BigInteger> factors = new ArrayList<BigInteger>();
 	    
-	    if(n.compareTo(BigInteger.ONE) == 0)
+	    if(n.equals(BigInteger.ONE))
 	    	    return factors;
 	    else if(n.isProbablePrime(100))
 	    {
 	    	    factors.add(n);
 	    	    return factors;
 	    }
-	    
-	    BigInteger m = n;
-	    
-	    // Handle even factors.
-	    BigInteger divisor = BigInteger.valueOf(2);
-	    //while(m.mod(divisor).equals(BigInteger.ZERO))
-	    while(m.mod(divisor).compareTo(BigInteger.ZERO) == 0)
+	    else
 	    {
-	    	    factors.add(divisor);
-            m = m.divide(divisor);    
-	    }
+	        BigInteger divisor = BigInteger.TWO;
+	        while(n.mod(divisor).equals(BigInteger.ZERO))
+	        {
+	    	        factors.add(divisor);
+                n = n.divide(divisor);    
+	        }
 	    
-	    // Handle odd factors.
-	    divisor = BigInteger.valueOf(3);
-	    while(divisor.multiply(divisor).compareTo(m) <= 0) 
-	    {
-            //if(m.mod(divisor).equals(BigInteger.ZERO)) 
-	    	    if(m.mod(divisor).compareTo(BigInteger.ZERO) == 0)
-            {
-                factors.add(divisor);
-                m = m.divide(divisor);
-            } 
-            else 
-            {
-                divisor = divisor.add(BigInteger.valueOf(2));
+	        divisor = BigInteger.valueOf(3);
+	        while(divisor.multiply(divisor).compareTo(n) <= 0) 
+	        {
+                if(n.mod(divisor).equals(BigInteger.ZERO)) 
+                {
+                    factors.add(divisor);
+                    n = n.divide(divisor);
+                } 
+                else 
+                    divisor = divisor.nextProbablePrime();
             }
-        }
 	    
-	    // If m > 1, the remaining m is the final prime factor
-        if(m.compareTo(BigInteger.ONE) > 0) 
-        {
-            factors.add(m);
-        }
+            if(n.compareTo(BigInteger.ONE) == 1) 
+                factors.add(n);
 	    
-        if(factors.contains(BigInteger.ONE))
-        	    System.out.println("getPrimeFactors: Factors contain 1.");    
-        
-        BigInteger product = BigInteger.ONE;
-        for(int i = 0; i < factors.size(); i++)
-        {
-        	    BigInteger factor = factors.get(i);
-        	    product = product.multiply(factor);
-        }
-        
-        if(product.compareTo(n) != 0)
-        	    System.out.println("Product of factors does not equal value.");
-        if(factors.size() < 2 && !n.isProbablePrime(2))
-        	    System.out.println("Non prime returning list of size " + factors.size());
-	    return factors;
+	        return factors;
+	    }
 	}
 	
 	public static ArrayList <BigInteger> getPrimes(BigInteger limit)
