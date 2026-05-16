@@ -2046,6 +2046,8 @@ public class CodeMapper
 		return a;
 	}
 	
+	
+
 	public static BigInteger pow(BigInteger base, BigInteger exp, BigInteger mod)
 	{
 		BigInteger a = base;
@@ -2055,6 +2057,7 @@ public class CodeMapper
 		return a;
 	}
 	
+
 	
 	public static int [] getDigits(long a, long b)
 	{
@@ -2704,16 +2707,7 @@ public class CodeMapper
 		BigInteger b = BigInteger.TWO;
 		BigInteger d = n.subtract(BigInteger.ONE);
 		BigInteger s = BigInteger.ZERO;
-		
 		BigInteger m = n.subtract(BigInteger.ONE);
-		
-		/*
-		while((d & 1) == 0)
-		{
-			s++;
-			d >>= 1;
-		}
-		*/
 		
 		while(d.and(BigInteger.ONE).equals(BigInteger.ZERO))
 		{
@@ -2721,28 +2715,10 @@ public class CodeMapper
 			d = d.shiftRight(1);
 		}
 		
-		
-		
 		BigInteger x = pow(b, d, n);
-		
-		/*
-		if(x == 1 || x == n - 1)
-			return true;
-		*/
 		
 		if(x.equals(BigInteger.ONE) || (x.compareTo(m) == 0))
 			return true;
-		
-		/*
-		for(int i = 1; i < s; i++)
-		{
-			x = (x * x) % n;
-			if(x == 1)
-				return false;
-			else if(x == n - 1)	
-				return true;
-		}
-		*/
 		
 		for(BigInteger i = BigInteger.ONE; i.compareTo(s) == -1; i = i.add(BigInteger.ONE))
 		{
@@ -2756,7 +2732,7 @@ public class CodeMapper
 	
 		return false;
 		
-		//return BigInteger.valueOf(n).isProbablePrime(100);
+		//return n.isProbablePrime(100);
 	}
 	
 	public static int nextPrime(int n)
@@ -3752,8 +3728,6 @@ public class CodeMapper
 	    	        for(int k = 0; k < factor_list.size(); k++)
 	    	        {
 	    	    	        BigInteger next_factor = factor_list.get(k);
-	    	    	        if(next_factor.compareTo(BigInteger.ONE) == 0)
-	    	    	    	        System.out.println("Adding one to range factors 2.");
 	    	    	        range_list.add(next_factor);
 	    	        }
 	    	    }
@@ -3795,11 +3769,6 @@ public class CodeMapper
 	    	    	    s[k]--;
 	    	    }
 	    }
-		
-		if(offset_list.contains(BigInteger.ONE))
-			System.out.println("Offset list contains 1.");
-		if(range_list.contains(BigInteger.ONE))
-			System.out.println("Range list contains 1.");
 		
 		if(offset[1].compareTo(range[1]) != 0)
 		{	
