@@ -2645,6 +2645,7 @@ public class CodeMapper
 	
 	public static boolean isProbablePrime(int n)
 	{
+		/*
 		int b = 2;
 		int d = n - 1;
 		int s = 0;
@@ -2668,12 +2669,14 @@ public class CodeMapper
 		}
 	
 		return false;
+		*/
 		
-		//return BigInteger.valueOf(n).isProbablePrime(100);
+		return BigInteger.valueOf(n).isProbablePrime(100);
 	}
 	
 	public static boolean isProbablePrime(long n)
 	{
+		/*
 		long b = 2;
 		long d = n - 1;
 		long s = 0;
@@ -2697,13 +2700,15 @@ public class CodeMapper
 		}
 	
 		return false;
+		*/
 		
-		//return BigInteger.valueOf(n).isProbablePrime(100);
+		return BigInteger.valueOf(n).isProbablePrime(100);
 	}
 	
 	
 	public static boolean isProbablePrime(BigInteger n)
 	{
+		// This gets very slow with larger numbers.
 		BigInteger b = BigInteger.TWO;
 		BigInteger d = n.subtract(BigInteger.ONE);
 		BigInteger s = BigInteger.ZERO;
@@ -2860,8 +2865,7 @@ public class CodeMapper
 	    
 	    if(n.equals(BigInteger.ONE))
 	    	    return factors;
-	    //else if(n.isProbablePrime(100))
-	    else if(isProbablePrime(n))
+	    else if(n.isProbablePrime(100))
 	    {
 	    	    factors.add(n);
 	    	    return factors;
@@ -3566,7 +3570,6 @@ public class CodeMapper
 		
 		BigInteger factor = BigInteger.ONE;
 		
-		//BigInteger maximum_range = BigInteger.valueOf(Integer.MAX_VALUE);
 		BigInteger maximum_range = BigInteger.valueOf(1000);
 		BigInteger minimum_range = BigInteger.valueOf(512);
 		int j = factor_list.size() - 1;
@@ -3650,6 +3653,196 @@ public class CodeMapper
 		BigInteger [] offset = new BigInteger [] {BigInteger.ZERO, BigInteger.ONE};
 		BigInteger [] range  = new BigInteger [] {BigInteger.ONE, BigInteger.ONE};
 		
+		int    n       = src.length;
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	   
+	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
+	    	    
+	    	    BigInteger factor = BigInteger.valueOf(s[j]);
+	    	    addend[0]         = addend[0].multiply(factor);
+	    	    factor            = BigInteger.valueOf(m);
+	    	    addend[1]         = addend[1].multiply(factor);
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	   
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	 
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    if(f[j] != 1)
+	    	    {
+	    	        factor   = BigInteger.valueOf(f[j]);
+	    	        range[0] = range[0].multiply(factor);
+	    	    }
+ 
+	    	    factor   = BigInteger.valueOf(m);
+	    	    range[1] = range[1].multiply(factor);
+	    	  
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	    {
+	    	    	    s[k]--;
+	    	    }
+	    }
+		
+		
+		if(offset[1].compareTo(range[1]) != 0)
+		{	
+		    BigInteger range_factor  = offset[1];
+		    BigInteger offset_factor = range[1];	
+			
+		    
+		    offset[0] = offset[0].multiply(offset_factor);
+			offset[1] = offset[1].multiply(offset_factor);
+			
+			range[0] = range[0].multiply(range_factor);
+			range[1] = range[1].multiply(range_factor);	
+		}
+		
+	    BigInteger offset_gcd = offset[0].gcd(offset[1]);
+	    BigInteger limit      = range[0].add(offset[0]);
+	    BigInteger limit_gcd  = limit.gcd(offset[1]);
+	    
+	    ArrayList <BigInteger> offset_list = getPrimeFactors(offset_gcd);
+	    ArrayList <BigInteger> limit_list  = getPrimeFactors(limit_gcd);
+	    
+	    int offset_list_size = offset_list.size();
+	    int limit_list_size  = limit_list.size();
+	    
+        ArrayList <BigInteger> common_factors = new ArrayList <BigInteger> ();
+	    
+	    if(offset_list.size() != 0)
+	    {
+	    	    for(int i = 0; i < offset_list.size(); i++)
+	    	    {
+	    	    	    BigInteger factor = offset_list.get(i);
+	    	    	    if(limit_list.contains(factor))
+	    	    	    {
+	    	    	    	    limit_list.remove(limit_list.indexOf(factor));
+	    	    	    	    common_factors.add(factor);   
+	    	    	    }
+	    	    }
+	    }
+	  
+	    int common_factor_size = common_factors.size();
+	   
+	    //System.out.println("Offset list has " + offset_list_size + " factors, limit list has " + limit_list_size + " factors, with " + common_factor_size + " common factors.");
+		
+	    BigInteger product = BigInteger.ONE;
+	    for(int i = 0; i < common_factors.size(); i++)
+	    {
+	    	     BigInteger factor = common_factors.get(i);
+	    	     product = product.multiply(factor);
+	    }
+		
+	    if(common_factor_size == 0)
+	    {
+	    	    /*
+	        offset[0] = offset[0].divide(offset_gcd);
+		    offset[1] = offset[1].divide(offset_gcd);
+		    return offset;
+		    */
+	      	int iterations     = 1;
+    	        int max_iterations  = 1;
+    	        BigInteger current_limit = limit.subtract(BigInteger.ONE);
+    	        BigInteger max_gcd = current_limit.gcd(offset[1]);
+    	    
+    	        while(current_limit.compareTo(offset[0]) == 1)
+    	        {
+    	    	        iterations++;
+    	            current_limit = current_limit.subtract(BigInteger.ONE);
+    	            BigInteger current_gcd = current_limit.gcd(offset[1]);
+    	            if(current_gcd.compareTo(max_gcd) == 1)
+    	            {
+    	        	        max_iterations = iterations;
+    	        	        max_gcd = current_gcd;
+    	            }
+    	        }
+    	    
+    	        limit    = limit.subtract(BigInteger.valueOf(max_iterations));
+    	        limit    = limit.divide(max_gcd);
+    	        offset[1] = offset[1].divide(max_gcd);
+    	    
+    	        BigInteger [] value = new BigInteger [] {limit, offset[1]};
+    	        return value;
+	    }
+	    else
+	    {
+	    	    limit     = limit.divide(product);
+	    	    offset[0] = offset[0].divide(product);
+	    	    offset[1] = offset[1].divide(product);
+	    	    
+	    	    int iterations     = 1;
+	    	    int max_iterations  = 1;
+	    	    BigInteger current_limit = limit.subtract(BigInteger.ONE);
+	    	    BigInteger max_gcd = current_limit.gcd(offset[1]);
+	    	    
+	    	    while(current_limit.compareTo(offset[0]) == 1)
+	    	    {
+	    	    	    iterations++;
+	    	        current_limit = current_limit.subtract(BigInteger.ONE);
+	    	        BigInteger current_gcd = current_limit.gcd(offset[1]);
+	    	        if(current_gcd.compareTo(max_gcd) == 1)
+	    	        {
+	    	        	    max_iterations = iterations;
+	    	        	    max_gcd = current_gcd;
+	    	        }
+	    	    }
+	    	    
+	    	    limit    = limit.subtract(BigInteger.valueOf(max_iterations));
+	    	    limit    = limit.divide(max_gcd);
+	    	    offset[1] = offset[1].divide(max_gcd);
+	    	    
+	    	    		
+	    	    BigInteger [] value = new BigInteger [] {limit, offset[1]};
+	    	    return value;
+	    }
+		
+	}
+	
+	/*
+	public static BigInteger [] getIntervalValue2(byte[] src, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		
+	    int [] s = new int[f.length];
+		
+		int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+		BigInteger [] offset = new BigInteger [] {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger [] range  = new BigInteger [] {BigInteger.ONE, BigInteger.ONE};
+		
 		ArrayList <BigInteger> offset_list = new ArrayList <BigInteger> ();
 		ArrayList <BigInteger> range_list = new ArrayList <BigInteger> ();
 
@@ -3675,23 +3868,18 @@ public class CodeMapper
 			    addend[1] = addend[1].divide(gcd);
 	    	    }
 	    	   
-	    	    BigInteger product = BigInteger.ONE;
 	    	    ArrayList <BigInteger> addend_list = getPrimeFactors(addend[1]);
 	    	    for(int k = 0; k < addend_list.size(); k++)
 	    	    {
 	    	    	    BigInteger next_factor = addend_list.get(k);
 	    	    	    offset_list.add(next_factor);
-	    	    	    product = product.multiply(next_factor);
 	    	    }
-	    	    if(product.compareTo(addend[1]) != 0)
-	    	    	    System.out.println("Product not equal to original value.");
 	    	    
 	    	    offset[0] = offset[0].multiply(addend[1]);
 	    	    addend[0] = addend[0].multiply(offset[1]);
 	    	    offset[1] = offset[1].multiply(addend[1]);
 	    	    offset[0] = offset[0].add(addend[0]);
 	    	    
-	    	  
 	    	    gcd = offset[0].gcd(offset[1]);
 	    	 
 	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
@@ -3779,35 +3967,24 @@ public class CodeMapper
 		    offset[0] = offset[0].multiply(offset_factor);
 			offset[1] = offset[1].multiply(offset_factor);
 			
-			ArrayList <BigInteger> offset_factor_list = getPrimeFactors(offset_factor);
-			
-			if(offset_factor_list.size() < 2)
-				offset_factor_list.add(offset_factor);
-			else
-			{
-			    for(int k = 0; k < offset_factor_list.size(); k++)
-			    {
-				    BigInteger next_factor = offset_factor_list.get(k);
-				    offset_list.add(next_factor);
-			    }
-			}
-					
 			range[0] = range[0].multiply(range_factor);
 			range[1] = range[1].multiply(range_factor);	
 			
-			ArrayList <BigInteger> range_factor_list = getPrimeFactors(range_factor);
-		
-			if(range_factor_list.size() < 2)
-				range_factor_list.add(range_factor);
-			else
+			int offset_list_size = offset_list.size();
+			
+			for(int k = 0; k < range_list.size(); k++)
 			{
-			    for(int k = 0; k < range_factor_list.size(); k++)
-			    {
-				    BigInteger next_factor = range_factor_list.get(k);
-				    range_list.add(next_factor);
-			    }
+				BigInteger factor = range_list.get(k);
+				offset_list.add(factor);
+			}
+			
+			for(int k = 0; k < offset_list_size; k++)
+			{
+				BigInteger factor = offset_list.get(k);
+				range_list.add(factor);
 			}
 		}
+		
 		
 		BigInteger product = BigInteger.ONE;
 		for(int i = 0; i < offset_list.size(); i++)
@@ -3858,7 +4035,7 @@ public class CodeMapper
 		
 		System.out.println("Product of first " + j + " factors is less than the limit.");
 		
-		/*
+		
 		if(interval_length.compareTo(product) == -1)
 			System.out.println("Interval length is less than product of range factors.");
 		else
@@ -3935,7 +4112,7 @@ public class CodeMapper
 		    	        }
 		        }
 		    }
-		    */
+		   
 		    
 		   
 		    
@@ -3946,7 +4123,7 @@ public class CodeMapper
 			return offset;
 		}
 		
-		/*
+		
 		BigInteger product = BigInteger.ONE;
 		for(int k = 0; k < range_list.size(); k++)
 		{
@@ -3980,9 +4157,7 @@ public class CodeMapper
 		}
 		else
 			System.out.println("The product of the factors is greater than or equal to the offset numerator.");
-		*/
 		
-		/*
 		BigInteger product = BigInteger.ONE;
 		for(int k = 0; k < offset_list.size(); k++)
 		{
