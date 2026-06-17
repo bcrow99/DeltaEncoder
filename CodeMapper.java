@@ -3250,74 +3250,6 @@ public class CodeMapper
 	    return last_table;	
 	}	
 
-	public static BigInteger [] getArithmeticOffset(byte[] src, int [] frequency)
-	{
-		int [] f = frequency.clone();
-		int    n = src.length;
-	   
-	    int [] s = new int[f.length];
-	    int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i]  = m;
-			m   += f[i];
-		}
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    
-	    	    BigInteger [] addend = {range[0], range[1]};
-	    	    addend[0] = addend[0].multiply(BigInteger.valueOf(s[j]));
-	    	    addend[1] = addend[1].multiply(BigInteger.valueOf(m));
-	    	    
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	    
-	    	    
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	    
-	    	    
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-	    	    
-	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
-	    	    
-           
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	        s[k]--;
-	    }
-	
-        return offset;	
-	}	
-	
 	public static BigInteger [] getArithmeticOffset(byte[] src, int [] frequency, byte [] order)
 	{
 		int [] f = new int[frequency.length];
@@ -3637,439 +3569,6 @@ public class CodeMapper
         
 	}
 
-	public static BigInteger [] getIntervalValue2(byte[] src, int [] frequency)
-	{
-		int [] f = frequency.clone();
-		
-	    int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = m;
-			m    += f[i];
-		}
-		
-		BigInteger [] offset = new BigInteger [] {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = new BigInteger [] {BigInteger.ONE, BigInteger.ONE};
-		
-		int    n       = src.length;
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	   
-	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-	    	    
-	    	    BigInteger factor = BigInteger.valueOf(s[j]);
-	    	    addend[0]         = addend[0].multiply(factor);
-	    	    factor            = BigInteger.valueOf(m);
-	    	    addend[1]         = addend[1].multiply(factor);
-	    	    
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	   
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	    
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	 
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-	    	    if(f[j] != 1)
-	    	    {
-	    	        factor   = BigInteger.valueOf(f[j]);
-	    	        range[0] = range[0].multiply(factor);
-	    	    }
- 
-	    	    factor   = BigInteger.valueOf(m);
-	    	    range[1] = range[1].multiply(factor);
-	    	  
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	    {
-	    	    	    s[k]--;
-	    	    }
-	    }
-		
-		
-		if(offset[1].compareTo(range[1]) != 0)
-		{	
-		    BigInteger range_factor  = offset[1];
-		    BigInteger offset_factor = range[1];	
-			
-		    
-		    offset[0] = offset[0].multiply(offset_factor);
-			offset[1] = offset[1].multiply(offset_factor);
-			
-			range[0] = range[0].multiply(range_factor);
-			range[1] = range[1].multiply(range_factor);	
-		}
-		
-		
-	    BigInteger offset_gcd = offset[0].gcd(offset[1]);
-	    BigInteger limit      = range[0].add(offset[0]);
-	    BigInteger limit_gcd  = limit.gcd(offset[1]);
-	    
-	    ArrayList <BigInteger> offset_list = getPrimeFactors(offset_gcd);
-	    ArrayList <BigInteger> limit_list  = getPrimeFactors(limit_gcd);
-	    
-	    int offset_list_size = offset_list.size();
-	    int limit_list_size  = limit_list.size();
-	    
-        ArrayList <BigInteger> common_factors = new ArrayList <BigInteger> ();
-	    
-	    if(offset_list.size() != 0)
-	    {
-	    	    for(int i = 0; i < offset_list.size(); i++)
-	    	    {
-	    	    	    BigInteger factor = offset_list.get(i);
-	    	    	    if(limit_list.contains(factor))
-	    	    	    {
-	    	    	    	    limit_list.remove(limit_list.indexOf(factor));
-	    	    	    	    common_factors.add(factor);   
-	    	    	    }
-	    	    }
-	    }
-	  
-	    int common_factor_size = common_factors.size();
-	   
-	    //System.out.println("Offset list has " + offset_list_size + " factors, limit list has " + limit_list_size + " factors, with " + common_factor_size + " common factors.");
-		
-	    BigInteger product = BigInteger.ONE;
-	    for(int i = 0; i < common_factors.size(); i++)
-	    {
-	    	     BigInteger factor = common_factors.get(i);
-	    	     product = product.multiply(factor);
-	    }
-		
-	    if(common_factor_size == 0)
-	    {
-	      	int iterations     = 1;
-    	        int max_iterations  = 1;
-    	        BigInteger current_limit = limit.subtract(BigInteger.ONE);
-    	        BigInteger max_gcd = current_limit.gcd(offset[1]);
-    	    
-    	        while(current_limit.compareTo(offset[0]) == 1)
-    	        {
-    	    	        iterations++;
-    	            current_limit = current_limit.subtract(BigInteger.ONE);
-    	            BigInteger current_gcd = current_limit.gcd(offset[1]);
-    	            if(current_gcd.compareTo(max_gcd) == 1)
-    	            {
-    	        	        max_iterations = iterations;
-    	        	        max_gcd = current_gcd;
-    	            }
-    	        }
-    	    
-    	        limit    = limit.subtract(BigInteger.valueOf(max_iterations));
-    	        limit    = limit.divide(max_gcd);
-    	        offset[1] = offset[1].divide(max_gcd);
-    	    
-    	        BigInteger [] value = new BigInteger [] {limit, offset[1]};
-    	        return value;
-	    }
-	    else
-	    {
-	    	    limit     = limit.divide(product);
-	    	    offset[0] = offset[0].divide(product);
-	    	    offset[1] = offset[1].divide(product);
-	    	    
-	    	    int iterations     = 1;
-	    	    int max_iterations  = 1;
-	    	    BigInteger current_limit = limit.subtract(BigInteger.ONE);
-	    	    BigInteger max_gcd = current_limit.gcd(offset[1]);
-	    	    
-	    	    while(current_limit.compareTo(offset[0]) == 1)
-	    	    {
-	    	    	    iterations++;
-	    	        current_limit = current_limit.subtract(BigInteger.ONE);
-	    	        BigInteger current_gcd = current_limit.gcd(offset[1]);
-	    	        if(current_gcd.compareTo(max_gcd) == 1)
-	    	        {
-	    	        	    max_iterations = iterations;
-	    	        	    max_gcd = current_gcd;
-	    	        }
-	    	    }
-	    	    
-	    	    limit    = limit.subtract(BigInteger.valueOf(max_iterations));
-	    	    limit    = limit.divide(max_gcd);
-	    	    offset[1] = offset[1].divide(max_gcd);
-	    	    
-	    	    		
-	    	    BigInteger [] value = new BigInteger [] {limit, offset[1]};
-	    	    return value;
-	    }
-		
-	}
-	
-	
-
-	public static BigInteger [] getIntervalValue3(byte[] src, int [] frequency)
-	{
-		int [] f = frequency.clone();
-		
-	    int [] s = new int[f.length];
-		
-		int m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = m;
-			m    += f[i];
-		}
-		
-		BigInteger [] offset = new BigInteger[2];
-		offset[0]            = BigInteger.ZERO;
-		offset[1]            = BigInteger.ONE;
-		
-		BigInteger [] range  = new BigInteger[2];
-		range[0]             = BigInteger.ONE;
-		range[1]             = BigInteger.ONE;
-		
-		int    n       = src.length;
-	    
-		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	   
-	    	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-	    	    
-	    	    BigInteger factor = BigInteger.ONE;
-	    	    factor            = factor.valueOf(s[j]);
-	    	    addend[0]         = addend[0].multiply(factor);
-	    	    factor            = factor.valueOf(m);
-	    	    addend[1]         = addend[1].multiply(factor);
-	    	    
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	   
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	    
-	    	   
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-            factor   = factor.valueOf(f[j]);
-	    	    range[0] = range[0].multiply(factor);
-	    	    factor   = factor.valueOf(m);
-	    	    range[1] = range[1].multiply(factor);
-	    	    
-	    	   
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	   
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	    {
-	    	    	    s[k]--;
-	    	    }
-	    }
-		
-		if(offset[1].compareTo(range[1]) != 0)
-		{	
-		    BigInteger range_factor  = offset[1];
-		    BigInteger offset_factor = range[1];	
-			offset[0] = offset[0].multiply(offset_factor);
-			offset[1] = offset[1].multiply(offset_factor);
-					
-			range[0] = range[0].multiply(range_factor);
-			range[1] = range[1].multiply(range_factor);	
-		}
-	
-		BigInteger limit     = offset[0].add(range[0]);
-		BigInteger limit_gcd = limit.gcd(offset[1]);
-		
-		BigInteger offset_gcd = offset[0].gcd(offset[1]);
-		
-		
-		ArrayList <BigInteger> offset_list = getPrimeFactors(offset_gcd);
-	    ArrayList <BigInteger> limit_list  = getPrimeFactors(limit_gcd);
-	    
-	    int offset_list_size = offset_list.size();
-	    
-        ArrayList <BigInteger> common_factors = new ArrayList <BigInteger> ();
-	    
-	    if(offset_list_size != 0)
-	    {
-	    	    for(int i = 0; i < offset_list.size(); i++)
-	    	    {
-	    	    	    BigInteger factor = offset_list.get(i);
-	    	    	    if(limit_list.contains(factor))
-	    	    	    {
-	    	    	    	    limit_list.remove(limit_list.indexOf(factor));
-	    	    	    	    offset_list.remove(offset_list.indexOf(factor));
-	    	    	    	    common_factors.add(factor);   
-	    	    	    }
-	    	    }
-	    }
-	  
-	    if(common_factors.size() != 0)
-	    {
-	       BigInteger product = BigInteger.ONE;
-	       for(int i = 0; i < common_factors.size(); i++)
-	       {
-	    	       BigInteger factor = common_factors.get(i);
-	    	       product = product.multiply(factor);
-	       }
-	       
-	       offset[0] = offset[0].divide(product);
-		   offset[1] = offset[1].divide(product);
-		   range[0]  = range[0].divide(product);
-		   range[1]  = offset[1];
-		   limit     = offset[0].add(range[0]);
-	    }
-		
-		BigInteger factor = BigInteger.ONE;
-		
-		BigInteger maximum_range = BigInteger.valueOf(10000 * 1);
-		BigInteger minimum_range = BigInteger.valueOf(512);
-		int j = offset_list.size() - 1;
-		while(range[0].divide(factor).compareTo(maximum_range) == 1 && j >= 0)
-		{
-			BigInteger next_factor = offset_list.get(j);
-			factor = factor.multiply(next_factor);
-			j--;
-		}
-		
-		if(factor.compareTo(BigInteger.ONE) != 0)
-		{
-			offset[0] = offset[0].divide(factor);
-		    offset[1] = offset[1].divide(factor);
-		    range[0]  = range[0].divide(factor);
-		    range[1]  = offset[1];
-		    limit     = offset[0].add(range[0]);
-		}
-	     
-		// If the offset pair had no common divisor,
-		// the range numerator is 1.
-		if(range[0].compareTo(minimum_range) == -1)
-		{
-			factor = BigInteger.TWO;
-			while(range[0].multiply(factor).compareTo(minimum_range) == - 1)
-				factor = factor.multiply(BigInteger.TWO);
-			
-			offset[0] = offset[0].multiply(factor);
-		    offset[1] = offset[1].multiply(factor);
-		    range[0]  = range[0].multiply(factor);
-		    range[1]  = offset[1];
-		    limit     = offset[0].add(range[0]);
-		}
-		
-		
-		int [] number_of_factors = new int[range[0].intValue()];
-		ArrayList <BigInteger> factor_list = getPrimeFactors(offset[1]);
-		
-		for(int i = 0; i < factor_list.size(); i++)
-		{
-			factor = factor_list.get(i);
-			
-			for(j = 0; j < number_of_factors.length; j++)
-			{
-			    BigInteger current_value = offset[0].add(BigInteger.valueOf(j));	
-			    if(current_value.mod(factor).equals(BigInteger.ZERO))
-			    	    number_of_factors[j]++;
-			}
-		}
-		
-		int max_factors = 0;
-		int max_index   = 0;
-		for(int i = 0; i < number_of_factors.length; i++)
-		{
-			if(number_of_factors[i] > max_factors)
-			{
-				max_factors = number_of_factors[i];
-				max_index   = i;
-			}
-		}
-		
-		//System.out.println("Max number of factors is " + max_factors + " at index " + max_index);
-		BigInteger [] value = new BigInteger[] {offset[0].add(BigInteger.valueOf(max_index)), offset[1]};
-		
-		
-		
-		/*
-		BigInteger  gcd          = offset[0].gcd(offset[1]);
-		BigInteger  max_gcd      = gcd;  
-        BigInteger largest_index = BigInteger.ZERO;
-        
-		
-        BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
-        
-        // Because of the way we reduced the range of our values,
-     	// we know the range can now be represented as an int, although
-     	// the offset and delimiter probably still require BigIntegers.	
-     	j = range[0].intValue();
-     	int k = 0;
-     	for(int i = 1; i < j; i++)
-     	{
-     		value[0]  = value[0].add(BigInteger.ONE);
-         	gcd = value[0].gcd(value[1]);
-            if(gcd.compareTo(max_gcd) == 1)
-            {
-         	    max_gcd = gcd;
-         	    k = i;
-            }	
-     	}
-     		
-     	largest_index = BigInteger.valueOf(k);
-     		
-        value[0] = offset[0].add(largest_index);
-        value[0] = value[0].divide(max_gcd);
-        value[1] = value[1].divide(max_gcd);
-        */
-		
-        return value;
-        
-	}
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
 	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
 	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
 	// We think the problem with this is it doesn't appear to produce a set of start bits and then repeating bits that resolve to a pair of integers.
@@ -4223,7 +3722,7 @@ public class CodeMapper
 	    return result;
 	}
 	
-	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
+	public static byte [] getArithmeticValues2(BigInteger [] v, int [] frequency, int n)
 	{
 	    byte [] value = new byte[n];
 	   
@@ -4363,7 +3862,83 @@ public class CodeMapper
 	}
 	
 	
-	public static byte [] getArithmeticValues2(BigInteger [] v, int [] frequency, int n)
+	
+	
+
+	public static BigInteger [] getArithmeticOffset(byte[] src, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		int    n = src.length;
+	   
+	    int [] s = new int[f.length];
+	    int m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i]  = m;
+			m   += f[i];
+		}
+		
+		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
+		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
+		
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    
+	    	    BigInteger [] addend = {range[0], range[1]};
+	    	    addend[0] = addend[0].multiply(BigInteger.valueOf(s[j]));
+	    	    addend[1] = addend[1].multiply(BigInteger.valueOf(m));
+	    	    
+	    	    BigInteger gcd = addend[0].gcd(addend[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    addend[0] = addend[0].divide(gcd);
+			    addend[1] = addend[1].divide(gcd);
+	    	    }
+	    	    
+	    	    
+	    	    offset[0] = offset[0].multiply(addend[1]);
+	    	    addend[0] = addend[0].multiply(offset[1]);
+	    	    offset[1] = offset[1].multiply(addend[1]);
+	    	    offset[0] = offset[0].add(addend[0]);
+	    	    
+	    	    
+	    	    gcd = offset[0].gcd(offset[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    offset[0] = offset[0].divide(gcd);
+			    	offset[1] = offset[1].divide(gcd);
+	    	    }
+			
+	    	    
+	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
+	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
+	    	    
+           
+	    	    gcd = range[0].gcd(range[1]);
+	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
+	    	    {
+	    	    	    range[0] = range[0].divide(gcd);
+			    	range[1] = range[1].divide(gcd);
+	    	    }
+	    	    
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	        s[k]--;
+	    }
+	
+        return offset;	
+	}	
+	
+	
+	
+	
+	
+	
+	public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
 	{
 	    byte [] value = new byte[n];
 	   
@@ -4940,4 +4515,208 @@ public class CodeMapper
 		return value;
 	}
 	
+	// ------------------------------------------------------------------
+    // Continued-fraction helpers
+    // ------------------------------------------------------------------
+
+    /**
+     * Full continued-fraction expansion of n/d.
+     * e.g. 7/5 → [1, 2, 2]
+     */
+    private static ArrayList <BigInteger> cfExpand(BigInteger n, BigInteger d) 
+    {
+        ArrayList <BigInteger> terms = new ArrayList <BigInteger>();
+        while(!d.equals(BigInteger.ZERO)) 
+        {
+            BigInteger[] qr = n.divideAndRemainder(d);
+            terms.add(qr[0]);
+            n = d;
+            d = qr[1];
+        }
+        return terms;
+    }
+
+    /**
+     * Evaluate a continued fraction [a0; a1, a2, …] → {p, q}.
+     * Returns a two-element array {numerator, denominator}.
+     */
+    private static BigInteger[] cfToFraction(ArrayList <BigInteger> terms) 
+    {
+        BigInteger p = BigInteger.ONE;
+        BigInteger q = BigInteger.ZERO;
+        for (int i = terms.size() - 1; i >= 0; i--) 
+        {
+            BigInteger a = terms.get(i);
+            BigInteger newP = a.multiply(p).add(q);
+            q = p;
+            p = newP;
+        }
+        return new BigInteger[]{p, q};
+    }
+
+    /**
+     * Return the fraction p/q with the smallest denominator strictly inside
+     * the open interval (loN/loD, hiN/hiD).
+     *
+     * Algorithm (O(log max(loD, hiD)) — pure calculation, no search):
+     *   1. Expand both endpoints as continued fractions.
+     *   2. Walk terms in lockstep while they agree; collect shared prefix.
+     *   3. At the first differing term append min(a_lo, a_hi) + 1.
+     *   4. Boundary fix: if that candidate lands exactly on the upper
+     *      endpoint (excluded), descend one more level into lo's CF.
+     *   5. Evaluate the truncated CF to get p/q.
+     *
+     * Returns {numerator, denominator}.
+     */
+    public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD,BigInteger hiN, BigInteger hiD) 
+    {
+        ArrayList <BigInteger> loCf = cfExpand(loN, loD);
+        ArrayList <BigInteger> hiCf = cfExpand(hiN, hiD);
+
+        // Pad the shorter list with zeros
+        int maxLen = Math.max(loCf.size(), hiCf.size());
+        while(loCf.size() < maxLen) 
+        	    loCf.add(BigInteger.ZERO);
+        while(hiCf.size() < maxLen) 
+        	    hiCf.add(BigInteger.ZERO);
+
+        ArrayList<BigInteger> shared = new ArrayList <BigInteger>();
+
+        for(int i = 0; i < maxLen; i++) 
+        {
+            BigInteger a = loCf.get(i);
+            BigInteger b = hiCf.get(i);
+
+            if (a.equals(b)) 
+            {
+                shared.add(a);
+            } 
+            else 
+            {
+                // Take min(a, b) + 1 as the diverging term
+                BigInteger c = a.min(b).add(BigInteger.ONE);
+                shared.add(c);
+
+                // Boundary fix: check if we landed exactly on hi (excluded)
+                BigInteger[] pq = cfToFraction(shared);
+                BigInteger g = pq[0].gcd(pq[1]);
+                BigInteger p = pq[0].divide(g);
+                BigInteger q = pq[1].divide(g);
+
+                if(p.multiply(hiD).equals(hiN.multiply(q))) 
+                {
+                    // Exactly at upper bound — descend one level into lo's CF
+                    shared.remove(shared.size() - 1);
+                    shared.add(a);   // lo's actual diverging term
+                    // Original lo_cf (before padding) has size loCf.size() - (maxLen - loCf.size() padding)
+                    // We need the unpadded lo CF length; reconstruct from cfExpand
+                    ArrayList <BigInteger> loCfOrig = cfExpand(loN, loD);
+                    if(i + 1 < loCfOrig.size()) 
+                    {
+                        shared.add(loCfOrig.get(i + 1).add(BigInteger.ONE));
+                    } 
+                    else 
+                    {
+                        shared.add(BigInteger.TWO);
+                    }
+                }
+
+                break;
+            }
+        }
+
+        BigInteger[] pq = cfToFraction(shared);
+        BigInteger g = pq[0].gcd(pq[1]);
+        return new BigInteger[]{pq[0].divide(g), pq[1].divide(g)};
+    }
+
+    // ------------------------------------------------------------------
+    // Encoder
+    // ------------------------------------------------------------------
+
+    /**
+     * Arithmetic encode {@code src} and return the simplest fraction
+     * (smallest denominator) within the valid encoding interval.
+     *
+     * @param src       Raw bytes to encode.
+     * @param frequency frequency[i] = count of byte value i (256 entries).
+     * @return          Two-element array {numerator, denominator}.
+     */
+    public static BigInteger[] getIntervalValue2(byte[] src, int[] frequency) {
+
+        int[] f = frequency.clone();
+        int   n = src.length;
+
+        // Build cumulative-frequency table
+        int[] s = new int[f.length];
+        int   m = 0;
+        for (int i = 0; i < f.length; i++) {
+            s[i] = m;
+            m   += f[i];
+        }
+
+        // Track interval as two reduced rationals: offset and range
+        BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
+        BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
+
+        for (int i = 0; i < n; i++) 
+        {
+            int j = src[i];
+            if (j < 0) j += 256;   // treat byte as unsigned
+
+            // addend = range * s[j] / m
+            BigInteger addN = rngN.multiply(BigInteger.valueOf(s[j]));
+            BigInteger addD = rngD.multiply(BigInteger.valueOf(m));
+            BigInteger g = addN.gcd(addD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                addN = addN.divide(g);
+                addD = addD.divide(g);
+            }
+
+            // offset += addend
+            offN = offN.multiply(addD).add(addN.multiply(offD));
+            offD = offD.multiply(addD);
+            g = offN.gcd(offD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                offN = offN.divide(g);
+                offD = offD.divide(g);
+            }
+
+            // range *= f[j] / m
+            rngN = rngN.multiply(BigInteger.valueOf(f[j]));
+            rngD = rngD.multiply(BigInteger.valueOf(m));
+            g = rngN.gcd(rngD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                rngN = rngN.divide(g);
+                rngD = rngD.divide(g);
+            }
+
+            // Adaptive update
+            f[j]--;
+            m--;
+            for (int k = j + 1; k < s.length; k++) 
+            {
+                s[k]--;
+            }
+        }
+
+        // Bring offset and range to a common denominator
+        if (!offD.equals(rngD)) 
+        {
+            offN = offN.multiply(rngD);
+            rngN = rngN.multiply(offD);
+            BigInteger commonD = offD.multiply(rngD);
+            offD = commonD;
+            rngD = commonD;
+        }
+
+        // Upper bound of the valid interval (exclusive)
+        BigInteger hiN = offN.add(rngN);
+        BigInteger hiD = offD;
+
+        return simplestFractionInInterval(offN, offD, hiN, hiD);
+    }
 }
