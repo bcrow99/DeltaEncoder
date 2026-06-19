@@ -300,7 +300,7 @@ public class HuffmanReader
 	    	    {
 	    		    delta = new int[xdim * ydim];
 	    		    
-	    		    int number_unpacked  =  CodeMapper3.unpackCode(string, table, code, code_length, length[i], delta);
+	    		    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
 	    		    
 	    		    delta[0] = 0;
 			        for(int j = 1; j < delta.length; j++)
@@ -317,7 +317,7 @@ public class HuffmanReader
 		        int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
 		        delta = new int[intermediate_xdim * intermediate_ydim];
 		            
-		        int number_unpacked  =  CodeMapper3.unpackCode(string, table, code, code_length, length[i], delta);
+		        int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
 		        delta[0] = 0;
 			    for(int j = 1; j < delta.length; j++)
 			        delta[j] += delta_min[i];	

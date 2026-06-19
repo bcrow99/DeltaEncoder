@@ -58,8 +58,8 @@ public class HuffmanWriter
 			System.exit(0);
 		}
 		
-		//String prefix       = new String("");
-		String prefix       = new String("C:/Users/bcrow/Desktop/");
+		String prefix       = new String("");
+		//String prefix       = new String("C:/Users/bcrow/Desktop/");
 		String filename     = new String(args[0]);
 		
 		HuffmanWriter writer = new HuffmanWriter(prefix + filename);
