@@ -45,7 +45,7 @@ public class HuffmanWriter
 	long   file_length;
 	double file_compression_rate;
 
-	ArrayList channel_list, table_list, string_list, map_list, segment_list;
+	ArrayList channel_list, table_list, string_list, map_list, delta_list;
 	ArrayList code_list, code_length_list;
 	
 	boolean initialized = false;
@@ -84,7 +84,7 @@ public class HuffmanWriter
 		    table_list   = new ArrayList();
 		    string_list  = new ArrayList();
 		    map_list     = new ArrayList();
-		    segment_list = new ArrayList();
+		    delta_list   = new ArrayList();
 		    code_list    = new ArrayList();
 		    code_length_list = new ArrayList();
 		    
@@ -526,7 +526,7 @@ public class HuffmanWriter
 			
 			table_list.clear();
 			string_list.clear();
-			segment_list.clear();
+			delta_list.clear();
 			map_list.clear();
 			code_list.clear();
 			code_length_list.clear();
@@ -619,7 +619,7 @@ public class HuffmanWriter
 				for(int k = 1; k < delta.length; k++)
 			    	    delta[k] += delta_min;
 				string_list.add(packed_delta);
-				segment_list.add(packed_delta);
+				delta_list.add(packed_delta);
 			}
 			
 			ArrayList resized_channel_list = new ArrayList();
@@ -631,7 +631,7 @@ public class HuffmanWriter
 		        int  [] table        = (int [])table_list.get(i);
 		        int [] code          = (int [])code_list.get(i);
 		        byte [] code_length  = (byte [])code_length_list.get(i);
-		        byte [] packed_delta = (byte [])string_list.get(i);
+		        byte [] packed_delta = (byte [])delta_list.get(i);
 		     
 		        int  [] delta        = new int[new_xdim * new_ydim]; 
 		        
@@ -885,17 +885,17 @@ public class HuffmanWriter
                 	    int n                 = (int)length_list.get(0);
                 	    byte init_value       = (byte)length_list.get(1);
                 	    byte max_delta        = (byte)length_list.get(2);
-                	    byte [] packed_delta  = (byte [])length_list.get(3);
+                	    byte [] packed_table_delta  = (byte [])length_list.get(3);
                 	
                   	out.writeInt(n);
             		    out.writeByte(init_value);
             		    out.writeByte(max_delta);
-            		    out.writeByte(packed_delta.length);
-            		    out.write(packed_delta, 0, packed_delta.length);	
+            		    out.writeByte(packed_table_delta.length);
+            		    out.write(packed_table_delta, 0, packed_table_delta.length);	
 
-            		    byte [] string = (byte [])string_list.get(i);
- 		            out.writeInt(string.length);
-             		out.write(string, 0, string.length);
+            		    byte []  packed_delta = (byte [])delta_list.get(i);
+ 		            out.writeInt(packed_delta.length);
+             		out.write(packed_delta, 0, packed_delta.length);
 		        }
 		      
 		        out.flush();

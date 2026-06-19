@@ -115,9 +115,9 @@ public class HuffmanReader
 			    byte [] packed_delta = new byte[packed_delta_length];
 			    in.read(packed_delta, 0, packed_delta_length);
 			    
-			    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
+			    byte [] code_length = CodeMapper3.unpackLengthTable(n, init_value, max_delta, packed_delta);
 			    
-				int [] code = CodeMapper.getCanonicalCode(code_length);
+				int [] code = CodeMapper3.getCanonicalCode(code_length);
 				code_list.add(code);
 				code_length_list.add(code_length);
 			    
@@ -300,7 +300,7 @@ public class HuffmanReader
 	    	    {
 	    		    delta = new int[xdim * ydim];
 	    		    
-	    		    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
+	    		    int number_unpacked  =  CodeMapper3.unpackCode(string, table, code, code_length, length[i], delta);
 	    		    
 	    		    delta[0] = 0;
 			        for(int j = 1; j < delta.length; j++)
@@ -317,7 +317,7 @@ public class HuffmanReader
 		        int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
 		        delta = new int[intermediate_xdim * intermediate_ydim];
 		            
-		        int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
+		        int number_unpacked  =  CodeMapper3.unpackCode(string, table, code, code_length, length[i], delta);
 		        delta[0] = 0;
 			    for(int j = 1; j < delta.length; j++)
 			        delta[j] += delta_min[i];	
