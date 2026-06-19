@@ -1551,8 +1551,8 @@ public class ArithmeticWriter
 			 //order[index] = CodeMapper.getLastTable(src, frequency);
 			 //order[index] = CodeMapper.getAscendingTable(frequency);
 			 //order[index]  = CodeMapper.getDescendingTable(frequency);
-			 offset[index] = CodeMapper.getArithmeticOffset(src, frequency);
-			 //offset[index] = CodeMapper.getIntervalValue(src, frequency);
+			 //offset[index] = CodeMapper.getArithmeticOffset(src, frequency);
+			 offset[index] = ArithmeticMapper.getIntervalValue(src, frequency);
 			 //offset[index] = CodeMapper.getArithmeticOffset(src, frequency, order[index]);
 		}
 	}
@@ -1575,7 +1575,7 @@ public class ArithmeticWriter
 		public void run()
 		{
 			//decoded_segment[index] = CodeMapper.getArithmeticValues(offset, frequency, n);
-			decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, frequency, n);
+			decoded_segment[index] = ArithmeticMapper.getArithmeticValues(offset, frequency, n);
 			//decoded_segment[index] = CodeMapper.getArithmeticValues2(offset, frequency, n, order[index]);
 		}
 	}

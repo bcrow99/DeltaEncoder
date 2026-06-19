@@ -467,7 +467,7 @@ public class ArithmeticReader
 	    public void run()
 	    {
 	    	    byte [][] segment = segment_list.get(i);
-	    	    segment[j] = CodeMapper.getArithmeticValues(offset, frequency, n);
+	    	    segment[j] = ArithmeticMapper.getArithmeticValues(offset, frequency, n);
 	    }
 	}
 
