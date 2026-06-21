@@ -18,9 +18,11 @@ public class HuffmanReader
 	int pixel_quant = 0;
 	int set_id      = 0;
 	byte delta_type = 0;
+	byte compress_type = 0;
 	
-	ArrayList string_list = new ArrayList();
-	ArrayList table_list  = new ArrayList();
+	ArrayList huffman_string_list = new ArrayList();
+	ArrayList huffman_table_list  = new ArrayList();
+	ArrayList string_table_list  = new ArrayList();
 	ArrayList map_list    = new ArrayList();
 	ArrayList code_list   = new ArrayList();
 	ArrayList code_length_list = new ArrayList();
@@ -32,9 +34,13 @@ public class HuffmanReader
     int  delta_min[]  = new int[3];
     byte type[]       = new byte[3];
     byte compressed[] = new byte[3];
-    int  length[]     = new int[3];
-    int  compressed_length[] = new int[3];
-    byte channel_iterations[] = new byte[3];
+    
+ 
+    //byte channel_iterations[] = new byte[3];
+    
+    
+    int  channel_huffman_length[] = new int[3];
+    int channel_string_length[] = new int[3];
     
 	public static void main(String[] args)
 	{
@@ -59,6 +65,8 @@ public class HuffmanReader
 		    pixel_quant        = in.readByte();
 		    set_id             = in.readByte();
 		    delta_type         = in.readByte();
+		    compress_type      = in.readByte();
+		    System.out.println("Compress type is " + compress_type);
 		    int [] channel_id  = DeltaMapper.getChannels(set_id);
 		    
 		    if(delta_type > 7)
@@ -72,14 +80,19 @@ public class HuffmanReader
 		    long start = System.nanoTime();
 		    for(int i = 0; i < 3; i++)
 		    {
+		    	    System.out.println("Processing channel " + i);
 		      	int j        = channel_id[i];
 		    	    min[i]       = in.readInt();
+		    	    System.out.println("Min is " + min[i]);
 		    	    init[i]      = in.readInt();
+		    	    System.out.println("Init is " + init[i]);
 	    	        delta_min[i] = in.readInt();
-	    	        length[i]    = in.readInt();
+	    	        channel_huffman_length[i]    = in.readInt();
+	    	        System.out.println("Huffman bit length is " + channel_huffman_length[i]);
 			    int table_length = in.readShort();
 			    int [] table = new int[table_length];
 			    
+			    System.out.println("Huffman table length is " + table_length);
 			    if(table.length <= Byte.MAX_VALUE * 2 + 1)
 			    {
 			    	    byte [] buffer = new byte[table.length];
@@ -94,9 +107,9 @@ public class HuffmanReader
 			    else
 			    {
 				    for(int k = 0; k < table_length; k++)
-			    	    table[k] = in.readShort();
+			    	        table[k] = in.readShort();
 			    }
-			    table_list.add(table);
+			    huffman_table_list.add(table);
 			    
 			    if(delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
@@ -107,25 +120,68 @@ public class HuffmanReader
 					byte [] map           = SegmentMapper.unpackBits(packed_map, map_length, 2);
 					map_list.add(map);
 				}
-				
-			    int n           = in.readInt();
-			    byte init_value = in.readByte();
-			    byte max_delta  = in.readByte();
-			    byte packed_delta_length = in.readByte();
-			    byte [] packed_delta = new byte[packed_delta_length];
-			    in.read(packed_delta, 0, packed_delta_length);
 			    
-			    byte [] code_length = CodeMapper3.unpackLengthTable(n, init_value, max_delta, packed_delta);
-			    
-				int [] code = CodeMapper3.getCanonicalCode(code_length);
-				code_list.add(code);
-				code_length_list.add(code_length);
-			    
-			    int string_length = in.readInt();
-			    byte [] string = new byte[string_length];
-				in.read(string, 0, string_length);
-				string_list.add(string);
+			    if(compress_type == 0)
+			    {
+			    	    int n           = in.readInt();
+				    byte init_value = in.readByte();
+				    byte max_delta  = in.readByte();
+				    byte packed_delta_length = in.readByte();
+				    byte [] packed_delta = new byte[packed_delta_length];
+				    in.read(packed_delta, 0, packed_delta_length);
+				    
+				    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
+				    
+					int [] code = CodeMapper.getCanonicalCode(code_length);
+					code_list.add(code);
+					code_length_list.add(code_length);
+				    
+				    int string_length = in.readInt();
+				    byte [] string = new byte[string_length];
+					in.read(string, 0, string_length);
+					huffman_string_list.add(string);
+			    }
+			    else
+			    {
+			    	    int n           = in.readInt();
+				    byte init_value = in.readByte();
+				    byte max_delta  = in.readByte();
+				    byte packed_delta_length = in.readByte();
+				    byte [] packed_delta = new byte[packed_delta_length];
+				    in.read(packed_delta, 0, packed_delta_length);
+				    
+				    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
+				    
+					int [] code = CodeMapper.getCanonicalCode(code_length);
+					code_list.add(code);
+					code_length_list.add(code_length);
+				    
+				    int string_length = in.readInt();
+				    byte [] string = new byte[string_length];
+					in.read(string, 0, string_length);
+					huffman_string_list.add(string);
+					
+					channel_string_length[i] = in.readInt();
+					System.out.println("Channel " + i + " string length is " + channel_string_length[i]);
+					int string_table_length = in.readShort();
+					System.out.println("String table length is " + string_table_length);
+					int [] string_table = new int[string_table_length];
+					byte [] buffer = new byte[string_table.length];
+		    	        in.read(buffer, 0, string_table.length);
+		      	    for(int k = 0; k < buffer.length; k++)
+		      	    {
+		    		        string_table[k] = buffer[k];
+		    		        if(string_table[k] < 0)
+        			            string_table[k] += Byte.MAX_VALUE * 2 + 2;
+		    	        }
+		      	    
+		      	    string_table_list.add(string_table);
+		      	    System.out.println("Finished processing channel " + i);
+		      	    System.out.println();
+			    }
 		    }
+		    
+		    
 		    
 		    long stop = System.nanoTime();
 		    long time = stop - start;
@@ -156,9 +212,9 @@ public class HuffmanReader
 		    
 		    if(set_id == 0)
 			{
-		    	blue  = channel_array[0];
-		    	green = channel_array[1];
-		    	red   = channel_array[2];
+		      	blue  = channel_array[0];
+		      	green = channel_array[1];
+		    	    red   = channel_array[2];
 		    }
 			else if(set_id == 1)
 			{ 
@@ -186,9 +242,9 @@ public class HuffmanReader
 			}
 		    else if(set_id == 5)
 			{
-		    	green = channel_array[0];
-		    	red   = channel_array[1];
-		    	blue  = DeltaMapper.getSum(channel_array[2], green);
+		    	    green = channel_array[0];
+		    	    red   = channel_array[1];
+		    	    blue  = DeltaMapper.getSum(channel_array[2], green);
 			}
 			else if(set_id == 6)
 			{
@@ -285,91 +341,177 @@ public class HuffmanReader
 		public void run()
 		{
 			int [] channel_id = DeltaMapper.getChannels(set_id);
+			int j = channel_id[i];
 			
 			if(delta_type < 8)
 			{
-			    byte [] string      = (byte [])string_list.get(i);
-			    int  [] table       = (int [])table_list.get(i);
+			    byte [] string      = (byte [])huffman_string_list.get(i);
+			    int  [] table       = (int []) huffman_table_list.get(i);
 			    int  [] code        = (int [])code_list.get(i);
 			    byte [] code_length = (byte [])code_length_list.get(i);
-			 
-	    	    int [] delta;
-	    	    int current_xdim = 0;
-	    	    int current_ydim = 0;
-	    	    if(pixel_quant == 0)
-	    	    {
-	    		    delta = new int[xdim * ydim];
-	    		    
-	    		    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
-	    		    
-	    		    delta[0] = 0;
-			        for(int j = 1; j < delta.length; j++)
-			           delta[j] += delta_min[i];
-			        
-			    current_xdim = xdim;
-			    current_ydim = ydim;
-	    	    }
-	    	    else
-	    	    {
-	    		    double factor = pixel_quant;
-	    		    factor       /= 10;
-		        int intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
-		        int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
-		        delta = new int[intermediate_xdim * intermediate_ydim];
-		            
-		        int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, length[i], delta);
-		        delta[0] = 0;
-			    for(int j = 1; j < delta.length; j++)
-			        delta[j] += delta_min[i];	
-			        
-			    current_xdim = intermediate_xdim;
-			    current_ydim = intermediate_ydim;     
-	    	    }
+			    
+			    int [] delta = new int[1];
+	    	        int current_xdim = 0;
+	    	        int current_ydim = 0;
+	    	        
+	    	        System.out.println("Got here.");
+			    if(compress_type == 0)
+			    {
+			    	    if(pixel_quant == 0)
+		    	        {
+		    		        delta = new int[xdim * ydim];
+		    		    
+		    		        int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, channel_huffman_length[i], delta);
+		    		    
+		    		        delta[0] = 0;
+				        for(int k = 1; k < delta.length; k++)
+				                delta[k] += delta_min[i];
+				        
+				        current_xdim = xdim;
+				        current_ydim = ydim;
+		    	        }
+		    	        else
+		    	        {
+		    		        double factor = pixel_quant;
+		    		        factor       /= 10;
+			            int intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
+			            int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
+			            delta = new int[intermediate_xdim * intermediate_ydim];
+			            
+			            int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, channel_huffman_length[i], delta);
+			            delta[0] = 0;
+				        for(int k = 1; k < delta.length; k++)
+				            delta[k] += delta_min[i];	
+				        
+				        current_xdim = intermediate_xdim;
+				        current_ydim = intermediate_ydim;     
+		    	        }
+			    }
+			    else
+			    {
+			    	    int bytelength = StringMapper.getBytelength(channel_string_length[i]);
+			    	    
+			    	    int [] delta_string_ints = new int[bytelength];
+			    	    int number_unpacked  =  CodeMapper.unpackCode(string, table, code, code_length, channel_huffman_length[i], delta_string_ints);
+			    	    if(number_unpacked != bytelength)
+			    	    	    System.out.println("Number unpacked not equal to bytelength.");
+			    	    
+			    	    byte [] delta_string = new byte[bytelength];
+			    	    for(int k = 0; k < bytelength; k++)
+			    	    	    delta_string[k] = (byte)delta_string_ints[k];
+			    	    
+			    	    int bitlength = StringMapper.getBitlength(delta_string);
+			    	    if(bitlength == channel_string_length[i])
+			    	    	    System.out.println("Bitlengths for channel " + i + " agree.");
+			    	    else
+			    	    	    System.out.println("Bitlengths for channel " + i + " do not agree.");
+			    	    
+			    	    int [] string_table = (int [])string_table_list.get(i);
+			    	    
+			    	    if(pixel_quant == 0)
+			    	    {
+			    	    	    delta = new int[xdim * ydim];
+			    		    
+			    	    	    int current_iterations = StringMapper.getIterations(delta_string);
+			    	    	    
+			    	    	    if (current_iterations == 0 || current_iterations == 16)
+						{
+							number_unpacked = StringMapper.unpackStrings2(delta_string, table, delta);
+							if (number_unpacked != xdim * ydim)
+								System.out.println("Number of values unpacked does not agree with image dimensions.");
+						} 
+						else
+						{
+							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
+							number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+							if(number_unpacked != xdim * ydim)
+								System.out.println("Number of values unpacked does not agree with image dimensions.");
+						}
+		    		    
+		    		        delta[0] = 0;
+				        for(int k = 1; k < delta.length; k++)
+				            delta[k] += delta_min[i];
+				        
+				        current_xdim = xdim;
+				        current_ydim = ydim;   
+			    	    }
+			    	    else
+			    	    {
+			    	    	    double factor = pixel_quant;
+		    		        factor       /= 10;
+			            int intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
+			            int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
+			            delta = new int[intermediate_xdim * intermediate_ydim];
+			            
+			            int current_iterations = StringMapper.getIterations(delta_string);
+			            System.out.println("Current iterations is " + current_iterations);
+						if (current_iterations == 0 || current_iterations == 16)
+						{
+							number_unpacked = StringMapper.unpackStrings2(delta_string, table, delta);
+							if (number_unpacked != intermediate_xdim * intermediate_ydim)
+								System.out.println("Number of values unpacked does not agree with image dimensions.");
+						} 
+						else
+						{
+							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
+							number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+							if(number_unpacked != intermediate_xdim * intermediate_ydim)
+								System.out.println("Number of values unpacked does not agree with image dimensions.");
+						}
+			            
+			            delta[0] = 0;
+				        for(int k = 1; k < delta.length; k++)
+				            delta[k] += delta_min[i];	
+				        
+				        current_xdim = intermediate_xdim;
+				        current_ydim = intermediate_ydim;
+			    	    }
+			    }
 	    	   
-    		    int[] current_channel = new int[1];
-    		    if(delta_type == 0)
-    			    current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim , current_ydim, init[i]);
-    		    else if(delta_type == 1)
-    			    current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, current_xdim , current_ydim, init[i]);
-    		    else if(delta_type == 2)
-    			    current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, current_xdim , current_ydim, init[i]);
-    		    else if(delta_type == 3)
-    			    current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, current_xdim , current_ydim, init[i]);
-    		    else if(delta_type == 4)
-    			    current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim , current_ydim, init[i]);
-    		    else if(delta_type == 5)
-    		    {
-    			    byte [] map = (byte [])map_list.get(i);
+    		        int[] current_channel = new int[1];
+    		        if(delta_type == 0)
+    			        current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim , current_ydim, init[i]);
+    		        else if(delta_type == 1)
+    			        current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, current_xdim , current_ydim, init[i]);
+    		        else if(delta_type == 2)
+    			        current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, current_xdim , current_ydim, init[i]);
+    		        else if(delta_type == 3)
+    			        current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, current_xdim , current_ydim, init[i]);
+    		        else if(delta_type == 4)
+    			        current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim , current_ydim, init[i]);
+    		        else if(delta_type == 5)
+    		        {
+    			        byte [] map = (byte [])map_list.get(i);
 			        current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim , current_ydim, init[i], map);
-    		    }
-    		    else if(delta_type == 6)
-    		    {
-    			    byte [] map = (byte [])map_list.get(i);
+    		        }
+    		        else if(delta_type == 6)
+    		        {
+    			        byte [] map = (byte [])map_list.get(i);
 			        current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim , current_ydim, init[i], map);
-    		    }
-    		    else if(delta_type == 7)
-    		    {
-    			    byte [] map = (byte [])map_list.get(i);
+    		        }
+    		        else if(delta_type == 7)
+    		        {
+    			        byte [] map = (byte [])map_list.get(i);
 			        current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim , current_ydim, init[i], map);
-    		    }
+    		        }
     		    
-    		    if(channel_id[i] > 2)
-    	            for(int j = 0; j < current_channel.length; j++)
-    				    current_channel[j] += min[i];	
+    		        if(channel_id[i] > 2)
+    	                for(int k = 0; k < current_channel.length; k++)
+    				        current_channel[k] += min[i];	
         		
-        		if(pixel_quant == 0)
-                	channel_array[i] = current_channel;
+        		    if(pixel_quant == 0)
+                	    channel_array[i] = current_channel;
                 else
                 {
-                	int [] resized_channel = ResizeMapper.resize(current_channel, current_xdim, xdim, ydim);
-    		        channel_array[i] = resized_channel;		
+                	    int [] resized_channel = ResizeMapper.resize(current_channel, current_xdim, xdim, ydim);
+    		            channel_array[i] = resized_channel;		
                 }
-    		}
-    		else
-    		{
-    			 System.out.println("Delta type " + delta_type + " not supported.");
-    			 System.exit(0);
-    		}	
+    		    }
+    		    else
+    		    {
+    			    System.out.println("Delta type " + delta_type + " not supported.");
+    			    System.exit(0);
+    		    }	
 		}
 	} 
 }
