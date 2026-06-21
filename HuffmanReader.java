@@ -416,14 +416,14 @@ public class HuffmanReader
 			    	    	    
 			    	    	    if (current_iterations == 0 || current_iterations == 16)
 						{
-							number_unpacked = StringMapper.unpackStrings2(delta_string, table, delta);
+							number_unpacked = StringMapper.unpackStrings2(delta_string, string_table, delta);
 							if (number_unpacked != xdim * ydim)
 								System.out.println("Number of values unpacked does not agree with image dimensions.");
 						} 
 						else
 						{
 							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
-							number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+							number_unpacked = StringMapper.unpackStrings2(decompressed_string, string_table, delta);
 							if(number_unpacked != xdim * ydim)
 								System.out.println("Number of values unpacked does not agree with image dimensions.");
 						}
@@ -447,14 +447,14 @@ public class HuffmanReader
 			            System.out.println("Current iterations is " + current_iterations);
 						if (current_iterations == 0 || current_iterations == 16)
 						{
-							number_unpacked = StringMapper.unpackStrings2(delta_string, table, delta);
+							number_unpacked = StringMapper.unpackStrings2(delta_string, string_table, delta);
 							if (number_unpacked != intermediate_xdim * intermediate_ydim)
 								System.out.println("Number of values unpacked does not agree with image dimensions.");
 						} 
 						else
 						{
 							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
-							number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
+							number_unpacked = StringMapper.unpackStrings2(decompressed_string, string_table, delta);
 							if(number_unpacked != intermediate_xdim * intermediate_ydim)
 								System.out.println("Number of values unpacked does not agree with image dimensions.");
 						}
