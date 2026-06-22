@@ -35,10 +35,6 @@ public class HuffmanReader
     byte type[]       = new byte[3];
     byte compressed[] = new byte[3];
     
- 
-    //byte channel_iterations[] = new byte[3];
-    
-    
     int  channel_huffman_length[] = new int[3];
     int channel_string_length[] = new int[3];
     
@@ -66,7 +62,7 @@ public class HuffmanReader
 		    set_id             = in.readByte();
 		    delta_type         = in.readByte();
 		    compress_type      = in.readByte();
-		    System.out.println("Compress type is " + compress_type);
+		    
 		    int [] channel_id  = DeltaMapper.getChannels(set_id);
 		    
 		    if(delta_type > 7)
@@ -74,25 +70,19 @@ public class HuffmanReader
 		        	System.out.println("Delta type not supported.");
 		    	    System.exit(0);
 		    }
-		    System.out.println("Set id is " + set_id);
 		    
 		    
 		    long start = System.nanoTime();
 		    for(int i = 0; i < 3; i++)
 		    {
-		    	    System.out.println("Processing channel " + i);
 		      	int j        = channel_id[i];
 		    	    min[i]       = in.readInt();
-		    	    System.out.println("Min is " + min[i]);
 		    	    init[i]      = in.readInt();
-		    	    System.out.println("Init is " + init[i]);
 	    	        delta_min[i] = in.readInt();
 	    	        channel_huffman_length[i]    = in.readInt();
-	    	        System.out.println("Huffman bit length is " + channel_huffman_length[i]);
 			    int table_length = in.readShort();
 			    int [] table = new int[table_length];
 			    
-			    System.out.println("Huffman table length is " + table_length);
 			    if(table.length <= Byte.MAX_VALUE * 2 + 1)
 			    {
 			    	    byte [] buffer = new byte[table.length];
@@ -162,9 +152,7 @@ public class HuffmanReader
 					huffman_string_list.add(string);
 					
 					channel_string_length[i] = in.readInt();
-					System.out.println("Channel " + i + " string length is " + channel_string_length[i]);
 					int string_table_length = in.readShort();
-					System.out.println("String table length is " + string_table_length);
 					int [] string_table = new int[string_table_length];
 					byte [] buffer = new byte[string_table.length];
 		    	        in.read(buffer, 0, string_table.length);
@@ -176,19 +164,13 @@ public class HuffmanReader
 		    	        }
 		      	    
 		      	    string_table_list.add(string_table);
-		      	    System.out.println("Finished processing channel " + i);
-		      	    System.out.println();
 			    }
 		    }
-		    
-		    
 		    
 		    long stop = System.nanoTime();
 		    long time = stop - start;
 		    System.out.println("It took " + (time / 1000000) + " ms to read file.");
-		    
-		    int cores = Runtime.getRuntime().availableProcessors();
-		    System.out.println("There are " + cores + " processors available.");
+		   
 		    start = System.nanoTime();
 		    
 		    Thread [] decompression_thread = new Thread[3];
@@ -276,8 +258,6 @@ public class HuffmanReader
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to assemble rgb files.");
 		    
-		  
-			
 			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);	
 			
 			start = System.nanoTime();
@@ -354,7 +334,6 @@ public class HuffmanReader
 	    	        int current_xdim = 0;
 	    	        int current_ydim = 0;
 	    	        
-	    	        System.out.println("Got here.");
 			    if(compress_type == 0)
 			    {
 			    	    if(pixel_quant == 0)
@@ -401,11 +380,7 @@ public class HuffmanReader
 			    	    	    delta_string[k] = (byte)delta_string_ints[k];
 			    	    
 			    	    int bitlength = StringMapper.getBitlength(delta_string);
-			    	    if(bitlength == channel_string_length[i])
-			    	    	    System.out.println("Bitlengths for channel " + i + " agree.");
-			    	    else
-			    	    	    System.out.println("Bitlengths for channel " + i + " do not agree.");
-			    	    
+			    	  
 			    	    int [] string_table = (int [])string_table_list.get(i);
 			    	    
 			    	    if(pixel_quant == 0)
@@ -444,7 +419,6 @@ public class HuffmanReader
 			            delta = new int[intermediate_xdim * intermediate_ydim];
 			            
 			            int current_iterations = StringMapper.getIterations(delta_string);
-			            System.out.println("Current iterations is " + current_iterations);
 						if (current_iterations == 0 || current_iterations == 16)
 						{
 							number_unpacked = StringMapper.unpackStrings2(delta_string, string_table, delta);

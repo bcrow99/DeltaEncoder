@@ -21,6 +21,7 @@ public class ArithmeticReader
 	int  pixel_quant       = 0;
 	int  set_id            = 0;
 	byte delta_type        = 0;
+	byte compress_type     = 0;
 
 	ArrayList string_list = new ArrayList();
 	ArrayList table_list  = new ArrayList();
@@ -64,6 +65,10 @@ public class ArithmeticReader
 			pixel_quant        = in.readByte();
 			set_id             = in.readByte();
 			delta_type         = in.readByte();
+			compress_type      = in.readByte();
+			
+			System.out.println("Compress type is " + compress_type);
+			
 			int[] channel_id   = DeltaMapper.getChannels(set_id);
 
 			if (delta_type > 7)
@@ -231,11 +236,29 @@ public class ArithmeticReader
 			
             for(int i = 0; i < 3; i++)
             {
-            	    int string_length = compressed_length[i] / 8;
-				if(compressed_length[i] % 8 != 0)
-					string_length++;
-				string_length++;
+            	    int string_length = 0;
+            	    if(compress_type > 0)
+            	    {
+            	        string_length = compressed_length[i] / 8;
+				    if(compressed_length[i] % 8 != 0)
+					    string_length++;
+				    string_length++;
+            	    }
+            	    else
+            	    {
+            	    	    if(pixel_quant == 0)
+            	    	    	    string_length = xdim * ydim;
+            	    	    else
+            	    	    {
+            	    	    	        double factor = pixel_quant;
+            					factor /= 10;
+            					intermediate_xdim = xdim - (int) (factor * (xdim / 2 - 2));
+            					intermediate_ydim = ydim - (int) (factor * (ydim / 2 - 2)); 
+            					string_length = intermediate_xdim * intermediate_ydim;
+            	    	    }
+            	    }
 				byte [] string = new byte[string_length];  
+				
 				
 				int [][] frequency = frequency_list.get(i);
 				BigInteger [][] offset = offset_list.get(i);
@@ -484,7 +507,7 @@ public class ArithmeticReader
 		{
 			int[] channel_id = DeltaMapper.getChannels(set_id);
 
-			if (delta_type < 8)
+			if(compress_type > 0)
 			{
 				byte[] string  = (byte[]) string_list.get(i);
 				int[] table    = (int[]) table_list.get(i);
@@ -563,8 +586,78 @@ public class ArithmeticReader
 			} 
 			else
 			{
-				System.out.println("Delta type " + delta_type + " not supported.");
-				System.exit(0);
+				int [] delta;
+				int current_xdim = 0;
+				int current_ydim = 0;
+				byte [] string = (byte []) string_list.get(i);
+				if(pixel_quant == 0)
+				{
+					delta = new int[xdim * ydim];
+					if(string.length != delta.length)
+					{
+						System.out.println("String length is " + string.length + ", delta length is " + delta.length);
+						System.exit(0);
+					}
+					for(int j = 0; j < delta.length; j++)
+						delta[j] = string[j];
+					current_xdim = xdim;
+					current_ydim = ydim;
+				}
+				else
+				{
+					double factor = pixel_quant;
+					factor /= 10;
+					intermediate_xdim = xdim - (int) (factor * (xdim / 2 - 2));
+					intermediate_ydim = ydim - (int) (factor * (ydim / 2 - 2));
+					delta = new int[intermediate_xdim * intermediate_ydim];
+					
+					if(string.length != delta.length)
+					{
+						System.out.println("String length is " + string.length + ", delta length is " + delta.length);
+						System.exit(0);
+					}
+					
+					
+					for(int j = 0; j < delta.length; j++)
+						delta[j] = string[j];
+
+					current_xdim = intermediate_xdim;
+					current_ydim = intermediate_ydim;
+				}
+				
+				int[] current_channel = new int[1];
+				if (delta_type == 0)
+					current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 1)
+					current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 2)
+					current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 3)
+					current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 4)
+					current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim, current_ydim, init[i]);
+				else if (delta_type == 5)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim, current_ydim, init[i], map);
+				} 
+				else if (delta_type == 6)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim, current_ydim, init[i], map);
+				} 
+				else if (delta_type == 7)
+				{
+					byte[] map = (byte[]) map_list.get(i);
+					current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], map);
+				}
+
+				if (channel_id[i] > 2)
+					for (int j = 0; j < current_channel.length; j++)
+						current_channel[j] += min[i];
+
+				channel_array[i] = current_channel;
+				
 			}
 		}
 	}

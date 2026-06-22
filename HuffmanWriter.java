@@ -25,7 +25,7 @@ public class HuffmanWriter
 	int correction     = 0;
 	int min_set_id     = 0;
 	int delta_type     = 2;
-	int compress_type  = 0;
+	int compress_type  = 1;
 	
 	int    [] set_sum, channel_sum;
 	String [] set_string;
@@ -345,6 +345,41 @@ public class HuffmanWriter
 				settings_menu.add(correction_item);
 				
 				
+				JMenu datatype_menu = new JMenu("Datatype");
+				JRadioButtonMenuItem [] datatype_button = new JRadioButtonMenuItem[3];
+				datatype_button[0] = new JRadioButtonMenuItem("Integer");
+				datatype_button[1] = new JRadioButtonMenuItem("String");
+				datatype_button[2] = new JRadioButtonMenuItem("String*");
+				datatype_button[compress_type].setSelected(true);
+				
+				class DatatypeButtonHandler implements ActionListener
+				{
+					int index;
+				    DatatypeButtonHandler(int index)	
+				    {
+				        this.index = index;	
+				    }
+				    
+				    public void actionPerformed(ActionEvent e) 
+		            {
+				    	    if(compress_type != index)
+				    	    {
+				    	        datatype_button[compress_type].setSelected(false);
+				    	        compress_type = index;
+				    	        datatype_button[compress_type].setSelected(true);
+				    	        apply_item.doClick();
+				    	    }
+				    	    else
+					    	    datatype_button[compress_type].setSelected(true);
+		            }    
+				}
+				
+				for(int i = 0; i < 3; i++)
+				{
+					datatype_button[i].addActionListener(new DatatypeButtonHandler(i));
+					datatype_menu.add(datatype_button[i]);
+				}
+				
 				JMenu delta_menu = new JMenu("Delta");
 				
 				JRadioButtonMenuItem [] delta_button = new JRadioButtonMenuItem[8];
@@ -360,10 +395,10 @@ public class HuffmanWriter
 				
 				delta_button[delta_type].setSelected(true);
 				
-				class ButtonHandler implements ActionListener
+				class DeltaButtonHandler implements ActionListener
 				{
 					int index;
-				    ButtonHandler(int index)	
+				    DeltaButtonHandler(int index)	
 				    {
 				        this.index = index;	
 				    }
@@ -379,17 +414,17 @@ public class HuffmanWriter
 				    	    }
 				    	    else
 					    	    delta_button[delta_type].setSelected(true);
-		            }  
-				    
+		            }    
 				}
 				
 				for(int i = 0; i < 8; i++)
 				{
-					delta_button[i].addActionListener(new ButtonHandler(i));
+					delta_button[i].addActionListener(new DeltaButtonHandler(i));
 					delta_menu.add(delta_button[i]);
 				}
 			
 				menu_bar.add(file_menu);
+				menu_bar.add(datatype_menu);
 				menu_bar.add(delta_menu);
 				menu_bar.add(settings_menu);
 				

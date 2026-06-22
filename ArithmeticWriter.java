@@ -33,8 +33,9 @@ public class ArithmeticWriter
 	
 	int delta_type      = 5;
 	
-	boolean precompress = true;
-	int deflate_type    = 0;
+	boolean precompress = false;
+	
+	int compress_type = 0;
 	
 	double scale       = 1.;
 
@@ -607,6 +608,43 @@ public class ArithmeticWriter
 				correction_dialog.add(correction_panel);
 
 				settings_menu.add(correction_item);
+				
+				JMenu datatype_menu = new JMenu("Datatype");
+				JRadioButtonMenuItem [] datatype_button = new JRadioButtonMenuItem[3];
+				datatype_button[0] = new JRadioButtonMenuItem("Integer");
+				datatype_button[1] = new JRadioButtonMenuItem("String");
+				datatype_button[2] = new JRadioButtonMenuItem("String*");
+				datatype_button[compress_type].setSelected(true);
+				
+				class DatatypeButtonHandler implements ActionListener
+				{
+					int index;
+				    DatatypeButtonHandler(int index)	
+				    {
+				        this.index = index;	
+				    }
+				    
+				    public void actionPerformed(ActionEvent e) 
+		            {
+				    	    if(compress_type != index)
+				    	    {
+				    	        datatype_button[compress_type].setSelected(false);
+				    	        compress_type = index;
+				    	        datatype_button[compress_type].setSelected(true);
+				    	        apply_item.doClick();
+				    	    }
+				    	    else
+					    	    datatype_button[compress_type].setSelected(true);
+		            }    
+				}
+				
+				for(int i = 0; i < 3; i++)
+				{
+					datatype_button[i].addActionListener(new DatatypeButtonHandler(i));
+					datatype_menu.add(datatype_button[i]);
+				}
+				
+				
 			
 				JMenu delta_menu = new JMenu("Delta");
 
@@ -653,6 +691,7 @@ public class ArithmeticWriter
 				}
 
 				menu_bar.add(file_menu);
+				menu_bar.add(datatype_menu);
 				menu_bar.add(delta_menu);
 				menu_bar.add(settings_menu);
 
@@ -924,12 +963,19 @@ public class ArithmeticWriter
 				byte [] delta_bytes = new byte[delta.length];
 			    for(int k = 0; k < delta.length; k++)
 			    {
-			    	    delta_bytes[k] = (byte)(delta[k] + channel_delta_min[j]);
+			    	    //channel_delta_min not initialized
+			    	    //delta_bytes[k] = (byte)(delta[k] + channel_delta_min[j]);
+			    	    delta_bytes[k] = (byte)(delta[k]);
 			    }
 			    delta_list.add(delta_bytes);
 
-				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
-				//System.out.println();
+			    if(compress_type == 2)
+			    	    precompress = true;
+			    else
+			    	    precompress = false;
+				
+			    ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
+			
 				
 				channel_delta_min[j]        = (int) delta_string_list.get(0);
 				channel_length[j]           = (int) delta_string_list.get(1);
@@ -1202,6 +1248,7 @@ public class ArithmeticWriter
 				out.writeByte(pixel_quant);
 				out.writeByte(min_set_id);
 				out.writeByte(delta_type);
+				out.writeByte(compress_type);
 
 				for (int i = 0; i < 3; i++)
 				{
@@ -1248,14 +1295,14 @@ public class ArithmeticWriter
 						out.write(packed_map, 0, packed_map.length);
 					}
 					
-					byte [] string = (byte []) string_list.get(i);
+					byte [] string;
 					
-					// Check to see if two's complement does better than unary strings.
-					// Does not seem to be the case.
-					//byte [] string = (byte []) delta_list.get(i);
+					if(compress_type == 0)
+						string = (byte []) delta_list.get(i);
+					else
+					    string = (byte []) string_list.get(i);
 					
-					
-					int minimum_segment_length = 120;
+					int minimum_segment_length = 500;
 					
 					int number_of_segments     = string.length / minimum_segment_length;
 					
@@ -1510,7 +1557,6 @@ public class ArithmeticWriter
 					    out.writeInt(bytes.length);
 					    out.write(bytes, 0, bytes.length);
 					}
-					
 				}
 
 				out.flush();
