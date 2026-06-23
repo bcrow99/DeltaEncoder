@@ -27,6 +27,7 @@ public class ArithmeticWriter
 
 	int pixel_quant    = 4;
 	int pixel_shift    = 3;
+	int pixel_segment  = 0;
 	
 	int correction     = 0;
 	int min_set_id     = 0;
@@ -35,7 +36,7 @@ public class ArithmeticWriter
 	
 	boolean precompress = false;
 	
-	int compress_type = 0;
+	int compress_type = 1;
 	
 	double scale       = 1.;
 
@@ -197,9 +198,6 @@ public class ArithmeticWriter
 		}
 		min_set_id = min_index;
 		
-		//System.out.println("Minimum set with current settings is " + set_string[min_set_id]);
-		//System.out.println();
-		
 		int [] channel_id = DeltaMapper.getChannels(min_set_id);
 		
 		int [] channel_delta_sum = new int[7];
@@ -265,7 +263,7 @@ public class ArithmeticWriter
 			}
 		}
 		delta_type = min_index;
-		//System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
+		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
 	}
 	
 	public ArithmeticWriter(String _filename)
@@ -370,7 +368,7 @@ public class ArithmeticWriter
 						working_image.setRGB(i, j, pixel[j * image_xdim + i]);
 				}
 
-				JFrame frame = new JFrame("Delta Writer " + filename);
+				JFrame frame = new JFrame("Arithmetic Deltas " + filename);
 
 				WindowAdapter window_handler = new WindowAdapter()
 				{
@@ -561,6 +559,48 @@ public class ArithmeticWriter
 				shift_dialog.add(shift_panel);
 				settings_menu.add(shift_item);
 
+				JMenuItem segment_length_item   = new JMenuItem("Segment Length");
+				JDialog   segment_length_dialog = new JDialog(frame, "Segment Length");
+				ActionListener segment_length_handler = new ActionListener()
+				{
+					public void actionPerformed(ActionEvent e)
+					{
+						Point location_point = frame.getLocation();
+						int x = (int) location_point.getX();
+						int y = (int) location_point.getY();
+
+						segment_length_dialog.setLocation(x, y - 50);
+						segment_length_dialog.pack();
+						segment_length_dialog.setVisible(true);
+					}
+				};
+				segment_length_item.addActionListener(segment_length_handler);
+
+				JPanel segment_length_panel = new JPanel(new BorderLayout());
+				JSlider segment_slider = new JSlider();
+				segment_slider.setMinimum(0);
+				segment_slider.setMaximum(9);
+				segment_slider.setValue(pixel_segment);
+				JTextField segment_length_value = new JTextField(3);
+				segment_length_value.setText(" " + pixel_segment + " ");
+				ChangeListener segment_slider_handler = new ChangeListener()
+				{
+					public void stateChanged(ChangeEvent e)
+					{
+						JSlider slider = (JSlider) e.getSource();
+						pixel_segment = slider.getValue();
+						if (slider.getValueIsAdjusting() == false)
+						{
+							segment_length_value.setText(" " + pixel_segment + " ");
+						}
+					}
+				};
+				segment_slider.addChangeListener(segment_slider_handler);
+				segment_length_panel.add(segment_slider, BorderLayout.CENTER);
+				segment_length_panel.add(segment_length_value, BorderLayout.EAST);
+				segment_length_dialog.add(segment_length_panel);
+				settings_menu.add(segment_length_item);
+				
 				
 				// The correction value is a convenience to help see what
 				// quantizing does to the original image. Instead of
@@ -832,7 +872,6 @@ public class ArithmeticWriter
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
 			System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_index]);
-			System.out.println();
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
@@ -1296,19 +1335,15 @@ public class ArithmeticWriter
 					}
 					
 					byte [] string;
-					
 					if(compress_type == 0)
 						string = (byte []) delta_list.get(i);
 					else
 					    string = (byte []) string_list.get(i);
 					
-					int minimum_segment_length = 500;
+					int minimum_segment_length = 500 + (pixel_segment * 500);
 					
 					int number_of_segments     = string.length / minimum_segment_length;
-					
-					
-					int number_of_processors   = Runtime.getRuntime().availableProcessors();
-				
+					System.out.println("Number of segments is " + number_of_segments);
 					
 					int segment_length                   = string.length / number_of_segments;
 					int odd_segment_length = segment_length + string.length % number_of_segments;
@@ -1372,15 +1407,16 @@ public class ArithmeticWriter
 					
 					long stop = System.nanoTime();
 					long time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
+					
+					if(pixel_segment < 3)
+					    System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
+					else
+						System.out.println("It took " + (time / 1000000000) + " secs to encode values for channel " + i);
 					
 					
 					BigInteger[] quotient = offset[0];
 					
 					System.out.println("Bitlength of numerator is " + quotient[0].bitLength() + ", denominator is " + quotient[0].bitLength());
-					 
-					 
-					
 					
                     start = System.nanoTime();
                     Thread [] decoder_thread = new Thread[number_of_segments];
@@ -1407,7 +1443,10 @@ public class ArithmeticWriter
                      
 					stop = System.nanoTime();
 					time = stop - start;
-					System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
+					if(pixel_segment < 3)
+					    System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
+					else
+						System.out.println("It took " + (time / 1000000000) + " secs to decode values for channel " + i);
 					
 					
 					byte [] string2 = new byte[string.length];
@@ -1438,12 +1477,10 @@ public class ArithmeticWriter
                     	    System.out.println("String differed at index " + first_index);
                     	    System.out.println("String length is " + string.length);
                       	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
-                      	System.out.println();
                     }
                     else
                     {
                     	    System.out.println("Strings are equal.");
-                    	    System.out.println();
                     }
                     
                     
@@ -1471,8 +1508,6 @@ public class ArithmeticWriter
                     }
                     else
                     	    System.out.println("Frequency max fits in an integer.");
-                   
-                    System.out.println();
                     
                     byte [] frequency_bytes;
                     
@@ -1538,6 +1573,7 @@ public class ArithmeticWriter
                     
 					System.out.println("Original length of frequency tables is " + (number_of_segments * 256 * 4));
 					System.out.println("Zipped length is " + freq_zipped_length);
+					System.out.println();
 					
 					
 					out.writeInt(number_of_segments);
@@ -1567,7 +1603,6 @@ public class ArithmeticWriter
 				double compression_rate = file_length;
 				compression_rate /= image_xdim * image_ydim * 3;
 				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				System.out.println("Delta type is " + delta_type_string[delta_type]);
 				System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
 				System.out.println();
 			} 
