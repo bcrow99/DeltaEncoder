@@ -33,9 +33,6 @@ public class ArithmeticWriter
 	int min_set_id     = 0;
 	
 	int delta_type      = 5;
-	
-	boolean precompress = false;
-	
 	int compress_type = 1;
 	
 	double scale       = 1.;
@@ -1001,17 +998,12 @@ public class ArithmeticWriter
 				
 				byte [] delta_bytes = new byte[delta.length];
 			    for(int k = 0; k < delta.length; k++)
-			    {
-			    	    //channel_delta_min not initialized
-			    	    //delta_bytes[k] = (byte)(delta[k] + channel_delta_min[j]);
 			    	    delta_bytes[k] = (byte)(delta[k]);
-			    }
 			    delta_list.add(delta_bytes);
 
+			    boolean precompress = false;
 			    if(compress_type == 2)
 			    	    precompress = true;
-			    else
-			    	    precompress = false;
 				
 			    ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
 			
@@ -1126,9 +1118,9 @@ public class ArithmeticWriter
 			}
 
 			// Assemble the rgb files if the minimum set contains difference channels.
-			int[] blue = new int[new_xdim * new_ydim];
+			int[] blue  = new int[new_xdim * new_ydim];
 			int[] green = new int[new_xdim * new_ydim];
-			int[] red = new int[new_xdim * new_ydim];
+			int[] red   = new int[new_xdim * new_ydim];
 			if(min_set_id == 0)
 			{
 				blue  = dequantized_channel_list.get(0);
@@ -1264,353 +1256,324 @@ public class ArithmeticWriter
 			initialized = true;
 		}
 	}
-
+	
 	class SaveHandler implements ActionListener
 	{
-		public void actionPerformed(ActionEvent event)
-		{
-			if(!initialized)
-				apply_item.doClick();
-			int channel_id[] = DeltaMapper.getChannels(min_set_id);
+	    public void actionPerformed(ActionEvent event)
+	    {
+	        if(!initialized)
+	            apply_item.doClick();
+	        int channel_id[] = DeltaMapper.getChannels(min_set_id);
 
-			try
-			{
-				
-				DataOutputStream out = new DataOutputStream(new FileOutputStream(new File("foo")));
+	        int[][]          all_number_of_segments = new int[3][];
+	        int[][]          all_segment_lengths     = new int[3][];
+	        int[][]          all_odd_segment_lengths = new int[3][];
+	        BigInteger[][][] all_offsets             = new BigInteger[3][][];
+	        int[][][]        all_frequencies         = new int[3][][];
+	        byte[][][]       all_decoded_segments    = new byte[3][][];
+	        byte[][]         all_strings             = new byte[3][];
+	        byte[][][]       all_segments            = new byte[3][][];
+	        int[]            all_length_types        = new int[3];
+	        byte[][]         all_zipped_frequencies  = new byte[3][];
+	        int[]            all_freq_zipped_lengths = new int[3];
+	        Thread[][][]     all_encoder_threads     = new Thread[3][][];
 
-				// Dimensions of full sized frame
-				out.writeShort(image_xdim);
-				out.writeShort(image_ydim);
+	        // ── Phase 1a: slice, tally, and start encoding threads for all channels
 
-				// Compression parameters
-				out.writeByte(pixel_shift);
-				out.writeByte(pixel_quant);
-				out.writeByte(min_set_id);
-				out.writeByte(delta_type);
-				out.writeByte(compress_type);
+	        long encode_start = System.nanoTime();
 
-				for (int i = 0; i < 3; i++)
-				{
-					int j = channel_id[i];
+	        for (int i = 0; i < 3; i++)
+	        {
+	            byte[] string;
+	            if (compress_type == 0)
+	                string = (byte[]) delta_list.get(i);
+	            else
+	                string = (byte[]) string_list.get(i);
 
-					// Only used for difference channels.
-					out.writeInt(channel_min[j]);
+	            int minimum_segment_length = 500 + (pixel_segment * 500);
+	            int number_of_segments     = string.length / minimum_segment_length;
+	            System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
 
-					out.writeInt(channel_init[j]);
-					out.writeInt(channel_delta_min[j]);
+	            int segment_length     = string.length / number_of_segments;
+	            int odd_segment_length = segment_length + string.length % number_of_segments;
 
-					out.writeInt(channel_length[j]);
+	            byte[][]       segment     = new byte[number_of_segments][];
+	            int[][]        freq        = new int[number_of_segments][256];
+	            byte[][]       decoded_seg = new byte[number_of_segments][];
+	            BigInteger[][] offsets     = new BigInteger[number_of_segments][2];
 
-					// If the string didn't compress or wasn't compressed,
-					// this is the same as the uncompressed length.
-					out.writeInt(channel_compressed_length[j]);
+	            for (int m = 0; m < number_of_segments; m++)
+	                segment[m] = (m < number_of_segments - 1)
+	                    ? new byte[segment_length]
+	                    : new byte[odd_segment_length];
 
-					out.writeByte(channel_iterations[i]);
+	            for (int m = 0; m < number_of_segments - 1; m++)
+	                decoded_seg[m] = new byte[segment_length];
+	            decoded_seg[number_of_segments - 1] = new byte[odd_segment_length];
 
-					int[] table = (int[]) table_list.get(i);
-					out.writeShort(table.length);
+	            // Slice the string into segments and tally frequencies.
+	            int k = 0;
+	            for (int m = 0; m < number_of_segments - 1; m++)
+	                for (int n = 0; n < segment_length; n++)
+	                {
+	                    segment[m][n] = string[k];
+	                    int p = string[k];
+	                    if (p < 0) p += 256;
+	                    freq[m][p]++;
+	                    k++;
+	                }
 
-					int max_byte_value = Byte.MAX_VALUE * 2 + 1;
+	            int m = number_of_segments - 1;
+	            for (int n = 0; n < odd_segment_length; n++)
+	            {
+	                segment[m][n] = string[k];
+	                int p = string[k];
+	                if (p < 0) p += 256;
+	                freq[m][p]++;
+	                k++;
+	            }
 
-					if (table.length <= max_byte_value)
-					{
-						for (int k = 0; k < table.length; k++)
-							out.writeByte(table[k]);
-					} 
-					else
-					{
-						for (int k = 0; k < table.length; k++)
-							out.writeShort(table[k]);
-					}
+	            // Start encoding threads.
+	            Thread[] encoder_thread = new Thread[number_of_segments];
+	            for (k = 0; k < number_of_segments; k++)
+	            {
+	                final int    seg_idx  = k;
+	                final byte[] seg_data = segment[k];
+	                final int[]  seg_freq = freq[k];
+	                encoder_thread[k] = new Thread(() ->
+	                    offsets[seg_idx] = ArithmeticMapper.getIntervalValue(seg_data, seg_freq));
+	                encoder_thread[k].start();
+	            }
 
-					if(delta_type == 5 || delta_type == 6 || delta_type == 7)
-					{
-						byte[] map = (byte[]) map_list.get(i);
-						
-						byte [] packed_map = SegmentMapper.packBits(map, 2);
-						
-						out.writeInt(map.length);
-						out.writeInt(packed_map.length);
-						out.write(packed_map, 0, packed_map.length);
-					}
-					
-					byte [] string;
-					if(compress_type == 0)
-						string = (byte []) delta_list.get(i);
-					else
-					    string = (byte []) string_list.get(i);
-					
-					int minimum_segment_length = 500 + (pixel_segment * 500);
-					
-					int number_of_segments     = string.length / minimum_segment_length;
-					System.out.println("Number of segments is " + number_of_segments);
-					
-					int segment_length                   = string.length / number_of_segments;
-					int odd_segment_length = segment_length + string.length % number_of_segments;
-			        byte    [][] segment   = new byte[number_of_segments][segment_length];
-					segment[number_of_segments - 1] = new byte[odd_segment_length];
-					frequency  = new int [number_of_segments][256];
-					
-					decoded_segment   = new byte[number_of_segments][segment_length];
-					decoded_segment[number_of_segments - 1] = new byte[odd_segment_length];
-					
-					order             = new byte[number_of_segments][256];
-					
-					int k = 0;
-					for(int m = 0; m < number_of_segments - 1; m++)
-	    		        {
-	    			        for(int n = 0; n < segment_length; n++)
-	    			        {
-	    				        segment[m][n] = string[k];
-	    			            int p         = string[k];
-	    			            if(p < 0)
-	    			    	            p += 256;
-	    			            frequency[m][p]++;
-	    			            k++;
-	    			        }
-	    		        }
-					
-	    		        int m = number_of_segments - 1;
-	    		        for(int n = 0; n < odd_segment_length; n++)
-	    		        {
-					    segment[m][n] = string[k];  
-					    int p = string[k];
-				        if(p < 0)
-				    	        p += 256;
-				        frequency[m][p]++;
-				        k++;
-	    		        }
-					
-					offset    = new BigInteger[number_of_segments][2];
-					
-					long start = System.nanoTime();
-					
-					Thread [] encoder_thread = new Thread[number_of_segments];
-					for(k = 0; k < number_of_segments; k++)
-					{
-						encoder_thread[k] = new Thread(new ArithmeticEncoder(segment[k], frequency[k], k));
-				        encoder_thread[k].start();	
-					}
-					
-					for(k = 0; k < number_of_segments; k++)
-					{
-						try
-						{
-					        encoder_thread[k].join();
-						}
-						catch(Exception e)
-						{
-							System.out.println("Exception waiting for thread to finish:");
-							System.out.println(e.toString());
-						}
-					}
-					
-					long stop = System.nanoTime();
-					long time = stop - start;
-					
-					if(pixel_segment < 3)
-					    System.out.println("It took " + (time / 1000000) + " ms to encode values for channel " + i);
-					else
-						System.out.println("It took " + (time / 1000000000) + " secs to encode values for channel " + i);
-					
-					
-					BigInteger[] quotient = offset[0];
-					
-					System.out.println("Bitlength of numerator is " + quotient[0].bitLength() + ", denominator is " + quotient[0].bitLength());
-					
-                    start = System.nanoTime();
-                    Thread [] decoder_thread = new Thread[number_of_segments];
-                    
-                    for(k = 0; k < number_of_segments; k++)
-                    {
-                    	    int n = segment[k].length;
-                    	    decoder_thread[k] = new Thread(new ArithmeticDecoder(offset[k], frequency[k], n, k));
-                    	    decoder_thread[k].start(); 
-                    }
-                    
-                    for(k = 0; k < number_of_segments; k++)
-                    {
-                    	    try
-						{
-						    decoder_thread[k].join();
-					    }
-					    catch(Exception e2)
-						{
-							System.out.println("Exception waiting for thread to finish:");
-							System.out.println(e2.toString());
-						}
-                    }
-                     
-					stop = System.nanoTime();
-					time = stop - start;
-					if(pixel_segment < 3)
-					    System.out.println("It took " + (time / 1000000) + " ms to decode values for channel " + i);
-					else
-						System.out.println("It took " + (time / 1000000000) + " secs to decode values for channel " + i);
-					
-					
-					byte [] string2 = new byte[string.length];
-					int     string_offset = 0;
-					
-					for(m = 0; m < decoded_segment.length; m++)
-					{
-						for(int n = 0; n  < decoded_segment[m].length; n++)
-							string2[string_offset + n] = decoded_segment[m][n];
-						string_offset += decoded_segment[m].length;	
-					}
-					
-				    int first_index = 0;
-                    boolean isSame = true;
-                    for(k = 0; k < string.length; k++)
-                    {
-                   	    if(isSame)
-                   	    {
-                   	        if(string[k] != string2[k])
-                   	    	        isSame = false;
-                   	        first_index = k;
-                   	    }
-                    }
-                   
-                    if(!isSame)
-                    {
-                    	    System.out.println("Strings are not equal.");
-                    	    System.out.println("String differed at index " + first_index);
-                    	    System.out.println("String length is " + string.length);
-                      	System.out.println("String 1 value is " + string[first_index] + ", string 2 value is " + string2[first_index]);
-                    }
-                    else
-                    {
-                    	    System.out.println("Strings are equal.");
-                    }
-                    
-                    
-                    int frequency_max = 0;
-                    
-                    for(k = 0; k < number_of_segments; k++)
-                    {
-                    	    for(m = 0; m < frequency[k].length; m++)
-                    	    {
-                    	    	    if(frequency[k][m] > frequency_max)
-                    	    	    	    frequency_max = frequency[k][m];    	    
-                    	    }
-                    }
-                   
-                    int length_type = 2;
-                    if(frequency_max < Byte.MAX_VALUE * 2 + 2)
-                    {
-                    	    System.out.println("Frequency max fits in an unsigned byte.");
-                    	    length_type = 0;
-                    }
-                    else if(frequency_max < Short.MAX_VALUE * 2 + 2)
-                    {
-                    	    System.out.println("Frequency max fits in an unsigned short.");
-                    	    length_type = 1;
-                    }
-                    else
-                    	    System.out.println("Frequency max fits in an integer.");
-                    
-                    byte [] frequency_bytes;
-                    
-                    if(length_type == 0)
-                    {
-                    	    frequency_bytes = new byte[number_of_segments * 256];
-                    	    for(k = 0; k < number_of_segments; k++)
-                        {
-                            	for(m = 0; m < frequency[k].length; m++)
-                            	{
-                            	    frequency_bytes[k * 256 + m] = (byte) frequency[k][m];    
-                            	}
-                        }
-                    }
-                    else if(length_type == 1)
-                    {
-                    	    frequency_bytes = new byte[number_of_segments * 256 * 2];
-                    	    for(k = 0; k < number_of_segments; k++)
-                        {
-                             for(m = 0; m < frequency[k].length; m++)
-                             {
-                                 int current_frequency = frequency[k][m];
-                                 short a               = (short)current_frequency;
-                                 a                    &= 0x00ff;
-                                 short b               = (short)(current_frequency >> 8);
-      						    b                     &= 0x00ff;
-      						    frequency_bytes[k * 512 + 2 * m]     = (byte) a;
-      						    frequency_bytes[k * 512 + 2 * m + 1] = (byte) b;
-                             }
-                        }
-                    }
-                    else
-                    {
-                    	    frequency_bytes = new byte[number_of_segments * 256 * 4];
-                    	    for(k = 0; k < number_of_segments; k++)
-                    	    {
-                    	        for(m = 0; m < frequency[k].length; m++)
-                            {
-                    	     	    int current_frequency = frequency[k][m]; 
-                    	     	    int a                 = current_frequency;
-							    a                    &= 0x000000ff;
-							    int b                 = current_frequency >> 8;
-							    b                    &= 0x000000ff;
-							    int c                 = current_frequency >> 16;
-							    c                    &= 0x000000ff;
-							    int d                 = current_frequency >> 24;
-							    d                    &= 0x000000ff;
-							    frequency_bytes[k * 1024 + 2 * m]     = (byte)a;
-							    frequency_bytes[k * 1024 + 2 * m + 1] = (byte)b;
-							    frequency_bytes[k * 1024 + 2 * m + 2] = (byte)c;
-			              	    frequency_bytes[k * 1024 + 2 * m + 3] = (byte)d;
-                            }
-                        }
-                    }
-    
-                    Deflater frequency_deflater   = new Deflater(Deflater.BEST_COMPRESSION);
-                    byte [] zipped_frequency_data = new byte[frequency_bytes.length];
-                    frequency_deflater.setInput(frequency_bytes);
-					frequency_deflater.finish();
-					int freq_zipped_length = frequency_deflater.deflate(zipped_frequency_data);
-					frequency_deflater.end();
-					
-                    
-					System.out.println("Original length of frequency tables is " + (number_of_segments * 256 * 4));
-					System.out.println("Zipped length is " + freq_zipped_length);
-					System.out.println();
-					
-					
-					out.writeInt(number_of_segments);
-					out.writeInt(length_type);
-					out.writeInt(freq_zipped_length); 
-					out.write(zipped_frequency_data, 0, freq_zipped_length);
-					
-					
-					for(k = 0; k < number_of_segments; k++)
-					{
-						BigInteger [] current_offset = offset[k];
-					    byte []       bytes          = current_offset[0].toByteArray();
-					    out.writeInt(bytes.length);
-					    out.write(bytes, 0, bytes.length);
-					    
-					    bytes          = current_offset[1].toByteArray();
-					    out.writeInt(bytes.length);
-					    out.write(bytes, 0, bytes.length);
-					}
-				}
+	            all_number_of_segments[i]  = new int[]{ number_of_segments };
+	            all_segment_lengths[i]     = new int[]{ segment_length };
+	            all_odd_segment_lengths[i] = new int[]{ odd_segment_length };
+	            all_offsets[i]             = offsets;
+	            all_frequencies[i]         = freq;
+	            all_decoded_segments[i]    = decoded_seg;
+	            all_strings[i]             = string;
+	            all_segments[i]            = segment;
+	            all_encoder_threads[i]     = new Thread[][]{ encoder_thread };
+	        }
 
-				out.flush();
-				out.close();
+	        // ── Phase 1b: join all encoding threads, then verify ─────────────────
 
-				File file = new File("foo");
-				long file_length = file.length();
-				double compression_rate = file_length;
-				compression_rate /= image_xdim * image_ydim * 3;
-				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				System.out.println("Delta bits compression rate is " + String.format("%.4f", compression_rate));
-				System.out.println();
-			} 
-			catch (Exception e)
-			{
-				System.out.println(e.toString());
-			}
-		}
+	        for (int i = 0; i < 3; i++)
+	        {
+	            Thread[] encoder_thread    = all_encoder_threads[i][0];
+	            int      number_of_segments = all_number_of_segments[i][0];
+
+	            for (int k = 0; k < number_of_segments; k++)
+	                try { encoder_thread[k].join(); }
+	                catch (Exception e) { System.out.println("Encoder join: " + e); }
+	        }
+
+	        long encTime = System.nanoTime() - encode_start;
+	        System.out.println("It took " + (pixel_segment < 3
+	            ? (encTime / 1_000_000) + " ms"
+	            : (encTime / 1_000_000_000) + " secs")
+	            + " to encode all channels.");
+
+	        // ── Phase 1c: start decoding threads for all channels ────────────────
+
+	        long decode_start = System.nanoTime();
+
+	        for (int i = 0; i < 3; i++)
+	        {
+	            int            number_of_segments = all_number_of_segments[i][0];
+	            BigInteger[][] offsets            = all_offsets[i];
+	            int[][]        freq               = all_frequencies[i];
+	            byte[][]       decoded_seg        = all_decoded_segments[i];
+	            byte[][]       segment            = all_segments[i];
+
+	            Thread[] decoder_thread = new Thread[number_of_segments];
+	            for (int k = 0; k < number_of_segments; k++)
+	            {
+	                final int seg_idx    = k;
+	                final int seg_length = segment[k].length;
+	                decoder_thread[k] = new Thread(() ->
+	                    decoded_seg[seg_idx] =
+	                        ArithmeticMapper.getArithmeticValues(offsets[seg_idx], freq[seg_idx], seg_length));
+	                decoder_thread[k].start();
+	            }
+	            all_encoder_threads[i][0] = decoder_thread;
+	        }
+
+	        // ── Phase 1d: join all decoding threads, then verify ─────────────────
+
+	        for (int i = 0; i < 3; i++)
+	        {
+	            int      number_of_segments = all_number_of_segments[i][0];
+	            Thread[] decoder_thread     = all_encoder_threads[i][0];
+	            byte[][] decoded_seg        = all_decoded_segments[i];
+	            byte[]   string             = all_strings[i];
+
+	            for (int k = 0; k < number_of_segments; k++)
+	                try { decoder_thread[k].join(); }
+	                catch (Exception e) { System.out.println("Decoder join: " + e); }
+
+	            // Reassemble and verify.
+	            byte[] string2       = new byte[string.length];
+	            int    string_offset = 0;
+	            for (int m = 0; m < decoded_seg.length; m++)
+	            {
+	                System.arraycopy(decoded_seg[m], 0, string2, string_offset, decoded_seg[m].length);
+	                string_offset += decoded_seg[m].length;
+	            }
+
+	            boolean isSame    = true;
+	            int     first_idx = 0;
+	            for (int k = 0; k < string.length; k++)
+	                if (string[k] != string2[k]) { isSame = false; first_idx = k; break; }
+
+	            if (!isSame)
+	            {
+	                System.out.println("Strings are not equal.");
+	                System.out.println("String differed at index " + first_idx);
+	                System.out.println("String length is " + string.length);
+	                System.out.println("String 1 value is " + string[first_idx]
+	                    + ", string 2 value is " + string2[first_idx]);
+	            }
+	            else
+	                System.out.println("Strings are equal.");
+	        }
+
+	        long decTime = System.nanoTime() - decode_start;
+	        System.out.println("It took " + (pixel_segment < 3
+	            ? (decTime / 1_000_000) + " ms"
+	            : (decTime / 1_000_000_000) + " secs")
+	            + " to decode all channels.");
+
+	        // ── Phase 1e: build and compress frequency tables ────────────────────
+
+	        for (int i = 0; i < 3; i++)
+	        {
+	            int     number_of_segments = all_number_of_segments[i][0];
+	            int[][] freq               = all_frequencies[i];
+
+	            int frequency_max = 0;
+	            for (int k = 0; k < number_of_segments; k++)
+	                for (int m = 0; m < freq[k].length; m++)
+	                    if (freq[k][m] > frequency_max) frequency_max = freq[k][m];
+
+	            int length_type;
+	            if      (frequency_max < Byte.MAX_VALUE  * 2 + 2) { System.out.println("Frequency max fits in an unsigned byte.");  length_type = 0; }
+	            else if (frequency_max < Short.MAX_VALUE * 2 + 2) { System.out.println("Frequency max fits in an unsigned short."); length_type = 1; }
+	            else                                               { System.out.println("Frequency max fits in an integer.");        length_type = 2; }
+
+	            int    bytes_per_entry = (length_type == 0) ? 1 : (length_type == 1) ? 2 : 4;
+	            byte[] frequency_bytes = new byte[number_of_segments * 256 * bytes_per_entry];
+	            for (int k = 0; k < number_of_segments; k++)
+	                for (int m = 0; m < 256; m++)
+	                {
+	                    int v    = freq[k][m];
+	                    int base = k * 256 * bytes_per_entry + m * bytes_per_entry;
+	                    for (int b = 0; b < bytes_per_entry; b++)
+	                        frequency_bytes[base + b] = (byte)(v >> (8 * b));
+	                }
+
+	            Deflater deflater         = new Deflater(Deflater.BEST_COMPRESSION);
+	            byte[]   zipped_freq_data = new byte[frequency_bytes.length];
+	            deflater.setInput(frequency_bytes);
+	            deflater.finish();
+	            int freq_zipped_length = deflater.deflate(zipped_freq_data);
+	            deflater.end();
+
+	            System.out.println("Original length of frequency tables is "
+	                + (number_of_segments * 256 * 4));
+	            System.out.println("Zipped length is " + freq_zipped_length);
+	            System.out.println();
+
+	            all_length_types[i]        = length_type;
+	            all_zipped_frequencies[i]  = zipped_freq_data;
+	            all_freq_zipped_lengths[i] = freq_zipped_length;
+	        }
+
+	        // ── Phase 2: write the file ───────────────────────────────────────────
+
+	        try
+	        {
+	            DataOutputStream out =
+	                new DataOutputStream(new FileOutputStream(new File("foo")));
+
+	            out.writeShort(image_xdim);
+	            out.writeShort(image_ydim);
+
+	            out.writeByte(pixel_shift);
+	            out.writeByte(pixel_quant);
+	            out.writeByte(min_set_id);
+	            out.writeByte(delta_type);
+	            out.writeByte(compress_type);
+
+	            for (int i = 0; i < 3; i++)
+	            {
+	                int j = channel_id[i];
+
+	                out.writeInt(channel_min[j]);
+	                out.writeInt(channel_init[j]);
+	                out.writeInt(channel_delta_min[j]);
+	                out.writeInt(channel_length[j]);
+	                out.writeInt(channel_compressed_length[j]);
+	                out.writeByte(channel_iterations[i]);
+
+	                int[] table = (int[]) table_list.get(i);
+	                out.writeShort(table.length);
+
+	                int max_byte_value = Byte.MAX_VALUE * 2 + 1;
+	                if (table.length <= max_byte_value)
+	                    for (int k = 0; k < table.length; k++) out.writeByte(table[k]);
+	                else
+	                    for (int k = 0; k < table.length; k++) out.writeShort(table[k]);
+
+	                if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+	                {
+	                    byte[] map        = (byte[]) map_list.get(i);
+	                    byte[] packed_map = SegmentMapper.packBits(map, 2);
+	                    out.writeInt(map.length);
+	                    out.writeInt(packed_map.length);
+	                    out.write(packed_map, 0, packed_map.length);
+	                }
+
+	                int            number_of_segments = all_number_of_segments[i][0];
+	                int            length_type        = all_length_types[i];
+	                byte[]         zipped_freq_data   = all_zipped_frequencies[i];
+	                int            freq_zipped_length = all_freq_zipped_lengths[i];
+	                BigInteger[][] offsets            = all_offsets[i];
+
+	                out.writeInt(number_of_segments);
+	                out.writeInt(length_type);
+	                out.writeInt(freq_zipped_length);
+	                out.write(zipped_freq_data, 0, freq_zipped_length);
+
+	                for (int k = 0; k < number_of_segments; k++)
+	                {
+	                    byte[] bytes = offsets[k][0].toByteArray();
+	                    out.writeInt(bytes.length);
+	                    out.write(bytes, 0, bytes.length);
+
+	                    bytes = offsets[k][1].toByteArray();
+	                    out.writeInt(bytes.length);
+	                    out.write(bytes, 0, bytes.length);
+	                }
+	            }
+
+	            out.flush();
+	            out.close();
+
+	            File   file             = new File("foo");
+	            long   file_length_out  = file.length();
+	            double compression_rate = (double) file_length_out / (image_xdim * image_ydim * 3);
+	            System.out.println("The file compression rate is "
+	                + String.format("%.4f", file_compression_rate));
+	            System.out.println("Delta bits compression rate is "
+	                + String.format("%.4f", compression_rate));
+	            System.out.println();
+	        }
+	        catch (Exception e)
+	        {
+	            System.out.println(e.toString());
+	        }
+	    }
 	}
 	
 	class ArithmeticEncoder implements Runnable
