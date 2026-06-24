@@ -1311,7 +1311,7 @@ public class ArithmeticWriter
 	                decoded_seg[m] = new byte[segment_length];
 	            decoded_seg[number_of_segments - 1] = new byte[odd_segment_length];
 
-	            // Segment string.
+	            // Slice the string into segments and tally frequencies.
 	            int k = 0;
 	            for (int m = 0; m < number_of_segments - 1; m++)
 	                for (int n = 0; n < segment_length; n++)
@@ -1357,11 +1357,11 @@ public class ArithmeticWriter
 	        }
 	        System.out.println();
 
-	        // ── Phase 1b: join all encoding threads, then verify ─────────────────
+	        // ── Phase 1b: join all encoding threads ──────────────────────────────
 
 	        for (int i = 0; i < 3; i++)
 	        {
-	            Thread[] encoder_thread    = all_encoder_threads[i][0];
+	            Thread[] encoder_thread     = all_encoder_threads[i][0];
 	            int      number_of_segments = all_number_of_segments[i][0];
 
 	            for (int k = 0; k < number_of_segments; k++)
@@ -1400,7 +1400,7 @@ public class ArithmeticWriter
 	            all_encoder_threads[i][0] = decoder_thread;
 	        }
 
-	        // ── Phase 1d: join all decoding threads, then verify ─────────────────
+	        // ── Phase 1d: join all decoding threads and verify ───────────────────
 
 	        for (int i = 0; i < 3; i++)
 	        {
@@ -1446,8 +1446,12 @@ public class ArithmeticWriter
 
 	        // ── Phase 1e: build and compress frequency tables ────────────────────
 
+	        Thread[] deflater_thread = new Thread[3];
+
 	        for (int i = 0; i < 3; i++)
 	        {
+	            final int fi = i;
+
 	            int     number_of_segments = all_number_of_segments[i][0];
 	            int[][] freq               = all_frequencies[i];
 
@@ -1457,26 +1461,13 @@ public class ArithmeticWriter
 	                    if (freq[k][m] > frequency_max) frequency_max = freq[k][m];
 
 	            int length_type;
-	            if(frequency_max < Byte.MAX_VALUE  * 2 + 2) 
-	            { 
-	            	    System.out.println("Frequency max for channel " + i + " fits in an unsigned byte.");  
-	            	    length_type = 0; 
-	            	}
-	            else if(frequency_max < Short.MAX_VALUE * 2 + 2) 
-	            { 
-	            	    System.out.println("Frequency max for channel " + i + " fits in an unsigned short.");
-	            	    length_type = 1; 
-	            	}
-	            else                                               
-	            { 
-	            	    System.out.println("Frequency max for channel " + i + " fits in an integer.");        
-	            	    length_type = 2; 
-	            	}
+	            if      (frequency_max < Byte.MAX_VALUE  * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned byte.");  length_type = 0; }
+	            else if (frequency_max < Short.MAX_VALUE * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned short."); length_type = 1; }
+	            else                                               { System.out.println("Frequency max for channel " + i + " fits in an integer.");        length_type = 2; }
 
 	            int    bytes_per_entry = (length_type == 0) ? 1 : (length_type == 1) ? 2 : 4;
 	            byte[] frequency_bytes = new byte[number_of_segments * 256 * bytes_per_entry];
 	            for (int k = 0; k < number_of_segments; k++)
-	            {
 	                for (int m = 0; m < 256; m++)
 	                {
 	                    int v    = freq[k][m];
@@ -1484,24 +1475,35 @@ public class ArithmeticWriter
 	                    for (int b = 0; b < bytes_per_entry; b++)
 	                        frequency_bytes[base + b] = (byte)(v >> (8 * b));
 	                }
-	            }
 
-	            Deflater deflater         = new Deflater(Deflater.BEST_COMPRESSION);
-	            byte[]   zipped_freq_data = new byte[frequency_bytes.length];
-	            deflater.setInput(frequency_bytes);
-	            deflater.finish();
-	            int freq_zipped_length = deflater.deflate(zipped_freq_data);
-	            deflater.end();
+	            all_length_types[i] = length_type;
 
-	            System.out.println("Original length of frequency tables is "
-	                + (number_of_segments * 256 * 4));
-	            System.out.println("Zipped length is " + freq_zipped_length);
-	            System.out.println();
+	            final byte[] freq_bytes_for_thread = frequency_bytes;
+	            final int    segs_for_thread       = number_of_segments;
+	            deflater_thread[i] = new Thread(() ->
+	            {
+	                Deflater deflater         = new Deflater(Deflater.BEST_COMPRESSION);
+	                byte[]   zipped_freq_data = new byte[freq_bytes_for_thread.length];
+	                deflater.setInput(freq_bytes_for_thread);
+	                deflater.finish();
+	                int freq_zipped_length = deflater.deflate(zipped_freq_data);
+	                deflater.end();
 
-	            all_length_types[i]        = length_type;
-	            all_zipped_frequencies[i]  = zipped_freq_data;
-	            all_freq_zipped_lengths[i] = freq_zipped_length;
+	                System.out.println("Original length of frequency tables for channel " + fi + " is "
+	                    + (segs_for_thread * 256 * 4));
+	                System.out.println("Zipped length for channel " + fi + " is " + freq_zipped_length);
+
+	                all_zipped_frequencies[fi]  = zipped_freq_data;
+	                all_freq_zipped_lengths[fi] = freq_zipped_length;
+	            });
+	            deflater_thread[i].start();
 	        }
+
+	        for (int i = 0; i < 3; i++)
+	            try { deflater_thread[i].join(); }
+	            catch (Exception e) { System.out.println("Deflater join: " + e); }
+
+	        System.out.println();
 
 	        // ── Phase 2: write the file ───────────────────────────────────────────
 
