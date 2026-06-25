@@ -6,6 +6,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.math.*;
 import java.util.zip.*;
+import java.awt.geom.AffineTransform;
 import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.ChangeEvent;
@@ -40,6 +41,20 @@ public class ArithmeticReader
     ArrayList <byte [][]>       segment_list   = new ArrayList <byte [][]> ();
 
     int [][] resize_array = new int[3][0];
+
+    // --- Viewer state ---
+    BufferedImage decoded_image = null;
+    BufferedImage display_image = null;
+    ImageCanvas   image_canvas  = null;
+    JScrollPane   scroll_pane   = null;
+    JFrame        frame         = null;
+
+    double zoom_scale = 1.0;
+    double fit_scale  = 1.0;
+
+    static final double ZOOM_FACTOR = 1.25;
+    static final double ZOOM_MIN    = 0.05;
+    static final double ZOOM_MAX    = 32.0;
 
     public static void main(String[] args)
     {
@@ -144,14 +159,14 @@ public class ArithmeticReader
                 BigInteger[][] offset = new BigInteger[number_of_segments][2];
                 for (int k = 0; k < number_of_segments; k++)
                 {
-                    int length    = in.readInt();
-                    byte[] bytes  = new byte[length];
-                    in.read(bytes, 0, length);
+                    int len       = in.readInt();
+                    byte[] bytes  = new byte[len];
+                    in.read(bytes, 0, len);
                     offset[k][0] = new BigInteger(bytes);
 
-                    length        = in.readInt();
-                    bytes         = new byte[length];
-                    in.read(bytes, 0, length);
+                    len           = in.readInt();
+                    bytes         = new byte[len];
+                    in.read(bytes, 0, len);
                     offset[k][1] = new BigInteger(bytes);
                 }
 
@@ -165,7 +180,10 @@ public class ArithmeticReader
             long time = stop - start;
             System.out.println("It took " + (time / 1000000) + " ms to read file.");
 
-            // Inflate all three channels' frequency tables in parallel.
+            // ── Build the viewer window immediately so the user sees something ──
+            buildViewer(filename);
+
+            // ── Inflate all three channels' frequency tables in parallel ──────
             int[][][] all_frequencies = new int[3][][];
             Thread[]  inflater_thread = new Thread[3];
 
@@ -245,9 +263,7 @@ public class ArithmeticReader
 
             start = System.nanoTime();
 
-            // Compute string lengths and determine processing order:
-            // when compress_type > 0 process longest string first so its
-            // decoder threads get the most head start.
+            // Compute string lengths and determine processing order.
             int[] string_length  = new int[3];
             int[] segment_length = new int[3];
             for (int i = 0; i < 3; i++)
@@ -284,8 +300,7 @@ public class ArithmeticReader
                     + " (descending string length)");
             }
 
-            // Start all decoder threads in process_order so the longest
-            // channel's threads get the most time before any joining begins.
+            // Start all decoder threads in process_order.
             ArrayList<Thread[]> thread_list = new ArrayList<Thread[]>();
             for (int pi = 0; pi < 3; pi++)
             {
@@ -307,10 +322,7 @@ public class ArithmeticReader
                 thread_list.add(decoder_thread);
             }
 
-            // Join each channel's decoders in process_order, reassemble its
-            // string, and immediately start its decompressor. Strings are
-            // stored in a plain array indexed by canonical i to avoid any
-            // ordering or thread-safety issues with ArrayList.add.
+            // Join, reassemble, and immediately start decompressor for each channel.
             byte[]   [] string_array        = new byte[3][];
             Thread[]    decompression_thread = new Thread[3];
 
@@ -329,9 +341,6 @@ public class ArithmeticReader
                 for (int j = 0; j < segment.length; j++)
                     System.arraycopy(segment[j], 0, string, j * segment_length[i], segment[j].length);
 
-                // Store in canonical slot rather than adding to a list,
-                // so Decompressor can safely index by i regardless of
-                // what order threads start or finish.
                 string_array[i] = string;
 
                 decompression_thread[i] = new Thread(new Decompressor(i, string));
@@ -346,6 +355,7 @@ public class ArithmeticReader
             time = stop - start;
             System.out.println("It took " + (time / 1000000) + " ms to get arithmetic values and process data.");
 
+            // ── Assemble the final RGB image ──────────────────────────────────
             BufferedImage image   = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
             int[][]       channel = new int[3][0];
 
@@ -450,27 +460,9 @@ public class ArithmeticReader
             time = stop - start;
             System.out.println("It took " + (time / 1000000) + " ms to assemble and load rgb files.");
 
-            JFrame frame = new JFrame("Delta Reader");
-            WindowAdapter window_handler = new WindowAdapter()
-            {
-                public void windowClosing(WindowEvent event) { System.exit(0); }
-            };
-            frame.addWindowListener(window_handler);
-
-            Canvas image_canvas = new Canvas()
-            {
-                public synchronized void paint(Graphics g)
-                {
-                    g.drawImage(image, 0, 0, this);
-                }
-            };
-
-            image_canvas.setSize(xdim, ydim);
-            frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
-            frame.pack();
-            frame.setLocation(400, 200);
-            frame.setExtendedState(JFrame.NORMAL);
-            frame.setVisible(true);
+            // ── Hand the finished image to the viewer on the EDT ─────────────
+            decoded_image = image;
+            SwingUtilities.invokeLater(() -> showImage());
         }
         catch (Exception e)
         {
@@ -478,6 +470,253 @@ public class ArithmeticReader
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Build the JFrame with scroll pane and View menu.
+    // Called once from the constructor before decoding starts.
+    // -------------------------------------------------------------------------
+    private void buildViewer(String filename)
+    {
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int screen_xdim = (int) screenSize.getWidth();
+        int screen_ydim = (int) screenSize.getHeight();
+
+        // Compute a fit scale so the image starts fully visible inside a
+        // reasonably-sized window (at most 70% of screen in each dimension).
+        int max_canvas_w = (int)(screen_xdim * 0.70) - 40;
+        int max_canvas_h = (int)(screen_ydim * 0.70) - 80;  // 80 accounts for menu + chrome
+        double xscale = (xdim > 0) ? (double) max_canvas_w / xdim : 1.0;
+        double yscale = (ydim > 0) ? (double) max_canvas_h / ydim : 1.0;
+        fit_scale  = Math.min(1.0, Math.min(xscale, yscale));
+        zoom_scale = fit_scale;
+
+        image_canvas = new ImageCanvas();
+        image_canvas.setPreferredSize(new Dimension(
+                Math.max(1, (int)(xdim * zoom_scale)),
+                Math.max(1, (int)(ydim * zoom_scale))));
+
+        scroll_pane = new JScrollPane(image_canvas,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
+        scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
+
+        // Ctrl+wheel zooms; plain wheel scrolls.
+        scroll_pane.addMouseWheelListener(new MouseWheelListener()
+        {
+            public void mouseWheelMoved(MouseWheelEvent e)
+            {
+                if (e.isControlDown())
+                {
+                    JViewport vp           = scroll_pane.getViewport();
+                    Point     view_pos     = vp.getViewPosition();
+                    Point     mouse_pt     = e.getPoint();
+                    int       mouse_can_x  = mouse_pt.x + view_pos.x;
+                    int       mouse_can_y  = mouse_pt.y + view_pos.y;
+
+                    double old_scale = zoom_scale;
+                    if (e.getWheelRotation() < 0)
+                        zoom_scale = Math.min(ZOOM_MAX, zoom_scale * ZOOM_FACTOR);
+                    else
+                        zoom_scale = Math.max(ZOOM_MIN, zoom_scale / ZOOM_FACTOR);
+
+                    if (zoom_scale == old_scale) return;
+
+                    updateDisplayImage();
+                    image_canvas.setPreferredSize(new Dimension(
+                            (int)(xdim * zoom_scale),
+                            (int)(ydim * zoom_scale)));
+                    image_canvas.revalidate();
+                    image_canvas.repaint();
+
+                    double ratio = zoom_scale / old_scale;
+                    int new_vx   = (int)(mouse_can_x * ratio) - mouse_pt.x;
+                    int new_vy   = (int)(mouse_can_y * ratio) - mouse_pt.y;
+                    vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
+
+                    updateTitle();
+                }
+                else
+                {
+                    scroll_pane.dispatchEvent(e);
+                }
+            }
+        });
+
+        frame = new JFrame("Arithmetic Reader  [decoding…]");
+        frame.addWindowListener(new WindowAdapter()
+        {
+            public void windowClosing(WindowEvent event) { System.exit(0); }
+        });
+
+        // ── View / Zoom menu ────────────────────────────────────────────────
+        JMenuBar menu_bar = new JMenuBar();
+        JMenu    view_menu = new JMenu("View");
+
+        JMenuItem zoom_in_item = new JMenuItem("Zoom In (+)");
+        zoom_in_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+        zoom_in_item.addActionListener(e -> zoomBy(ZOOM_FACTOR));
+        view_menu.add(zoom_in_item);
+
+        JMenuItem zoom_out_item = new JMenuItem("Zoom Out (-)");
+        zoom_out_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+        zoom_out_item.addActionListener(e -> zoomBy(1.0 / ZOOM_FACTOR));
+        view_menu.add(zoom_out_item);
+
+        JMenuItem zoom_fit_item = new JMenuItem("Fit to Window");
+        zoom_fit_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+        zoom_fit_item.addActionListener(e ->
+        {
+            Dimension vp_size = scroll_pane.getViewport().getSize();
+            double xs = (double) vp_size.width  / xdim;
+            double ys = (double) vp_size.height / ydim;
+            zoom_scale = Math.min(xs, ys);
+            updateDisplayImage();
+            image_canvas.setPreferredSize(new Dimension(
+                    (int)(xdim * zoom_scale),
+                    (int)(ydim * zoom_scale)));
+            image_canvas.revalidate();
+            image_canvas.repaint();
+            updateTitle();
+        });
+        view_menu.add(zoom_fit_item);
+
+        JMenuItem zoom_actual_item = new JMenuItem("Actual Size (100%)");
+        zoom_actual_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
+        zoom_actual_item.addActionListener(e ->
+        {
+            zoom_scale = 1.0;
+            updateDisplayImage();
+            image_canvas.setPreferredSize(new Dimension(xdim, ydim));
+            image_canvas.revalidate();
+            image_canvas.repaint();
+            updateTitle();
+        });
+        view_menu.add(zoom_actual_item);
+
+        menu_bar.add(view_menu);
+        frame.setJMenuBar(menu_bar);
+
+        frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
+
+        // Size the frame to at most 70% of the screen in each dimension,
+        // but never larger than the image itself (plus chrome).
+        int screen_w    = screen_xdim;
+        int screen_h    = screen_ydim;
+        int max_frame_w = (int)(screen_w * 0.70);
+        int max_frame_h = (int)(screen_h * 0.70);
+        frame.setSize(Math.min(xdim + 40,  max_frame_w),
+                      Math.min(ydim + 80,  max_frame_h));
+        frame.setLocation(5, 5);
+        frame.setVisible(true);
+    }
+
+    // Called on the EDT once decoded_image is ready.
+    private void showImage()
+    {
+        // Recompute fit scale now that we definitely have the image.
+        Dimension vp_size = scroll_pane.getViewport().getSize();
+        double xs = (vp_size.width  > 0) ? (double) vp_size.width  / xdim : 1.0;
+        double ys = (vp_size.height > 0) ? (double) vp_size.height / ydim : 1.0;
+        fit_scale  = Math.min(1.0, Math.min(xs, ys));
+        zoom_scale = fit_scale;
+
+        updateDisplayImage();
+        image_canvas.setPreferredSize(new Dimension(
+                (int)(xdim * zoom_scale),
+                (int)(ydim * zoom_scale)));
+        image_canvas.revalidate();
+        image_canvas.repaint();
+        updateTitle();
+    }
+
+    // -------------------------------------------------------------------------
+    // Zoom helpers
+    // -------------------------------------------------------------------------
+    private void zoomBy(double factor)
+    {
+        double new_scale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom_scale * factor));
+        if (new_scale == zoom_scale) return;
+
+        JViewport vp      = scroll_pane.getViewport();
+        Point     vp_pos  = vp.getViewPosition();
+        Dimension vp_size = vp.getSize();
+
+        double centre_x = vp_pos.x + vp_size.width  / 2.0;
+        double centre_y = vp_pos.y + vp_size.height / 2.0;
+        double ratio    = new_scale / zoom_scale;
+        zoom_scale      = new_scale;
+
+        updateDisplayImage();
+        image_canvas.setPreferredSize(new Dimension(
+                (int)(xdim * zoom_scale),
+                (int)(ydim * zoom_scale)));
+        image_canvas.revalidate();
+        image_canvas.repaint();
+
+        int new_vx = (int)(centre_x * ratio - vp_size.width  / 2.0);
+        int new_vy = (int)(centre_y * ratio - vp_size.height / 2.0);
+        vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
+
+        updateTitle();
+    }
+
+    private void updateDisplayImage()
+    {
+        if (decoded_image == null) return;
+
+        if (zoom_scale == 1.0)
+        {
+            display_image = decoded_image;
+        }
+        else
+        {
+            int w = Math.max(1, (int)(xdim * zoom_scale));
+            int h = Math.max(1, (int)(ydim * zoom_scale));
+            AffineTransform t  = new AffineTransform();
+            t.scale(zoom_scale, zoom_scale);
+            AffineTransformOp op = new AffineTransformOp(t, AffineTransformOp.TYPE_BILINEAR);
+            display_image = new BufferedImage(w, h, decoded_image.getType());
+            display_image = op.filter(decoded_image, display_image);
+        }
+    }
+
+    private void updateTitle()
+    {
+        if (frame == null) return;
+        int pct = (int) Math.round(zoom_scale * 100);
+        String status = (decoded_image == null) ? "decoding…" : (pct + "%");
+        frame.setTitle("Arithmetic Reader  [" + status + "]");
+    }
+
+    // -------------------------------------------------------------------------
+    // ImageCanvas
+    // -------------------------------------------------------------------------
+    class ImageCanvas extends JPanel
+    {
+        public ImageCanvas() { setOpaque(true); }
+
+        @Override
+        public Dimension getPreferredSize()
+        {
+            if (display_image != null)
+                return new Dimension(display_image.getWidth(), display_image.getHeight());
+            return new Dimension(
+                    Math.max(1, (int)(xdim * zoom_scale)),
+                    Math.max(1, (int)(ydim * zoom_scale)));
+        }
+
+        @Override
+        protected synchronized void paintComponent(Graphics g)
+        {
+            super.paintComponent(g);
+            if (display_image != null)
+                g.drawImage(display_image, 0, 0, this);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Worker runnables (unchanged logic)
+    // -------------------------------------------------------------------------
     class Resizer implements Runnable
     {
         int [] src;
@@ -494,8 +733,7 @@ public class ArithmeticReader
 
         public void run()
         {
-            int[] dst       = ResizeMapper.resize(src, xdim, new_xdim, new_ydim);
-            resize_array[i] = dst;
+            resize_array[i] = ResizeMapper.resize(src, xdim, new_xdim, new_ydim);
         }
     }
 
@@ -536,9 +774,9 @@ public class ArithmeticReader
         {
             int[] channel_id = DeltaMapper.getChannels(set_id);
 
-            int[]  delta;
-            int    current_xdim = 0;
-            int    current_ydim = 0;
+            int[] delta;
+            int   current_xdim = 0;
+            int   current_ydim = 0;
 
             if (compress_type > 0)
             {
