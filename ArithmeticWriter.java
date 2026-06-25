@@ -11,7 +11,6 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
-
 public class ArithmeticWriter
 {
 	BufferedImage original_image;
@@ -26,20 +25,18 @@ public class ArithmeticWriter
 	String filename;
 	int[] pixel;
 
-	int pixel_quant    = 4;
-	int pixel_shift    = 3;
-	int pixel_segment  = 0;
-	
-	int correction     = 0;
-	int min_set_id     = 0;
-	
+	int pixel_quant   = 4;
+	int pixel_shift   = 3;
+	int pixel_segment = 0;
+
+	int correction  = 0;
+	int min_set_id  = 0;
+
 	int delta_type    = 5;
 	int compress_type = 1;
 
-	// zoom_scale is the current zoom level (1.0 = 100%, fit-to-window at start)
-	double zoom_scale  = 1.0;
-	// fit_scale is the scale computed to fit the image in the window
-	double fit_scale   = 1.0;
+	double zoom_scale = 1.0;
+	double fit_scale  = 1.0;
 
 	int[] set_sum, channel_sum;
 	String[] set_string;
@@ -55,96 +52,91 @@ public class ArithmeticWriter
 	int[] channel_string_type;
 	int[] number_of_segments;
 	byte[] channel_iterations;
-	
+
 	int[] max_bytelength;
-	int [] min_bytelength;
+	int[] min_bytelength;
 
 	long file_length;
 	double file_compression_rate;
 	JRadioButtonMenuItem[] delta_button;
+	ButtonGroup delta_group;
 	JFrame frame = null;
 
-	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
-	
-	BigInteger [][] offset;
-	int        [][] frequency;
-	byte       [][] decoded_segment;
-	byte       [][] order;
+	ArrayList<Object> channel_list, table_list, string_list, map_list, delta_list;
+
+	BigInteger[][] offset;
+	int[][]        frequency;
+	byte[][]       decoded_segment;
+	byte[][]       order;
 
 	boolean initialized = false;
 
-	// Zoom step factor — each zoom in/out multiplies or divides by this
 	static final double ZOOM_FACTOR = 1.25;
 	static final double ZOOM_MIN    = 0.05;
 	static final double ZOOM_MAX    = 32.0;
 
 	public static void main(String[] args)
 	{
-		if(args.length != 1)
+		if (args.length != 1)
 		{
 			System.out.println("Usage: java ArithmeticWriter <filename>");
 			System.exit(0);
 		}
-
-		//String prefix = new String("");
-		String prefix = new String("C:/Users/bcrow/Desktop/");
+		String prefix   = new String("C:/Users/bcrow/Desktop/");
 		String filename = new String(args[0]);
-
 		ArithmeticWriter writer = new ArithmeticWriter(prefix + filename);
-		writer.init();
+		// init() is called from showInitialImage() after the UI is fully built
 	}
-	
+
 	public void init()
 	{
-	    System.out.println("Loaded file.");
-	    System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
-	    System.out.println();
-	    ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
-		ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
-	
+		System.out.println("Loaded file.");
+		System.out.println("Image xdim = " + image_xdim + ", ydim = " + image_ydim);
+		System.out.println();
+		ArrayList<int[]> quantized_channel_list = new ArrayList<int[]>();
+
 		int new_xdim = image_xdim;
 		int new_ydim = image_ydim;
 		if (pixel_quant != 0)
 		{
 			double factor = pixel_quant;
 			factor /= 10;
-			new_xdim = image_xdim - (int) (factor * (image_xdim / 2 - 2));
-			new_ydim = image_ydim - (int) (factor * (image_ydim / 2 - 2));
+			new_xdim = image_xdim - (int)(factor * (image_xdim / 2 - 2));
+			new_ydim = image_ydim - (int)(factor * (image_ydim / 2 - 2));
 		}
-		
-		for(int i = 0; i < 3; i++)
+
+		for (int i = 0; i < 3; i++)
 		{
 			int[] channel = (int[]) channel_list.get(i);
-			if(pixel_quant == 0)
+			if (pixel_quant == 0)
 			{
-				if(pixel_shift == 0)
-					quantized_channel_list.add(channel);	
+				if (pixel_shift == 0)
+					quantized_channel_list.add(channel);
 				else
 				{
-					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+					int[] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
 					quantized_channel_list.add(shifted_channel);
 				}
 			}
 			else
 			{
-				int [] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
-				if(pixel_shift == 0)
-					quantized_channel_list.add(resized_channel);	
+				int[] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
+				if (pixel_shift == 0)
+					quantized_channel_list.add(resized_channel);
 				else
 				{
-					int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
+					int[] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
 					quantized_channel_list.add(shifted_channel);
 				}
 			}
 		}
-		
-		int[] quantized_blue  = quantized_channel_list.get(0);
-		int[] quantized_green = quantized_channel_list.get(1);
-		int[] quantized_red   = quantized_channel_list.get(2);
-     
+
+		int[] quantized_blue       = quantized_channel_list.get(0);
+		int[] quantized_green      = quantized_channel_list.get(1);
+		int[] quantized_red        = quantized_channel_list.get(2);
 		int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-		int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red, quantized_green);
-		int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red, quantized_blue);
+		int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red,  quantized_green);
+		int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red,  quantized_blue);
 
 		quantized_channel_list.add(quantized_blue_green);
 		quantized_channel_list.add(quantized_red_green);
@@ -167,9 +159,9 @@ public class ArithmeticWriter
 			channel_init[i] = quantized_channel[0];
 			quantized_channel_list.set(i, quantized_channel);
 
-			int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
-			double shannon_limit = CodeMapper.getShannonLimit(frequency);
-			channel_sum[i]       = (int)Math.floor(shannon_limit);
+			int[]  freq          = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(freq);
+			channel_sum[i]       = (int) Math.floor(shannon_limit);
 		}
 
 		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
@@ -183,7 +175,7 @@ public class ArithmeticWriter
 		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
 		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
 
-		int min_index = 0;
+		int min_index     = 0;
 		int min_delta_sum = Integer.MAX_VALUE;
 		for (int i = 0; i < 10; i++)
 		{
@@ -194,83 +186,77 @@ public class ArithmeticWriter
 			}
 		}
 		min_set_id = min_index;
-		
-		int [] channel_id      = DeltaMapper.getChannels(min_set_id);
-		int [] channel_delta_sum = new int[7];
-		
-		for(int i = 0; i < 3; i++)
-		{
-		    int j = channel_id[i];	
-		    int[] quantized_channel = quantized_channel_list.get(j);
-		    
-		    int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
-			double shannon_limit = CodeMapper.getShannonLimit(frequency);
-			int    shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[0] = shannon_sum;
 
-		    frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[1] = shannon_sum;
-			
-			frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[2] = shannon_sum;
-			
-			frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[3] = shannon_sum;
-			
-			frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[4] = shannon_sum;
-			
-			ArrayList <int []> result = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
-			frequency     = result.get(0);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[5] = shannon_sum;
-			
-			int [] map = result.get(1);
-			channel_delta_sum[5] += map.length / 4;
-			
-			result        = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
-			frequency     = result.get(0);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[6] = shannon_sum;
-			
-			map = result.get(1);
-			channel_delta_sum[6] += map.length / 4;
-		}
-		
-		min_delta_sum = channel_delta_sum[0];
-		min_index     = 0;
-		
-		for(int i = 1; i < 7; i++)
+		int[]  channel_id      = DeltaMapper.getChannels(min_set_id);
+		int[]  total_delta_sum = new int[7];
+
+		for (int i = 0; i < 3; i++)
 		{
-			if(channel_delta_sum[i] < min_delta_sum)
+			int   j                 = channel_id[i];
+			int[] quantized_channel = quantized_channel_list.get(j);
+
+			int[]  freq;
+			double shannon_limit;
+			int    shannon_sum;
+
+			freq          = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			total_delta_sum[0] += (int) Math.floor(shannon_limit);
+
+			freq          = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			total_delta_sum[1] += (int) Math.floor(shannon_limit);
+
+			freq          = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			total_delta_sum[2] += (int) Math.floor(shannon_limit);
+
+			freq          = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			total_delta_sum[3] += (int) Math.floor(shannon_limit);
+
+			freq          = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			total_delta_sum[4] += (int) Math.floor(shannon_limit);
+
+			ArrayList<int[]> result = DeltaMapper.getMedScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			freq          = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			shannon_sum   = (int) Math.floor(shannon_limit);
+			shannon_sum  += result.get(1).length / 4;
+			total_delta_sum[5] += shannon_sum;
+
+			result        = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			freq          = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			shannon_sum   = (int) Math.floor(shannon_limit);
+			shannon_sum  += result.get(1).length / 4;
+			total_delta_sum[6] += shannon_sum;
+		}
+
+		min_delta_sum = total_delta_sum[0];
+		min_index     = 0;
+		for (int i = 1; i < 7; i++)
+		{
+			if (total_delta_sum[i] < min_delta_sum)
 			{
-				min_delta_sum = channel_delta_sum[i];
-				min_index = i;
+				min_delta_sum = total_delta_sum[i];
+				min_index     = i;
 			}
 		}
 		delta_type = min_index;
-		
+
 		System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_set_id]);
 		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[delta_type]);
 	}
-	
+
 	public ArithmeticWriter(String _filename)
 	{
 		filename = _filename;
 		try
 		{
 			File file = new File(filename);
-			file_length = file.length();
+			file_length    = file.length();
 			original_image = ImageIO.read(file);
 			int raster_type = original_image.getType();
 			image_xdim = original_image.getWidth();
@@ -282,7 +268,7 @@ public class ArithmeticWriter
 			map_list     = new ArrayList<Object>();
 			delta_list   = new ArrayList<Object>();
 
-			channel_string = new String[6];
+			channel_string    = new String[6];
 			channel_string[0] = new String("blue");
 			channel_string[1] = new String("green");
 			channel_string[2] = new String("red");
@@ -290,8 +276,8 @@ public class ArithmeticWriter
 			channel_string[4] = new String("red-green");
 			channel_string[5] = new String("red-blue");
 
-			set_sum = new int[10];
-			set_string = new String[10];
+			set_sum       = new int[10];
+			set_string    = new String[10];
 			set_string[0] = new String("blue, green, and red.");
 			set_string[1] = new String("blue, red, and red-green.");
 			set_string[2] = new String("blue, red, and blue-green.");
@@ -302,8 +288,8 @@ public class ArithmeticWriter
 			set_string[7] = new String("green, blue-green, and red-green.");
 			set_string[8] = new String("green, red-green, and red-blue.");
 			set_string[9] = new String("red, red-green, red-blue.");
-			
-			delta_type_string = new String[8];
+
+			delta_type_string    = new String[8];
 			delta_type_string[0] = new String("horizontal");
 			delta_type_string[1] = new String("vertical");
 			delta_type_string[2] = new String("average");
@@ -317,22 +303,22 @@ public class ArithmeticWriter
 			channel_min       = new int[6];
 			channel_delta_min = new int[6];
 			channel_sum       = new int[6];
-			channel_length    = new int[6];
-			channel_compressed_length = new int[6];
+			channel_length             = new int[6];
+			channel_compressed_length  = new int[6];
 
 			channel_string_type = new int[3];
 			min_bytelength      = new int[3];
 			max_bytelength      = new int[3];
 			channel_iterations  = new byte[3];
-			
-			if(raster_type == BufferedImage.TYPE_3BYTE_BGR)
+
+			if (raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				pixel = new int[image_xdim * image_ydim];
 				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
 				try
 				{
 					pixel_grabber.grabPixels();
-				} 
+				}
 				catch (InterruptedException e)
 				{
 					System.err.println(e.toString());
@@ -374,37 +360,32 @@ public class ArithmeticWriter
 				screen_xdim = (int) screenSize.getWidth();
 				screen_ydim = (int) screenSize.getHeight();
 
-				// Compute a fit-to-window scale so the image starts fully visible
-				// inside a window capped at 70% of the screen in each dimension.
 				int max_canvas_w = (int)(screen_xdim * 0.70) - 40;
 				int max_canvas_h = (int)(screen_ydim * 0.70) - 80;
-				double xscale = (double) max_canvas_w / image_xdim;
-				double yscale = (double) max_canvas_h / image_ydim;
-				fit_scale  = Math.min(1.0, Math.min(xscale, yscale)); // never upscale at start
-				zoom_scale = fit_scale;
+				double xscale    = (double) max_canvas_w / image_xdim;
+				double yscale    = (double) max_canvas_h / image_ydim;
+				fit_scale        = Math.min(1.0, Math.min(xscale, yscale));
+				zoom_scale       = fit_scale;
 
-				// ImageCanvas draws display_image; its preferred size drives the scroll pane.
 				image_canvas = new ImageCanvas();
 
-				// Wrap the canvas in a scroll pane that fills the frame.
 				scroll_pane = new JScrollPane(image_canvas,
 						JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 						JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 				scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
 				scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
 
-				// Mouse-wheel zoom: Ctrl+wheel zooms, plain wheel scrolls (default).
 				scroll_pane.addMouseWheelListener(new MouseWheelListener()
 				{
 					public void mouseWheelMoved(MouseWheelEvent e)
 					{
 						if (e.isControlDown())
 						{
-							JViewport vp        = scroll_pane.getViewport();
-							Point     view_pos  = vp.getViewPosition();
-							Point     mouse_pt  = e.getPoint();
-							int mouse_canvas_x  = mouse_pt.x + view_pos.x;
-							int mouse_canvas_y  = mouse_pt.y + view_pos.y;
+							JViewport vp       = scroll_pane.getViewport();
+							Point     view_pos = vp.getViewPosition();
+							Point     mouse_pt = e.getPoint();
+							int mouse_canvas_x = mouse_pt.x + view_pos.x;
+							int mouse_canvas_y = mouse_pt.y + view_pos.y;
 
 							double old_scale = zoom_scale;
 							if (e.getWheelRotation() < 0)
@@ -424,10 +405,7 @@ public class ArithmeticWriter
 							double ratio = zoom_scale / old_scale;
 							int new_vx   = (int)(mouse_canvas_x * ratio) - mouse_pt.x;
 							int new_vy   = (int)(mouse_canvas_y * ratio) - mouse_pt.y;
-							vp.setViewPosition(new Point(
-									Math.max(0, new_vx),
-									Math.max(0, new_vy)));
-
+							vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
 							updateTitle();
 						}
 						else
@@ -439,7 +417,6 @@ public class ArithmeticWriter
 
 				frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
 
-				// ---- Menu bar ----
 				JMenuBar menu_bar = new JMenuBar();
 				JMenu file_menu   = new JMenu("File");
 
@@ -466,22 +443,18 @@ public class ArithmeticWriter
 				reload_item.addActionListener(reload_handler);
 				file_menu.add(reload_item);
 
-				JMenuItem save_item    = new JMenuItem("Save");
+				JMenuItem save_item = new JMenuItem("Save");
 				SaveHandler save_handler = new SaveHandler();
 				save_item.addActionListener(save_handler);
 				file_menu.add(save_item);
 
-				// ---- View / Zoom menu ----
 				JMenu view_menu = new JMenu("View");
 
 				JMenuItem zoom_in_item = new JMenuItem("Zoom In (+)");
 				zoom_in_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
 				zoom_in_item.addActionListener(new ActionListener()
 				{
-					public void actionPerformed(ActionEvent e)
-					{
-						zoomBy(ZOOM_FACTOR);
-					}
+					public void actionPerformed(ActionEvent e) { zoomBy(ZOOM_FACTOR); }
 				});
 				view_menu.add(zoom_in_item);
 
@@ -489,10 +462,7 @@ public class ArithmeticWriter
 				zoom_out_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
 				zoom_out_item.addActionListener(new ActionListener()
 				{
-					public void actionPerformed(ActionEvent e)
-					{
-						zoomBy(1.0 / ZOOM_FACTOR);
-					}
+					public void actionPerformed(ActionEvent e) { zoomBy(1.0 / ZOOM_FACTOR); }
 				});
 				view_menu.add(zoom_out_item);
 
@@ -533,11 +503,10 @@ public class ArithmeticWriter
 				});
 				view_menu.add(zoom_actual_item);
 
-				// ---- Quantization settings menu ----
 				JMenu settings_menu = new JMenu("Quantization");
 
-				JMenuItem quant_item    = new JMenuItem("Pixel Resolution");
-				JDialog   quant_dialog  = new JDialog(frame, "Pixel Resolution");
+				JMenuItem quant_item   = new JMenuItem("Pixel Resolution");
+				JDialog   quant_dialog = new JDialog(frame, "Pixel Resolution");
 				ActionListener quant_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
@@ -550,12 +519,12 @@ public class ArithmeticWriter
 				};
 				quant_item.addActionListener(quant_handler);
 
-				JPanel    quant_panel  = new JPanel(new BorderLayout());
-				JSlider   quant_slider = new JSlider();
+				JPanel     quant_panel  = new JPanel(new BorderLayout());
+				JSlider    quant_slider = new JSlider();
 				quant_slider.setMinimum(0);
 				quant_slider.setMaximum(10);
 				quant_slider.setValue(pixel_quant);
-				JTextField quant_value = new JTextField(3);
+				JTextField quant_value  = new JTextField(3);
 				quant_value.setText(" " + pixel_quant + " ");
 				ChangeListener quant_slider_handler = new ChangeListener()
 				{
@@ -588,12 +557,12 @@ public class ArithmeticWriter
 				};
 				shift_item.addActionListener(shift_handler);
 
-				JPanel    shift_panel  = new JPanel(new BorderLayout());
-				JSlider   shift_slider = new JSlider();
+				JPanel     shift_panel  = new JPanel(new BorderLayout());
+				JSlider    shift_slider = new JSlider();
 				shift_slider.setMinimum(0);
 				shift_slider.setMaximum(7);
 				shift_slider.setValue(pixel_shift);
-				JTextField shift_value = new JTextField(3);
+				JTextField shift_value  = new JTextField(3);
 				shift_value.setText(" " + pixel_shift + " ");
 				ChangeListener shift_slider_handler = new ChangeListener()
 				{
@@ -626,8 +595,8 @@ public class ArithmeticWriter
 				};
 				segment_length_item.addActionListener(segment_length_handler);
 
-				JPanel    segment_length_panel = new JPanel(new BorderLayout());
-				JSlider   segment_slider       = new JSlider();
+				JPanel     segment_length_panel = new JPanel(new BorderLayout());
+				JSlider    segment_slider       = new JSlider();
 				segment_slider.setMinimum(0);
 				segment_slider.setMaximum(9);
 				segment_slider.setValue(pixel_segment);
@@ -663,12 +632,12 @@ public class ArithmeticWriter
 				};
 				correction_item.addActionListener(correction_handler);
 
-				JPanel    correction_panel  = new JPanel(new BorderLayout());
-				JSlider   correction_slider = new JSlider();
+				JPanel     correction_panel  = new JPanel(new BorderLayout());
+				JSlider    correction_slider  = new JSlider();
 				correction_slider.setMinimum(0);
 				correction_slider.setMaximum(10);
 				correction_slider.setValue(correction);
-				JTextField correction_value = new JTextField(3);
+				JTextField correction_value   = new JTextField(3);
 				correction_value.setText(" " + correction + " ");
 				ChangeListener correction_slider_handler = new ChangeListener()
 				{
@@ -687,41 +656,40 @@ public class ArithmeticWriter
 				correction_dialog.add(correction_panel);
 				settings_menu.add(correction_item);
 
-				// ---- Datatype menu ----
 				JMenu datatype_menu = new JMenu("Datatype");
-				JRadioButtonMenuItem [] datatype_button = new JRadioButtonMenuItem[3];
+				JRadioButtonMenuItem[] datatype_button = new JRadioButtonMenuItem[3];
 				datatype_button[0] = new JRadioButtonMenuItem("Integer");
 				datatype_button[1] = new JRadioButtonMenuItem("String");
 				datatype_button[2] = new JRadioButtonMenuItem("String*");
 				datatype_button[compress_type].setSelected(true);
 
+				ButtonGroup datatype_group = new ButtonGroup();
+				for (int i = 0; i < 3; i++)
+					datatype_group.add(datatype_button[i]);
+
 				class DatatypeButtonHandler implements ActionListener
 				{
 					int index;
-				    DatatypeButtonHandler(int index) { this.index = index; }
-				    public void actionPerformed(ActionEvent e)
-		            {
-				    	if(compress_type != index)
-				    	{
-				    	    datatype_button[compress_type].setSelected(false);
-				    	    compress_type = index;
-				    	    datatype_button[compress_type].setSelected(true);
-				    	    apply_item.doClick();
-				    	}
-				    	else
-					    	datatype_button[compress_type].setSelected(true);
-		            }
+					DatatypeButtonHandler(int index) { this.index = index; }
+					public void actionPerformed(ActionEvent e)
+					{
+						if (compress_type != index)
+						{
+							compress_type = index;
+							apply_item.doClick();
+						}
+					}
 				}
 
-				for(int i = 0; i < 3; i++)
+				for (int i = 0; i < 3; i++)
 				{
 					datatype_button[i].addActionListener(new DatatypeButtonHandler(i));
 					datatype_menu.add(datatype_button[i]);
 				}
 
-				// ---- Delta menu ----
 				JMenu delta_menu = new JMenu("Delta");
-				delta_button = new JRadioButtonMenuItem[8];
+
+				delta_button    = new JRadioButtonMenuItem[8];
 				delta_button[0] = new JRadioButtonMenuItem("H");
 				delta_button[1] = new JRadioButtonMenuItem("V");
 				delta_button[2] = new JRadioButtonMenuItem("Average");
@@ -730,6 +698,12 @@ public class ArithmeticWriter
 				delta_button[5] = new JRadioButtonMenuItem("Scanline 1");
 				delta_button[6] = new JRadioButtonMenuItem("Scanline 2");
 				delta_button[7] = new JRadioButtonMenuItem("Map");
+
+				delta_group = new ButtonGroup();
+				for (int i = 0; i < 8; i++)
+					delta_group.add(delta_button[i]);
+
+				// Temporary default — showInitialImage() corrects this after init()
 				delta_button[delta_type].setSelected(true);
 
 				class ButtonHandler implements ActionListener
@@ -740,13 +714,9 @@ public class ArithmeticWriter
 					{
 						if (delta_type != index)
 						{
-							delta_button[delta_type].setSelected(false);
 							delta_type = index;
-							delta_button[delta_type].setSelected(true);
 							apply_item.doClick();
 						}
-						else
-							delta_button[delta_type].setSelected(true);
 					}
 				}
 
@@ -763,23 +733,20 @@ public class ArithmeticWriter
 				menu_bar.add(settings_menu);
 				frame.setJMenuBar(menu_bar);
 
-				// Initial canvas size based on fit scale.
 				display_image = original_image;
 				image_canvas.setPreferredSize(new Dimension(
 						(int)(image_xdim * zoom_scale),
 						(int)(image_ydim * zoom_scale)));
 				updateTitle();
 
-				// Size the frame to at most 70% of the screen in each dimension.
 				frame.setSize(Math.min(image_xdim + 40, (int)(screen_xdim * 0.70)),
 				              Math.min(image_ydim + 80,  (int)(screen_ydim * 0.70)));
 				frame.setLocation(5, 5);
 				frame.setVisible(true);
 
-				// Recompute fit scale against the live viewport once layout is done.
 				SwingUtilities.invokeLater(() -> showInitialImage());
 			}
-		} 
+		}
 		catch (Exception e)
 		{
 			System.out.println(e.getMessage());
@@ -787,7 +754,6 @@ public class ArithmeticWriter
 		}
 	}
 
-	/** Called once on the EDT after the frame is visible, to lock in the correct fit scale. */
 	private void showInitialImage()
 	{
 		Dimension vp_size = scroll_pane.getViewport().getSize();
@@ -802,9 +768,12 @@ public class ArithmeticWriter
 		image_canvas.revalidate();
 		image_canvas.repaint();
 		updateTitle();
+
+		// Run init() now that the UI is fully built, then sync the button.
+		init();
+		delta_button[delta_type].setSelected(true);
 	}
 
-	/** Zoom by a multiplier, keeping the view centred. */
 	private void zoomBy(double factor)
 	{
 		double new_scale = zoom_scale * factor;
@@ -817,9 +786,8 @@ public class ArithmeticWriter
 
 		double centre_x = vp_pos.x + vp_size.width  / 2.0;
 		double centre_y = vp_pos.y + vp_size.height / 2.0;
-
-		double ratio = new_scale / zoom_scale;
-		zoom_scale   = new_scale;
+		double ratio    = new_scale / zoom_scale;
+		zoom_scale      = new_scale;
 
 		updateDisplayImage();
 		image_canvas.setPreferredSize(new Dimension(
@@ -831,11 +799,9 @@ public class ArithmeticWriter
 		int new_vx = (int)(centre_x * ratio - vp_size.width  / 2.0);
 		int new_vy = (int)(centre_y * ratio - vp_size.height / 2.0);
 		vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
-
 		updateTitle();
 	}
 
-	/** Re-render display_image (working_image or original_image) at current zoom_scale. */
 	private void updateDisplayImage()
 	{
 		BufferedImage source = (working_image != null && initialized) ? working_image : original_image;
@@ -855,22 +821,15 @@ public class ArithmeticWriter
 		}
 	}
 
-	/** Put the current zoom percentage in the title bar. */
 	private void updateTitle()
 	{
-		int pct = (int)Math.round(zoom_scale * 100);
+		int pct = (int) Math.round(zoom_scale * 100);
 		frame.setTitle("Arithmetic Deltas " + filename + "  [" + pct + "%]");
 	}
 
-	// -----------------------------------------------------------------------
-	// ImageCanvas
-	// -----------------------------------------------------------------------
 	class ImageCanvas extends JPanel
 	{
-		public ImageCanvas()
-		{
-			setOpaque(true);
-		}
+		public ImageCanvas() { setOpaque(true); }
 
 		@Override
 		public Dimension getPreferredSize()
@@ -889,52 +848,49 @@ public class ArithmeticWriter
 		}
 	}
 
-	// -----------------------------------------------------------------------
-	// ApplyHandler
-	// -----------------------------------------------------------------------
 	class ApplyHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
 		{
 			ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
 			ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
-			
+
 			int new_xdim = image_xdim;
 			int new_ydim = image_ydim;
 			if (pixel_quant != 0)
 			{
 				double factor = pixel_quant;
 				factor /= 10;
-				new_xdim = image_xdim - (int) (factor * (image_xdim / 2 - 2));
-				new_ydim = image_ydim - (int) (factor * (image_ydim / 2 - 2));
+				new_xdim = image_xdim - (int)(factor * (image_xdim / 2 - 2));
+				new_ydim = image_ydim - (int)(factor * (image_ydim / 2 - 2));
 			}
-			
-			for(int i = 0; i < 3; i++)
+
+			for (int i = 0; i < 3; i++)
 			{
 				int[] channel = (int[]) channel_list.get(i);
-				if(pixel_quant == 0)
+				if (pixel_quant == 0)
 				{
-					if(pixel_shift == 0)
-						quantized_channel_list.add(channel);	
+					if (pixel_shift == 0)
+						quantized_channel_list.add(channel);
 					else
 					{
-						int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+						int[] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
 						quantized_channel_list.add(shifted_channel);
 					}
 				}
 				else
 				{
-					int [] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
-					if(pixel_shift == 0)
-						quantized_channel_list.add(resized_channel);	
+					int[] resized_channel = ResizeMapper.resize(channel, image_xdim, new_xdim, new_ydim);
+					if (pixel_shift == 0)
+						quantized_channel_list.add(resized_channel);
 					else
 					{
-						int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
+						int[] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
 						quantized_channel_list.add(shifted_channel);
 					}
 				}
 			}
-			
+
 			int[] quantized_blue       = quantized_channel_list.get(0);
 			int[] quantized_green      = quantized_channel_list.get(1);
 			int[] quantized_red        = quantized_channel_list.get(2);
@@ -962,9 +918,9 @@ public class ArithmeticWriter
 				channel_init[i] = quantized_channel[0];
 				quantized_channel_list.set(i, quantized_channel);
 
-				int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
-				double shannon_limit = CodeMapper.getShannonLimit(frequency);
-				channel_sum[i]       = (int)Math.floor(shannon_limit);
+				int[]  freq          = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+				double shannon_limit = CodeMapper.getShannonLimit(freq);
+				channel_sum[i]       = (int) Math.floor(shannon_limit);
 			}
 
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
@@ -978,7 +934,7 @@ public class ArithmeticWriter
 			set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
 			set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
 
-			int min_index = 0;
+			int min_index     = 0;
 			int min_delta_sum = Integer.MAX_VALUE;
 			for (int i = 0; i < 10; i++)
 			{
@@ -989,10 +945,9 @@ public class ArithmeticWriter
 				}
 			}
 			min_set_id = min_index;
-			
+
 			file_compression_rate  = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
-
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
@@ -1005,49 +960,9 @@ public class ArithmeticWriter
 			{
 				int j = channel_id[i];
 				int[] quantized_channel = quantized_channel_list.get(j);
-				double current_sum      = channel_sum[j];
-				
-				int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
-				double shannon_limit = CodeMapper.getShannonLimit(frequency);
-				int    shannon_sum   = (int)Math.floor(shannon_limit);
-				double horizontal_ratio = shannon_sum / current_sum;
-				
-				frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				double vertical_ratio = shannon_sum / current_sum;
-				
-				frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				double average_ratio = shannon_sum / current_sum;
-				
-				frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				double paeth_ratio = shannon_sum / current_sum;
-				
-				frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				double gradient_ratio = shannon_sum / current_sum;
-				
-				ArrayList <int []> f_result = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
-				frequency     = f_result.get(0);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				shannon_sum  += (new_ydim - 1) / 4;
-				double scanline_ratio = shannon_sum / current_sum;
-				
-				f_result      = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
-				frequency     = f_result.get(0);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				shannon_sum  += (new_ydim - 1) / 4;
-				double scanline2_ratio = shannon_sum / current_sum;
 
 				ArrayList<Object> result = new ArrayList<Object>();
-				
+
 				if      (delta_type == 0) result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				else if (delta_type == 1) result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				else if (delta_type == 2) result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
@@ -1071,24 +986,24 @@ public class ArithmeticWriter
 
 				int[]  delta       = (int[]) result.get(1);
 				byte[] delta_bytes = new byte[delta.length];
-			    for(int k = 0; k < delta.length; k++)
-			    	delta_bytes[k] = (byte)(delta[k]);
-			    delta_list.add(delta_bytes);
+				for (int k = 0; k < delta.length; k++)
+					delta_bytes[k] = (byte)(delta[k]);
+				delta_list.add(delta_bytes);
 
-			    boolean precompress = (compress_type == 2);
-			    ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
-				
-				channel_delta_min[j]      = (int)   delta_string_list.get(0);
-				channel_length[j]         = (int)   delta_string_list.get(1);
-				int[]  string_table       = (int[])  delta_string_list.get(2);
-				byte[] compression_string = (byte[]) delta_string_list.get(3);
+				boolean precompress = (compress_type == 2);
+				ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
+
+				channel_delta_min[j]      = (int)    delta_string_list.get(0);
+				channel_length[j]          = (int)    delta_string_list.get(1);
+				int[]  string_table        = (int[])  delta_string_list.get(2);
+				byte[] compression_string  = (byte[]) delta_string_list.get(3);
 
 				table_list.add(string_table);
 				string_list.add(compression_string);
 
 				channel_compressed_length[j] = StringMapper.getBitlength(compression_string);
-				channel_string_type[i]       = StringMapper.getType(compression_string);
-				channel_iterations[i]        = StringMapper.getIterations(compression_string);
+				channel_string_type[i]        = StringMapper.getType(compression_string);
+				channel_iterations[i]         = StringMapper.getIterations(compression_string);
 			}
 
 			for (int i = 0; i < 3; i++)
@@ -1109,10 +1024,10 @@ public class ArithmeticWriter
 				{
 					byte[] decompressed_string = StringMapper.decompressStrings2(current_string);
 					int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-					if(number_unpacked != new_xdim * new_ydim)
+					if (number_unpacked != new_xdim * new_ydim)
 						System.out.println("Number of values unpacked does not agree with image dimensions.");
 				}
-				
+
 				for (int k = 1; k < delta.length; k++)
 					delta[k] += channel_delta_min[j];
 
@@ -1130,51 +1045,52 @@ public class ArithmeticWriter
 					for (int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
 
-				if(pixel_shift == 0)
+				if (pixel_shift == 0)
 				{
-				    if(pixel_quant == 0)
-				    	dequantized_channel_list.add(channel);
-				    else
-				    	dequantized_channel_list.add(ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim));
+					if (pixel_quant == 0)
+						dequantized_channel_list.add(channel);
+					else
+						dequantized_channel_list.add(ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim));
 				}
 				else
 				{
-				    int[] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
-				    if(pixel_quant == 0)
-				    	dequantized_channel_list.add(shifted_channel);
-				    else
-				    	dequantized_channel_list.add(ResizeMapper.resize(shifted_channel, new_xdim, image_xdim, image_ydim));
+					int[] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
+					if (pixel_quant == 0)
+						dequantized_channel_list.add(shifted_channel);
+					else
+						dequantized_channel_list.add(ResizeMapper.resize(shifted_channel, new_xdim, image_xdim, image_ydim));
 				}
 			}
 
 			int[] blue  = new int[new_xdim * new_ydim];
 			int[] green = new int[new_xdim * new_ydim];
 			int[] red   = new int[new_xdim * new_ydim];
-			if(min_set_id == 0)
+
+			if (min_set_id == 0)
 			{
 				blue  = dequantized_channel_list.get(0);
 				green = dequantized_channel_list.get(1);
 				red   = dequantized_channel_list.get(2);
 			}
-			else if(min_set_id == 1)
+			else if (min_set_id == 1)
 			{
-				blue = dequantized_channel_list.get(0);
-				red  = dequantized_channel_list.get(1);
+				blue  = dequantized_channel_list.get(0);
+				red   = dequantized_channel_list.get(1);
 				green = DeltaMapper.getDifference(red, dequantized_channel_list.get(2));
 			}
-			else if(min_set_id == 2)
+			else if (min_set_id == 2)
 			{
 				blue  = dequantized_channel_list.get(0);
 				red   = dequantized_channel_list.get(1);
 				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(2));
 			}
-			else if(min_set_id == 3)
+			else if (min_set_id == 3)
 			{
 				blue  = dequantized_channel_list.get(0);
 				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(1));
 				red   = DeltaMapper.getSum(dequantized_channel_list.get(2), green);
 			}
-			else if(min_set_id == 4)
+			else if (min_set_id == 4)
 			{
 				blue  = dequantized_channel_list.get(0);
 				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(1));
@@ -1186,7 +1102,7 @@ public class ArithmeticWriter
 				red   = dequantized_channel_list.get(1);
 				blue  = DeltaMapper.getSum(dequantized_channel_list.get(2), green);
 			}
-			else if(min_set_id == 6)
+			else if (min_set_id == 6)
 			{
 				red = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
@@ -1196,19 +1112,19 @@ public class ArithmeticWriter
 				green = DeltaMapper.getSum(red_green, red);
 				blue  = DeltaMapper.getSum(blue_green, green);
 			}
-			else if(min_set_id == 7)
+			else if (min_set_id == 7)
 			{
 				green = dequantized_channel_list.get(0);
 				blue  = DeltaMapper.getSum(green, dequantized_channel_list.get(1));
 				red   = DeltaMapper.getSum(green, dequantized_channel_list.get(2));
 			}
-			else if(min_set_id == 8)
+			else if (min_set_id == 8)
 			{
 				green = dequantized_channel_list.get(0);
 				red   = DeltaMapper.getSum(green, dequantized_channel_list.get(1));
 				blue  = DeltaMapper.getDifference(red, dequantized_channel_list.get(2));
 			}
-			else if(min_set_id == 9)
+			else if (min_set_id == 9)
 			{
 				red   = dequantized_channel_list.get(0);
 				green = DeltaMapper.getDifference(red, dequantized_channel_list.get(1));
@@ -1243,7 +1159,6 @@ public class ArithmeticWriter
 					k++;
 				}
 
-			// Update display at the current zoom level.
 			updateDisplayImage();
 			image_canvas.repaint();
 
@@ -1253,368 +1168,361 @@ public class ArithmeticWriter
 		}
 	}
 
-	// -----------------------------------------------------------------------
-	// SaveHandler  (logic unchanged from original)
-	// -----------------------------------------------------------------------
 	class SaveHandler implements ActionListener
 	{
-	    public void actionPerformed(ActionEvent event)
-	    {
-	        if(!initialized)
-	            apply_item.doClick();
-	        int channel_id[] = DeltaMapper.getChannels(min_set_id);
+		public void actionPerformed(ActionEvent event)
+		{
+			if (!initialized)
+				apply_item.doClick();
+			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
-	        int[][]          all_number_of_segments = new int[3][];
-	        int[][]          all_segment_lengths     = new int[3][];
-	        int[][]          all_odd_segment_lengths = new int[3][];
-	        BigInteger[][][] all_offsets             = new BigInteger[3][][];
-	        int[][][]        all_frequencies         = new int[3][][];
-	        byte[][][]       all_decoded_segments    = new byte[3][][];
-	        byte[][]         all_strings             = new byte[3][];
-	        byte[][][]       all_segments            = new byte[3][][];
-	        int[]            all_length_types        = new int[3];
-	        byte[][]         all_zipped_frequencies  = new byte[3][];
-	        int[]            all_freq_zipped_lengths = new int[3];
-	        Thread[][][]     all_encoder_threads     = new Thread[3][][];
+			int[][]          all_number_of_segments = new int[3][];
+			int[][]          all_segment_lengths     = new int[3][];
+			int[][]          all_odd_segment_lengths = new int[3][];
+			BigInteger[][][] all_offsets             = new BigInteger[3][][];
+			int[][][]        all_frequencies         = new int[3][][];
+			byte[][][]       all_decoded_segments    = new byte[3][][];
+			byte[][]         all_strings             = new byte[3][];
+			byte[][][]       all_segments            = new byte[3][][];
+			int[]            all_length_types        = new int[3];
+			byte[][]         all_zipped_frequencies  = new byte[3][];
+			int[]            all_freq_zipped_lengths = new int[3];
+			Thread[][][]     all_encoder_threads     = new Thread[3][][];
 
-	        int[] process_order = new int[]{ 0, 1, 2 };
-	        if (compress_type > 0)
-	        {
-	            int[] lengths = new int[3];
-	            for (int i = 0; i < 3; i++)
-	                lengths[i] = ((byte[]) string_list.get(i)).length;
+			int[] process_order = new int[]{ 0, 1, 2 };
+			if (compress_type > 0)
+			{
+				int[] lengths = new int[3];
+				for (int i = 0; i < 3; i++)
+					lengths[i] = ((byte[]) string_list.get(i)).length;
 
-	            process_order = new int[]{ 0, 1, 2 };
-	            for (int i = 1; i < 3; i++)
-	                for (int j = i; j > 0 && lengths[process_order[j-1]] < lengths[process_order[j]]; j--)
-	                {
-	                    int tmp           = process_order[j];
-	                    process_order[j]  = process_order[j-1];
-	                    process_order[j-1] = tmp;
-	                }
-	            System.out.println("Processing channel order: "
-	                + process_order[0] + ", " + process_order[1] + ", " + process_order[2]
-	                + " (descending string length)");
-	        }
+				for (int i = 1; i < 3; i++)
+					for (int j = i; j > 0 && lengths[process_order[j-1]] < lengths[process_order[j]]; j--)
+					{
+						int tmp            = process_order[j];
+						process_order[j]   = process_order[j-1];
+						process_order[j-1] = tmp;
+					}
+				System.out.println("Processing channel order: "
+					+ process_order[0] + ", " + process_order[1] + ", " + process_order[2]
+					+ " (descending string length)");
+			}
 
-	        int[] inv_order = new int[3];
-	        for (int i = 0; i < 3; i++)
-	            inv_order[process_order[i]] = i;
+			int[] inv_order = new int[3];
+			for (int i = 0; i < 3; i++)
+				inv_order[process_order[i]] = i;
 
-	        long encode_start = System.nanoTime();
+			long encode_start = System.nanoTime();
 
-	        for (int pi = 0; pi < 3; pi++)
-	        {
-	            int i = process_order[pi];
+			for (int pi = 0; pi < 3; pi++)
+			{
+				int i = process_order[pi];
 
-	            byte[] string;
-	            if (compress_type == 0)
-	                string = (byte[]) delta_list.get(i);
-	            else
-	                string = (byte[]) string_list.get(i);
+				byte[] string;
+				if (compress_type == 0)
+					string = (byte[]) delta_list.get(i);
+				else
+					string = (byte[]) string_list.get(i);
 
-	            int minimum_segment_length = 500 + (pixel_segment * 500);
-	            int number_of_segments     = string.length / minimum_segment_length;
-	            System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
+				int minimum_segment_length = 500 + (pixel_segment * 500);
+				int number_of_segments     = string.length / minimum_segment_length;
+				System.out.println("Number of segments for channel " + i + " is " + number_of_segments);
 
-	            int segment_length     = string.length / number_of_segments;
-	            int odd_segment_length = segment_length + string.length % number_of_segments;
+				int segment_length     = string.length / number_of_segments;
+				int odd_segment_length = segment_length + string.length % number_of_segments;
 
-	            byte[][]       segment     = new byte[number_of_segments][];
-	            int[][]        freq        = new int[number_of_segments][256];
-	            byte[][]       decoded_seg = new byte[number_of_segments][];
-	            BigInteger[][] offsets     = new BigInteger[number_of_segments][2];
+				byte[][]       segment     = new byte[number_of_segments][];
+				int[][]        freq        = new int[number_of_segments][256];
+				byte[][]       decoded_seg = new byte[number_of_segments][];
+				BigInteger[][] offsets     = new BigInteger[number_of_segments][2];
 
-	            for (int m = 0; m < number_of_segments; m++)
-	                segment[m] = (m < number_of_segments - 1)
-	                    ? new byte[segment_length]
-	                    : new byte[odd_segment_length];
+				for (int m = 0; m < number_of_segments; m++)
+					segment[m] = (m < number_of_segments - 1)
+						? new byte[segment_length]
+						: new byte[odd_segment_length];
 
-	            for (int m = 0; m < number_of_segments - 1; m++)
-	                decoded_seg[m] = new byte[segment_length];
-	            decoded_seg[number_of_segments - 1] = new byte[odd_segment_length];
+				for (int m = 0; m < number_of_segments - 1; m++)
+					decoded_seg[m] = new byte[segment_length];
+				decoded_seg[number_of_segments - 1] = new byte[odd_segment_length];
 
-	            int k = 0;
-	            for (int m = 0; m < number_of_segments - 1; m++)
-	                for (int n = 0; n < segment_length; n++)
-	                {
-	                    segment[m][n] = string[k];
-	                    int p = string[k];
-	                    if (p < 0) p += 256;
-	                    freq[m][p]++;
-	                    k++;
-	                }
+				int k = 0;
+				for (int m = 0; m < number_of_segments - 1; m++)
+					for (int n = 0; n < segment_length; n++)
+					{
+						segment[m][n] = string[k];
+						int p = string[k];
+						if (p < 0) p += 256;
+						freq[m][p]++;
+						k++;
+					}
 
-	            int m = number_of_segments - 1;
-	            for (int n = 0; n < odd_segment_length; n++)
-	            {
-	                segment[m][n] = string[k];
-	                int p = string[k];
-	                if (p < 0) p += 256;
-	                freq[m][p]++;
-	                k++;
-	            }
+				int m = number_of_segments - 1;
+				for (int n = 0; n < odd_segment_length; n++)
+				{
+					segment[m][n] = string[k];
+					int p = string[k];
+					if (p < 0) p += 256;
+					freq[m][p]++;
+					k++;
+				}
 
-	            Thread[] encoder_thread = new Thread[number_of_segments];
-	            for (k = 0; k < number_of_segments; k++)
-	            {
-	                final int    seg_idx  = k;
-	                final byte[] seg_data = segment[k];
-	                final int[]  seg_freq = freq[k];
-	                encoder_thread[k] = new Thread(() ->
-	                    offsets[seg_idx] = ArithmeticMapper.getIntervalValue(seg_data, seg_freq));
-	                encoder_thread[k].start();
-	            }
+				Thread[] encoder_thread = new Thread[number_of_segments];
+				for (k = 0; k < number_of_segments; k++)
+				{
+					final int    seg_idx  = k;
+					final byte[] seg_data = segment[k];
+					final int[]  seg_freq = freq[k];
+					encoder_thread[k] = new Thread(() ->
+						offsets[seg_idx] = ArithmeticMapper.getIntervalValue(seg_data, seg_freq));
+					encoder_thread[k].start();
+				}
 
-	            all_number_of_segments[i]  = new int[]{ number_of_segments };
-	            all_segment_lengths[i]     = new int[]{ segment_length };
-	            all_odd_segment_lengths[i] = new int[]{ odd_segment_length };
-	            all_offsets[i]             = offsets;
-	            all_frequencies[i]         = freq;
-	            all_decoded_segments[i]    = decoded_seg;
-	            all_strings[i]             = string;
-	            all_segments[i]            = segment;
-	            all_encoder_threads[i]     = new Thread[][]{ encoder_thread };
-	        }
-	        System.out.println();
+				all_number_of_segments[i]  = new int[]{ number_of_segments };
+				all_segment_lengths[i]     = new int[]{ segment_length };
+				all_odd_segment_lengths[i] = new int[]{ odd_segment_length };
+				all_offsets[i]             = offsets;
+				all_frequencies[i]         = freq;
+				all_decoded_segments[i]    = decoded_seg;
+				all_strings[i]             = string;
+				all_segments[i]            = segment;
+				all_encoder_threads[i]     = new Thread[][]{ encoder_thread };
+			}
+			System.out.println();
 
-	        for (int pi = 0; pi < 3; pi++)
-	        {
-	            int      i                  = process_order[pi];
-	            Thread[] encoder_thread     = all_encoder_threads[i][0];
-	            int      number_of_segments = all_number_of_segments[i][0];
+			for (int pi = 0; pi < 3; pi++)
+			{
+				int      i                  = process_order[pi];
+				Thread[] encoder_thread     = all_encoder_threads[i][0];
+				int      number_of_segments = all_number_of_segments[i][0];
 
-	            for (int k = 0; k < number_of_segments; k++)
-	                try { encoder_thread[k].join(); }
-	                catch (Exception e) { System.out.println("Encoder join: " + e); }
-	        }
+				for (int k = 0; k < number_of_segments; k++)
+					try { encoder_thread[k].join(); }
+					catch (Exception e) { System.out.println("Encoder join: " + e); }
+			}
 
-	        long encTime = System.nanoTime() - encode_start;
-	        System.out.println("It took " + (pixel_segment < 3
-	            ? (encTime / 1_000_000) + " ms"
-	            : (encTime / 1_000_000_000) + " secs")
-	            + " to encode all channels.");
+			long encTime = System.nanoTime() - encode_start;
+			System.out.println("It took " + (pixel_segment < 3
+				? (encTime / 1_000_000) + " ms"
+				: (encTime / 1_000_000_000) + " secs")
+				+ " to encode all channels.");
 
-	        long decode_start = System.nanoTime();
+			long decode_start = System.nanoTime();
 
-	        for (int pi = 0; pi < 3; pi++)
-	        {
-	            int            i                  = process_order[pi];
-	            int            number_of_segments = all_number_of_segments[i][0];
-	            BigInteger[][] offsets            = all_offsets[i];
-	            int[][]        freq               = all_frequencies[i];
-	            byte[][]       decoded_seg        = all_decoded_segments[i];
-	            byte[][]       segment            = all_segments[i];
+			for (int pi = 0; pi < 3; pi++)
+			{
+				int            i                  = process_order[pi];
+				int            number_of_segments = all_number_of_segments[i][0];
+				BigInteger[][] offsets            = all_offsets[i];
+				int[][]        freq               = all_frequencies[i];
+				byte[][]       decoded_seg        = all_decoded_segments[i];
+				byte[][]       segment            = all_segments[i];
 
-	            Thread[] decoder_thread = new Thread[number_of_segments];
-	            for (int k = 0; k < number_of_segments; k++)
-	            {
-	                final int seg_idx    = k;
-	                final int seg_length = segment[k].length;
-	                decoder_thread[k] = new Thread(() ->
-	                    decoded_seg[seg_idx] =
-	                        ArithmeticMapper.getArithmeticValues(offsets[seg_idx], freq[seg_idx], seg_length));
-	                decoder_thread[k].start();
-	            }
-	            all_encoder_threads[i][0] = decoder_thread;
-	        }
+				Thread[] decoder_thread = new Thread[number_of_segments];
+				for (int k = 0; k < number_of_segments; k++)
+				{
+					final int seg_idx    = k;
+					final int seg_length = segment[k].length;
+					decoder_thread[k] = new Thread(() ->
+						decoded_seg[seg_idx] =
+							ArithmeticMapper.getArithmeticValues(offsets[seg_idx], freq[seg_idx], seg_length));
+					decoder_thread[k].start();
+				}
+				all_encoder_threads[i][0] = decoder_thread;
+			}
 
-	        for (int pi = 0; pi < 3; pi++)
-	        {
-	            int      i                  = process_order[pi];
-	            int      number_of_segments = all_number_of_segments[i][0];
-	            Thread[] decoder_thread     = all_encoder_threads[i][0];
-	            byte[][] decoded_seg        = all_decoded_segments[i];
-	            byte[]   string             = all_strings[i];
+			for (int pi = 0; pi < 3; pi++)
+			{
+				int      i                  = process_order[pi];
+				int      number_of_segments = all_number_of_segments[i][0];
+				Thread[] decoder_thread     = all_encoder_threads[i][0];
+				byte[][] decoded_seg        = all_decoded_segments[i];
+				byte[]   string             = all_strings[i];
 
-	            for (int k = 0; k < number_of_segments; k++)
-	                try { decoder_thread[k].join(); }
-	                catch (Exception e) { System.out.println("Decoder join: " + e); }
+				for (int k = 0; k < number_of_segments; k++)
+					try { decoder_thread[k].join(); }
+					catch (Exception e) { System.out.println("Decoder join: " + e); }
 
-	            byte[] string2       = new byte[string.length];
-	            int    string_offset = 0;
-	            for (int mm = 0; mm < decoded_seg.length; mm++)
-	            {
-	                System.arraycopy(decoded_seg[mm], 0, string2, string_offset, decoded_seg[mm].length);
-	                string_offset += decoded_seg[mm].length;
-	            }
+				byte[] string2       = new byte[string.length];
+				int    string_offset = 0;
+				for (int mm = 0; mm < decoded_seg.length; mm++)
+				{
+					System.arraycopy(decoded_seg[mm], 0, string2, string_offset, decoded_seg[mm].length);
+					string_offset += decoded_seg[mm].length;
+				}
 
-	            boolean isSame    = true;
-	            int     first_idx = 0;
-	            for (int k = 0; k < string.length; k++)
-	                if (string[k] != string2[k]) { isSame = false; first_idx = k; break; }
+				boolean isSame    = true;
+				int     first_idx = 0;
+				for (int k = 0; k < string.length; k++)
+					if (string[k] != string2[k]) { isSame = false; first_idx = k; break; }
 
-	            if (!isSame)
-	            {
-	                System.out.println("Strings are not equal.");
-	                System.out.println("String differed at index " + first_idx);
-	                System.out.println("String length is " + string.length);
-	                System.out.println("String 1 value is " + string[first_idx]
-	                    + ", string 2 value is " + string2[first_idx]);
-	            }
-	            else
-	                System.out.println("Strings are equal for channel " + i + ".");
-	        }
+				if (!isSame)
+				{
+					System.out.println("Strings are not equal.");
+					System.out.println("String differed at index " + first_idx);
+					System.out.println("String length is " + string.length);
+					System.out.println("String 1 value is " + string[first_idx]
+						+ ", string 2 value is " + string2[first_idx]);
+				}
+				else
+					System.out.println("Strings are equal for channel " + i + ".");
+			}
 
-	        long decTime = System.nanoTime() - decode_start;
-	        System.out.println("It took " + (pixel_segment < 3
-	            ? (decTime / 1_000_000) + " ms"
-	            : (decTime / 1_000_000_000) + " secs")
-	            + " to decode all channels.");
-	        System.out.println();
+			long decTime = System.nanoTime() - decode_start;
+			System.out.println("It took " + (pixel_segment < 3
+				? (decTime / 1_000_000) + " ms"
+				: (decTime / 1_000_000_000) + " secs")
+				+ " to decode all channels.");
+			System.out.println();
 
-	        Thread[] deflater_thread = new Thread[3];
+			Thread[] deflater_thread = new Thread[3];
 
-	        for (int pi = 0; pi < 3; pi++)
-	        {
-	            int     i                  = process_order[pi];
-	            final int fi               = i;
-	            int     number_of_segments = all_number_of_segments[i][0];
-	            int[][] freq               = all_frequencies[i];
+			for (int pi = 0; pi < 3; pi++)
+			{
+				int      i                  = process_order[pi];
+				final int fi                = i;
+				int      number_of_segments = all_number_of_segments[i][0];
+				int[][]  freq               = all_frequencies[i];
 
-	            int frequency_max = 0;
-	            for (int k = 0; k < number_of_segments; k++)
-	                for (int mm = 0; mm < freq[k].length; mm++)
-	                    if (freq[k][mm] > frequency_max) frequency_max = freq[k][mm];
+				int frequency_max = 0;
+				for (int k = 0; k < number_of_segments; k++)
+					for (int mm = 0; mm < freq[k].length; mm++)
+						if (freq[k][mm] > frequency_max) frequency_max = freq[k][mm];
 
-	            int length_type;
-	            if      (frequency_max < Byte.MAX_VALUE  * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned byte.");  length_type = 0; }
-	            else if (frequency_max < Short.MAX_VALUE * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned short."); length_type = 1; }
-	            else                                               { System.out.println("Frequency max for channel " + i + " fits in an integer.");        length_type = 2; }
+				int length_type;
+				if      (frequency_max < Byte.MAX_VALUE  * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned byte.");  length_type = 0; }
+				else if (frequency_max < Short.MAX_VALUE * 2 + 2) { System.out.println("Frequency max for channel " + i + " fits in an unsigned short."); length_type = 1; }
+				else                                               { System.out.println("Frequency max for channel " + i + " fits in an integer.");        length_type = 2; }
 
-	            int    bytes_per_entry = (length_type == 0) ? 1 : (length_type == 1) ? 2 : 4;
-	            byte[] frequency_bytes = new byte[number_of_segments * 256 * bytes_per_entry];
-	            for (int k = 0; k < number_of_segments; k++)
-	                for (int mm = 0; mm < 256; mm++)
-	                {
-	                    int v    = freq[k][mm];
-	                    int base = k * 256 * bytes_per_entry + mm * bytes_per_entry;
-	                    for (int b = 0; b < bytes_per_entry; b++)
-	                        frequency_bytes[base + b] = (byte)(v >> (8 * b));
-	                }
+				int    bytes_per_entry = (length_type == 0) ? 1 : (length_type == 1) ? 2 : 4;
+				byte[] frequency_bytes = new byte[number_of_segments * 256 * bytes_per_entry];
+				for (int k = 0; k < number_of_segments; k++)
+					for (int mm = 0; mm < 256; mm++)
+					{
+						int v    = freq[k][mm];
+						int base = k * 256 * bytes_per_entry + mm * bytes_per_entry;
+						for (int b = 0; b < bytes_per_entry; b++)
+							frequency_bytes[base + b] = (byte)(v >> (8 * b));
+					}
 
-	            all_length_types[i] = length_type;
+				all_length_types[i] = length_type;
 
-	            final byte[] freq_bytes_for_thread = frequency_bytes;
-	            final int    segs_for_thread       = number_of_segments;
-	            deflater_thread[pi] = new Thread(() ->
-	            {
-	                Deflater deflater         = new Deflater(Deflater.BEST_COMPRESSION);
-	                byte[]   zipped_freq_data = new byte[freq_bytes_for_thread.length];
-	                deflater.setInput(freq_bytes_for_thread);
-	                deflater.finish();
-	                int freq_zipped_length = deflater.deflate(zipped_freq_data);
-	                deflater.end();
+				final byte[] freq_bytes_for_thread = frequency_bytes;
+				final int    segs_for_thread       = number_of_segments;
+				deflater_thread[pi] = new Thread(() ->
+				{
+					Deflater deflater         = new Deflater(Deflater.BEST_COMPRESSION);
+					byte[]   zipped_freq_data = new byte[freq_bytes_for_thread.length];
+					deflater.setInput(freq_bytes_for_thread);
+					deflater.finish();
+					int freq_zipped_length = deflater.deflate(zipped_freq_data);
+					deflater.end();
 
-	                System.out.println("Original length of frequency tables for channel " + fi + " is "
-	                    + (segs_for_thread * 256 * 4));
-	                System.out.println("Zipped length for channel " + fi + " is " + freq_zipped_length);
+					System.out.println("Original length of frequency tables for channel " + fi + " is "
+						+ (segs_for_thread * 256 * 4));
+					System.out.println("Zipped length for channel " + fi + " is " + freq_zipped_length);
 
-	                all_zipped_frequencies[fi]  = zipped_freq_data;
-	                all_freq_zipped_lengths[fi] = freq_zipped_length;
-	            });
-	            deflater_thread[pi].start();
-	        }
+					all_zipped_frequencies[fi]  = zipped_freq_data;
+					all_freq_zipped_lengths[fi] = freq_zipped_length;
+				});
+				deflater_thread[pi].start();
+			}
 
-	        for (int pi = 0; pi < 3; pi++)
-	            try { deflater_thread[pi].join(); }
-	            catch (Exception e) { System.out.println("Deflater join: " + e); }
+			for (int pi = 0; pi < 3; pi++)
+				try { deflater_thread[pi].join(); }
+				catch (Exception e) { System.out.println("Deflater join: " + e); }
 
-	        System.out.println();
+			System.out.println();
 
-	        try
-	        {
-	            DataOutputStream out =
-	                new DataOutputStream(new FileOutputStream(new File("foo")));
+			try
+			{
+				DataOutputStream out =
+					new DataOutputStream(new FileOutputStream(new File("foo")));
 
-	            out.writeShort(image_xdim);
-	            out.writeShort(image_ydim);
-	            out.writeByte(pixel_shift);
-	            out.writeByte(pixel_quant);
-	            out.writeByte(min_set_id);
-	            out.writeByte(delta_type);
-	            out.writeByte(compress_type);
+				out.writeShort(image_xdim);
+				out.writeShort(image_ydim);
+				out.writeByte(pixel_shift);
+				out.writeByte(pixel_quant);
+				out.writeByte(min_set_id);
+				out.writeByte(delta_type);
+				out.writeByte(compress_type);
 
-	            for (int i = 0; i < 3; i++)
-	            {
-	                int j = channel_id[i];
+				for (int i = 0; i < 3; i++)
+				{
+					int j = channel_id[i];
 
-	                out.writeInt(channel_min[j]);
-	                out.writeInt(channel_init[j]);
-	                out.writeInt(channel_delta_min[j]);
-	                out.writeInt(channel_length[j]);
-	                out.writeInt(channel_compressed_length[j]);
-	                out.writeByte(channel_iterations[i]);
+					out.writeInt(channel_min[j]);
+					out.writeInt(channel_init[j]);
+					out.writeInt(channel_delta_min[j]);
+					out.writeInt(channel_length[j]);
+					out.writeInt(channel_compressed_length[j]);
+					out.writeByte(channel_iterations[i]);
 
-	                int[] table = (int[]) table_list.get(i);
-	                out.writeShort(table.length);
-	                int max_byte_value = Byte.MAX_VALUE * 2 + 1;
-	                if (table.length <= max_byte_value)
-	                    for (int k = 0; k < table.length; k++) out.writeByte(table[k]);
-	                else
-	                    for (int k = 0; k < table.length; k++) out.writeShort(table[k]);
+					int[] table = (int[]) table_list.get(i);
+					out.writeShort(table.length);
+					int max_byte_value = Byte.MAX_VALUE * 2 + 1;
+					if (table.length <= max_byte_value)
+						for (int k = 0; k < table.length; k++) out.writeByte(table[k]);
+					else
+						for (int k = 0; k < table.length; k++) out.writeShort(table[k]);
 
-	                if (delta_type == 5 || delta_type == 6 || delta_type == 7)
-	                {
-	                    byte[] map        = (byte[]) map_list.get(i);
-	                    byte[] packed_map = SegmentMapper.packBits(map, 2);
-	                    out.writeInt(map.length);
-	                    out.writeInt(packed_map.length);
-	                    out.write(packed_map, 0, packed_map.length);
-	                }
+					if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+					{
+						byte[] map        = (byte[]) map_list.get(i);
+						byte[] packed_map = SegmentMapper.packBits(map, 2);
+						out.writeInt(map.length);
+						out.writeInt(packed_map.length);
+						out.write(packed_map, 0, packed_map.length);
+					}
 
-	                int            number_of_segments = all_number_of_segments[i][0];
-	                int            length_type        = all_length_types[i];
-	                byte[]         zipped_freq_data   = all_zipped_frequencies[i];
-	                int            freq_zipped_length = all_freq_zipped_lengths[i];
-	                BigInteger[][] offsets            = all_offsets[i];
+					int            number_of_segments = all_number_of_segments[i][0];
+					int            length_type        = all_length_types[i];
+					byte[]         zipped_freq_data   = all_zipped_frequencies[i];
+					int            freq_zipped_length = all_freq_zipped_lengths[i];
+					BigInteger[][] offsets            = all_offsets[i];
 
-	                out.writeInt(number_of_segments);
-	                out.writeInt(length_type);
-	                out.writeInt(freq_zipped_length);
-	                out.write(zipped_freq_data, 0, freq_zipped_length);
+					out.writeInt(number_of_segments);
+					out.writeInt(length_type);
+					out.writeInt(freq_zipped_length);
+					out.write(zipped_freq_data, 0, freq_zipped_length);
 
-	                for (int k = 0; k < number_of_segments; k++)
-	                {
-	                    byte[] bytes = offsets[k][0].toByteArray();
-	                    out.writeInt(bytes.length);
-	                    out.write(bytes, 0, bytes.length);
+					for (int k = 0; k < number_of_segments; k++)
+					{
+						byte[] bytes = offsets[k][0].toByteArray();
+						out.writeInt(bytes.length);
+						out.write(bytes, 0, bytes.length);
 
-	                    bytes = offsets[k][1].toByteArray();
-	                    out.writeInt(bytes.length);
-	                    out.write(bytes, 0, bytes.length);
-	                }
-	            }
+						bytes = offsets[k][1].toByteArray();
+						out.writeInt(bytes.length);
+						out.write(bytes, 0, bytes.length);
+					}
+				}
 
-	            out.flush();
-	            out.close();
+				out.flush();
+				out.close();
 
-	            File   file             = new File("foo");
-	            long   file_length_out  = file.length();
-	            double compression_rate = (double) file_length_out / (image_xdim * image_ydim * 3);
-	            System.out.println("The file compression rate is "
-	                + String.format("%.4f", file_compression_rate));
-	            System.out.println("Delta bits compression rate is "
-	                + String.format("%.4f", compression_rate));
-	            System.out.println();
-	        }
-	        catch (Exception e)
-	        {
-	            System.out.println(e.toString());
-	        }
-	    }
+				File   file             = new File("foo");
+				long   file_length_out  = file.length();
+				double compression_rate = (double) file_length_out / (image_xdim * image_ydim * 3);
+				System.out.println("The file compression rate is "
+					+ String.format("%.4f", file_compression_rate));
+				System.out.println("Delta bits compression rate is "
+					+ String.format("%.4f", compression_rate));
+				System.out.println();
+			}
+			catch (Exception e)
+			{
+				System.out.println(e.toString());
+			}
+		}
 	}
 
-	// -----------------------------------------------------------------------
-	// ArithmeticEncoder / ArithmeticDecoder  (unchanged)
-	// -----------------------------------------------------------------------
 	class ArithmeticEncoder implements Runnable
 	{
-		byte [] src;
-		int  [] frequency;
-		int     index;
+		byte[] src;
+		int[]  frequency;
+		int    index;
 
-		public ArithmeticEncoder(byte [] src, int [] frequency, int index)
+		public ArithmeticEncoder(byte[] src, int[] frequency, int index)
 		{
 			this.src       = src;
 			this.frequency = frequency;
@@ -1629,12 +1537,12 @@ public class ArithmeticWriter
 
 	class ArithmeticDecoder implements Runnable
 	{
-		BigInteger [] offset;
-		int []        frequency;
-		int           n;
-		int           index;
+		BigInteger[] offset;
+		int[]        frequency;
+		int          n;
+		int          index;
 
-		public ArithmeticDecoder(BigInteger [] offset, int [] frequency, int n, int index)
+		public ArithmeticDecoder(BigInteger[] offset, int[] frequency, int n, int index)
 		{
 			this.offset    = offset;
 			this.frequency = frequency;

@@ -486,6 +486,159 @@ public class DeltaMapper
 		return frequency;
 	}
 	
+	public static ArrayList<int[]> getMedScanlineFrequency(int src[], int xdim, int ydim)
+	{
+	    ArrayList<Integer> delta_list = new ArrayList<Integer>();
+	    byte[] map = new byte[ydim - 1];
+
+	    // Pass 1: choose best filter per row using Shannon entropy,
+	    // with MED as filter 3 instead of Paeth
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int[][] delta = new int[4][xdim - 2];
+
+	        int k = i * xdim + 1;
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            delta[0][j - 1] = src[k] - src[k - 1];
+	            delta[1][j - 1] = src[k] - src[k - xdim];
+	            delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+
+	            int a = src[k - 1];
+	            int b = src[k - xdim];
+	            int c = src[k - xdim - 1];
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            delta[3][j - 1] = src[k] - pred;
+	            k++;
+	        }
+
+	        int[] limit = new int[4];
+	        for (int j = 0; j < 4; j++)
+	        {
+	            int[] current_delta = delta[j];
+
+	            int delta_min = current_delta[0];
+	            int delta_max = current_delta[0];
+	            for (k = 1; k < current_delta.length; k++)
+	            {
+	                if (current_delta[k] < delta_min)
+	                    delta_min = current_delta[k];
+	                else if (current_delta[k] > delta_max)
+	                    delta_max = current_delta[k];
+	            }
+
+	            for (k = 0; k < current_delta.length; k++)
+	                current_delta[k] -= delta_min;
+	            int range = delta_max - delta_min;
+	            int[] frequency = new int[range + 1];
+	            for (k = 0; k < current_delta.length; k++)
+	                frequency[current_delta[k]]++;
+	            double shannon_limit = CodeMapper.getShannonLimit(frequency);
+	            limit[j] = (int) Math.floor(shannon_limit);
+	        }
+
+	        int value = limit[0];
+	        int index = 0;
+	        for (k = 1; k < 4; k++)
+	        {
+	            if (limit[k] < value)
+	            {
+	                value = limit[k];
+	                index = k;
+	            }
+	        }
+	        map[i - 1] = (byte) index;
+	    }
+
+	    // Pass 2: collect deltas using chosen filter per row
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int k = i * xdim + 1;
+	        byte m = map[i - 1];
+
+	        if (m == 0)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta_list.add(src[k] - src[k - 1]);
+	                k++;
+	            }
+	        }
+	        else if (m == 1)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta_list.add(src[k] - src[k - xdim]);
+	                k++;
+	            }
+	        }
+	        else if (m == 2)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta_list.add(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+	                k++;
+	            }
+	        }
+	        else if (m == 3)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                delta_list.add(src[k] - pred);
+	                k++;
+	            }
+	        }
+	    }
+
+	    int delta_min = Integer.MAX_VALUE;
+	    int delta_max = Integer.MIN_VALUE;
+	    int size = delta_list.size();
+	    for (int i = 0; i < size; i++)
+	    {
+	        int current_delta = delta_list.get(i);
+	        if (current_delta < delta_min) delta_min = current_delta;
+	        if (current_delta > delta_max) delta_max = current_delta;
+	    }
+
+	    int range = delta_max - delta_min;
+	    int[] delta_frequency = new int[range + 1];
+	    for (int i = 0; i < size; i++)
+	    {
+	        int current_value = delta_list.get(i);
+	        current_value -= delta_min;
+	        delta_frequency[current_value]++;
+	    }
+
+	    int[] map_frequency = new int[4];
+	    for (int i = 0; i < map.length; i++)
+	        map_frequency[map[i]]++;
+
+	    ArrayList<int[]> result = new ArrayList<int[]>();
+	    result.add(delta_frequency);
+	    result.add(map_frequency);
+	    return result;
+	}
+	
 	public static ArrayList <int[]> getScanlineFrequency(int src[], int xdim, int ydim)
 	{
 		ArrayList <int []> result = new ArrayList <int []> ();
@@ -1699,6 +1852,101 @@ public class DeltaMapper
 		return dst;
 	}
 	
+
+	
+	public static ArrayList getMedDeltasFromValues(int src[], int xdim, int ydim)
+	{
+	    int[] dst = new int[xdim * ydim];
+	    int init_value = src[0];
+	    int sum = 0;
+	    int k = 0;
+
+	    // Row 0: horizontal deltas
+	    dst[k++] = 0;
+	    for (int j = 1; j < xdim; j++)
+	    {
+	        int delta = src[k] - src[k - 1];
+	        dst[k++] = delta;
+	        sum += Math.abs(delta);
+	    }
+
+	    // Rows 1+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta from row above
+	        int delta = src[k] - src[k - xdim];
+	        dst[k++] = delta;
+	        sum += Math.abs(delta);
+
+	        for (int j = 1; j < xdim; j++)
+	        {
+	            int a = src[k - 1];          // left
+	            int b = src[k - xdim];       // above
+	            int c = src[k - xdim - 1];   // above-left
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            delta = src[k] - pred;
+	            dst[k++] = delta;
+	            sum += Math.abs(delta);
+	        }
+	    }
+
+	    ArrayList result = new ArrayList();
+	    result.add(sum);
+	    result.add(dst);
+	    result.add(init_value);
+	    return result;
+	}
+
+	public static int[] getValuesFromMedDeltas(int src[], int xdim, int ydim, int init_value)
+	{
+	    int[] dst = new int[xdim * ydim];
+	    int k = 0;
+
+	    // Row 0: cumsum restores horizontal deltas
+	    dst[k++] = init_value;
+	    for (int j = 1; j < xdim; j++)
+	    {
+	        dst[k] = dst[k - 1] + src[k];
+	        k++;
+	    }
+
+	    // Rows 1+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta
+	        dst[k] = dst[k - xdim] + src[k];
+	        k++;
+
+	        for (int j = 1; j < xdim; j++)
+	        {
+	            int a = dst[k - 1];          // left        (already recovered)
+	            int b = dst[k - xdim];       // above       (already recovered)
+	            int c = dst[k - xdim - 1];   // above-left  (already recovered)
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            dst[k] = pred + src[k];
+	            k++;
+	        }
+	    }
+
+	    return dst;
+	}
+	
 	public static ArrayList getGradientDeltasFromValues(int src[], int xdim, int ydim)
 	{
 	    int[] dst       = new int[xdim * ydim];
@@ -2003,6 +2251,7 @@ public class DeltaMapper
 	    return dst;
 	}
 
+	/*
 	// This is the set of standard png filters.
 	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
 	{
@@ -2247,6 +2496,248 @@ public class DeltaMapper
 
 		return dst;
 	}
+
+    */
+	
+	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
+	{
+	    byte[] map = new byte[ydim - 1];
+
+	    // Pass 1: choose best filter per row using Shannon entropy
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int[][] delta = new int[4][xdim - 2];
+
+	        int k = i * xdim + 1;
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            delta[0][j - 1] = src[k] - src[k - 1];
+	            delta[1][j - 1] = src[k] - src[k - xdim];
+	            delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+
+	            // MED predictor replaces Paeth
+	            int a = src[k - 1];
+	            int b = src[k - xdim];
+	            int c = src[k - xdim - 1];
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            delta[3][j - 1] = src[k] - pred;
+	            k++;
+	        }
+
+	        int[] limit = new int[4];
+	        for (int j = 0; j < 4; j++)
+	        {
+	            int[] current_delta = delta[j];
+
+	            int delta_min = current_delta[0];
+	            int delta_max = current_delta[0];
+	            for (k = 1; k < current_delta.length; k++)
+	            {
+	                if (current_delta[k] < delta_min)
+	                    delta_min = current_delta[k];
+	                else if (current_delta[k] > delta_max)
+	                    delta_max = current_delta[k];
+	            }
+
+	            for (k = 0; k < current_delta.length; k++)
+	                current_delta[k] -= delta_min;
+	            int range = delta_max - delta_min;
+	            int[] frequency = new int[range + 1];
+	            for (k = 0; k < current_delta.length; k++)
+	                frequency[current_delta[k]]++;
+	            double shannon_limit = CodeMapper.getShannonLimit(frequency);
+	            limit[j] = (int) Math.floor(shannon_limit);
+	        }
+
+	        int value = limit[0];
+	        int index = 0;
+	        for (k = 1; k < 4; k++)
+	        {
+	            if (limit[k] < value)
+	            {
+	                value = limit[k];
+	                index = k;
+	            }
+	        }
+	        map[i - 1] = (byte) index;
+	    }
+
+	    // Pass 2: collect deltas using chosen filter per row
+	    int[] dst = new int[xdim * ydim];
+	    int init_value = src[0];
+
+	    int sum = 0;
+	    int k = 0;
+	    dst[k++] = 0;
+	    int delta = src[k] - init_value;
+	    int value = src[k];
+	    dst[k++] = delta;
+	    sum += Math.abs(delta);
+
+	    for (int i = 2; i < xdim; i++)
+	    {
+	        delta = src[k] - value;
+	        value = src[k];
+	        dst[k++] = delta;
+	        sum += Math.abs(delta);
+	    }
+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        delta = src[k] - init_value;
+	        init_value = src[k];
+	        dst[k++] = delta;
+	        sum += Math.abs(delta);
+
+	        byte m = map[i - 1];
+
+	        if (m == 0)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta = src[k] - src[k - 1];
+	                dst[k++] = delta;
+	            }
+	            delta = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum += Math.abs(delta);
+	        }
+	        else if (m == 1)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta = src[k] - src[k - xdim];
+	                dst[k++] = delta;
+	            }
+	            delta = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum += Math.abs(delta);
+	        }
+	        else if (m == 2)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+	                dst[k++] = delta;
+	            }
+	            delta = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum += Math.abs(delta);
+	        }
+	        else if (m == 3)
+	        {
+	            // MED predictor replaces Paeth
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                delta = src[k] - pred;
+	                dst[k++] = delta;
+	                sum += Math.abs(delta);
+	            }
+	            delta = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	        }
+	    }
+
+	    ArrayList result = new ArrayList();
+	    result.add(sum);
+	    result.add(dst);
+	    result.add(map);
+	    result.add(init_value);
+	    return result;
+	}
+
+
+	public static int[] getValuesFromMixedDeltas(int[] src, int xdim, int ydim, int init_value, byte[] map)
+	{
+	    int[] dst = new int[xdim * ydim];
+	    int k = 0;
+	    dst[k++] = init_value;
+	    int value = init_value;
+
+	    for (int i = 1; i < xdim; i++)
+	    {
+	        value += src[k];
+	        dst[k++] = value;
+	    }
+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        init_value += src[k];
+	        dst[k++] = init_value;
+
+	        int m = map[i - 1];
+	        if (m == 0)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                value = dst[k - 1] + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 1)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                value = dst[k - xdim] + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 2)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                value = (dst[k - xdim] + dst[k - 1]) / 2 + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 3)
+	        {
+	            // MED predictor replaces Paeth
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = dst[k - 1];
+	                int b = dst[k - xdim];
+	                int c = dst[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                value = pred + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        value = dst[k - 1] + src[k];
+	        dst[k++] = value;
+	    }
+
+	    return dst;
+	}
+
 
 	// This function uses a set of averaging filters instead of the standard png
 	// filters,
