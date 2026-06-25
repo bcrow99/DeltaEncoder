@@ -273,20 +273,12 @@ public class HuffmanReader
 			System.out.println("It took " + (time / 1000000) + " ms to assemble rgb files.");
 			
 			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			
+
 			start = System.nanoTime();
-			int blue_shift  = pixel_shift + 16;
-			int green_shift = pixel_shift + 8;
-			int red_shift   = pixel_shift;
-			
-			int k = 0;
-			for (int i = 0; i < ydim; i++)
-				for (int j = 0; j < xdim; j++)
-				{
-					image.setRGB(j, i, (blue[k] << blue_shift) + (green[k] << green_shift) + (red[k] << red_shift));
-					k++;
-				}
-			
+			// pixel_shift is already applied per-channel in Decompressor, so pass 0 here.
+			int[] pixel = DeltaMapper.getPixel(blue, green, red, xdim, 0);
+			image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+
 			stop = System.nanoTime();
 			time = stop - start;
 			System.out.println("It took " + (time / 1000000) + " ms to load rgb files.");
@@ -678,7 +670,11 @@ public class HuffmanReader
 				if (channel_id[i] > 2)
 					for (int k = 0; k < current_channel.length; k++)
 						current_channel[k] += min[i];
-				
+
+				// Shift second (matching the new encode order: resize then shift).
+				if (pixel_shift != 0)
+					current_channel = DeltaMapper.shift(current_channel, pixel_shift);
+
 				if (pixel_quant == 0)
 					channel_array[i] = current_channel;
 				else

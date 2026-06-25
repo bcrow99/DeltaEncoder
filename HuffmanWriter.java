@@ -38,6 +38,7 @@ public class HuffmanWriter
 
 	int    [] set_sum, channel_sum;
 	String [] set_string;
+	String [] delta_type_string;
 	String [] channel_string;
 
 	int [] channel_init;
@@ -76,9 +77,178 @@ public class HuffmanWriter
 			System.exit(0);
 		}
 		String prefix   = new String("");
-		//String prefix = new String("C:/Users/bcrow/Desktop/");
 		String filename = new String(args[0]);
 		HuffmanWriter writer = new HuffmanWriter(prefix + filename);
+		writer.init();
+	}
+
+	public void init()
+	{
+		System.out.println("Loaded file.");
+		System.out.println("Image xdim = " + xdim + ", ydim = " + ydim);
+		System.out.println();
+
+		// Shift then resize, matching HuffmanWriter's quantization convention.
+		ArrayList<int[]> quantized_channel_list = new ArrayList<int[]>();
+
+		int new_xdim = xdim;
+		int new_ydim = ydim;
+		if (pixel_quant != 0)
+		{
+			double factor = pixel_quant;
+			factor       /= 10;
+			new_xdim = xdim - (int)(factor * (xdim / 2 - 2));
+			new_ydim = ydim - (int)(factor * (ydim / 2 - 2));
+		}
+
+		for (int i = 0; i < 3; i++)
+		{
+			int [] channel = (int []) channel_list.get(i);
+			if (pixel_quant == 0)
+			{
+				if (pixel_shift == 0)
+					quantized_channel_list.add(channel);
+				else
+				{
+					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+					quantized_channel_list.add(shifted_channel);
+				}
+			}
+			else
+			{
+				int [] resized_channel = ResizeMapper.resize(channel, xdim, new_xdim, new_ydim);
+				if (pixel_shift == 0)
+					quantized_channel_list.add(resized_channel);
+				else
+				{
+					int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
+					quantized_channel_list.add(shifted_channel);
+				}
+			}
+		}
+
+		int [] quantized_blue  = quantized_channel_list.get(0);
+		int [] quantized_green = quantized_channel_list.get(1);
+		int [] quantized_red   = quantized_channel_list.get(2);
+
+		int [] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
+		int [] quantized_red_green  = DeltaMapper.getDifference(quantized_red,  quantized_green);
+		int [] quantized_red_blue   = DeltaMapper.getDifference(quantized_red,  quantized_blue);
+
+		quantized_channel_list.add(quantized_blue_green);
+		quantized_channel_list.add(quantized_red_green);
+		quantized_channel_list.add(quantized_red_blue);
+
+		for (int i = 0; i < 6; i++)
+		{
+			int min = 256;
+			int [] quantized_channel = quantized_channel_list.get(i);
+
+			for (int j = 0; j < quantized_channel.length; j++)
+				if (quantized_channel[j] < min)
+					min = quantized_channel[j];
+			channel_min[i] = min;
+
+			if (i > 2)
+				for (int j = 0; j < quantized_channel.length; j++)
+					quantized_channel[j] -= min;
+
+			channel_init[i] = quantized_channel[0];
+			quantized_channel_list.set(i, quantized_channel);
+
+			int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(frequency);
+			channel_sum[i]       = (int)Math.floor(shannon_limit);
+		}
+
+		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
+		set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
+		set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
+		set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
+		set_sum[4] = channel_sum[0] + channel_sum[3] + channel_sum[5];
+		set_sum[5] = channel_sum[3] + channel_sum[1] + channel_sum[2];
+		set_sum[6] = channel_sum[3] + channel_sum[4] + channel_sum[2];
+		set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
+		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
+		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+
+		int min_index = 0;
+		int min_delta_sum = Integer.MAX_VALUE;
+		for (int i = 0; i < 10; i++)
+		{
+			if (set_sum[i] < min_delta_sum)
+			{
+				min_delta_sum = set_sum[i];
+				min_index = i;
+			}
+		}
+		min_set_id = min_index;
+		
+
+		int [] channel_id        = DeltaMapper.getChannels(min_set_id);
+		int [] channel_delta_sum = new int[7];
+
+		for (int i = 0; i < 3; i++)
+		{
+			int j = channel_id[i];
+			int [] quantized_channel = quantized_channel_list.get(j);
+
+			int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(frequency);
+			int    shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[0] = shannon_sum;
+
+			frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[1] = shannon_sum;
+
+			frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[2] = shannon_sum;
+
+			frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[3] = shannon_sum;
+
+			frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[4] = shannon_sum;
+
+			ArrayList<int[]> result = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			frequency     = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[5] = shannon_sum;
+			int [] map = result.get(1);
+			channel_delta_sum[5] += map.length / 4;
+
+			result        = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			frequency     = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(frequency);
+			shannon_sum   = (int)Math.floor(shannon_limit);
+			channel_delta_sum[6] = shannon_sum;
+			map = result.get(1);
+			channel_delta_sum[6] += map.length / 4;
+		}
+
+		min_delta_sum = channel_delta_sum[0];
+		min_index     = 0;
+		for (int i = 1; i < 7; i++)
+		{
+			if (channel_delta_sum[i] < min_delta_sum)
+			{
+				min_delta_sum = channel_delta_sum[i];
+				min_index = i;
+			}
+		}
+		
+		delta_type = min_index;
+		System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_set_id]);
+		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[delta_type]);
 	}
 
 	public HuffmanWriter(String _filename)
@@ -94,7 +264,6 @@ public class HuffmanWriter
 			ydim                      = original_image.getHeight();
 
 			System.out.println("Xdim = " + xdim + ", ydim = " + ydim);
-			System.out.println();
 
 			channel_list       = new ArrayList();
 			huffman_table_list = new ArrayList();
@@ -125,6 +294,16 @@ public class HuffmanWriter
 			set_string[7] = new String("green, blue-green, and red-green.");
 			set_string[8] = new String("green, red-green, and red-blue.");
 			set_string[9] = new String("red, red-green, red-blue.");
+
+			delta_type_string    = new String[8];
+			delta_type_string[0] = new String("horizontal");
+			delta_type_string[1] = new String("vertical");
+			delta_type_string[2] = new String("average");
+			delta_type_string[3] = new String("paeth");
+			delta_type_string[4] = new String("gradient");
+			delta_type_string[5] = new String("scanline (1)");
+			delta_type_string[6] = new String("scanline (2)");
+			delta_type_string[7] = new String("frame map");
 
 			channel_init         = new int[6];
 			channel_min          = new int[6];
@@ -660,16 +839,6 @@ public class HuffmanWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			ArrayList shifted_channel_list = new ArrayList();
-			for (int i = 0; i < 3; i++)
-			{
-				int [] channel         = (int []) channel_list.get(i);
-				int [] shifted_channel = new int[xdim * ydim];
-				for (int j = 0; j < channel.length; j++)
-					shifted_channel[j] = channel[j] >> pixel_shift;
-				shifted_channel_list.add(shifted_channel);
-			}
-
 			ArrayList quantized_channel_list = new ArrayList();
 
 			int new_xdim = xdim;
@@ -684,13 +853,27 @@ public class HuffmanWriter
 
 			for (int i = 0; i < 3; i++)
 			{
-				int [] shifted_channel = (int []) shifted_channel_list.get(i);
+				int [] channel = (int []) channel_list.get(i);
 				if (pixel_quant == 0)
-					quantized_channel_list.add(shifted_channel);
+				{
+					if (pixel_shift == 0)
+						quantized_channel_list.add(channel);
+					else
+					{
+						int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
+						quantized_channel_list.add(shifted_channel);
+					}
+				}
 				else
 				{
-					int [] resized_channel = ResizeMapper.resize(shifted_channel, xdim, new_xdim, new_ydim);
-					quantized_channel_list.add(resized_channel);
+					int [] resized_channel = ResizeMapper.resize(channel, xdim, new_xdim, new_ydim);
+					if (pixel_shift == 0)
+						quantized_channel_list.add(resized_channel);
+					else
+					{
+						int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
+						quantized_channel_list.add(shifted_channel);
+					}
 				}
 			}
 
@@ -723,7 +906,9 @@ public class HuffmanWriter
 				channel_init[i] = quantized_channel[0];
 				quantized_channel_list.set(i, quantized_channel);
 
-				channel_sum[i] = DeltaMapper.getIdealSum(quantized_channel, new_xdim, new_ydim, 20);
+				int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+				double shannon_limit = CodeMapper.getShannonLimit(frequency);
+				channel_sum[i]       = (int)Math.floor(shannon_limit);
 			}
 
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
@@ -752,8 +937,6 @@ public class HuffmanWriter
 			file_compression_rate  = file_length;
 			file_compression_rate /= xdim * ydim * 3;
 
-			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
-			System.out.println();
 
 			int [] channel_id = DeltaMapper.getChannels(min_set_id);
 
@@ -958,10 +1141,22 @@ public class HuffmanWriter
 					for (int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
 
-				if (new_xdim != xdim || new_ydim != ydim)
-					resized_channel_list.add(ResizeMapper.resize(channel, new_xdim, xdim, ydim));
+				// Dequantize: shift second, matching the encode order.
+				if (pixel_shift == 0)
+				{
+					if (new_xdim != xdim || new_ydim != ydim)
+						resized_channel_list.add(ResizeMapper.resize(channel, new_xdim, xdim, ydim));
+					else
+						resized_channel_list.add(channel);
+				}
 				else
-					resized_channel_list.add(channel);
+				{
+					int [] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
+					if (new_xdim != xdim || new_ydim != ydim)
+						resized_channel_list.add(ResizeMapper.resize(shifted_channel, new_xdim, xdim, ydim));
+					else
+						resized_channel_list.add(shifted_channel);
+				}
 			}
 
 			int [] blue  = new int[xdim * ydim];
@@ -1043,9 +1238,6 @@ public class HuffmanWriter
 
 			for (int i = 0; i < xdim * ydim; i++)
 			{
-				blue[i]  <<= pixel_shift;
-				green[i] <<= pixel_shift;
-				red[i]   <<= pixel_shift;
 				error[0][i] = original_blue[i]  - blue[i];
 				error[1][i] = original_green[i] - green[i];
 				error[2][i] = original_red[i]   - red[i];
@@ -1104,11 +1296,9 @@ public class HuffmanWriter
 					out.writeInt(channel_init[j]);
 					out.writeInt(channel_delta_min[j]);
 					out.writeInt(channel_huffman_length[j]);
-					System.out.println("Huffman bit length is " + channel_huffman_length[j]);
 
 					int [] table = (int []) huffman_table_list.get(i);
 					out.writeShort(table.length);
-					System.out.println("Huffman table length is " + table.length);
 
 					if (table.length <= Byte.MAX_VALUE * 2 + 1)
 					{
@@ -1151,7 +1341,6 @@ public class HuffmanWriter
 
 					if (compress_type == 1 || compress_type == 2)
 					{
-						System.out.println("Channel string length is " + channel_string_length[j]);
 						out.writeInt(channel_string_length[j]);
 
 						table = (int []) string_table_list.get(i);
@@ -1171,7 +1360,6 @@ public class HuffmanWriter
 				long file_length_out    = file.length();
 				double compression_rate = (double) file_length_out / (xdim * ydim * 3);
 				System.out.println("The file compression rate is " + String.format("%.4f", file_compression_rate));
-				System.out.println("Delta type is " + delta_type);
 				System.out.println("Huffman compression rate is " + String.format("%.4f", compression_rate));
 				System.out.println();
 			}

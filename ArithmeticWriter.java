@@ -86,8 +86,8 @@ public class ArithmeticWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("");
-		//String prefix = new String("C:/Users/bcrow/Desktop/");
+		//String prefix = new String("");
+		String prefix = new String("C:/Users/bcrow/Desktop/");
 		String filename = new String(args[0]);
 
 		ArithmeticWriter writer = new ArithmeticWriter(prefix + filename);
@@ -259,7 +259,9 @@ public class ArithmeticWriter
 			}
 		}
 		delta_type = min_index;
-		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[min_index]);
+		
+		System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_set_id]);
+		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[delta_type]);
 	}
 	
 	public ArithmeticWriter(String _filename)
@@ -991,7 +993,6 @@ public class ArithmeticWriter
 			file_compression_rate  = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
-			System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_index]);
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
