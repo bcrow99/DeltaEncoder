@@ -951,6 +951,200 @@ public class DeltaMapper
 		return result;
 	}
 	
+	public static ArrayList<int[]> getMixedDeltas4Frequency(int src[], int xdim, int ydim)
+	{
+	    ArrayList<Integer> delta_list = new ArrayList<Integer>();
+	    byte[] map = new byte[ydim - 1];
+
+	    // Pass 1: choose best filter per row using Shannon entropy
+	    // Filters: 0=horizontal, 1=average, 2=MED, 3=directional
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int[][] delta = new int[4][xdim - 2];
+
+	        int k = i * xdim + 1;
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            int a = src[k - 1];
+	            int b = src[k - xdim];
+	            int c = src[k - xdim - 1];
+	            int d = src[k - xdim + 1];
+
+	            // 0: horizontal
+	            delta[0][j - 1] = src[k] - a;
+
+	            // 1: average
+	            delta[1][j - 1] = src[k] - (a + b) / 2;
+
+	            // 2: MED
+	            int med_pred;
+	            if (c >= Math.max(a, b))
+	                med_pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                med_pred = Math.max(a, b);
+	            else
+	                med_pred = a + b - c;
+	            delta[2][j - 1] = src[k] - med_pred;
+
+	            // 3: directional
+	            int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	            int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	            int dl_edge = Math.abs(c - d);
+	            int dr_edge = Math.abs(a - d);
+
+	            int dir_pred;
+	            if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                dir_pred = b;
+	            else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                dir_pred = a;
+	            else if (dl_edge >= dr_edge)
+	                dir_pred = d;
+	            else
+	                dir_pred = c;
+	            delta[3][j - 1] = src[k] - dir_pred;
+
+	            k++;
+	        }
+
+	        int[] limit = new int[4];
+	        for (int j = 0; j < 4; j++)
+	        {
+	            int[] current_delta = delta[j];
+
+	            int delta_min = current_delta[0];
+	            int delta_max = current_delta[0];
+	            for (k = 1; k < current_delta.length; k++)
+	            {
+	                if (current_delta[k] < delta_min)
+	                    delta_min = current_delta[k];
+	                else if (current_delta[k] > delta_max)
+	                    delta_max = current_delta[k];
+	            }
+
+	            for (k = 0; k < current_delta.length; k++)
+	                current_delta[k] -= delta_min;
+	            int range = delta_max - delta_min;
+	            int[] frequency = new int[range + 1];
+	            for (k = 0; k < current_delta.length; k++)
+	                frequency[current_delta[k]]++;
+	            double shannon_limit = CodeMapper.getShannonLimit(frequency);
+	            limit[j] = (int) Math.floor(shannon_limit);
+	        }
+
+	        int value = limit[0];
+	        int index = 0;
+	        for (k = 1; k < 4; k++)
+	        {
+	            if (limit[k] < value)
+	            {
+	                value = limit[k];
+	                index = k;
+	            }
+	        }
+	        map[i - 1] = (byte) index;
+	    }
+
+	    // Pass 2: collect deltas using chosen filter per row
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int k    = i * xdim + 1;
+	        byte m   = map[i - 1];
+
+	        if (m == 0)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta_list.add(src[k] - src[k - 1]);
+	                k++;
+	            }
+	        }
+	        else if (m == 1)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta_list.add(src[k] - (src[k - 1] + src[k - xdim]) / 2);
+	                k++;
+	            }
+	        }
+	        else if (m == 2)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                delta_list.add(src[k] - pred);
+	                k++;
+	            }
+	        }
+	        else if (m == 3)
+	        {
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+	                int d = src[k - xdim + 1];
+
+	                int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	                int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	                int dl_edge = Math.abs(c - d);
+	                int dr_edge = Math.abs(a - d);
+
+	                int pred;
+	                if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                    pred = b;
+	                else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                    pred = a;
+	                else if (dl_edge >= dr_edge)
+	                    pred = d;
+	                else
+	                    pred = c;
+
+	                delta_list.add(src[k] - pred);
+	                k++;
+	            }
+	        }
+	    }
+
+	    int delta_min = Integer.MAX_VALUE;
+	    int delta_max = Integer.MIN_VALUE;
+	    int size      = delta_list.size();
+	    for (int i = 0; i < size; i++)
+	    {
+	        int current_delta = delta_list.get(i);
+	        if (current_delta < delta_min) delta_min = current_delta;
+	        if (current_delta > delta_max) delta_max = current_delta;
+	    }
+
+	    int range           = delta_max - delta_min;
+	    int[] delta_frequency = new int[range + 1];
+	    for (int i = 0; i < size; i++)
+	    {
+	        int current_value  = delta_list.get(i);
+	        current_value     -= delta_min;
+	        delta_frequency[current_value]++;
+	    }
+
+	    int[] map_frequency = new int[4];
+	    for (int i = 0; i < map.length; i++)
+	        map_frequency[map[i]]++;
+
+	    ArrayList<int[]> result = new ArrayList<int[]>();
+	    result.add(delta_frequency);
+	    result.add(map_frequency);
+	    return result;
+	}
+	
 	public static int getHorizontalSum(int src[], int xdim, int ydim)
 	{
 		int sum   = 0;
@@ -1946,6 +2140,181 @@ public class DeltaMapper
 
 	    return dst;
 	}
+	
+	public static ArrayList getDirectionalDeltasFromValues(int src[], int xdim, int ydim)
+	{
+	    int[] dst       = new int[xdim * ydim];
+	    int   init_value = src[0];
+	    int   sum        = 0;
+	    int   k          = 0;
+
+	    // Row 0: horizontal deltas
+	    dst[k++] = 0;
+	    for (int j = 1; j < xdim; j++)
+	    {
+	        int delta = src[k] - src[k - 1];
+	        dst[k++]  = delta;
+	        sum      += Math.abs(delta);
+	    }
+
+	    // Rows 1+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta
+	        int delta = src[k] - src[k - xdim];
+	        dst[k++]  = delta;
+	        sum      += Math.abs(delta);
+
+	        // Columns 1 to xdim-2: use d (above-right) where available
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            int a = src[k - 1];             // left
+	            int b = src[k - xdim];          // above
+	            int c = src[k - xdim - 1];      // above-left
+	            int d = src[k - xdim + 1];      // above-right
+
+	            // Gradient magnitudes in four directions
+	            int horiz    = Math.abs(a - b);  // horizontal edge strength
+	            int vert     = Math.abs(b - a);  // same as horiz — use c/d instead
+	            int diag_l   = Math.abs(c - d);  // diagonal / strength (up-left to down-right)
+	            int diag_r   = Math.abs(a - d);  // diagonal \ strength (up-right to down-left)
+	            int smooth   = Math.abs(c - b);  // vertical gradient through c
+
+	            // Redefine more meaningfully:
+	            // horizontal edge: big difference above vs above-left/right
+	            int h_edge   = Math.abs(b - c) + Math.abs(b - d);
+	            // vertical edge: big difference left vs above-left
+	            int v_edge   = Math.abs(a - c) + Math.abs(a - b);
+	            // diagonal up-left to down-right edge
+	            int dl_edge  = Math.abs(c - d);
+	            // diagonal up-right to down-left edge
+	            int dr_edge  = Math.abs(a - d);
+
+	            int pred;
+	            if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	            {
+	                // Strong horizontal edge — predict from above (b)
+	                pred = b;
+	            }
+	            else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	            {
+	                // Strong vertical edge — predict from left (a)
+	                pred = a;
+	            }
+	            else if (dl_edge >= dr_edge)
+	            {
+	                // Diagonal edge running up-left to down-right
+	                // Predict from above-right (d) — we are on the other side of this edge
+	                pred = d;
+	            }
+	            else
+	            {
+	                // Diagonal edge running up-right to down-left
+	                // Predict from above-left (c)
+	                pred = c;
+	            }
+
+	            delta    = src[k] - pred;
+	            dst[k++] = delta;
+	            sum     += Math.abs(delta);
+	        }
+
+	        // Last column: no d available, fall back to MED
+	        {
+	            int a = src[k - 1];
+	            int b = src[k - xdim];
+	            int c = src[k - xdim - 1];
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            delta    = src[k] - pred;
+	            dst[k++] = delta;
+	            sum     += Math.abs(delta);
+	        }
+	    }
+
+	    ArrayList result = new ArrayList();
+	    result.add(sum);
+	    result.add(dst);
+	    result.add(init_value);
+	    return result;
+	}
+
+	public static int[] getValuesFromDirectionalDeltas(int src[], int xdim, int ydim, int init_value)
+	{
+	    int[] dst = new int[xdim * ydim];
+	    int   k   = 0;
+
+	    // Row 0: cumsum restores horizontal deltas
+	    dst[k++] = init_value;
+	    for (int j = 1; j < xdim; j++)
+	    {
+	        dst[k] = dst[k - 1] + src[k];
+	        k++;
+	    }
+
+	    // Rows 1+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta
+	        dst[k] = dst[k - xdim] + src[k];
+	        k++;
+
+	        // Columns 1 to xdim-2
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            int a = dst[k - 1];
+	            int b = dst[k - xdim];
+	            int c = dst[k - xdim - 1];
+	            int d = dst[k - xdim + 1];
+
+	            int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	            int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	            int dl_edge = Math.abs(c - d);
+	            int dr_edge = Math.abs(a - d);
+
+	            int pred;
+	            if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                pred = b;
+	            else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                pred = a;
+	            else if (dl_edge >= dr_edge)
+	                pred = d;
+	            else
+	                pred = c;
+
+	            dst[k] = pred + src[k];
+	            k++;
+	        }
+
+	        // Last column: MED
+	        {
+	            int a = dst[k - 1];
+	            int b = dst[k - xdim];
+	            int c = dst[k - xdim - 1];
+
+	            int pred;
+	            if (c >= Math.max(a, b))
+	                pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                pred = Math.max(a, b);
+	            else
+	                pred = a + b - c;
+
+	            dst[k] = pred + src[k];
+	            k++;
+	        }
+	    }
+
+	    return dst;
+	}
+	
 	
 	public static ArrayList getGradientDeltasFromValues(int src[], int xdim, int ydim)
 	{
@@ -3335,6 +3704,357 @@ public class DeltaMapper
 		}
 		return dst;
 	}
+	
+	public static ArrayList getMixedDeltasFromValues4(int src[], int xdim, int ydim)
+	{
+	    byte[] map = new byte[ydim - 1];
+
+	    // Pass 1: choose best filter per row using Shannon entropy
+	    // Filters: 0=horizontal, 1=average, 2=MED, 3=directional
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        int[][] delta = new int[4][xdim - 2];
+
+	        int k = i * xdim + 1;
+	        for (int j = 1; j < xdim - 1; j++)
+	        {
+	            int a = src[k - 1];
+	            int b = src[k - xdim];
+	            int c = src[k - xdim - 1];
+	            int d = src[k - xdim + 1];
+
+	            // 0: horizontal
+	            delta[0][j - 1] = src[k] - a;
+
+	            // 1: average
+	            delta[1][j - 1] = src[k] - (a + b) / 2;
+
+	            // 2: MED
+	            int med_pred;
+	            if (c >= Math.max(a, b))
+	                med_pred = Math.min(a, b);
+	            else if (c <= Math.min(a, b))
+	                med_pred = Math.max(a, b);
+	            else
+	                med_pred = a + b - c;
+	            delta[2][j - 1] = src[k] - med_pred;
+
+	            // 3: directional
+	            int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	            int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	            int dl_edge = Math.abs(c - d);
+	            int dr_edge = Math.abs(a - d);
+
+	            int dir_pred;
+	            if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                dir_pred = b;
+	            else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                dir_pred = a;
+	            else if (dl_edge >= dr_edge)
+	                dir_pred = d;
+	            else
+	                dir_pred = c;
+	            delta[3][j - 1] = src[k] - dir_pred;
+
+	            k++;
+	        }
+
+	        int[] limit = new int[4];
+	        for (int j = 0; j < 4; j++)
+	        {
+	            int[] current_delta = delta[j];
+
+	            int delta_min = current_delta[0];
+	            int delta_max = current_delta[0];
+	            for (k = 1; k < current_delta.length; k++)
+	            {
+	                if (current_delta[k] < delta_min)
+	                    delta_min = current_delta[k];
+	                else if (current_delta[k] > delta_max)
+	                    delta_max = current_delta[k];
+	            }
+
+	            for (k = 0; k < current_delta.length; k++)
+	                current_delta[k] -= delta_min;
+	            int range = delta_max - delta_min;
+	            int[] frequency = new int[range + 1];
+	            for (k = 0; k < current_delta.length; k++)
+	                frequency[current_delta[k]]++;
+	            double shannon_limit = CodeMapper.getShannonLimit(frequency);
+	            limit[j] = (int) Math.floor(shannon_limit);
+	        }
+
+	        int value = limit[0];
+	        int index = 0;
+	        for (k = 1; k < 4; k++)
+	        {
+	            if (limit[k] < value)
+	            {
+	                value = limit[k];
+	                index = k;
+	            }
+	        }
+	        map[i - 1] = (byte) index;
+	    }
+
+	    // Pass 2: collect deltas using chosen filter per row
+	    int[] dst        = new int[xdim * ydim];
+	    int   init_value = src[0];
+	    int   sum        = 0;
+	    int   k          = 0;
+
+	    // Row 0: horizontal deltas
+	    dst[k++] = 0;
+	    int delta = src[k] - init_value;
+	    int value = src[k];
+	    dst[k++]  = delta;
+	    sum      += Math.abs(delta);
+
+	    for (int i = 2; i < xdim; i++)
+	    {
+	        delta    = src[k] - value;
+	        value    = src[k];
+	        dst[k++] = delta;
+	        sum     += Math.abs(delta);
+	    }
+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta from running init_value
+	        delta      = src[k] - init_value;
+	        init_value = src[k];
+	        dst[k++]   = delta;
+	        sum       += Math.abs(delta);
+
+	        byte m = map[i - 1];
+
+	        if (m == 0)
+	        {
+	            // Horizontal
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta    = src[k] - src[k - 1];
+	                dst[k++] = delta;
+	                sum     += Math.abs(delta);
+	            }
+	            delta    = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum     += Math.abs(delta);
+	        }
+	        else if (m == 1)
+	        {
+	            // Average
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                delta    = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+	                dst[k++] = delta;
+	                sum     += Math.abs(delta);
+	            }
+	            delta    = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum     += Math.abs(delta);
+	        }
+	        else if (m == 2)
+	        {
+	            // MED
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                delta    = src[k] - pred;
+	                dst[k++] = delta;
+	                sum     += Math.abs(delta);
+	            }
+	            delta    = src[k] - src[k - 1];
+	            dst[k++] = delta;
+	            sum     += Math.abs(delta);
+	        }
+	        else if (m == 3)
+	        {
+	            // Directional
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+	                int d = src[k - xdim + 1];
+
+	                int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	                int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	                int dl_edge = Math.abs(c - d);
+	                int dr_edge = Math.abs(a - d);
+
+	                int pred;
+	                if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                    pred = b;
+	                else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                    pred = a;
+	                else if (dl_edge >= dr_edge)
+	                    pred = d;
+	                else
+	                    pred = c;
+
+	                delta    = src[k] - pred;
+	                dst[k++] = delta;
+	                sum     += Math.abs(delta);
+	            }
+	            // Last column: MED fallback (no d available)
+	            {
+	                int a = src[k - 1];
+	                int b = src[k - xdim];
+	                int c = src[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                delta    = src[k] - pred;
+	                dst[k++] = delta;
+	                sum     += Math.abs(delta);
+	            }
+	        }
+	    }
+
+	    ArrayList result = new ArrayList();
+	    result.add(sum);
+	    result.add(dst);
+	    result.add(map);
+	    result.add(init_value);
+	    return result;
+	}
+
+
+	public static int[] getValuesFromMixedDeltas4(int[] src, int xdim, int ydim, int init_value, byte[] map)
+	{
+	    int[] dst   = new int[xdim * ydim];
+	    int   k     = 0;
+	    int   value = init_value;
+
+	    // Row 0: cumsum restores horizontal deltas
+	    dst[k++] = init_value;
+	    for (int i = 1; i < xdim; i++)
+	    {
+	        value   += src[k];
+	        dst[k++] = value;
+	    }
+
+	    for (int i = 1; i < ydim; i++)
+	    {
+	        // Column 0: vertical delta from running init_value
+	        init_value += src[k];
+	        dst[k++]    = init_value;
+
+	        int m = map[i - 1];
+
+	        if (m == 0)
+	        {
+	            // Horizontal
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                value   = dst[k - 1] + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 1)
+	        {
+	            // Average
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                value   = (dst[k - 1] + dst[k - xdim]) / 2 + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 2)
+	        {
+	            // MED
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = dst[k - 1];
+	                int b = dst[k - xdim];
+	                int c = dst[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                value   = pred + src[k];
+	                dst[k++] = value;
+	            }
+	        }
+	        else if (m == 3)
+	        {
+	            // Directional
+	            for (int j = 1; j < xdim - 1; j++)
+	            {
+	                int a = dst[k - 1];
+	                int b = dst[k - xdim];
+	                int c = dst[k - xdim - 1];
+	                int d = dst[k - xdim + 1];
+
+	                int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+	                int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+	                int dl_edge = Math.abs(c - d);
+	                int dr_edge = Math.abs(a - d);
+
+	                int pred;
+	                if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+	                    pred = b;
+	                else if (v_edge >= dl_edge && v_edge >= dr_edge)
+	                    pred = a;
+	                else if (dl_edge >= dr_edge)
+	                    pred = d;
+	                else
+	                    pred = c;
+
+	                value   = pred + src[k];
+	                dst[k++] = value;
+	            }
+	            // Last column: MED fallback
+	            {
+	                int a = dst[k - 1];
+	                int b = dst[k - xdim];
+	                int c = dst[k - xdim - 1];
+
+	                int pred;
+	                if (c >= Math.max(a, b))
+	                    pred = Math.min(a, b);
+	                else if (c <= Math.min(a, b))
+	                    pred = Math.max(a, b);
+	                else
+	                    pred = a + b - c;
+
+	                value   = pred + src[k];
+	                dst[k++] = value;
+	            }
+	            continue;
+	        }
+
+	        // Last column for filters 0, 1, 2: horizontal fallback
+	        value   = dst[k - 1] + src[k];
+	        dst[k++] = value;
+	    }
+
+	    return dst;
+	}
+	
 	
 	public static ArrayList getIdealDeltasFromValues(int src[], int xdim, int ydim)
 	{
