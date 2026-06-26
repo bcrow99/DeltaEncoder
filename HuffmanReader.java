@@ -79,7 +79,7 @@ public class HuffmanReader
 			
 			int [] channel_id  = DeltaMapper.getChannels(set_id);
 			
-			if (delta_type > 7)
+			if (delta_type > 8)
 			{
 				System.out.println("Delta type not supported.");
 				System.exit(0);
@@ -114,7 +114,7 @@ public class HuffmanReader
 				}
 				huffman_table_list.add(table);
 				
-				if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+				if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
 				{
 					int map_length        = in.readInt();
 					int packed_map_length = in.readInt();	
@@ -609,19 +609,10 @@ public class HuffmanReader
 					{
 						delta = new int[xdim * ydim];
 						int current_iterations = StringMapper.getIterations(delta_string);
-						if (current_iterations == 0 || current_iterations == 16)
-						{
-							number_unpacked = StringMapper.unpackStrings2(delta_string, string_table, delta);
-							if (number_unpacked != xdim * ydim)
-								System.out.println("Number of values unpacked does not agree with image dimensions.");
-						} 
-						else
-						{
-							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
-							number_unpacked = StringMapper.unpackStrings2(decompressed_string, string_table, delta);
-							if (number_unpacked != xdim * ydim)
-								System.out.println("Number of values unpacked does not agree with image dimensions.");
-						}
+						if(current_iterations != 0 && current_iterations != 16)
+							delta_string        = StringMapper.decompressStrings(delta_string);	
+						int    bitlength      = StringMapper.getBitlength(delta_string);
+						delta = StringMapper.unpackStrings(delta_string, string_table, xdim * ydim, bitlength);
 						delta[0] = 0;
 						for (int k = 1; k < delta.length; k++)
 							delta[k] += delta_min[i];
@@ -636,19 +627,10 @@ public class HuffmanReader
 						int intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
 						delta = new int[intermediate_xdim * intermediate_ydim];
 						int current_iterations = StringMapper.getIterations(delta_string);
-						if (current_iterations == 0 || current_iterations == 16)
-						{
-							number_unpacked = StringMapper.unpackStrings2(delta_string, string_table, delta);
-							if (number_unpacked != intermediate_xdim * intermediate_ydim)
-								System.out.println("Number of values unpacked does not agree with image dimensions.");
-						} 
-						else
-						{
-							byte[] decompressed_string = StringMapper.decompressStrings2(delta_string);
-							number_unpacked = StringMapper.unpackStrings2(decompressed_string, string_table, delta);
-							if (number_unpacked != intermediate_xdim * intermediate_ydim)
-								System.out.println("Number of values unpacked does not agree with image dimensions.");
-						}
+						if(current_iterations != 0 && current_iterations != 16)
+							delta_string        = StringMapper.decompressStrings(delta_string);	
+						int    bitlength      = StringMapper.getBitlength(delta_string);
+						delta = StringMapper.unpackStrings(delta_string, string_table, intermediate_xdim * intermediate_ydim, bitlength);
 						delta[0] = 0;
 						for (int k = 1; k < delta.length; k++)
 							delta[k] += delta_min[i];
@@ -665,7 +647,8 @@ public class HuffmanReader
 				else if (delta_type == 4) current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim, current_ydim, init[i]);
 				else if (delta_type == 5) current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim, current_ydim, init[i], (byte []) map_list.get(i));
 				else if (delta_type == 6) current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim, current_ydim, init[i], (byte []) map_list.get(i));
-				else if (delta_type == 7) current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], (byte []) map_list.get(i));
+				else if (delta_type == 7) current_channel = DeltaMapper.getValuesFromMixedDeltas4(delta, current_xdim, current_ydim, init[i], (byte []) map_list.get(i));
+					else if (delta_type == 8) current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], (byte []) map_list.get(i));
 				
 				if (channel_id[i] > 2)
 					for (int k = 0; k < current_channel.length; k++)

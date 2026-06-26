@@ -56,7 +56,6 @@ public class DeltaWriter
 	int[] number_of_segments;
 	byte[] channel_iterations;
 	
-	
 	int[] max_bytelength;
 	int [] min_bytelength;
 
@@ -76,7 +75,7 @@ public class DeltaWriter
 			System.exit(0);
 		}
 
-		String prefix = new String("C:/Users/Brian Crowley/Desktop/");
+		String prefix = new String("C:/Users/bcrow/Desktop/");
 		//String prefix = new String("");
 		String filename = new String(args[0]);
 
@@ -1381,20 +1380,11 @@ public class DeltaWriter
 				{
 					byte[] current_string = (byte[]) segments.get(0);
 					int current_iterations = StringMapper.getIterations(current_string);
-
-					if (current_iterations == 0 || current_iterations == 16)
-					{
-						int number_unpacked = StringMapper.unpackStrings2(current_string, table, delta);
-						if (number_unpacked != new_xdim * new_ydim)
-							System.out.println("Number of values unpacked does not agree with image dimensions.");
-					} 
-					else
-					{
-						byte[] decompressed_string = StringMapper.decompressStrings2(current_string);
-						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						if(number_unpacked != new_xdim * new_ydim)
-							System.out.println("Number of values unpacked does not agree with image dimensions.");
-					}
+					
+					if(current_iterations != 0 && current_iterations != 16)
+						current_string        = StringMapper.decompressStrings(current_string);	
+					int    bitlength      = StringMapper.getBitlength(current_string);
+					delta = StringMapper.unpackStrings(current_string, table, new_xdim * new_ydim, bitlength);
 				} 
 				else
 				{
@@ -1419,20 +1409,11 @@ public class DeltaWriter
 					    current_index++;
 					}
 					
-					int restored_iterations = StringMapper.getIterations(restored_string);
-					if (restored_iterations == 0 || restored_iterations == 16)
-					{
-						int number_unpacked = StringMapper.unpackStrings2(restored_string, table, delta);
-						if(number_unpacked != delta.length)
-							System.out.println("Did not unpack expected number of values.");
-					}
-					else
-					{
-						byte[] decompressed_string = StringMapper.decompressStrings2(restored_string);
-						int number_unpacked = StringMapper.unpackStrings2(decompressed_string, table, delta);
-						if(number_unpacked != delta.length)
-							System.out.println("Did not unpack expected number of values.");
-					}
+					int current_iterations = StringMapper.getIterations(restored_string);
+					if(current_iterations != 0 && current_iterations != 16)
+						restored_string        = StringMapper.decompressStrings(restored_string);	
+					int    bitlength      = StringMapper.getBitlength(restored_string);
+					delta = StringMapper.unpackStrings(restored_string, table, new_xdim * new_ydim, bitlength);
 				}
 
 				for (int k = 1; k < delta.length; k++)

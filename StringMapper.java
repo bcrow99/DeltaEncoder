@@ -150,110 +150,101 @@ public class StringMapper
 		return order;
 	}
 	
-	public static byte [] packStrings(int [] src, int [] table)
+	public static byte[] packStrings(int[] src, int[] table)
 	{
-		// Get the total bit length, accounting for the fact the last two are the same.
-		int length = 0;
-		for(int i = 0; i < src.length; i++)
+		// Compute the total bit length of the packed output.
+		// All symbols except the maximum-rank one use (rank + 1) bits;
+		// the maximum-rank symbol uses (table.length - 1) bits.
+		int bitlength = 0;
+		for (int i = 0; i < src.length; i++)
 		{
-			if(table[src[i]] != table.length - 1)
-				length += table[src[i]] + 1;
+			if (table[src[i]] != table.length - 1)
+				bitlength += table[src[i]] + 1;
 			else
-				length += table.length - 1;
+				bitlength += table.length - 1;
 		}
-		
-		// Get the byte length we need, probably with empty bits.
-		if(length % 8 != 0)	
+
+		// Byte length needed for the bit data, rounded up.
+		int bytelength = bitlength / 8;
+		if (bitlength % 8 != 0)
+			bytelength++;
+
+		// +1 for the trailing data byte written by setData().
+		byte[] dst = new byte[bytelength + 1];
+
+		int max_length = table.length - 1;
+		int[] mask = {1, 3, 7, 15, 31, 63, 127, 255};
+
+		int start = 0;
+		int stop  = 0;
+		int j     = 0;
+
+		for (int i : src)
 		{
-			length = length / 8;
-			length++;
+			int k = table[i];
+			if (k == 0)
+			{
+				start++;
+				if (start == 8)
+				{
+					j++;
+					start = 0;
+				}
+			}
+			else
+			{
+				stop = (start + k + 1) % 8;
+				if (k == max_length)
+					stop = (stop > 0) ? stop - 1 : 7;
+
+				if (k <= 7)
+				{
+					dst[j] = (byte)((dst[j] | (mask[k - 1] << start)) & 0xFF);
+					if (stop <= start)
+					{
+						j++;
+						if (stop != 0)
+							dst[j] = (byte)((dst[j] | (mask[k - 1] >> (8 - start))) & 0xFF);
+					}
+				}
+				else
+				{
+					dst[j] = (byte)((dst[j] | (mask[7] << start)) & 0xFF);
+					int m = (k - 8) / 8;
+					for (int n = 0; n < m; n++)
+					{
+						j++;
+						dst[j] = (byte) mask[7];
+					}
+					j++;
+					if (start != 0)
+						dst[j] = (byte)((dst[j] | (mask[7] >> (8 - start))) & 0xFF);
+					if (k % 8 != 0)
+					{
+						m = k % 8 - 1;
+						dst[j] = (byte)((dst[j] | (mask[m] << start)) & 0xFF);
+						if (stop <= start)
+						{
+							j++;
+							if (stop != 0)
+								dst[j] = (byte)((dst[j] | (mask[m] >> (8 - start))) & 0xFF);
+						}
+					}
+					else if (stop <= start && k != max_length)
+						j++;
+				}
+				start = stop;
+			}
 		}
-		else
-			length = length / 8;
-		
-		// Add an extra byte for the trailing data. 
-		byte [] dst = new byte[length];
-		
-        int max_length  = table.length - 1;
-        int[] mask = {1, 3, 7, 15, 31, 63, 127, 255};
-		
-        int start = 0;
-        int stop  = 0;
-        int j = 0;
 
-        for (int i : src) 
-        {
-            int k = table[i];
-            if(k == 0) 
-            {
-                start++;
-                if(start == 8)
-                {
-                    j++;
-                    start = 0;
-                }
-            } 
-            else 
-            {
-                stop = (start + k + 1) % 8;
-                if (k == max_length)
-                    stop = (stop > 0) ? stop - 1 : 7;
+		// Determine type from zero ratio so setData encodes it correctly.
+		double zero_ratio = getZeroRatio(dst, bitlength);
+		int type = (zero_ratio < .5) ? 1 : 0;
 
-                if (k <= 7) 
-                {
-                    dst[j] = (byte) ((dst[j] | (mask[k - 1] << start)) & 0xFF);
-                    if(stop <= start) 
-                    {
-                        j++;
-                        if (stop != 0)
-                            dst[j] = (byte) ((dst[j] | (mask[k - 1] >> (8 - start))) & 0xFF);
-                    }
-                } 
-                else 
-                {
-                    dst[j] = (byte) ((dst[j] | (mask[7] << start)) & 0xFF);
-                    int m = (k - 8) / 8;
-                    for (int n = 0; n < m; n++) 
-                    {
-                        j++;
-                        dst[j] = (byte) mask[7];
-                    }
-                    j++;
-                    if (start != 0)
-                        dst[j] = (byte) ((dst[j] | (mask[7] >> (8 - start))) & 0xFF);
-                    if(k % 8 != 0) 
-                    {
-                        m = k % 8 - 1;
-                        dst[j] = (byte) ((dst[j] | (mask[m] << start)) & 0xFF);
-                        if(stop <= start) 
-                        {
-                            j++;
-                            if (stop != 0)
-                                dst[j] = (byte) ((dst[j] | (mask[m] >> (8 - start))) & 0xFF);
-                        }
-                    } 
-                    else if(stop <= start && k != max_length) 
-                        j++;
-                }
-                start = stop;
-            }
-        }
-
-        if (start != 0)
-            j++;
-        int bitlength = j * 8 - (start != 0 ? 8 - start : 0);
-        
-        int    type       = 0;
-        double zero_ratio = getZeroRatio(dst, bitlength);
-        if(zero_ratio < .5)
-        	    type = 1;
-        
-        int iterations = 0;
-        
-        setData(type, iterations, bitlength, dst);
+		setData(type, 0, bitlength, dst);
 		return dst;
 	}
-	
+
 	public static int[] unpackStrings(byte[] src, int[] table, int size, int bitlength) 
     {
         int n          = table.length;
@@ -304,369 +295,6 @@ public class StringMapper
         return dst;
     }
 
-	
-	
-	// These packing/unpacking functions use the maximum length
-	// expect destination buffers allocated in advance.
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn byte
-	 * representations into unary strings, and then pack pack them into a byte
-	 * array. It assumes dst is large enough to contain the result, and returns the
-	 * length of the bit string.
-	 * 
-	 * @param src   the input bytes
-	 * @param table the rank table
-	 * @return byte array containing the bit string
-	 */
-	public static int packStrings2(byte src[], int table[], byte dst[])
-	{
-		int size = src.length;
-		int number_of_values = table.length;
-
-		int maximum_length = number_of_values - 1;
-
-		int[] mask = new int[8];
-
-		mask[0] = 1;
-		mask[1] = 3;
-		mask[2] = 7;
-		mask[3] = 15;
-		mask[4] = 31;
-		mask[5] = 63;
-		mask[6] = 127;
-		mask[7] = 255;
-
-		int start_bit = 0;
-		int stop_bit = 0;
-		int p = 0;
-		dst[p] = 0;
-
-		for(int i = 0; i < size; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-
-			if(k == 0)
-			{
-				start_bit++;
-				if(start_bit == 8)
-				{
-					dst[++p] = 0;
-					start_bit = 0;
-				}
-			} 
-			else
-			{
-				stop_bit = (start_bit + k + 1) % 8;
-				if(k == maximum_length)
-				{
-					stop_bit--;
-					if(stop_bit < 0)
-						stop_bit = 7;
-				}
-
-				if(k <= 7)
-				{
-					dst[p] |= (byte) (mask[k - 1] << start_bit);
-
-					if(stop_bit <= start_bit)
-					{
-						dst[++p] = 0;
-						if(stop_bit != 0)
-						{
-							dst[p] |= (byte) (mask[k - 1] >> (8 - start_bit));
-						}
-					}
-				} else if(k > 7)
-				{
-					dst[p] |= (byte) (mask[7] << start_bit);
-					int m = (k - 8) / 8;
-					for(int n = 0; n < m; n++)
-						dst[++p] = (byte) (mask[7]);
-					dst[++p] = 0;
-
-					if(start_bit != 0)
-						dst[p] |= (byte) (mask[7] >> (8 - start_bit));
-
-					if(k % 8 != 0)
-					{
-						m = k % 8 - 1;
-
-						dst[p] |= (byte) (mask[m] << start_bit);
-
-						if(stop_bit <= start_bit)
-						{
-							dst[++p] = 0;
-							if(stop_bit != 0)
-							{
-								dst[p] |= (byte) (mask[m] >> (8 - start_bit));
-							}
-						}
-					}
-					// If this is the maximum_length index and it's a multiple of 8,
-					// then we already incremented the index and then reset the stop bit.
-					// Don't want to do it twice. Very tricky bug.
-					else if(stop_bit <= start_bit && k != maximum_length)
-						dst[++p] = 0;
-				}
-				start_bit = stop_bit;
-			}
-		}
-
-		if(start_bit != 0)
-			p++;
-		int number_of_bits = p * 8;
-		if(start_bit != 0)
-			number_of_bits -= 8 - start_bit;
-		return(number_of_bits);
-	}
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn integer
-	 * representations into unary strings, and then pack pack them into a byte
-	 * array. It assumes dst is large enough to contain the result, and returns the
-	 * length of the bit string.
-	 * 
-	 * @param src   the input integers
-	 * @param table the rank table
-	 * @return byte array containing the bit string
-	 */
-	public static int packStrings2(int src[], int table[], byte dst[])
-	{
-		int size = src.length;
-		int number_of_values = table.length;
-
-		int maximum_length = number_of_values - 1;
-
-		int[] mask = new int[8];
-
-		mask[0] = 1;
-		mask[1] = 3;
-		mask[2] = 7;
-		mask[3] = 15;
-		mask[4] = 31;
-		mask[5] = 63;
-		mask[6] = 127;
-		mask[7] = 255;
-
-		int start_bit = 0;
-		int stop_bit = 0;
-		int p = 0;
-		dst[p] = 0;
-
-		for(int i = 0; i < size; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-
-			if(k == 0)
-			{
-				start_bit++;
-				if(start_bit == 8)
-				{
-					dst[++p] = 0;
-					start_bit = 0;
-				}
-			} 
-			else
-			{
-				stop_bit = (start_bit + k + 1) % 8;
-				if(k == maximum_length)
-				{
-					stop_bit--;
-					if(stop_bit < 0)
-						stop_bit = 7;
-				}
-
-				if(k <= 7)
-				{
-					dst[p] |= (byte) (mask[k - 1] << start_bit);
-
-					if(stop_bit <= start_bit)
-					{
-						dst[++p] = 0;
-						if(stop_bit != 0)
-						{
-							dst[p] |= (byte) (mask[k - 1] >> (8 - start_bit));
-						}
-					}
-				} 
-				else if(k > 7)
-				{
-					dst[p] |= (byte) (mask[7] << start_bit);
-					int m = (k - 8) / 8;
-					for(int n = 0; n < m; n++)
-						dst[++p] = (byte) (mask[7]);
-					dst[++p] = 0;
-
-					if(start_bit != 0)
-						dst[p] |= (byte) (mask[7] >> (8 - start_bit));
-
-					if(k % 8 != 0)
-					{
-						m = k % 8 - 1;
-
-						dst[p] |= (byte) (mask[m] << start_bit);
-
-						if(stop_bit <= start_bit)
-						{
-							dst[++p] = 0;
-							if(stop_bit != 0)
-							{
-								dst[p] |= (byte) (mask[m] >> (8 - start_bit));
-							}
-						}
-					}
-					// If this is the maximum_length index and it's a multiple of 8,
-					// then we already incremented the index and then reset the stop bit.
-					// Don't want to do it twice. Very tricky bug.
-					else if(stop_bit <= start_bit && k != maximum_length)
-						dst[++p] = 0;
-				}
-				start_bit = stop_bit;
-			}
-		}
-
-		if(start_bit != 0)
-			p++;
-		int number_of_bits = p * 8;
-		if(start_bit != 0)
-			number_of_bits -= 8 - start_bit;
-		return(number_of_bits);
-	}
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn unary strings into
-	 * bytes.
-	 * 
-	 * @param src   the input bytes
-	 * @param table the rank table
-	 * @param dst   the byte array containing the result
-	 * @return int the length of the dst.array
-	 */
-	public static int unpackStrings2(byte src[], int table[], byte dst[])
-	{
-		int size = dst.length;
-		int number_of_values = table.length;
-		int maximum_length = number_of_values - 1;
-		int length = 1;
-		int src_byte = 0;
-		int dst_byte = 0;
-		int number_unpacked = 0;
-		int mask = 1;
-		int bit = 0;
-
-		byte[] inverse_table = new byte[number_of_values];
-		for(int i = 0; i < number_of_values; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = (byte) i;
-		}
-
-		try
-		{
-			while (dst_byte < size)
-			{
-				int non_zero = src[src_byte] & (mask << bit);
-				if(non_zero != 0 && length < maximum_length)
-					length++;
-				else if(non_zero == 0)
-				{
-					int k = length - 1;
-					dst[dst_byte++] = inverse_table[k];
-					length = 1;
-					number_unpacked++;
-
-				} 
-				else if(length == maximum_length)
-				{
-					int k = length;
-					dst[dst_byte++] = inverse_table[k];
-					number_unpacked++;
-					length = 1;
-				}
-				bit++;
-				if(bit == 8)
-				{
-					bit = 0;
-					src_byte++;
-				}
-			}
-		} 
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting unpackStrings2 with an exception.");
-		}
-		return(number_unpacked);
-	}
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn unary strings into
-	 * integers.
-	 * 
-	 * @param src   the input bytes
-	 * @param table the rank table
-	 * @param dst   the integer array containing the result
-	 * @return int the length of the dst.array
-	 */
-	public static int unpackStrings2(byte src[], int table[], int dst[])
-	{
-		int size = dst.length;
-		int number_of_values = table.length;
-		int maximum_length = number_of_values - 1;
-		int length = 1;
-		int src_byte = 0;
-		int dst_byte = 0;
-		int number_unpacked = 0;
-		int mask = 1;
-		int bit = 0;
-
-		int[] inverse_table = new int[number_of_values];
-		for(int i = 0; i < number_of_values; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-
-		try
-		{
-			while (dst_byte < size)
-			{
-				int non_zero = src[src_byte] & (mask << bit);
-				if(non_zero != 0 && length < maximum_length)
-					length++;
-				else if(non_zero == 0)
-				{
-					int k = length - 1;
-					dst[dst_byte++] = inverse_table[k];
-					length = 1;
-					number_unpacked++;
-
-				} 
-				else if(length == maximum_length)
-				{
-					int k = length;
-					dst[dst_byte++] = inverse_table[k];
-					number_unpacked++;
-					length = 1;
-				}
-				bit++;
-				if(bit == 8)
-				{
-					bit = 0;
-					src_byte++;
-				}
-			}
-		} 
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
-			System.out.println("Exiting unpackStrings2 with an exception.");
-		}
-		return(number_unpacked);
-	}
 	
 
 	// Stop bit methods.
@@ -2379,194 +2007,56 @@ public class StringMapper
 		ArrayList string_list = new ArrayList();
 
 		ArrayList histogram_list = getHistogram(value);
-		int       min_value      = (int) histogram_list.get(0);
+		int       min_value      = (int)   histogram_list.get(0);
 		int[]     histogram      = (int[]) histogram_list.get(1);
-		int       value_range    = (int) histogram_list.get(2);
+		int       value_range    = (int)   histogram_list.get(2);
 		int[]     string_table   = getRankTable(histogram);
 
-		// Assume the first value is a code, which is the 
-		// case in our main application. Reset it to a 
-		// standard value.
+		// Reset first value to a neutral code; shift the rest by min_value.
 		value[0] = value_range / 2;
-		for(int i = 1; i < value.length; i++)
+		for (int i = 1; i < value.length; i++)
 			value[i] -= min_value;
-		
-		
-		// A practical limit on how much the data might expand.
-		byte[] buffer  = new byte[value.length * 16];
-		int bit_length = packStrings2(value, string_table, buffer);
 
-		double zero_ratio = value.length;
-		if(histogram.length > 1)
-		{
-			int min_histogram_value = Integer.MAX_VALUE;
-			for(int k = 0; k < histogram.length; k++)
-				if(histogram[k] < min_histogram_value)
-					min_histogram_value = histogram[k];
-			zero_ratio -= min_histogram_value;
-		}
-		zero_ratio /= bit_length;
-		
-		int    bytelength           = getBytelength(bit_length);
-		byte [] uncompressed_string = new byte[bytelength];
-		for(int i = 0; i < bytelength - 1; i++)
-			uncompressed_string[i] = buffer[i];
-		if(zero_ratio >= .5)
-			setData(0, 0, bit_length, uncompressed_string);
-		else
-			setData(1, 0, bit_length, uncompressed_string);
-	    byte [] string = compressStrings2(uncompressed_string);
-	    
-	    string_list.add(min_value);
-		string_list.add(bit_length);
-		string_list.add(string_table);
-	    string_list.add(string);
-		
-		return string_list;
-	}
-	
-	public static ArrayList getStringList(int[] value, boolean compress)
-	{
-		ArrayList string_list    = new ArrayList();
+		byte[] string  = packStrings(value, string_table);
+		int    bitlength = getBitlength(string);
 
-		ArrayList histogram_list = getHistogram(value);
-		int       min_value      = (int) histogram_list.get(0);
-		int[]     histogram      = (int[]) histogram_list.get(1);
-		int value_range          = (int) histogram_list.get(2);
-		int[] string_table       = getRankTable(histogram);
+		byte[] compressed_string = compressStrings2(string);
 
-		value[0] = value_range / 2;
-		for(int i = 1; i < value.length; i++)
-			value[i] -= min_value;
-		byte[] string = new byte[value.length * 16];
-		int bitlength = packStrings2(value, string_table, string);
-
-		double zero_ratio = value.length;
-		if(histogram.length > 1)
-		{
-			int min_histogram_value = Integer.MAX_VALUE;
-			for(int k = 0; k < histogram.length; k++)
-				if(histogram[k] < min_histogram_value)
-					min_histogram_value = histogram[k];
-			zero_ratio -= min_histogram_value;
-		}
-		zero_ratio /= bitlength;
-		
-		int    bytelength  = getBytelength(bitlength);
-		byte [] string2   = new byte[bytelength];
-		for(int i = 0; i < bytelength - 1; i++)
-			string2[i] = string[i];
-		if(zero_ratio >= .5)
-			setData(0, 0, bitlength, string2);
-		else
-			setData(1, 0, bitlength, string2);
-		
 		string_list.add(min_value);
 		string_list.add(bitlength);
 		string_list.add(string_table);
-		
-		if(compress)
-		{
-			byte [] string3 = compressStrings2(string2);
-			string_list.add(string3);
-		}
-		else
-			string_list.add(string2);
+		string_list.add(compressed_string);
 
 		return string_list;
 	}
-	
-	// Packing and compressing arrays where the first value
-	// is not a code.
-	public static ArrayList getStringList2(int[] value)
+
+	public static ArrayList getStringList(int[] value, boolean compress)
 	{
-		
 		ArrayList string_list = new ArrayList();
-		
+
 		ArrayList histogram_list = getHistogram(value);
-	
-		int min_value = (int) histogram_list.get(0);
-		int[] histogram = (int[]) histogram_list.get(1);
-		
-		int[] string_table = getRankTable(histogram);
-        
-		
-		
-		for(int i = 0; i < value.length; i++)
-			value[i] -= min_value;
-		byte[] string = new byte[value.length * 16];
-		
-		
-		int bit_length = packStrings2(value, string_table, string);
-		
-		double zero_ratio = value.length;
-		if(histogram.length > 1)
-		{
-			int min_histogram_value = Integer.MAX_VALUE;
-			for(int k = 0; k < histogram.length; k++)
-				if(histogram[k] < min_histogram_value)
-					min_histogram_value = histogram[k];
-			zero_ratio -= min_histogram_value;
-		}
-		zero_ratio /= bit_length;
-		
-		int byte_length = StringMapper.getBytelength(bit_length);
-		byte [] clipped_string = new byte[byte_length];
-		for(int i = 0; i < byte_length - 1; i++)
-			clipped_string[i] = string[i];
-		if(zero_ratio >= .5)
-			setData(0, 0, bit_length, clipped_string);
-		else
-			setData(1, 0, bit_length, clipped_string);
-		byte[] compression_string = compressStrings2(clipped_string);
-		
-		string_list.add(min_value);
-		string_list.add(bit_length);
-		string_list.add(string_table);
-		string_list.add(compression_string);
-		
-		return string_list;
-	}
- 
-	public static ArrayList getStringList2(byte[] value)
-	{
-		ArrayList string_list    = new ArrayList();
-		ArrayList histogram_list = getHistogram(value);
-		int       min_value      = (int) histogram_list.get(0);
+		int       min_value      = (int)   histogram_list.get(0);
 		int[]     histogram      = (int[]) histogram_list.get(1);
+		int       value_range    = (int)   histogram_list.get(2);
 		int[]     string_table   = getRankTable(histogram);
 
-		for(int i = 0; i < value.length; i++)
+		// Reset first value to a neutral code; shift the rest by min_value.
+		value[0] = value_range / 2;
+		for (int i = 1; i < value.length; i++)
 			value[i] -= min_value;
-		
-		byte[] string     = new byte[value.length * 16];
-		int    bit_length = packStrings2(value, string_table, string);
-		double zero_ratio = value.length;
-		if(histogram.length > 1)
-		{
-			int min_histogram_value = Integer.MAX_VALUE;
-			for(int k = 0; k < histogram.length; k++)
-				if(histogram[k] < min_histogram_value)
-					min_histogram_value = histogram[k];
-			zero_ratio -= min_histogram_value;
-		}
-		zero_ratio /= bit_length;
-		
-		int byte_length = StringMapper.getBytelength(bit_length);
-		byte [] clipped_string = new byte[byte_length];
-		for(int i = 0; i < byte_length - 1; i++)
-			clipped_string[i] = string[i];
-		if(zero_ratio >= .5)
-			setData(0, 0, bit_length, clipped_string);
-		else
-			setData(1, 0, bit_length, clipped_string);
-		byte[] compression_string = compressStrings2(clipped_string);
-		
+
+		byte[] string    = packStrings(value, string_table);
+		int    bitlength = getBitlength(string);
+
 		string_list.add(min_value);
-		string_list.add(bit_length);
+		string_list.add(bitlength);
 		string_list.add(string_table);
-		string_list.add(compression_string);
-		
+
+		if (compress)
+			string_list.add(compressStrings2(string));
+		else
+			string_list.add(string);
+
 		return string_list;
 	}
    

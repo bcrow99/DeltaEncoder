@@ -84,7 +84,7 @@ public class ArithmeticReader
 
             int[] channel_id = DeltaMapper.getChannels(set_id);
 
-            if (delta_type > 7)
+            if (delta_type > 8)
             {
                 System.out.println("Delta type " + delta_type + " not supported.");
                 System.exit(0);
@@ -128,7 +128,7 @@ public class ArithmeticReader
                 }
                 table_list.add(table);
 
-                if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+                if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
                 {
                     int map_length        = in.readInt();
                     int packed_map_length = in.readInt();
@@ -783,12 +783,11 @@ public class ArithmeticReader
                 int iterations = StringMapper.getIterations(string);
                 if (iterations != 0 && iterations != 16)
                     string = StringMapper.decompressStrings2(string);
-
+                int bitlength = StringMapper.getBitlength(string);
                 int[] table = (int[]) table_list.get(i);
                 if (pixel_quant == 0)
                 {
-                    delta = new int[xdim * ydim];
-                    StringMapper.unpackStrings2(string, table, delta);
+                    delta = StringMapper.unpackStrings(string, table, xdim * ydim, bitlength);
                     for (int j = 1; j < delta.length; j++)
                         delta[j] += delta_min[i];
                     current_xdim = xdim;
@@ -800,8 +799,8 @@ public class ArithmeticReader
                     factor           /= 10;
                     intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
                     intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
-                    delta = new int[intermediate_xdim * intermediate_ydim];
-                    StringMapper.unpackStrings2(string, table, delta);
+                    
+                    delta = StringMapper.unpackStrings(string, table, intermediate_xdim * intermediate_ydim, bitlength);
                     for (int j = 1; j < delta.length; j++)
                         delta[j] += delta_min[i];
                     current_xdim = intermediate_xdim;
@@ -850,7 +849,8 @@ public class ArithmeticReader
             else if (delta_type == 4) current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim, current_ydim, init[i]);
             else if (delta_type == 5) current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim, current_ydim, init[i], (byte[]) map_list.get(i));
             else if (delta_type == 6) current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim, current_ydim, init[i], (byte[]) map_list.get(i));
-            else if (delta_type == 7) current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], (byte[]) map_list.get(i));
+            else if (delta_type == 7) current_channel = DeltaMapper.getValuesFromMixedDeltas4(delta, current_xdim, current_ydim, init[i], (byte[]) map_list.get(i));
+            else if (delta_type == 8) current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], (byte[]) map_list.get(i));
 
             if (channel_id[i] > 2)
                 for (int j = 0; j < current_channel.length; j++)

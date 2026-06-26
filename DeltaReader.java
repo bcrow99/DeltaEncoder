@@ -99,11 +99,29 @@ public class DeltaReader
 
 				if (delta_type == 5 || delta_type == 6 || delta_type == 7)
 				{
-					int map_length        = in.readInt();
-					int packed_map_length = in.readInt();	
-					byte [] packed_map    = new byte[packed_map_length];
-					in.read(packed_map, 0, packed_map_length);
-					byte [] map           = SegmentMapper.unpackBits(packed_map, map_length, 2);
+					short map_table_length = in.readShort();
+					int[] map_table = new int[map_table_length];
+					for (int k = 0; k < map_table_length; k++)
+						map_table[k] = in.readShort();
+					int byte_length = in.readInt();
+
+					byte[] map_string = new byte[byte_length];
+					in.read(map_string, 0, byte_length);
+
+					byte increment = in.readByte();
+					int dimension = in.readInt();
+					int [] map = new int[dimension];
+					byte iterations = StringMapper.getIterations(map_string);
+					
+					//System.out.println("Iterations of map string is " + iterations);
+					if(iterations != 0 && iterations != 16)
+						map_string        = StringMapper.decompressStrings(map_string);	
+					int    bitlength      = StringMapper.getBitlength(map_string);
+					map = StringMapper.unpackStrings(map_string, map_table, dimension, bitlength);
+					
+					if (increment != 0)
+						for (int k = 0; k < map.length; k++)
+							map[k] += increment;
 					map_list.add(map);
 				}
 				
@@ -645,13 +663,9 @@ public class DeltaReader
 				byte[] string  = (byte[]) string_list.get(i);
 				int[] table    = (int[]) table_list.get(i);
 				int iterations = StringMapper.getIterations(string);
-				int bitlength  = StringMapper.getBitlength(string);
-				string         =  StringMapper.decompressStrings2(string);
 				
-				if(channel_iterations[i] != iterations)
-					System.out.println("Iterations appended to string does not agree with channel " + i + " information.");
-				if(compressed_length[i] != bitlength)
-					System.out.println("Bit length appended to string does not agree with channel " + i + " information.");
+				string         =  StringMapper.decompressStrings2(string);
+				int bitlength  = StringMapper.getBitlength(string);
 				
 				int[] delta;
 				int   number_unpacked = 0;
@@ -661,8 +675,7 @@ public class DeltaReader
 				if (pixel_quant == 0)
 				{
 					delta = new int[xdim * ydim];
-					number_unpacked = StringMapper.unpackStrings2(string, table, delta);
-
+					
 					for (int j = 1; j < delta.length; j++)
 						delta[j] += delta_min[i];
 
@@ -676,7 +689,8 @@ public class DeltaReader
 					intermediate_xdim = xdim - (int) (factor * (xdim / 2 - 2));
 					intermediate_ydim = ydim - (int) (factor * (ydim / 2 - 2));
 					delta = new int[intermediate_xdim * intermediate_ydim];
-					number_unpacked = StringMapper.unpackStrings2(string, table, delta);
+					
+					delta = StringMapper.unpackStrings(string, table, intermediate_xdim * intermediate_ydim, bitlength);
 					for (int j = 1; j < delta.length; j++)
 						delta[j] += delta_min[i];
 
@@ -708,7 +722,7 @@ public class DeltaReader
 				else if (delta_type == 7)
 				{
 					byte[] map = (byte[]) map_list.get(i);
-					current_channel = DeltaMapper.getValuesFromIdealDeltas(delta, current_xdim, current_ydim, init[i], map);
+					current_channel = DeltaMapper.getValuesFromIdealDeltas2(delta, current_xdim, current_ydim, init[i], map);
 				}
 
 				if (channel_id[i] > 2)
