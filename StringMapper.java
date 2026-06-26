@@ -149,160 +149,165 @@ public class StringMapper
 		}
 		return order;
 	}
-
-	// This set of functions makes no assumptions about the
-	// the maxiumum length of an individual string.
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn integer
-	 * representations into unary strings, and then pack pack them into a byte
-	 * array. It assumes dst is large enough to contain the result, and returns the
-	 * length of the bit string.
-	 * 
-	 * @param src   the input integers
-	 * @param table the rank table
-	 * @return byte array containing the bit string
-	 */
-	public static int packStrings(int src[], int table[], byte dst[])
+	
+	public static byte [] packStrings(int [] src, int [] table)
 	{
-		int size = src.length;
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = 0;
-		int[] mask = new int[8];
-
-		mask[0] = 1;
-		mask[1] = 3;
-		mask[2] = 7;
-		mask[3] = 15;
-		mask[4] = 31;
-		mask[5] = 63;
-		mask[6] = 127;
-		mask[7] = 255;
-
-		int start_bit = 0;
-		int stop_bit = 0;
-		int p = 0;
-		dst[p] = 0;
-
-		for(int i = 0; i < size; i++)
+		// Get the total bit length, accounting for the fact the last two are the same.
+		int length = 0;
+		for(int i = 0; i < src.length; i++)
 		{
-			int j = src[i];
-			int k = table[j];
-			if(k == 0)
-			{
-				start_bit++;
-				if(start_bit == 8)
-				{
-					dst[++p] = 0;
-					start_bit = 0;
-				}
-			} 
+			if(table[src[i]] != table.length - 1)
+				length += table[src[i]] + 1;
 			else
-			{
-				stop_bit = (start_bit + k + 1) % 8;
-
-				if(k <= 7)
-				{
-					dst[p] |= (byte) (mask[k - 1] << start_bit);
-					if(stop_bit <= start_bit)
-					{
-						dst[++p] = 0;
-						if(stop_bit != 0)
-							dst[p] |= (byte) (mask[k - 1] >> (8 - start_bit));
-					}
-				} 
-				else if(k > 7)
-				{
-					dst[p] |= (byte) (mask[7] << start_bit);
-					int m = (k - 8) / 8;
-					for(int n = 0; n < m; n++)
-						dst[++p] = (byte) (mask[7]);
-					dst[++p] = 0;
-					if(start_bit != 0)
-						dst[p] |= (byte) (mask[7] >> (8 - start_bit));
-
-					if(k % 8 != 0)
-					{
-						m = k % 8 - 1;
-						dst[p] |= (byte) (mask[m] << start_bit);
-						if(stop_bit <= start_bit)
-						{
-							dst[++p] = 0;
-							if(stop_bit != 0)
-								dst[p] |= (byte) (mask[m] >> (8 - start_bit));
-						}
-					} 
-					else if(stop_bit <= start_bit)
-						dst[++p] = 0;
-				}
-				start_bit = stop_bit;
-			}
+				length += table.length - 1;
 		}
-		if(start_bit != 0)
-			p++;
-		int number_of_bits = p * 8;
-		if(start_bit != 0)
-			number_of_bits -= 8 - start_bit;
-		return(number_of_bits);
-	}
-
-	/**
-	 * Uses a rank table of most popular to least popular to turn unary strings into
-	 * integers.
-	 * 
-	 * @param src   the input integers
-	 * @param table the rank table
-	 * @param dst   the integer array containing the result
-	 * @return int the length of the dst.array
-	 */
-	public static int unpackStrings(byte src[], int table[], int dst[])
-	{
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = 0;
-
-		int size = dst.length;
-		int number_of_different_values = table.length;
-		int number_unpacked = 0;
-
-		int[] inverse_table = new int[number_of_different_values];
-		for(int i = 0; i < number_of_different_values; i++)
+		
+		// Get the byte length we need, probably with empty bits.
+		if(length % 8 != 0)	
 		{
-			int j = table[i];
-			inverse_table[j] = i;
+			length = length / 8;
+			length++;
 		}
+		else
+			length = length / 8;
+		
+		// Add an extra byte for the trailing data. 
+		byte [] dst = new byte[length];
+		
+        int max_length  = table.length - 1;
+        int[] mask = {1, 3, 7, 15, 31, 63, 127, 255};
+		
+        int start = 0;
+        int stop  = 0;
+        int j = 0;
 
-		int length = 1;
-		int src_byte = 0;
-		int dst_byte = 0;
-		byte mask = 0x01;
-		byte bit = 0;
+        for (int i : src) 
+        {
+            int k = table[i];
+            if(k == 0) 
+            {
+                start++;
+                if(start == 8)
+                {
+                    j++;
+                    start = 0;
+                }
+            } 
+            else 
+            {
+                stop = (start + k + 1) % 8;
+                if (k == max_length)
+                    stop = (stop > 0) ? stop - 1 : 7;
 
-		while (dst_byte < size)
-		{
-			byte non_zero = (byte) (src[src_byte] & (byte) (mask << bit));
-			if(non_zero != 0)
-				length++;
-			else
-			{
-				int k = length - 1;
-				dst[dst_byte++] = inverse_table[k];
-				number_unpacked++;
-				length = 1;
-			}
-			bit++;
-			if(bit == 8)
-			{
-				bit = 0;
-				src_byte++;
-			}
-		}
-		return(number_unpacked);
+                if (k <= 7) 
+                {
+                    dst[j] = (byte) ((dst[j] | (mask[k - 1] << start)) & 0xFF);
+                    if(stop <= start) 
+                    {
+                        j++;
+                        if (stop != 0)
+                            dst[j] = (byte) ((dst[j] | (mask[k - 1] >> (8 - start))) & 0xFF);
+                    }
+                } 
+                else 
+                {
+                    dst[j] = (byte) ((dst[j] | (mask[7] << start)) & 0xFF);
+                    int m = (k - 8) / 8;
+                    for (int n = 0; n < m; n++) 
+                    {
+                        j++;
+                        dst[j] = (byte) mask[7];
+                    }
+                    j++;
+                    if (start != 0)
+                        dst[j] = (byte) ((dst[j] | (mask[7] >> (8 - start))) & 0xFF);
+                    if(k % 8 != 0) 
+                    {
+                        m = k % 8 - 1;
+                        dst[j] = (byte) ((dst[j] | (mask[m] << start)) & 0xFF);
+                        if(stop <= start) 
+                        {
+                            j++;
+                            if (stop != 0)
+                                dst[j] = (byte) ((dst[j] | (mask[m] >> (8 - start))) & 0xFF);
+                        }
+                    } 
+                    else if(stop <= start && k != max_length) 
+                        j++;
+                }
+                start = stop;
+            }
+        }
+
+        if (start != 0)
+            j++;
+        int bitlength = j * 8 - (start != 0 ? 8 - start : 0);
+        
+        int    type       = 0;
+        double zero_ratio = getZeroRatio(dst, bitlength);
+        if(zero_ratio < .5)
+        	    type = 1;
+        
+        int iterations = 0;
+        
+        setData(type, iterations, bitlength, dst);
+		return dst;
 	}
+	
+	public static int[] unpackStrings(byte[] src, int[] table, int size, int bitlength) 
+    {
+        int n          = table.length;
+        int max_length = n - 1;
+        int[] dst      = new int[size];
 
+        int[] inverse_table = new int[n];
+        for(int i = 0; i < n; i++)
+            inverse_table[table[i]] = i;
+
+        int length   = 1;
+        int src_byte  = 0;
+        int dst_byte  = 0;
+        int bit      = 0;
+        int bits_read = 0;
+
+        try 
+        {
+            while(dst_byte < size && bits_read < bitlength) 
+            {
+                int non_zero = src[src_byte] & (1 << bit);
+                if(non_zero != 0 && length < max_length) 
+                    length++; 
+                else if(non_zero == 0) 
+                {
+                    dst[dst_byte++] = inverse_table[length - 1];
+                    length = 1;
+                } 
+                else if(length == max_length) 
+                {
+                    dst[dst_byte++] = inverse_table[length];
+                    length = 1;
+                }
+                bit++;
+                bits_read++;
+                if (bit == 8) 
+                {
+                    bit = 0;
+                    src_byte++;
+                }
+            }
+        } 
+        catch (Exception e) 
+        {
+            System.out.println(e);
+            System.out.println("Exiting unpackStrings with an exception.");
+        }
+        return dst;
+    }
+
+	
+	
 	// These packing/unpacking functions use the maximum length
-	// code to dispense with a stop bit in the longest string.
-	// Not very significant until we are looking at binary and
-	// low resolution images.
+	// expect destination buffers allocated in advance.
 
 	/**
 	 * Uses a rank table of most popular to least popular to turn byte
@@ -662,6 +667,7 @@ public class StringMapper
 		}
 		return(number_unpacked);
 	}
+	
 
 	// Stop bit methods.
 	// Zero bits correspond to stop bits in our implementation.
@@ -2235,6 +2241,44 @@ public class StringMapper
 			value++;
 		}
 		return table;
+	}
+
+	public static double getZeroRatio(byte[] string, int bit_length)
+	{
+		int [] table = getBitTable();
+		int byte_length = bit_length / 8;
+		int zero_sum = 0;
+		int one_sum = 0;
+
+		int n = byte_length;
+
+		for(int i = 0; i < n; i++)
+		{
+			int j = (int) string[i];
+			if(j < 0)
+				j += 256;
+			zero_sum += table[j];
+			one_sum += 8 - table[j];
+		}
+
+		byte mask = 1;
+		int remainder = bit_length % 8;
+		if(remainder != 0)
+		{
+			for(int i = 0; i < remainder; i++)
+			{
+				int j = string[byte_length] & mask << i;
+				if(j == 0)
+					zero_sum++;
+				else
+					one_sum++;
+			}
+		}
+
+		double ratio = zero_sum;
+		ratio /= zero_sum + one_sum;
+
+		return ratio;
 	}
 
 	public static double getZeroRatio(byte[] string, int bit_length, int[] table)

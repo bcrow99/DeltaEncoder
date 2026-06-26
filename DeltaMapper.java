@@ -3595,10 +3595,6 @@ public class DeltaMapper
 		dst[0] = init_value;
 		int value = init_value;
 
-		/*
-		 * if(src[0] != 0) System.out.println("Wrong code.");
-		 */
-
 		for(int i = 1; i < xdim; i++)
 		{
 			value += src[i];
