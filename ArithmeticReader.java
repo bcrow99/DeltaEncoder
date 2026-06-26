@@ -780,11 +780,10 @@ public class ArithmeticReader
 
             if (compress_type > 0)
             {
-                int iterations = StringMapper.getIterations(string);
-                if (iterations != 0 && iterations != 16)
-                    string = StringMapper.decompressStrings2(string);
-                int bitlength = StringMapper.getBitlength(string);
-                int[] table = (int[]) table_list.get(i);
+                int   bitlength = StringMapper.getBitlength(string);
+                string          = StringMapper.decompressStrings(string);
+                int[] table     = (int[]) table_list.get(i);
+
                 if (pixel_quant == 0)
                 {
                     delta = StringMapper.unpackStrings(string, table, xdim * ydim, bitlength);
@@ -799,7 +798,6 @@ public class ArithmeticReader
                     factor           /= 10;
                     intermediate_xdim = xdim - (int)(factor * (xdim / 2 - 2));
                     intermediate_ydim = ydim - (int)(factor * (ydim / 2 - 2));
-                    
                     delta = StringMapper.unpackStrings(string, table, intermediate_xdim * intermediate_ydim, bitlength);
                     for (int j = 1; j < delta.length; j++)
                         delta[j] += delta_min[i];
