@@ -2,75 +2,118 @@ import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.zip.*;
-import javax.imageio.*;
+import java.math.*;
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 public class DeltaReader
 {
+	// ---- Image dimensions ---------------------------------------------------
 	int  xdim              = 0;
 	int  ydim              = 0;
 	int  intermediate_xdim = 0;
 	int  intermediate_ydim = 0;
-	int  pixel_shift       = 0;
-	int  pixel_quant       = 0;
-	int  set_id            = 0;
-	byte delta_type        = 0;
 
-	ArrayList string_list = new ArrayList();
-	ArrayList table_list  = new ArrayList();
-	ArrayList map_list    = new ArrayList();
+	// ---- Compression parameters (read from file) ----------------------------
+	int  pixel_shift   = 0;
+	int  pixel_quant   = 0;
+	int  set_id        = 0;
+	byte delta_type    = 0;
+	byte compress_type = 0;
+	byte entropy_type  = 0;   // 0=LZ77, 1=Huffman, 2=Arithmetic, 3=Fast Arithmetic
+
+	// ---- Per-channel scalars ------------------------------------------------
+	int[]  min               = new int[3];
+	int[]  init              = new int[3];
+	int[]  delta_min         = new int[3];
+	int[]  length            = new int[3];
+	int[]  compressed_length = new int[3];
+	byte[] channel_iterations = new byte[3];
+
+	// ---- Unary-string decode tables (compress_type > 0) --------------------
+	ArrayList<int[]> table_list = new ArrayList<int[]>();
+
+	// ---- Delta-type maps (delta_type 5-8) -----------------------------------
+	ArrayList<byte[]> map_list = new ArrayList<byte[]>();
+
+	// ---- Decoded channel arrays ---------------------------------------------
 	int[][] channel_array = new int[3][0];
-	int  min[]            = new int[3];
-	int  init[]           = new int[3];
-	int  delta_min[]      = new int[3];
-	byte type[]           = new byte[3];
-	byte compressed[]     = new byte[3];
-	int  length[]         = new int[3];
-	int  compressed_length[] = new int[3];
-	byte channel_iterations[] = new byte[3];
+	int[][] resize_array  = new int[3][0];
 
+	// ---- LZ77 per-channel data ----------------------------------------------
+	ArrayList<byte[]> lz77_data_list   = new ArrayList<byte[]>();
+	int[]             lz77_orig_length = new int[3];
+
+	// ---- Huffman per-channel data -------------------------------------------
+	ArrayList<int[]>  huff_rank_list = new ArrayList<int[]>();   // rank table
+	ArrayList<byte[]> huff_cl_list   = new ArrayList<byte[]>();  // code lengths
+	ArrayList<byte[]> huff_pay_list  = new ArrayList<byte[]>();  // packed payload
+	int[]             huff_bl        = new int[3];               // bit length
+	int[]             huff_pay_min   = new int[3];               // payload_min
+
+	// ---- Arithmetic per-channel data ----------------------------------------
+	ArrayList<int[][]>        freq_list    = new ArrayList<int[][]>();
+	ArrayList<BigInteger[][]> offset_list  = new ArrayList<BigInteger[][]>();
+	ArrayList<byte[][]>       segment_list = new ArrayList<byte[][]>();
+
+	// ---- Fast Arithmetic per-channel data (entropy_type == 3) ---------------
+	// Each entry is an array of encoded byte[] segments from getIntervalValueFast.
+	// Frequency tables are shared with the Arithmetic path (freq_list above).
+	ArrayList<byte[][]>       fast_enc_list = new ArrayList<byte[][]>();
+
+	// ---- Viewer state -------------------------------------------------------
+	BufferedImage decoded_image = null;
+	BufferedImage display_image = null;
+	ImageCanvas   image_canvas  = null;
+	JScrollPane   scroll_pane   = null;
+	JFrame        frame         = null;
+
+	double zoom_scale = 1.0;
+	double fit_scale  = 1.0;
+	static final double ZOOM_FACTOR = 1.25;
+	static final double ZOOM_MIN    = 0.05;
+	static final double ZOOM_MAX    = 32.0;
+
+	// =========================================================================
 	public static void main(String[] args)
 	{
-		if (args.length != 1)
-		{
-			System.out.println("Usage: java DeltaReader <filename>");
-			System.exit(0);
-		}
-
-		DeltaReader reader = new DeltaReader(args[0]);
+		if (args.length != 1) { System.out.println("Usage: java DeltaReader2 <filename>"); System.exit(0); }
+		new DeltaReader2(args[0]);
 	}
 
+	// =========================================================================
 	public DeltaReader(String filename)
 	{
 		try
 		{
-			File file          = new File(filename);
-			DataInputStream in = new DataInputStream(new FileInputStream(file));
-			xdim               = in.readShort();
-			ydim               = in.readShort();
-			pixel_shift        = in.readByte();
-			pixel_quant        = in.readByte();
-			set_id             = in.readByte();
-			delta_type         = in.readByte();
-			int[] channel_id   = DeltaMapper.getChannels(set_id);
+			File            file = new File(filename);
+			DataInputStream in   = new DataInputStream(new FileInputStream(file));
 
-			if (delta_type > 7)
-			{
-				System.out.println("Delta type not supported.");
-				System.exit(0);
-			}
-			System.out.println("Set id is " + set_id);
+			// ---- Header ----
+			xdim         = in.readShort();
+			ydim         = in.readShort();
+			pixel_shift  = in.readByte();
+			pixel_quant  = in.readByte();
+			set_id       = in.readByte();
+			delta_type   = in.readByte();
+			compress_type = in.readByte();
+			entropy_type  = in.readByte();
+
+			System.out.println("xdim=" + xdim + " ydim=" + ydim);
+			System.out.println("delta_type=" + delta_type + " compress_type=" + compress_type + " entropy_type=" + entropy_type);
+			System.out.println("set_id=" + set_id);
+
+			int[] channel_id = DeltaMapper.getChannels(set_id);
 
 			long start = System.nanoTime();
+
 			for (int i = 0; i < 3; i++)
 			{
-				// System.out.println("Getting channel " + i);
-				int j                 = channel_id[i];
+				System.out.println("Reading channel " + i);
+
+				// Common scalars
 				min[i]                = in.readInt();
 				init[i]               = in.readInt();
 				delta_min[i]          = in.readInt();
@@ -78,664 +121,543 @@ public class DeltaReader
 				compressed_length[i]  = in.readInt();
 				channel_iterations[i] = in.readByte();
 
-				int table_length = in.readShort();
-				int[] table = new int[table_length];
-				int max_byte_value = Byte.MAX_VALUE * 2 + 1;
-				if(table.length <= max_byte_value)
+				// Map (delta_type 5-8)
+				if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
 				{
-					for (int k = 0; k < table_length; k++)
-					{
-						table[k] = in.readByte();
-						if (table[k] < 0)
-							table[k] = max_byte_value + 1 + table[k];
-					}
-				} 
-				else
-				{
-					for (int k = 0; k < table_length; k++)
-						table[k] = in.readShort();
+					int    ml  = in.readInt();
+					int    pml = in.readInt();
+					byte[] pm  = new byte[pml];
+					in.readFully(pm);
+					map_list.add(SegmentMapper.unpackBits(pm, ml, 2));
 				}
-				table_list.add(table);
 
-				if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+				// String table (compress_type > 0)
+				if (compress_type > 0)
+					table_list.add(readTable(in));
+
+				// Entropy-specific payload
+				if (entropy_type == 0)
 				{
-					short map_table_length = in.readShort();
-					int[] map_table = new int[map_table_length];
-					for (int k = 0; k < map_table_length; k++)
-						map_table[k] = in.readShort();
-					int byte_length = in.readInt();
-
-					byte[] map_string = new byte[byte_length];
-					in.read(map_string, 0, byte_length);
-
-					byte increment = in.readByte();
-					int dimension = in.readInt();
-					int [] map = new int[dimension];
-					byte iterations = StringMapper.getIterations(map_string);
-					
-					//System.out.println("Iterations of map string is " + iterations);
-					if(iterations != 0 && iterations != 16)
-						map_string        = StringMapper.decompressStrings(map_string);	
-					int    bitlength      = StringMapper.getBitlength(map_string);
-					map = StringMapper.unpackStrings(map_string, map_table, dimension, bitlength);
-					
-					if (increment != 0)
-						for (int k = 0; k < map.length; k++)
-							map[k] += increment;
-					map_list.add(map);
+					// LZ77
+					int    orig_len   = in.readInt();
+					int    zip_len    = in.readInt();
+					byte[] zip_data   = new byte[zip_len];
+					in.readFully(zip_data);
+					lz77_orig_length[i] = orig_len;
+					lz77_data_list.add(zip_data);
 				}
-				
-				int number_of_segments = in.readInt();
-				if(number_of_segments == 1)
+				else if (entropy_type == 1)
 				{
-					int n           = in.readInt();
-					
-				    byte init_value = in.readByte();
-				    
-				    byte max_delta  = in.readByte();
-				   
-				    int compressed_length   = in.readInt();
-				    
-				    byte [] compressed_delta = new byte[compressed_length];
-				    in.read(compressed_delta, 0, compressed_length);
-				   
-				    byte [] decompressed_delta = StringMapper.decompressStrings2(compressed_delta);
-				    
-				    int packed_delta_length = decompressed_delta.length - 1;
-				    byte [] packed_delta    = new byte[packed_delta_length];
-				    for(int k = 0; k < packed_delta_length; k++)
-				    	    packed_delta[k] = decompressed_delta[k];
-				    System.out.println();
-				    
-				    byte [] code_length = CodeMapper.unpackLengthTable(n, init_value, max_delta, packed_delta);
-				   
-					int [] code = CodeMapper.getCanonicalCode(code_length);
-					
-					int m = in.readInt();
-					
-					int []  rank_table = new int[m];
-					byte [] rank       = new byte[m];
-					in.read(rank, 0, m);
-					for(int k = 0; k < m; k++)
-					{
-						if(rank[k] >= 0)
-							rank_table[k] = rank[k];
-						else
-					       rank_table[k]  = rank[k] + 256;
-					}
-					
-					int p = in.readInt();
-					
-					int packed_string_length = in.readInt();
-					
-				    byte [] packed_string = new byte[packed_string_length];
-					in.read(packed_string, 0, packed_string_length);
-					
-					ArrayList pack_list = new ArrayList();
-					pack_list.add(packed_string);
-					pack_list.add(packed_string.length * 8);
-					pack_list.add(rank_table);
-					pack_list.add(code);
-					pack_list.add(code_length);
-					pack_list.add(p);
-					
-                    byte [] string = CodeMapper.unpackCode(pack_list);
-					string_list.add(string);
-				} 
-				else
+					// Huffman
+					int[]  rank_table    = readTable(in);
+					int    pay_min       = in.readInt();
+					int    n             = in.readInt();
+					byte   init_val      = in.readByte();
+					byte   max_delta     = in.readByte();
+					int    pdt_len       = in.readByte() & 0xFF;  // unsigned byte
+					byte[] pdt           = new byte[pdt_len];
+					in.readFully(pdt);
+					byte[] code_length   = CodeMapper.unpackLengthTable(n, init_val, max_delta, pdt);
+					int    bl            = in.readInt();
+					int    pay_len       = in.readInt();
+					byte[] pay_bytes     = new byte[pay_len];
+					in.readFully(pay_bytes);
+
+					huff_rank_list.add(rank_table);
+					huff_cl_list.add(code_length);
+					huff_pay_list.add(pay_bytes);
+					huff_bl[i]      = bl;
+					huff_pay_min[i] = pay_min;
+				}
+				else if (entropy_type == 2) // Arithmetic (BigInteger)
 				{
-					int total_length = 0;
-					
-					int[] segment_length = new int[number_of_segments];
-					byte[] segment_info = new byte[number_of_segments];
-					
-					int number_of_zipped_bytes = in.readInt();
-					if(number_of_zipped_bytes == 0)
-					{
-					    in.read(segment_info, 0, number_of_segments);
-					    //System.out.println("Segment data was not zipped.");
-					}
+					int n_segs  = in.readInt();
+					int len_type = in.readInt();
+					int zfl     = in.readInt();
+					byte[] zfd  = new byte[zfl];
+					in.readFully(zfd);
+
+					// Compute inflated frequency buffer size
+					int n_bytes = n_segs * 256 * ((len_type == 0) ? 1 : (len_type == 1) ? 2 : 4);
+					byte[] fb   = new byte[n_bytes];
+					Inflater inf = new Inflater();
+					inf.setInput(zfd, 0, zfl);
+					inf.inflate(fb);
+					inf.end();
+
+					int[][] freqs = new int[n_segs][256];
+					if (len_type == 0)
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++) { freqs[k][m] = fb[k*256+m]; if (freqs[k][m]<0) freqs[k][m]+=256; }
+					else if (len_type == 1)
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++)
+							{
+								int a = fb[k*512+2*m]; if(a<0)a+=256;
+								int b = fb[k*512+2*m+1]; if(b<0)b+=256; b<<=8;
+								freqs[k][m] = a|b;
+							}
 					else
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++)
+							{
+								int a=fb[k*1024+4*m];if(a<0)a+=256;
+								int b=fb[k*1024+4*m+1];if(b<0)b+=256;b<<=8;
+								int c=fb[k*1024+4*m+2];if(c<0)c+=256;c<<=16;
+								int d=fb[k*1024+4*m+3];if(d<0)d+=256;d<<=24;
+								freqs[k][m]=a|b|c|d;
+							}
+
+					BigInteger[][] offsets = new BigInteger[n_segs][2];
+					for (int k = 0; k < n_segs; k++)
 					{
-						//System.out.println("Segment data was zipped.");
-						byte[] zipped_data = new byte[number_of_zipped_bytes];
-						in.read(zipped_data, 0, number_of_zipped_bytes);
-						Inflater inflater = new Inflater();
-						inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
-						int unzipped_length = inflater.inflate(segment_info);
-						if(unzipped_length != number_of_segments)
-							System.out.println("Unzipped data not expected length.");	
+						int    ll;
+						byte[] bb;
+						ll = in.readInt(); bb = new byte[ll]; in.readFully(bb); offsets[k][0] = new BigInteger(bb);
+						ll = in.readInt(); bb = new byte[ll]; in.readFully(bb); offsets[k][1] = new BigInteger(bb);
 					}
-                     
-					int max_bytelength = in.readInt();
-					if (max_bytelength <= Byte.MAX_VALUE * 2 + 1)
-					{
-						//System.out.println("Max segment length is an unsigned byte.");
-						byte[] segment_length_bytes = new byte[number_of_segments];
-						
-						number_of_zipped_bytes = in.readInt();
-						if(number_of_zipped_bytes == 0)
-						{
-						    //System.out.println("Did not zip byte lengths.");
-						    in.read(segment_length_bytes, 0, number_of_segments);
-						}
-						else
-						{
-							//System.out.println("Zipped byte lengths.");
-							byte[] zipped_data = new byte[number_of_zipped_bytes];
-							in.read(zipped_data, 0, number_of_zipped_bytes);
-							Inflater inflater = new Inflater();
-							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
-							int unzipped_length = inflater.inflate(segment_length_bytes);
-							if(unzipped_length != number_of_segments)
-								System.out.println("Unzipped data not expected length.");	
-						}
-						
-						for (int k = 0; k < number_of_segments; k++)
-						{
-							int current_length = segment_length_bytes[k];
-							if (current_length < 0)
-								current_length += 256;
-							total_length += current_length;
-							segment_length[k] = current_length;
-						}
-					} 
-					else if (max_bytelength <= Short.MAX_VALUE * 2 + 1)
-					{
-						//System.out.println("Max segment length is an unsigned short.");
-						
-						byte[] segment_length_bytes = new byte[2 * number_of_segments];
-						
-						number_of_zipped_bytes = in.readInt();
-						if(number_of_zipped_bytes == 0)
-						{
-						    //System.out.println("Did not zip short lengths.");
-						    in.read(segment_length_bytes, 0, 2 * number_of_segments);
-						}
-						else
-						{
-							//System.out.println("Zipped short lengths.");
-							byte[] zipped_data = new byte[number_of_zipped_bytes];
-							in.read(zipped_data, 0, number_of_zipped_bytes);
-							Inflater inflater = new Inflater();
-							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
-							int unzipped_length = inflater.inflate(segment_length_bytes);
-							if(unzipped_length != number_of_segments * 2)
-								System.out.println("Unzipped lengths not expected length.");	
-						}
-						
-						for(int k = 0; k < number_of_segments; k++)
-						{
-							int a = (int)segment_length_bytes[2 * k];
-							if(a < 0)
-								a += 256;
-							int b = (int)segment_length_bytes[2 * k + 1];
-							if(b < 0)
-								b += 256;
-							b   <<= 8;
-							
-							segment_length[k] = a | b;
-							total_length     += segment_length[k];
-						}
-					} 
+
+					freq_list.add(freqs);
+					offset_list.add(offsets);
+					segment_list.add(new byte[n_segs][0]);
+				}
+				else // entropy_type == 3 (Fast Arithmetic)
+				{
+					// Frequency tables use the same on-disk format as Arithmetic.
+					int n_segs   = in.readInt();
+					int len_type = in.readInt();
+					int zfl      = in.readInt();
+					byte[] zfd   = new byte[zfl];
+					in.readFully(zfd);
+
+					int n_bytes = n_segs * 256 * ((len_type == 0) ? 1 : (len_type == 1) ? 2 : 4);
+					byte[] fb   = new byte[n_bytes];
+					Inflater inf = new Inflater();
+					inf.setInput(zfd, 0, zfl);
+					inf.inflate(fb);
+					inf.end();
+
+					int[][] freqs = new int[n_segs][256];
+					if (len_type == 0)
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++) { freqs[k][m] = fb[k*256+m]; if (freqs[k][m]<0) freqs[k][m]+=256; }
+					else if (len_type == 1)
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++)
+							{
+								int a = fb[k*512+2*m]; if(a<0)a+=256;
+								int b = fb[k*512+2*m+1]; if(b<0)b+=256; b<<=8;
+								freqs[k][m] = a|b;
+							}
 					else
+						for (int k = 0; k < n_segs; k++)
+							for (int m = 0; m < 256; m++)
+							{
+								int a=fb[k*1024+4*m];if(a<0)a+=256;
+								int b=fb[k*1024+4*m+1];if(b<0)b+=256;b<<=8;
+								int c=fb[k*1024+4*m+2];if(c<0)c+=256;c<<=16;
+								int d=fb[k*1024+4*m+3];if(d<0)d+=256;d<<=24;
+								freqs[k][m]=a|b|c|d;
+							}
+
+					freq_list.add(freqs);
+
+					// Per-segment data: a single encoded byte[] from getIntervalValueFast
+					// (includes its own 4-byte bit-length header).
+					byte[][] fast_enc = new byte[n_segs][];
+					for (int k = 0; k < n_segs; k++)
 					{
-						//System.out.println("Max segment length is an int.");
-						byte[] segment_length_bytes = new byte[4 * number_of_segments];
-						
-						number_of_zipped_bytes = in.readInt();
-						if(number_of_zipped_bytes == 0)
-						{
-						    //System.out.println("Did not zip int lengths.");
-						    in.read(segment_length_bytes, 0, 4 * number_of_segments);
-						}
-						else
-						{
-							//System.out.println("Zipped int lengths.");
-							byte[] zipped_data = new byte[number_of_zipped_bytes];
-							in.read(zipped_data, 0, number_of_zipped_bytes);
-							Inflater inflater = new Inflater();
-							inflater.setInput(zipped_data, 0, number_of_zipped_bytes);
-							int unzipped_length = inflater.inflate(segment_length_bytes);
-							if(unzipped_length != number_of_segments * 4)
-								System.out.println("Unzipped lengths not expected length.");	
-						}
-						
-						for(int k = 0; k < number_of_segments; k++)
-						{
-							int a = (int)segment_length_bytes[2 * k];
-							if(a < 0)
-								a += 256;
-							int b = (int)segment_length_bytes[2 * k + 1];
-							if(b < 0)
-								b += 256;
-							b   <<= 8;
-							int c = (int)segment_length_bytes[2 * k + 2];
-							if(c < 0)
-								c += 256;
-							c   <<= 16;
-							int d = (int)segment_length_bytes[2 * k + 3];
-							if(d < 0)
-								d += 256;
-							d   <<= 24;
-							
-							segment_length[k] = a | b | c | d;
-							total_length     += segment_length[k];
-						}
+						int enc_len  = in.readInt();
+						fast_enc[k]  = new byte[enc_len];
+						in.readFully(fast_enc[k]);
 					}
-					
-					int zipped_length = in.readInt();
-					int packed_length = in.readInt();
-					byte [] packed_segments = new byte[packed_length];
-					if(zipped_length == 0)
-						 in.read(packed_segments, 0, packed_length);	
-					else
-					{
-						byte[] zipped_data = new byte[zipped_length];
-						in.read(zipped_data, 0, zipped_length);
-						Inflater inflater = new Inflater();
-						inflater.setInput(zipped_data, 0, zipped_length);
-						int unzipped_length = inflater.inflate(packed_segments);
-						if(unzipped_length != packed_length)
-							System.out.println("Unzipped segments not expected length.");		
-					}
-					
-					ArrayList <byte []> original_segments = SegmentMapper.unpackSegments2(packed_segments, segment_length, segment_info);
-					byte string_data                      = channel_iterations[i];
-					int odd_bits                          = compressed_length[i] % 8;
-					if(odd_bits != 0)
-					{
-						byte extra_bits = (byte)(8 - odd_bits);
-						extra_bits    <<= 5;
-						string_data    |= extra_bits;
-					}
-				    byte [] restored_string               = SegmentMapper.restore(original_segments, string_data);
-					string_list.add(restored_string);
+					fast_enc_list.add(fast_enc);
 				}
 			}
 
-			long stop = System.nanoTime();
-			long time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to read file.");
-			
+			in.close();
+			System.out.println("File read in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
 
-			int cores = Runtime.getRuntime().availableProcessors();
-			System.out.println("There are " + cores + " processors available.");
+			buildViewer(filename);
+
+			// ---- Run Decompressor threads (handles all entropy types) --------
 			start = System.nanoTime();
-
-			// Simplest possible threading.
-			Thread [] decompression_thread = new Thread[3]; for(int i = 0; i < 3; i++) 
+			Thread[] decompression_thread = new Thread[3];
+			for (int i = 0; i < 3; i++)
 			{
-			    decompression_thread[i] = new Thread(new Decompressor(i));
-			    decompression_thread[i].start(); 
-			} 
-			for(int i = 0; i < 3; i++)
-			    decompression_thread[i].join();
+				decompression_thread[i] = new Thread(new Decompressor(i));
+				decompression_thread[i].start();
+			}
+			for (int i = 0; i < 3; i++) decompression_thread[i].join();
 
-			
-			// This higher level abstraction makes the program more opaque and
-			// does not improve the performance.
-			//ExecutorService executorService = Executors.newFixedThreadPool(3);
-			//for (int i = 0; i < 3; i++)
-			//{
-			//	executorService.submit(new Decompressor(i));
-			//}
-			//executorService.shutdown();
-			//executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-			
-			
-			stop = System.nanoTime();
-			time = stop - start;
+			System.out.println("Channels processed in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
 
-			System.out.println("It took " + (time / 1000000) + " ms to process data.");
+			// ---- Assemble RGB -----------------------------------------------
+			start = System.nanoTime();
+			int[][] ch = new int[3][0];
+			if      (set_id==0){ch[0]=channel_array[0];ch[1]=channel_array[1];ch[2]=channel_array[2];}
+			else if (set_id==1){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[1],channel_array[2]);ch[2]=channel_array[1];}
+			else if (set_id==2){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[2]);ch[2]=channel_array[1];}
+			else if (set_id==3){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=DeltaMapper.getSum(channel_array[2],ch[1]);}
+			else if (set_id==4){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[2]);}
+			else if (set_id==5){ch[0]=DeltaMapper.getSum(channel_array[2],channel_array[0]);ch[1]=channel_array[0];ch[2]=channel_array[1];}
+			else if (set_id==6){for(int i=0;i<channel_array[2].length;i++)channel_array[2][i]=-channel_array[2][i];ch[1]=DeltaMapper.getSum(channel_array[2],channel_array[0]);ch[0]=DeltaMapper.getSum(channel_array[1],ch[1]);ch[2]=channel_array[0];}
+			else if (set_id==7){ch[0]=DeltaMapper.getSum(channel_array[0],channel_array[1]);ch[1]=channel_array[0];ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[2]);}
+			else if (set_id==8){ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[1]);ch[0]=DeltaMapper.getDifference(ch[2],channel_array[2]);ch[1]=channel_array[0];}
+			else if (set_id==9){ch[0]=DeltaMapper.getDifference(channel_array[0],channel_array[2]);ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=channel_array[0];}
 
 			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-
-			start = System.nanoTime();
-			if (set_id == 0)
+			if (pixel_quant == 0)
 			{
-				if (pixel_quant == 0)
+				int[] px = DeltaMapper.getPixel(ch[0], ch[1], ch[2], xdim, pixel_shift);
+				image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
+			}
+			else
+			{
+				if (xdim > 600)
 				{
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], channel_array[1], channel_array[2], xdim,
-							pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] resized_blue = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(channel_array[1], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(channel_array[2], intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+					Thread[] rt = new Thread[3];
+					for (int i = 0; i < 3; i++) { rt[i] = new Thread(new Resizer(ch[i], intermediate_xdim, xdim, ydim, i)); rt[i].start(); }
+					for (int i = 0; i < 3; i++) rt[i].join();
+					int[] px = DeltaMapper.getPixel(resize_array[0], resize_array[1], resize_array[2], xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
 				}
-			} 
-			else if (set_id == 1)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] green = DeltaMapper.getDifference(channel_array[1], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
 				else
 				{
-					int[] blue = channel_array[0];
-					int[] green = DeltaMapper.getDifference(channel_array[1], channel_array[2]);
-					int[] red = channel_array[1];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 2)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, channel_array[1], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = channel_array[0];
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
-					int[] red = channel_array[1];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 3)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[2], green);
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = channel_array[0];
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[2], green);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 4)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(channel_array[0], green, red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = channel_array[0];
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 5)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] blue = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], channel_array[1], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] green = channel_array[0];
-					int[] red = channel_array[1];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 6)
-			{
-				if (pixel_quant == 0)
-				{
-					for (int i = 0; i < channel_array[2].length; i++)
-						channel_array[2][i] = -channel_array[2][i];
-					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] blue = DeltaMapper.getSum(channel_array[1], green);
-					int[] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					for (int i = 0; i < channel_array[2].length; i++)
-						channel_array[2][i] = -channel_array[2][i];
-					int[] green = DeltaMapper.getSum(channel_array[2], channel_array[0]);
-					int[] blue = DeltaMapper.getSum(channel_array[1], green);
-					int[] red = channel_array[0];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(green, intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 7)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] green = channel_array[0];
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[2]);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 8)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] blue = DeltaMapper.getDifference(red, channel_array[2]);
-					int[] pixel = DeltaMapper.getPixel(blue, channel_array[0], red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] red = DeltaMapper.getSum(channel_array[0], channel_array[1]);
-					int[] blue = DeltaMapper.getDifference(red, channel_array[2]);
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				}
-			} 
-			else if (set_id == 9)
-			{
-				if (pixel_quant == 0)
-				{
-					int[] blue = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-
-					int[] pixel = DeltaMapper.getPixel(blue, green, channel_array[0], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
-				} 
-				else
-				{
-					int[] blue = DeltaMapper.getDifference(channel_array[0], channel_array[2]);
-					int[] green = DeltaMapper.getDifference(channel_array[0], channel_array[1]);
-					int[] red = channel_array[0];
-
-					int[] resized_blue = ResizeMapper.resize(blue, intermediate_xdim, xdim, ydim);
-					int[] resized_green = ResizeMapper.resize(channel_array[0], intermediate_xdim, xdim, ydim);
-					int[] resized_red = ResizeMapper.resize(red, intermediate_xdim, xdim, ydim);
-
-					int[] pixel = DeltaMapper.getPixel(resized_blue, resized_green, resized_red, xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, pixel, 0, xdim);
+					int[] px = DeltaMapper.getPixel(
+						ResizeMapper.resize(ch[0], intermediate_xdim, xdim, ydim),
+						ResizeMapper.resize(ch[1], intermediate_xdim, xdim, ydim),
+						ResizeMapper.resize(ch[2], intermediate_xdim, xdim, ydim),
+						xdim, pixel_shift);
+					image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
 				}
 			}
-			stop = System.nanoTime();
-			time = stop - start;
-			System.out.println("It took " + (time / 1000000) + " ms to assemble and load rgb files.");
+			System.out.println("RGB assembled in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
 
-			JFrame frame = new JFrame("Delta Reader");
-			WindowAdapter window_handler = new WindowAdapter()
-			{
-				public void windowClosing(WindowEvent event)
-				{
-					System.exit(0);
-				}
-			};
-			frame.addWindowListener(window_handler);
-
-			Canvas image_canvas = new Canvas()
-			{
-				public synchronized void paint(Graphics g)
-				{
-					g.drawImage(image, 0, 0, this);
-				}
-			};
-
-			image_canvas.setSize(xdim, ydim);
-			frame.getContentPane().add(image_canvas, BorderLayout.CENTER);
-			frame.pack();
-			frame.setLocation(400, 200);
-			frame.setVisible(true);
-		} 
-		catch (Exception e)
-		{
-			System.out.println(e.toString());
+			decoded_image = image;
+			SwingUtilities.invokeLater(() -> showImage());
 		}
+		catch (Exception e) { System.out.println(e.toString()); }
 	}
 
+	// ---- table I/O helper ---------------------------------------------------
+	private static int[] readTable(DataInputStream in) throws IOException
+	{
+		int    tl  = in.readShort();
+		int[]  tbl = new int[tl];
+		int    max = Byte.MAX_VALUE * 2 + 1;
+		if (tl <= max)
+			for (int k = 0; k < tl; k++) { tbl[k] = in.readByte(); if (tbl[k] < 0) tbl[k] = max + 1 + tbl[k]; }
+		else
+			for (int k = 0; k < tl; k++) tbl[k] = in.readShort();
+		return tbl;
+	}
+
+	// =========================================================================
+	// Viewer
+	// =========================================================================
+	private void buildViewer(String filename)
+	{
+		Dimension sc  = Toolkit.getDefaultToolkit().getScreenSize();
+		int sw = (int)sc.getWidth(), sh = (int)sc.getHeight();
+		fit_scale  = Math.min(1.0, Math.min((double)(sw*70/100-40)/xdim, (double)(sh*70/100-80)/ydim));
+		zoom_scale = fit_scale;
+
+		image_canvas = new ImageCanvas();
+		image_canvas.setPreferredSize(new Dimension(Math.max(1,(int)(xdim*zoom_scale)), Math.max(1,(int)(ydim*zoom_scale))));
+
+		scroll_pane = new JScrollPane(image_canvas, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
+		scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
+		scroll_pane.addMouseWheelListener(new MouseWheelListener()
+		{
+			public void mouseWheelMoved(MouseWheelEvent e)
+			{
+				if (e.isControlDown())
+				{
+					JViewport vp = scroll_pane.getViewport();
+					Point vpos = vp.getViewPosition(); Point mpt = e.getPoint();
+					int mcx = mpt.x+vpos.x, mcy = mpt.y+vpos.y;
+					double old = zoom_scale;
+					zoom_scale = (e.getWheelRotation()<0) ? Math.min(ZOOM_MAX,zoom_scale*ZOOM_FACTOR) : Math.max(ZOOM_MIN,zoom_scale/ZOOM_FACTOR);
+					if (zoom_scale==old) return;
+					updateDisplayImage();
+					image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+					image_canvas.revalidate(); image_canvas.repaint();
+					double r = zoom_scale/old;
+					vp.setViewPosition(new Point(Math.max(0,(int)(mcx*r)-mpt.x), Math.max(0,(int)(mcy*r)-mpt.y)));
+					updateTitle();
+				}
+				else scroll_pane.dispatchEvent(e);
+			}
+		});
+
+		frame = new JFrame("Delta Reader  [decoding\u2026]");
+		frame.addWindowListener(new WindowAdapter(){ public void windowClosing(WindowEvent e){ System.exit(0); }});
+
+		JMenuBar mb = new JMenuBar();
+		JMenu vm    = new JMenu("View");
+		JMenuItem zi = new JMenuItem("Zoom In (+)");
+		zi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+		zi.addActionListener(e -> zoomBy(ZOOM_FACTOR)); vm.add(zi);
+		JMenuItem zo = new JMenuItem("Zoom Out (-)");
+		zo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+		zo.addActionListener(e -> zoomBy(1.0/ZOOM_FACTOR)); vm.add(zo);
+		JMenuItem zf = new JMenuItem("Fit to Window");
+		zf.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+		zf.addActionListener(e ->
+		{
+			Dimension vps = scroll_pane.getViewport().getSize();
+			zoom_scale = Math.min((double)vps.width/xdim, (double)vps.height/ydim);
+			updateDisplayImage(); image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+			image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
+		}); vm.add(zf);
+		JMenuItem za = new JMenuItem("Actual Size (100%)");
+		za.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
+		za.addActionListener(e ->
+		{
+			zoom_scale = 1.0; updateDisplayImage();
+			image_canvas.setPreferredSize(new Dimension(xdim,ydim));
+			image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
+		}); vm.add(za);
+		mb.add(vm);
+		frame.setJMenuBar(mb);
+		frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
+		frame.setSize(Math.min(xdim+40,(int)(sw*0.70)), Math.min(ydim+80,(int)(sh*0.70)));
+		frame.setLocation(5,5); frame.setVisible(true);
+	}
+
+	private void showImage()
+	{
+		Dimension vps = scroll_pane.getViewport().getSize();
+		fit_scale  = Math.min(1.0, Math.min(vps.width>0?(double)vps.width/xdim:1.0, vps.height>0?(double)vps.height/ydim:1.0));
+		zoom_scale = fit_scale;
+		updateDisplayImage();
+		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
+	}
+
+	private void zoomBy(double factor)
+	{
+		double ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom_scale*factor));
+		if (ns==zoom_scale) return;
+		JViewport vp = scroll_pane.getViewport(); Point vpos = vp.getViewPosition(); Dimension vs = vp.getSize();
+		double cx=vpos.x+vs.width/2.0, cy=vpos.y+vs.height/2.0, r=ns/zoom_scale;
+		zoom_scale = ns; updateDisplayImage();
+		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+		image_canvas.revalidate(); image_canvas.repaint();
+		vp.setViewPosition(new Point(Math.max(0,(int)(cx*r-vs.width/2.0)), Math.max(0,(int)(cy*r-vs.height/2.0))));
+		updateTitle();
+	}
+
+	private void updateDisplayImage()
+	{
+		if (decoded_image==null) return;
+		if (zoom_scale==1.0) { display_image=decoded_image; return; }
+		int w=Math.max(1,(int)(xdim*zoom_scale)), h=Math.max(1,(int)(ydim*zoom_scale));
+		AffineTransform t = new AffineTransform(); t.scale(zoom_scale,zoom_scale);
+		display_image = new AffineTransformOp(t,AffineTransformOp.TYPE_BILINEAR).filter(decoded_image, new BufferedImage(w,h,decoded_image.getType()));
+	}
+
+	private void updateTitle()
+	{
+		if (frame==null) return;
+		int pct = (int)Math.round(zoom_scale*100);
+		frame.setTitle("Delta Reader  [" + (decoded_image==null ? "decoding\u2026" : pct+"%") + "]");
+	}
+
+	// =========================================================================
+	// ImageCanvas
+	// =========================================================================
+	class ImageCanvas extends JPanel
+	{
+		public ImageCanvas() { setOpaque(true); }
+		@Override public Dimension getPreferredSize()
+		{
+			return (display_image!=null) ? new Dimension(display_image.getWidth(),display_image.getHeight())
+				: new Dimension(Math.max(1,(int)(xdim*zoom_scale)), Math.max(1,(int)(ydim*zoom_scale)));
+		}
+		@Override protected synchronized void paintComponent(Graphics g) { super.paintComponent(g); if(display_image!=null) g.drawImage(display_image,0,0,this); }
+	}
+
+	// =========================================================================
+	// Resizer
+	// =========================================================================
+	class Resizer implements Runnable
+	{
+		int[] src; int xdim,nx,ny,i;
+		Resizer(int[] src,int xdim,int nx,int ny,int i){this.src=src;this.xdim=xdim;this.nx=nx;this.ny=ny;this.i=i;}
+		public void run(){ resize_array[i]=ResizeMapper.resize(src,xdim,nx,ny); }
+	}
+
+	// =========================================================================
+	// Decompressor — one per channel; handles all entropy types
+	// =========================================================================
 	class Decompressor implements Runnable
 	{
 		int i;
-
-		public Decompressor(int i)
-		{
-			this.i = i;
-		}
+		Decompressor(int i){ this.i=i; }
 
 		public void run()
 		{
-			int[] channel_id = DeltaMapper.getChannels(set_id);
-
-			if (delta_type < 8)
+			try
 			{
-				byte[] string  = (byte[]) string_list.get(i);
-				int[] table    = (int[]) table_list.get(i);
-				int iterations = StringMapper.getIterations(string);
-				
-				string         =  StringMapper.decompressStrings2(string);
-				int bitlength  = StringMapper.getBitlength(string);
-				
-				int[] delta;
-				int   number_unpacked = 0;
-				int   current_xdim    = 0;
-				int   current_ydim    = 0;
-				
+				int[] channel_id = DeltaMapper.getChannels(set_id);
+
+				// ---- Compute current dimensions ----
+				int cur_xdim, cur_ydim, size;
 				if (pixel_quant == 0)
 				{
-					delta = new int[xdim * ydim];
-					
-					for (int j = 1; j < delta.length; j++)
-						delta[j] += delta_min[i];
-
-					current_xdim = xdim;
-					current_ydim = ydim;
-				} 
+					cur_xdim = xdim; cur_ydim = ydim;
+				}
 				else
 				{
-					double factor = pixel_quant;
-					factor /= 10;
-					intermediate_xdim = xdim - (int) (factor * (xdim / 2 - 2));
-					intermediate_ydim = ydim - (int) (factor * (ydim / 2 - 2));
-					delta = new int[intermediate_xdim * intermediate_ydim];
-					
-					delta = StringMapper.unpackStrings(string, table, intermediate_xdim * intermediate_ydim, bitlength);
-					for (int j = 1; j < delta.length; j++)
-						delta[j] += delta_min[i];
+					double f = pixel_quant / 10.0;
+					intermediate_xdim = xdim - (int)(f*(xdim/2-2));
+					intermediate_ydim = ydim - (int)(f*(ydim/2-2));
+					cur_xdim = intermediate_xdim; cur_ydim = intermediate_ydim;
+				}
+				size = cur_xdim * cur_ydim;
 
-					current_xdim = intermediate_xdim;
-					current_ydim = intermediate_ydim;
+				// ---- Entropy decode → payload bytes ----
+				byte[] payload;
+
+				if (entropy_type == 0)
+				{
+					// LZ77
+					byte[]   zip_data = lz77_data_list.get(i);
+					int      orig_len = lz77_orig_length[i];
+					byte[]   buf      = new byte[orig_len];
+					Inflater inf      = new Inflater();
+					inf.setInput(zip_data); inf.inflate(buf); inf.end();
+					payload = buf;
+				}
+				else if (entropy_type == 1)
+				{
+					// Huffman
+					int[]  rank_table = huff_rank_list.get(i);
+					byte[] code_len   = huff_cl_list.get(i);
+					byte[] packed     = huff_pay_list.get(i);
+					int    bl         = huff_bl[i];
+					int    pay_min    = huff_pay_min[i];
+					int[]  hcode      = CodeMapper.getCanonicalCode(code_len);
+
+					// Number of payload symbols = payload byte count
+					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
+
+					int[] decoded = new int[num_sym];
+					CodeMapper.unpackCode(packed, rank_table, hcode, code_len, bl, decoded);
+
+					// Restore original unsigned byte values, then cast to signed byte
+					payload = new byte[num_sym];
+					for (int k = 0; k < num_sym; k++)
+						payload[k] = (byte)(decoded[k] + pay_min);
+				}
+				else if (entropy_type == 2) // Arithmetic (BigInteger)
+				{
+					// Expected total payload bytes
+					int expected = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
+
+					int[][]        freqs   = freq_list.get(i);
+					BigInteger[][] offsets = offset_list.get(i);
+					int            n_segs  = freqs.length;
+					int            seg_len = expected / n_segs;
+					int            odd_len = seg_len + expected % n_segs;
+
+					byte[][] segs = segment_list.get(i);
+					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
+
+					// Decode segments in parallel
+					Thread[] thr = new Thread[n_segs];
+					for (int k = 0; k < n_segs; k++)
+					{
+						final int ki = k;
+						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValues(offsets[ki], freqs[ki], segs[ki].length));
+						thr[k].start();
+					}
+					for (Thread t : thr) t.join();
+
+					// Reassemble
+					byte[] buf = new byte[expected];
+					int pos = 0;
+					for (int m = 0; m < n_segs; m++)
+					{ System.arraycopy(segs[m], 0, buf, pos, segs[m].length); pos += segs[m].length; }
+					payload = buf;
+				}
+				else // entropy_type == 3 (Fast Arithmetic)
+				{
+					int expected  = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
+
+					int[][]  freqs    = freq_list.get(i);
+					byte[][] fast_enc = fast_enc_list.get(i);
+					int      n_segs   = freqs.length;
+					int      seg_len  = expected / n_segs;
+					int      odd_len  = seg_len + expected % n_segs;
+
+					byte[][] segs = new byte[n_segs][];
+					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
+
+					// Decode segments in parallel using fast long-arithmetic decoder
+					Thread[] thr = new Thread[n_segs];
+					for (int k = 0; k < n_segs; k++)
+					{
+						final int    ki   = k;
+						final byte[] enc  = fast_enc[k];
+						final int[]  freq = freqs[k];
+						final int    n    = segs[k].length;
+						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValuesFast(enc, freq, n));
+						thr[k].start();
+					}
+					for (Thread t : thr) t.join();
+
+					// Reassemble
+					byte[] buf = new byte[expected];
+					int pos = 0;
+					for (int m = 0; m < n_segs; m++)
+					{ System.arraycopy(segs[m], 0, buf, pos, segs[m].length); pos += segs[m].length; }
+					payload = buf;
 				}
 
-				int[] current_channel = new int[1];
-				if (delta_type == 0)
-					current_channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, current_xdim, current_ydim, init[i]);
-				else if (delta_type == 1)
-					current_channel = DeltaMapper.getValuesFromVerticalDeltas(delta, current_xdim, current_ydim, init[i]);
-				else if (delta_type == 2)
-					current_channel = DeltaMapper.getValuesFromAverageDeltas(delta, current_xdim, current_ydim, init[i]);
-				else if (delta_type == 3)
-					current_channel = DeltaMapper.getValuesFromPaethDeltas(delta, current_xdim, current_ydim, init[i]);
-				else if (delta_type == 4)
-					current_channel = DeltaMapper.getValuesFromGradientDeltas(delta, current_xdim, current_ydim, init[i]);
-				else if (delta_type == 5)
+				// ---- Payload → delta values ----
+				int[] delta;
+
+				if (compress_type == 0)
 				{
-					byte[] map = (byte[]) map_list.get(i);
-					current_channel = DeltaMapper.getValuesFromMixedDeltas(delta, current_xdim, current_ydim, init[i], map);
-				} 
-				else if (delta_type == 6)
+					// payload bytes are (delta[k] - delta_min) stored as signed bytes
+					delta    = new int[size];
+					delta[0] = 0;
+					for (int k = 1; k < size; k++) delta[k] = payload[k] + delta_min[i];
+				}
+				else
 				{
-					byte[] map = (byte[]) map_list.get(i);
-					current_channel = DeltaMapper.getValuesFromMixedDeltas2(delta, current_xdim, current_ydim, init[i], map);
-				} 
-				else if (delta_type == 7)
-				{
-					byte[] map = (byte[]) map_list.get(i);
-					current_channel = DeltaMapper.getValuesFromIdealDeltas2(delta, current_xdim, current_ydim, init[i], map);
+					// payload is the unary-string byte array
+					int[]  tbl  = table_list.get(i);
+					byte[] str  = payload;
+					str         = StringMapper.decompressStrings(str);
+					delta       = StringMapper.unpackStrings(str, tbl, size, compressed_length[i]);
+					delta[0]    = 0;
+					for (int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 				}
 
+				// ---- Delta → channel values ----
+				int[] cur_ch;
+				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 2) cur_ch = DeltaMapper.getValuesFromAverageDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromPaethDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromGradientDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 5) cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 6) cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 7) cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else                      cur_ch = DeltaMapper.getValuesFromIdealDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+
+				// Restore difference-channel offset
 				if (channel_id[i] > 2)
-					for (int j = 0; j < current_channel.length; j++)
-						current_channel[j] += min[i];
+					for (int k = 0; k < cur_ch.length; k++) cur_ch[k] += min[i];
 
-				channel_array[i] = current_channel;
-			} 
-			else
-			{
-				System.out.println("Delta type " + delta_type + " not supported.");
-				System.exit(0);
+				channel_array[i] = cur_ch;
 			}
+			catch (Exception e) { System.out.println("Decompressor " + i + ": " + e); }
 		}
 	}
 }

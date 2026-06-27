@@ -463,16 +463,6 @@ public class ArithmeticMapper
     /**
      * Return the fraction p/q with the smallest denominator strictly inside
      * the open interval (loN/loD, hiN/hiD).
-     *
-     * Algorithm (O(log max(loD, hiD)) — pure calculation, no search):
-     *   1. Expand both endpoints as continued fractions.
-     *   2. Walk terms in lockstep while they agree; collect shared prefix.
-     *   3. At the first differing term append min(a_lo, a_hi) + 1.
-     *   4. Boundary fix: if that candidate lands exactly on the upper
-     *      endpoint (excluded), descend one more level into lo's CF.
-     *   5. Evaluate the truncated CF to get p/q.
-     *
-     * Returns {numerator, denominator}.
      */
     public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD,BigInteger hiN, BigInteger hiD) 
     {
@@ -514,8 +504,6 @@ public class ArithmeticMapper
                     // Exactly at upper bound — descend one level into lo's CF
                     shared.remove(shared.size() - 1);
                     shared.add(a);   // lo's actual diverging term
-                    // Original lo_cf (before padding) has size loCf.size() - (maxLen - loCf.size() padding)
-                    // We need the unpadded lo CF length; reconstruct from cfExpand
                     ArrayList <BigInteger> loCfOrig = cfExpand(loN, loD);
                     if(i + 1 < loCfOrig.size()) 
                     {
@@ -536,13 +524,9 @@ public class ArithmeticMapper
         return new BigInteger[]{pq[0].divide(g), pq[1].divide(g)};
     }
 
-    // ------------------------------------------------------------------
-    // Actual method.
-    // ------------------------------------------------------------------
-
     /**
-     * Arithmetic encode {@code src} and return the simplest fraction
-     * (smallest denominator) within the valid encoding interval.
+     * Arithmetic encode {@code src} using adaptive frequencies and return the
+     * simplest fraction (smallest denominator) within the valid encoding interval.
      *
      * @param src       Raw bytes to encode.
      * @param frequency frequency[i] = count of byte value i (256 entries).
@@ -757,10 +741,7 @@ public class ArithmeticMapper
     // Method with order table.
     public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte [] order) 
     {
-        //int[] f = frequency.clone();
-        //int   n = src.length;
-    	
-      	int [] f = new int[frequency.length];
+    	int [] f = new int[frequency.length];
 		int    n = src.length;
 	   
 		// Reorder frequency table.
@@ -1037,9 +1018,6 @@ public class ArithmeticMapper
         
         BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
         
-        // Because of the way we reduced the range of our values,
-     	// we know the range can now be represented as an int, although
-     	// the offset and delimiter probably still require BigIntegers.	
      	j = range[0].intValue();
      	int k = 0;
      	for(int i = 1; i < j; i++)
@@ -1059,7 +1037,6 @@ public class ArithmeticMapper
         value[0] = value[0].divide(max_gcd);
         value[1] = value[1].divide(max_gcd);
              
-       
         return value;
         
     }
@@ -1579,5 +1556,279 @@ public class ArithmeticMapper
  	  }
       return value;
    }
- 
+
+
+	// =========================================================================
+	// Fast renormalization-based arithmetic coder (no BigInteger).
+	//
+	// Uses standard E1/E2/E3 (Witten-Neal-Cleary) interval rescaling with a
+	// 32-bit fixed-point interval stored in longs to avoid sign issues.
+	// After renormalization the range is always >= 2^30, so every symbol with
+	// frequency >= 1 gets a non-zero interval: no precision loss for the
+	// segment sizes used in DeltaWriter.
+	//
+	// Output format (getIntervalValueFast):
+	//   bytes [0..3] : bit-stream length in bits, big-endian int
+	//   bytes [4..]  : compressed bit stream, LSB-first within each byte
+	//
+	// Input format (getArithmeticValuesFast):
+	//   same byte array produced by getIntervalValueFast
+	// =========================================================================
+
+	/**
+	 * Fast arithmetic encoder using long-integer E1/E2/E3 renormalization.
+	 * Drop-in replacement for the encode half of getIntervalValue / getArithmeticValues,
+	 * but ~10-50x faster because it avoids BigInteger.
+	 *
+	 * @param src        bytes to encode
+	 * @param frequency  frequency[i] = count of unsigned byte value i (256 entries)
+	 * @return           self-contained byte array: 4-byte bit-length header + bit stream
+	 */
+	public static byte[] getIntervalValueFast(byte[] src, int[] frequency)
+	{
+		int[] f = frequency.clone();
+		int   n = src.length;
+
+		// Build cumulative-frequency table
+		int[] s = new int[f.length];
+		int   m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		// 32-bit interval in [0, 2^32), stored in longs to avoid sign issues.
+		final long TOP  = 0x100000000L;  // 2^32  exclusive upper sentinel
+		final long HALF = 0x80000000L;   // 2^31
+		final long QTR  = 0x40000000L;   // 2^30
+		final long TQTR = 0xC0000000L;   // 3 * 2^30
+
+		long low     = 0L;
+		long high    = TOP;
+		int  pending = 0;
+
+		// Output buffer: worst case is ~n*8 bits + 64 bits flush/padding.
+		byte[] buf     = new byte[n * 2 + 16];
+		int    bit_pos = 0;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+
+			// Narrow the interval to symbol j's sub-interval.
+			long range    = high - low;
+			long new_low  = low + (range * s[j]) / m;
+			long new_high = (s[j] + f[j] == m)
+			                ? high   // avoid rounding error at the top
+			                : low + (range * (long)(s[j] + f[j])) / m;
+			low  = new_low;
+			high = new_high;
+
+			// E1 / E2 / E3 renormalization: rescale until interval >= HALF.
+			for (;;)
+			{
+				if (high <= HALF)
+				{
+					// E1: both in lower half — emit 0, flush pending 1s.
+					fastWriteBit(buf, bit_pos++, 0);
+					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
+					pending = 0;
+					low  <<= 1;
+					high <<= 1;
+				}
+				else if (low >= HALF)
+				{
+					// E2: both in upper half — emit 1, flush pending 0s.
+					fastWriteBit(buf, bit_pos++, 1);
+					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
+					pending = 0;
+					low  = (low  - HALF) << 1;
+					high = (high - HALF) << 1;
+				}
+				else if (low >= QTR && high <= TQTR)
+				{
+					// E3: straddles midpoint — scale around centre, defer one bit.
+					pending++;
+					low  = (low  - QTR) << 1;
+					high = (high - QTR) << 1;
+				}
+				else break;
+			}
+
+			// Adaptive update: same sequence as BigInteger version.
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		// Flush: emit enough bits so the decoder can identify the final interval.
+		// After the main loop: high > HALF (E1 didn't fire), low < HALF (E2 didn't fire),
+		// and either low < QTR or high > TQTR (E3 didn't fire).
+		// Increment pending so the flush bit and its complements collectively
+		// identify a unique point inside [low, high).
+		pending++;
+		if (low < QTR)
+		{
+			fastWriteBit(buf, bit_pos++, 0);
+			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
+		}
+		else
+		{
+			fastWriteBit(buf, bit_pos++, 1);
+			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
+		}
+
+		// Pack: 4-byte big-endian bit-length header + bit stream.
+		int    bit_length  = bit_pos;
+		int    byte_length = (bit_length + 7) / 8;
+		byte[] result      = new byte[4 + byte_length];
+		result[0] = (byte)(bit_length >>> 24);
+		result[1] = (byte)(bit_length >>> 16);
+		result[2] = (byte)(bit_length >>>  8);
+		result[3] = (byte) bit_length;
+		System.arraycopy(buf, 0, result, 4, byte_length);
+		return result;
+	}
+
+	/**
+	 * Fast arithmetic decoder, exact inverse of getIntervalValueFast.
+	 * Mirrors the encoder's E1/E2/E3 renormalization step-for-step, reading
+	 * bits from the stream to refill the 32-bit code register as the interval
+	 * is rescaled.
+	 *
+	 * @param encoded    byte array produced by getIntervalValueFast
+	 * @param frequency  original frequency table (256 entries, unmodified)
+	 * @param n          number of symbols to decode
+	 * @return           decoded byte array of length n
+	 */
+	public static byte[] getArithmeticValuesFast(byte[] encoded, int[] frequency, int n)
+	{
+		// Extract 4-byte big-endian bit-length header.
+		int bit_length = ((encoded[0] & 0xFF) << 24)
+		               | ((encoded[1] & 0xFF) << 16)
+		               | ((encoded[2] & 0xFF) <<  8)
+		               |  (encoded[3] & 0xFF);
+
+		int[] f = frequency.clone();
+
+		// Build cumulative-frequency table.
+		int[] s = new int[f.length];
+		int   m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
+		final long MASK = 0xFFFFFFFFL;   // keep values in [0, 2^32)
+
+		long low     = 0L;
+		long high    = TOP;
+		int  bit_ptr = 0;   // next bit index in the stream (data starts at byte 4)
+
+		// Prime the 32-bit code register with the first 32 bits (MSB-first).
+		// The encoder wrote the most-significant decision first, so bit 0 of the
+		// stream becomes the MSB of the code register.
+		long code = 0L;
+		for (int b = 0; b < 32; b++)
+		{
+			int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+			code = (code << 1) | bit;
+		}
+
+		byte[] value = new byte[n];
+
+		for (int i = 0; i < n; i++)
+		{
+			// Map code to a cumulative-frequency index in [0, m).
+			// After renormalization range >= QTR = 2^30 >> m, so integer
+			// division is accurate and no symbol interval can collapse to zero.
+			long range  = high - low;
+			long scaled = (code - low) * m / range;
+			if (scaled < 0)  scaled = 0;
+			if (scaled >= m) scaled = m - 1;
+
+			// Binary search: find the largest j with s[j] <= scaled.
+			// If f[j] == 0 (exhausted symbol, zero-width interval), advance.
+			int j = findFastSymbol(s, (int) scaled);
+			while (j < f.length - 1 && f[j] == 0) j++;
+
+			value[i] = (byte) j;
+
+			// Mirror the encoder's interval update exactly.
+			long new_low  = low + (range * s[j]) / m;
+			long new_high = (s[j] + f[j] == m)
+			                ? high
+			                : low + (range * (long)(s[j] + f[j])) / m;
+			low  = new_low;
+			high = new_high;
+
+			// Mirror the encoder's renormalization, sliding in new bits.
+			// The invariant low <= code < high is preserved at each step.
+			for (;;)
+			{
+				if (high <= HALF)
+				{
+					// E1 mirror
+					low  <<= 1;
+					high <<= 1;
+					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = ((code << 1) | bit) & MASK;
+				}
+				else if (low >= HALF)
+				{
+					// E2 mirror
+					low  = (low  - HALF) << 1;
+					high = (high - HALF) << 1;
+					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = (((code - HALF) << 1) | bit) & MASK;
+				}
+				else if (low >= QTR && high <= TQTR)
+				{
+					// E3 mirror
+					low  = (low  - QTR) << 1;
+					high = (high - QTR) << 1;
+					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = (((code - QTR) << 1) | bit) & MASK;
+				}
+				else break;
+			}
+
+			// Adaptive update: must mirror the encoder exactly.
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		return value;
+	}
+
+	// Write bit at position pos into buf (LSB-first within each byte).
+	private static void fastWriteBit(byte[] buf, int pos, int bit)
+	{
+		if (bit != 0)
+			buf[pos >> 3] |= (byte)(1 << (pos & 7));
+	}
+
+	// Read bit at position pos from buf, with data_byte_offset bytes of header.
+	private static int fastReadBit(byte[] buf, int data_byte_offset, int pos)
+	{
+		int abs = data_byte_offset * 8 + pos;
+		return (buf[abs >> 3] >> (abs & 7)) & 1;
+	}
+
+	/**
+	 * Binary search on cumulative-frequency table s[].
+	 * Returns the largest index j such that s[j] <= target.
+	 * s[] is non-decreasing (it is the cumulative sum of frequencies).
+	 */
+	private static int findFastSymbol(int[] s, int target)
+	{
+		int lo = 0, hi = s.length - 1;
+		while (lo < hi)
+		{
+			int mid = (lo + hi + 1) >> 1;
+			if (s[mid] <= target) lo = mid;
+			else                  hi = mid - 1;
+		}
+		return lo;
+	}
 }
