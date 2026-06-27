@@ -155,8 +155,8 @@ public class DeltaWriter
 			total_delta_sum[0] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getHorizontalFrequency(qc, new_xdim, new_ydim)));
 			total_delta_sum[1] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getVerticalFrequency(qc, new_xdim, new_ydim)));
 			total_delta_sum[2] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getAverageFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[3] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getPaethFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[4] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getGradientFrequency(qc, new_xdim, new_ydim)));
+			total_delta_sum[3] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getMedFrequency(qc, new_xdim, new_ydim)));
+			total_delta_sum[4] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getDirectionalFrequency(qc, new_xdim, new_ydim)));
 
 			res = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
 			total_delta_sum[5] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
@@ -211,7 +211,7 @@ public class DeltaWriter
 				"red, red-green, red-blue."};
 
 			delta_type_string = new String[]{
-				"horizontal","vertical","average","paeth","gradient",
+				"horizontal","vertical","average","med","directional",
 				"scanline (1)","scanline (2)","scanline (3)","frame map"};
 
 			channel_init              = new int[6];
@@ -375,7 +375,7 @@ public class DeltaWriter
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Paeth","Gradient","Scanline 1","Scanline 2","Scanline 3","Map"};
+				String[] dnames = {"H","V","Average","Med","Directional","Scanline 1","Scanline 2","Scanline 3","Map"};
 				delta_button = new JRadioButtonMenuItem[9];
 				ButtonGroup dg = new ButtonGroup();
 				for (int i = 0; i < 9; i++)
@@ -598,8 +598,8 @@ public class DeltaWriter
 				if      (delta_type == 0) result = DeltaMapper.getHorizontalDeltasFromValues(qc, new_xdim, new_ydim);
 				else if (delta_type == 1) result = DeltaMapper.getVerticalDeltasFromValues(qc, new_xdim, new_ydim);
 				else if (delta_type == 2) result = DeltaMapper.getAverageDeltasFromValues(qc, new_xdim, new_ydim);
-				else if (delta_type == 3) result = DeltaMapper.getPaethDeltasFromValues(qc, new_xdim, new_ydim);
-				else if (delta_type == 4) result = DeltaMapper.getGradientDeltasFromValues(qc, new_xdim, new_ydim);
+				else if (delta_type == 3) result = DeltaMapper.getMedDeltasFromValues(qc, new_xdim, new_ydim);
+				else if (delta_type == 4) result = DeltaMapper.getDirectionalDeltasFromValues(qc, new_xdim, new_ydim);
 				else if (delta_type == 5) { result = DeltaMapper.getMixedDeltasFromValues(qc, new_xdim, new_ydim);   map_list.add(result.get(2)); }
 				else if (delta_type == 6) { result = DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 7) { result = DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
@@ -660,8 +660,8 @@ public class DeltaWriter
 				if      (delta_type == 0) ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 1) ch = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 2) ch = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				else if (delta_type == 3) ch = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				else if (delta_type == 4) ch = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim, new_ydim, channel_init[j]);
+				else if (delta_type == 3) ch = DeltaMapper.getValuesFromMedDeltas(delta, new_xdim, new_ydim, channel_init[j]);
+				else if (delta_type == 4) ch = DeltaMapper.getValuesFromDirectionalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 5) ch = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 6) ch = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 7) ch = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));

@@ -383,6 +383,59 @@ public class DeltaMapper
 		
 		return frequency;
 	}
+
+	// -------------------------------------------------------------------------
+	// MED (Median Edge Detector) frequency — used by DeltaWriter.init() for
+	// delta-type 3 auto-selection.  Predictor matches getMedDeltasFromValues
+	// exactly: a = left, b = above, c = above-left; three-way median clamp.
+	// -------------------------------------------------------------------------
+	public static int[] getMedFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList<Integer> delta_list = new ArrayList<Integer>();
+
+		for (int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];           // left
+				int b = src[k - xdim];        // above
+				int c = src[k - xdim - 1];    // above-left
+
+				int pred;
+				if (c >= Math.max(a, b))
+					pred = Math.min(a, b);
+				else if (c <= Math.min(a, b))
+					pred = Math.max(a, b);
+				else
+					pred = a + b - c;
+
+				delta_list.add(src[k] - pred);
+				k++;
+			}
+		}
+
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for (int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if (current_delta < delta_min) delta_min = current_delta;
+			if (current_delta > delta_max) delta_max = current_delta;
+		}
+
+		int range = delta_max - delta_min;
+		int[] frequency = new int[range + 1];
+		for (int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value -= delta_min;
+			frequency[current_value]++;
+		}
+
+		return frequency;
+	}
 	
 	public static int [] getGradientFrequency(int src[], int xdim, int ydim)
 	{
@@ -485,7 +538,70 @@ public class DeltaMapper
 		
 		return frequency;
 	}
-	
+
+	// -------------------------------------------------------------------------
+	// Directional frequency — used by DeltaWriter.init() for delta-type 4
+	// auto-selection.  Predictor matches getDirectionalDeltasFromValues for
+	// columns 1..xdim-2 (where above-right d is always available).
+	// The last column (which uses a MED fallback in the actual encoder) is
+	// excluded here, consistent with every other frequency method in this file.
+	// -------------------------------------------------------------------------
+	public static int[] getDirectionalFrequency(int src[], int xdim, int ydim)
+	{
+		ArrayList<Integer> delta_list = new ArrayList<Integer>();
+
+		for (int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];            // left
+				int b = src[k - xdim];         // above
+				int c = src[k - xdim - 1];     // above-left
+				int d = src[k - xdim + 1];     // above-right
+
+				int h_edge  = Math.abs(b - c) + Math.abs(b - d);
+				int v_edge  = Math.abs(a - c) + Math.abs(a - b);
+				int dl_edge = Math.abs(c - d);
+				int dr_edge = Math.abs(a - d);
+
+				int pred;
+				if (h_edge >= v_edge && h_edge >= dl_edge && h_edge >= dr_edge)
+					pred = b;
+				else if (v_edge >= dl_edge && v_edge >= dr_edge)
+					pred = a;
+				else if (dl_edge >= dr_edge)
+					pred = d;
+				else
+					pred = c;
+
+				delta_list.add(src[k] - pred);
+				k++;
+			}
+		}
+
+		int delta_min = Integer.MAX_VALUE;
+		int delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for (int i = 0; i < size; i++)
+		{
+			int current_delta = delta_list.get(i);
+			if (current_delta < delta_min) delta_min = current_delta;
+			if (current_delta > delta_max) delta_max = current_delta;
+		}
+
+		int range = delta_max - delta_min;
+		int[] frequency = new int[range + 1];
+		for (int i = 0; i < size; i++)
+		{
+			int current_value = delta_list.get(i);
+			current_value -= delta_min;
+			frequency[current_value]++;
+		}
+
+		return frequency;
+	}
+
 	public static ArrayList<int[]> getMedScanlineFrequency(int src[], int xdim, int ydim)
 	{
 	    ArrayList<Integer> delta_list = new ArrayList<Integer>();
@@ -2623,249 +2739,9 @@ public class DeltaMapper
 	/*
 	// This is the set of standard png filters.
 	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
-	{
-		byte[] map = new byte[ydim - 1];
-
-		for(int i = 1; i < ydim; i++)
-		{
-			int[][] delta = new int[4][xdim - 2];
-
-			int k = i * xdim + 1;
-			for(int j = 1; j < xdim - 1; j++)
-			{
-				delta[0][j - 1] = src[k] - src[k - 1];
-				delta[1][j - 1] = src[k] - src[k - xdim];
-				delta[2][j - 1] = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-
-				int a = src[k - 1];
-				int b = src[k - xdim];
-				int c = src[k - xdim - 1];
-				int d = a + b - c;
-
-				int e = Math.abs(a - d);
-				int f = Math.abs(b - d);
-				int g = Math.abs(c - d);
-
-				int current_delta;
-				if(e <= f && e <= g)
-					current_delta = src[k] - src[k - 1];
-				else if(f <= g)
-					current_delta = src[k] - src[k - xdim];
-				else
-					current_delta = src[k] - src[k - xdim - 1];
-				delta[3][j - 1] = current_delta;
-				k++;
-			}
-			
-			int [] limit = new int[4];
-			for(int j = 0; j < 4; j++)
-			{
-			    int [] current_delta = delta[j];
-			    
-			    int delta_min = current_delta[0];
-			    int delta_max = current_delta[0];
-			    for(k = 1; k < current_delta.length; k++)
-			    {
-			    	    if(current_delta[k] < delta_min)
-			    	    	    delta_min = current_delta[k];
-			    	    else if(current_delta[k] > delta_max)
-			    	      	delta_max = current_delta[k];
-			    }
-			    
-			    for(k = 0; k < current_delta.length; k++)
-			    	    current_delta[k] -= delta_min;
-			    int range = delta_max - delta_min;
-			    int [] frequency = new int[range + 1];
-			    for(k = 0; k < current_delta.length; k++)
-			    	    frequency[current_delta[k]]++;
-                double shannon_limit = CodeMapper.getShannonLimit(frequency);
-                limit[j] = (int)Math.floor(shannon_limit);
-			}
-
-			int value = limit[0];
-			int index = 0;
-			for(k = 1; k < 4; k++)
-			{
-				if(limit[k] < value)
-				{
-					value = limit[k];
-					index = k;
-				}
-			}
-			map[i - 1] = (byte) index;
-		}
-		
-		
-		// Now go back and collect the deltas.
-		int[] dst = new int[xdim * ydim];
-		int init_value = src[0];
-
-		int sum = 0;
-		int k = 0;
-		dst[k++] = 0;
-		int delta = src[k] - init_value;
-		int value = src[k];
-		dst[k++] = delta;
-		sum += Math.abs(delta);
-
-		for(int i = 2; i < xdim; i++)
-		{
-			delta = src[k] - value;
-			value = src[k];
-			dst[k++] = delta;
-			sum += Math.abs(delta);
-		}
-
-		for(int i = 1; i < ydim; i++)
-		{
-			delta = src[k] - init_value;
-			init_value = src[k];
-			dst[k++] = delta;
-			sum += Math.abs(delta);
-
-			byte m = map[i - 1];
-
-			if(m == 0)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					delta = src[k] - src[k - 1];
-					dst[k++] = delta;
-				}
-				delta = src[k] - src[k - 1];
-				dst[k++] = delta;
-				sum += Math.abs(delta);
-			} 
-			else if(m == 1)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					delta = src[k] - src[k - xdim];
-					dst[k++] = delta;
-				}
-				delta = src[k] - src[k - 1];
-				dst[k++] = delta;
-				sum += Math.abs(delta);
-			} 
-			else if(m == 2)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-					dst[k++] = delta;
-				}
-				delta = src[k] - src[k - 1];
-				dst[k++] = delta;
-				sum += Math.abs(delta);
-			} 
-			else if(m == 3)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					int a = src[k - 1];
-					int b = src[k - xdim];
-					int c = src[k - xdim - 1];
-					int d = a + b - c;
-
-					int e = Math.abs(a - d);
-					int f = Math.abs(b - d);
-					int g = Math.abs(c - d);
-
-					if(e <= f && e <= g)
-						delta = src[k] - src[k - 1];
-					else if(f <= g)
-						delta = src[k] - src[k - xdim];
-					else
-						delta = src[k] - src[k - xdim - 1];
-					dst[k++] = delta;
-					sum += Math.abs(delta);
-				}
-				delta = src[k] - src[k - 1];
-				dst[k++] = delta;
-			}
-		}
-		ArrayList result = new ArrayList();
-		result.add(sum);
-		result.add(dst);
-		result.add(map);
-		result.add(init_value);
-		return result;
-	}
-	
-	
+	{ ... }
 	public static int[] getValuesFromMixedDeltas(int[] src, int xdim, int ydim, int init_value, byte[] map)
-	{
-		int[] dst = new int[xdim * ydim];
-		int k = 0;
-		dst[k++] = init_value;
-		int value = init_value;
-
-		for(int i = 1; i < xdim; i++)
-		{
-			value += src[k];
-			dst[k++] = value;
-		}
-
-		for(int i = 1; i < ydim; i++)
-		{
-			init_value += src[k];
-			dst[k++] = init_value;
-
-			int m = map[i - 1];
-			if(m == 0)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					value = dst[k - 1] + src[k];
-					dst[k++] = value;
-				}
-			} 
-			else if(m == 1)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					value = dst[k - xdim] + src[k];
-					dst[k++] = value;
-				}
-			} 
-			else if(m == 2)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					value = (dst[k - xdim] + dst[k - 1]) / 2 + src[k];
-					dst[k++] = value;
-				}
-			} 
-			else if(m == 3)
-			{
-				for(int j = 1; j < xdim - 1; j++)
-				{
-					int a = dst[k - 1];
-					int b = dst[k - xdim];
-					int c = dst[k - xdim - 1];
-					int d = a + b - c;
-
-					int delta_a = Math.abs(a - d);
-					int delta_b = Math.abs(b - d);
-					int delta_c = Math.abs(c - d);
-
-					if(delta_a <= delta_b && delta_a <= delta_c)
-						value = dst[k - 1];
-					else if(delta_b <= delta_c)
-						value = dst[k - xdim];
-					else
-						value = dst[k - xdim - 1];
-					value += src[k];
-					dst[k++] = value;
-				}
-			}
-			value = dst[k - 1] + src[k];
-			dst[k++] = value;
-		}
-
-		return dst;
-	}
-
+	{ ... }
     */
 	
 	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
@@ -3109,8 +2985,7 @@ public class DeltaMapper
 
 
 	// This function uses a set of averaging filters instead of the standard png
-	// filters,
-	// and seems to work slightly better.
+	// filters, and seems to work slightly better.
 	public static ArrayList getMixedDeltasFromValues2(int src[], int xdim, int ydim)
 	{
 		byte[] map = new byte[ydim - 1];
@@ -3307,45 +3182,25 @@ public class DeltaMapper
 			type_list.add(second_type);
 
 			if(type_list.contains(0) && type_list.contains(1))
-			{
 				line_map[m++] = (byte) 0;
-			} 
 			else if(type_list.contains(0) && type_list.contains(2))
-			{
 				line_map[m++] = (byte) 1;
-			} 
 			else if(type_list.contains(0) && type_list.contains(3))
-			{
 				line_map[m++] = (byte) 2;
-			} 
 			else if(type_list.contains(0) && type_list.contains(4))
-			{
 				line_map[m++] = (byte) 3;
-			} 
 			else if(type_list.contains(1) && type_list.contains(2))
-			{
 				line_map[m++] = (byte) 4;
-			} 
 			else if(type_list.contains(1) && type_list.contains(3))
-			{
 				line_map[m++] = (byte) 5;
-			} 
 			else if(type_list.contains(1) && type_list.contains(4))
-			{
 				line_map[m++] = (byte) 6;
-			} 
 			else if(type_list.contains(2) && type_list.contains(3))
-			{
 				line_map[m++] = (byte) 7;
-			} 
 			else if(type_list.contains(2) && type_list.contains(4))
-			{
 				line_map[m++] = (byte) 8;
-			} 
 			else if(type_list.contains(3) && type_list.contains(4))
-			{
 				line_map[m++] = (byte) 9;
-			}
 		}
 
 		// Then get the pixel map.
@@ -3354,7 +3209,6 @@ public class DeltaMapper
 		for(int i = 1; i < ydim; i++)
 		{
 			m = line_map[i - 1];
-			// System.out.println("Line " + i + " is type " + m);
 			int[] value = new int[2];
 			for(int j = 1; j < xdim - 1; j++)
 			{
@@ -3363,101 +3217,61 @@ public class DeltaMapper
 				{
 					value[0] += Math.abs(src[k] - src[k - 1]);
 					value[1] += Math.abs(src[k] - src[k - xdim]);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 1)
 				{
 					value[0] += Math.abs(src[k] - src[k - 1]);
 					value[1] += Math.abs(src[k] - src[k - xdim]);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 2)
 				{
 					value[0] += Math.abs(src[k] - src[k - 1]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 3)
 				{
 					value[0] += Math.abs(src[k] - src[k - 1]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 4)
 				{
 					value[0] += Math.abs(src[k] - src[k - xdim]);
 					value[1] += Math.abs(src[k] - src[k - xdim]);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 5)
 				{
 					value[0] += Math.abs(src[k] - src[k - xdim]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 6)
 				{
 					value[0] += Math.abs(src[k] - src[k - xdim]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 7)
 				{
 					value[0] += Math.abs(src[k] - src[k - xdim]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 8)
 				{
 					value[0] += Math.abs(src[k] - src[k - xdim]);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				} 
 				else if(m == 9)
 				{
 					value[0] += Math.abs(src[k] - (src[k - 1] + src[k - xdim]) / 2);
 					value[1] += Math.abs(src[k] - (src[k - 1] + src[k - xdim + 1]) / 2);
-
-					if(value[0] <= value[1])
-						pixel_map[n++] = 0;
-					else
-						pixel_map[n++] = 1;
+					pixel_map[n++] = (value[0] <= value[1]) ? (byte)0 : (byte)1;
 				}
 			}
 		}
@@ -3501,75 +3315,26 @@ public class DeltaMapper
 					n = pixel_map[p++];
 
 					if(m == 0)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - 1];
-						else
-							delta = src[k] - src[k - xdim];
-					} 
+						delta = (n == 0) ? src[k] - src[k-1] : src[k] - src[k-xdim];
 					else if(m == 1)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - 1];
-						else
-							delta = src[k] - src[k - xdim - 1];
-					} 
+						delta = (n == 0) ? src[k] - src[k-1] : src[k] - src[k-xdim-1];
 					else if(m == 2)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - 1];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-					} 
+						delta = (n == 0) ? src[k] - src[k-1] : src[k] - (src[k-1]+src[k-xdim])/2;
 					else if(m == 3)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - 1];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
-					} 
+						delta = (n == 0) ? src[k] - src[k-1] : src[k] - (src[k-1]+src[k-xdim+1])/2;
 					else if(m == 4)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - xdim];
-						else
-							delta = src[k] - src[k - xdim - 1];
-					} 
+						delta = (n == 0) ? src[k] - src[k-xdim] : src[k] - src[k-xdim-1];
 					else if(m == 5)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - xdim];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-					} 
+						delta = (n == 0) ? src[k] - src[k-xdim] : src[k] - (src[k-1]+src[k-xdim])/2;
 					else if(m == 6)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - xdim];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
-					} 
+						delta = (n == 0) ? src[k] - src[k-xdim] : src[k] - (src[k-1]+src[k-xdim+1])/2;
 					else if(m == 7)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - xdim - 1];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-					} 
+						delta = (n == 0) ? src[k] - src[k-xdim-1] : src[k] - (src[k-1]+src[k-xdim])/2;
 					else if(m == 8)
-					{
-						if(n == 0)
-							delta = src[k] - src[k - xdim - 1];
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
-					} 
-					else if(m == 9)
-					{
-						if(n == 0)
-							delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
-						else
-							delta = src[k] - (src[k - 1] + src[k - xdim + 1]) / 2;
-					}
+						delta = (n == 0) ? src[k] - src[k-xdim-1] : src[k] - (src[k-1]+src[k-xdim+1])/2;
+					else
+						delta = (n == 0) ? src[k] - (src[k-1]+src[k-xdim])/2 : src[k] - (src[k-1]+src[k-xdim+1])/2;
+
 					dst[k++] = delta;
 					sum += Math.abs(delta);
 				}
@@ -3617,75 +3382,25 @@ public class DeltaMapper
 				{
 					int n = pixel_map[p++];
 					if(m == 0)
-					{
-						if(n == 0)
-							value = dst[k - 1];
-						else
-							value = dst[k - xdim];
-					} 
+						value = (n == 0) ? dst[k-1] : dst[k-xdim];
 					else if(m == 1)
-					{
-						if(n == 0)
-							value = dst[k - 1];
-						else
-							value = dst[k - xdim - 1];
-					} 
+						value = (n == 0) ? dst[k-1] : dst[k-xdim-1];
 					else if(m == 2)
-					{
-						if(n == 0)
-							value = dst[k - 1];
-						else
-							value = (dst[k - xdim] + dst[k - xdim]) / 2;
-					} 
+						value = (n == 0) ? dst[k-1] : (dst[k-xdim]+dst[k-xdim])/2;
 					else if(m == 3)
-					{
-						if(n == 0)
-							value = dst[k - 1];
-						else
-							value = (dst[k - xdim] + dst[k - xdim + 1]) / 2;
-					} 
+						value = (n == 0) ? dst[k-1] : (dst[k-xdim]+dst[k-xdim+1])/2;
 					else if(m == 4)
-					{
-						if(n == 0)
-							value = dst[k - xdim];
-						else
-							value = dst[k - xdim - 1];
-					} 
+						value = (n == 0) ? dst[k-xdim] : dst[k-xdim-1];
 					else if(m == 5)
-					{
-						if(n == 0)
-							value = dst[k - xdim];
-						else
-							value = (dst[k - xdim] + dst[k - xdim]) / 2;
-					} 
+						value = (n == 0) ? dst[k-xdim] : (dst[k-xdim]+dst[k-xdim])/2;
 					else if(m == 6)
-					{
-						if(n == 0)
-							value = dst[k - xdim];
-						else
-							value = (dst[k - xdim] + dst[k - xdim + 1]) / 2;
-					} 
+						value = (n == 0) ? dst[k-xdim] : (dst[k-xdim]+dst[k-xdim+1])/2;
 					else if(m == 7)
-					{
-						if(n == 0)
-							value = dst[k - xdim - 1];
-						else
-							value = (dst[k - xdim] + dst[k - xdim]) / 2;
-					} 
+						value = (n == 0) ? dst[k-xdim-1] : (dst[k-xdim]+dst[k-xdim])/2;
 					else if(m == 8)
-					{
-						if(n == 0)
-							value = dst[k - xdim - 1];
-						else
-							value = (dst[k - xdim] + dst[k - xdim + 1]) / 2;
-					} 
-					else if(m == 9)
-					{
-						if(n == 0)
-							value = (dst[k - xdim] + dst[k - xdim]) / 2;
-						else
-							value = (dst[k - xdim] + dst[k - xdim + 1]) / 2;
-					}
+						value = (n == 0) ? dst[k-xdim-1] : (dst[k-xdim]+dst[k-xdim+1])/2;
+					else
+						value = (n == 0) ? (dst[k-xdim]+dst[k-xdim])/2 : (dst[k-xdim]+dst[k-xdim+1])/2;
 
 					value += src[k];
 					dst[k] = value;
@@ -4069,7 +3784,7 @@ public class DeltaMapper
 
 				if(j == 0)
 				{
-					int a = 	Math.abs(src[k] - src[k - xdim]);
+					int a = Math.abs(src[k] - src[k - xdim]);
 				    int b = Math.abs(src[k] - src[k - xdim + 1]);
 				    		
 				    if(a <= b)
@@ -4121,7 +3836,7 @@ public class DeltaMapper
 		{
 			if(j == 0)
 			{
-			    int a = 	Math.abs(src[k] - src[k - xdim]);
+			    int a = Math.abs(src[k] - src[k - xdim]);
 			    int b = Math.abs(src[k] - src[k - xdim + 1]);
 			    		
 			    if(a <= b)
@@ -4236,7 +3951,6 @@ public class DeltaMapper
 			for(int j = 0; j < xdim; j++)
 			{
 				int n = map[m];
-				
 				
 				if(n == 0)
 					dst[k] = dst[k - 1] + src[k];
@@ -4537,7 +4251,6 @@ public class DeltaMapper
 				for(int j = 0; j < xdim; j++)
 				{
 					if(j == 0)
-						// Setting the first value to 6 to mark the delta type ideal.
 						dst[k++] = 0;
 					else
 					{
@@ -4666,7 +4379,6 @@ public class DeltaMapper
 				for(int j = 0; j < xdim; j++)
 				{
 					if(j == 0)
-						// Setting the first value to 6 to mark the delta type ideal.
 						dst[k++] = 0;
 					else
 					{
@@ -4809,8 +4521,6 @@ public class DeltaMapper
 			{
 				for(int j = 0; j < xdim; j++)
 				{
-					// Setting the first value to 0. Could be set to a code
-					// since it never gets used.
 					if(j == 0)
 						dst[k++] = 0;
 					else
@@ -5093,20 +4803,14 @@ public class DeltaMapper
 						value[0] = src[k] - src[k + 1];
 						value[1] = src[k + xdim];
 						value[2] = src[k + xdim + 1];
-
-						location[0] = 4;
-						location[1] = 6;
-						location[2] = 7;
+						location[0] = 4; location[1] = 6; location[2] = 7;
 					} 
 					else if(j == xdim - 1)
 					{
 						value[0] = src[k] - src[k - 1];
 						value[1] = src[k + xdim - 1];
 						value[2] = src[k + xdim];
-
-						location[0] = 3;
-						location[1] = 5;
-						location[2] = 6;
+						location[0] = 3; location[1] = 5; location[2] = 6;
 					} 
 					else
 					{
@@ -5115,12 +4819,8 @@ public class DeltaMapper
 						value[2] = src[k] - src[k + xdim - 1];
 						value[3] = src[k] - src[k + xdim];
 						value[4] = src[k] - src[k + xdim + 1];
-
-						location[0] = 3;
-						location[1] = 4;
-						location[2] = 5;
-						location[3] = 6;
-						location[4] = 7;
+						location[0] = 3; location[1] = 4; location[2] = 5;
+						location[3] = 6; location[4] = 7;
 					}
 				} 
 				else if(i == ydim - 1)
@@ -5130,20 +4830,14 @@ public class DeltaMapper
 						value[0] = src[k] - src[k - xdim];
 						value[1] = src[k - xdim + 1];
 						value[2] = src[k + 1];
-
-						location[0] = 1;
-						location[1] = 2;
-						location[2] = 4;
+						location[0] = 1; location[1] = 2; location[2] = 4;
 					} 
 					else if(j == xdim - 1)
 					{
 						value[0] = src[k] - src[k - xdim - 1];
 						value[1] = src[k - xdim];
 						value[2] = src[k - 1];
-
-						location[0] = 0;
-						location[1] = 1;
-						location[2] = 3;
+						location[0] = 0; location[1] = 1; location[2] = 3;
 					} 
 					else
 					{
@@ -5152,12 +4846,8 @@ public class DeltaMapper
 						value[2] = src[k] - src[k - xdim + 1];
 						value[3] = src[k] - src[k - 1];
 						value[4] = src[k] - src[k + 1];
-
-						location[0] = 0;
-						location[1] = 1;
-						location[2] = 2;
-						location[3] = 3;
-						location[4] = 4;
+						location[0] = 0; location[1] = 1; location[2] = 2;
+						location[3] = 3; location[4] = 4;
 					}
 				} 
 				else
@@ -5169,12 +4859,8 @@ public class DeltaMapper
 						value[2] = src[k] - src[k + 1];
 						value[3] = src[k] - src[k + xdim];
 						value[4] = src[k] - src[k + xdim + 1];
-
-						location[0] = 1;
-						location[1] = 2;
-						location[2] = 4;
-						location[3] = 6;
-						location[4] = 7;
+						location[0] = 1; location[1] = 2; location[2] = 4;
+						location[3] = 6; location[4] = 7;
 					} 
 					else if(j == xdim - 1)
 					{
@@ -5183,12 +4869,8 @@ public class DeltaMapper
 						value[2] = src[k] - src[k - 1];
 						value[3] = src[k] - src[k + xdim - 1];
 						value[4] = src[k] - src[k + xdim];
-
-						location[0] = 0;
-						location[1] = 1;
-						location[2] = 3;
-						location[3] = 5;
-						location[4] = 6;
+						location[0] = 0; location[1] = 1; location[2] = 3;
+						location[3] = 5; location[4] = 6;
 					} 
 					else
 					{
@@ -5200,15 +4882,9 @@ public class DeltaMapper
 						value[5] = src[k] - src[k + xdim - 1];
 						value[6] = src[k] - src[k + xdim];
 						value[7] = src[k] - src[k + xdim + 1];
-
-						location[0] = 0;
-						location[1] = 1;
-						location[2] = 2;
-						location[3] = 3;
-						location[4] = 4;
-						location[5] = 5;
-						location[6] = 6;
-						location[7] = 7;
+						location[0] = 0; location[1] = 1; location[2] = 2;
+						location[3] = 3; location[4] = 4; location[5] = 5;
+						location[6] = 6; location[7] = 7;
 					}
 				}
 
@@ -5260,29 +4936,17 @@ public class DeltaMapper
 
 		if(y > 0)
 		{
-			if(x > 0)
-				neighbors.add(src[(y - 1) * xdim + x - 1]);
+			if(x > 0) neighbors.add(src[(y - 1) * xdim + x - 1]);
 			neighbors.add(src[(y - 1) * xdim + x]);
-			if(x < xdim - 1)
-				neighbors.add(src[(y - 1) * xdim + x + 1]);
+			if(x < xdim - 1) neighbors.add(src[(y - 1) * xdim + x + 1]);
 		}
-
-		if(x > 0)
-		{
-			neighbors.add(src[y * xdim + x - 1]);
-		}
-		if(x < xdim - 1)
-		{
-			neighbors.add(src[y * xdim + x + 1]);
-		}
-
+		if(x > 0) neighbors.add(src[y * xdim + x - 1]);
+		if(x < xdim - 1) neighbors.add(src[y * xdim + x + 1]);
 		if(y < ydim - 1)
 		{
-			if(x > 0)
-				neighbors.add(src[(y + 1) * xdim + x - 1]);
+			if(x > 0) neighbors.add(src[(y + 1) * xdim + x - 1]);
 			neighbors.add(src[(y + 1) * xdim + x]);
-			if(x < xdim - 1)
-				neighbors.add(src[(y + 1) * xdim + x + 1]);
+			if(x < xdim - 1) neighbors.add(src[(y + 1) * xdim + x + 1]);
 		}
 
 		return neighbors;
@@ -5294,30 +4958,21 @@ public class DeltaMapper
 
 		if(y == 0)
 		{
-			if(x == 0)
-				location_type = 1;
-			else if(x < xdim - 1)
-				location_type = 2;
-			else if(x == xdim - 1)
-				location_type = 3;
+			if(x == 0) location_type = 1;
+			else if(x < xdim - 1) location_type = 2;
+			else if(x == xdim - 1) location_type = 3;
 		} 
 		else if(y < ydim - 1)
 		{
-			if(x == 0)
-				location_type = 4;
-			else if(x < xdim - 1)
-				location_type = 5;
-			else if(x == xdim - 1)
-				location_type = 6;
+			if(x == 0) location_type = 4;
+			else if(x < xdim - 1) location_type = 5;
+			else if(x == xdim - 1) location_type = 6;
 		} 
 		else if(y == ydim - 1)
 		{
-			if(x == 0)
-				location_type = 7;
-			else if(x < xdim - 1)
-				location_type = 8;
-			else if(x == xdim - 1)
-				location_type = 9;
+			if(x == 0) location_type = 7;
+			else if(x < xdim - 1) location_type = 8;
+			else if(x == xdim - 1) location_type = 9;
 		}
 		return(location_type);
 	}
@@ -5328,128 +4983,79 @@ public class DeltaMapper
 
 		if(location_type == 1)
 		{
-			if(location == 4)
-				index = 0;
-			else if(location == 6)
-				index = 1;
-			else if(location == 7)
-				index = 2;
-			else
-				index = -1;
+			if(location == 4) index = 0;
+			else if(location == 6) index = 1;
+			else if(location == 7) index = 2;
+			else index = -1;
 		} 
 		else if(location_type == 2)
 		{
-			if(location == 3)
-				index = 0;
-			else if(location == 4)
-				index = 1;
-			else if(location == 5)
-				index = 2;
-			else if(location == 6)
-				index = 3;
-			else if(location == 7)
-				index = 4;
-			else
-				index = -1;
+			if(location == 3) index = 0;
+			else if(location == 4) index = 1;
+			else if(location == 5) index = 2;
+			else if(location == 6) index = 3;
+			else if(location == 7) index = 4;
+			else index = -1;
 		} 
 		else if(location_type == 3)
 		{
-			if(location == 3)
-				index = 0;
-			else if(location == 5)
-				index = 1;
-			else if(location == 6)
-				index = 2;
-			else
-				index = -1;
+			if(location == 3) index = 0;
+			else if(location == 5) index = 1;
+			else if(location == 6) index = 2;
+			else index = -1;
 		} 
 		else if(location_type == 4)
 		{
-			if(location == 1)
-				index = 0;
-			else if(location == 2)
-				index = 1;
-			else if(location == 4)
-				index = 2;
-			else if(location == 6)
-				index = 3;
-			else if(location == 7)
-				index = 4;
-			else
-				index = -1;
+			if(location == 1) index = 0;
+			else if(location == 2) index = 1;
+			else if(location == 4) index = 2;
+			else if(location == 6) index = 3;
+			else if(location == 7) index = 4;
+			else index = -1;
 		} 
 		else if(location_type == 5)
 		{
-			if(location == 0)
-				index = 0;
-			else if(location == 1)
-				index = 1;
-			else if(location == 2)
-				index = 2;
-			else if(location == 3)
-				index = 3;
-			else if(location == 4)
-				index = 4;
-			else if(location == 5)
-				index = 5;
-			else if(location == 6)
-				index = 6;
-			else if(location == 7)
-				index = 7;
-			else
-				index = -1;
+			if(location == 0) index = 0;
+			else if(location == 1) index = 1;
+			else if(location == 2) index = 2;
+			else if(location == 3) index = 3;
+			else if(location == 4) index = 4;
+			else if(location == 5) index = 5;
+			else if(location == 6) index = 6;
+			else if(location == 7) index = 7;
+			else index = -1;
 		} 
 		else if(location_type == 6)
 		{
-			if(location == 0)
-				index = 0;
-			else if(location == 1)
-				index = 1;
-			else if(location == 3)
-				index = 2;
-			else if(location == 5)
-				index = 3;
-			else if(location == 6)
-				index = 4;
-			else
-				index = -1;
+			if(location == 0) index = 0;
+			else if(location == 1) index = 1;
+			else if(location == 3) index = 2;
+			else if(location == 5) index = 3;
+			else if(location == 6) index = 4;
+			else index = -1;
 		} 
 		else if(location_type == 7)
 		{
-			if(location == 1)
-				index = 0;
-			else if(location == 2)
-				index = 1;
-			else if(location == 4)
-				index = 2;
-			else
-				index = -1;
+			if(location == 1) index = 0;
+			else if(location == 2) index = 1;
+			else if(location == 4) index = 2;
+			else index = -1;
 		} 
 		else if(location_type == 8)
 		{
-			if(location == 0)
-				index = 0;
-			else if(location == 1)
-				index = 1;
-			else if(location == 2)
-				index = 2;
-			else if(location == 3)
-				index = 3;
-			else if(location == 4)
-				index = 4;
-			else
-				index = -1;
+			if(location == 0) index = 0;
+			else if(location == 1) index = 1;
+			else if(location == 2) index = 2;
+			else if(location == 3) index = 3;
+			else if(location == 4) index = 4;
+			else index = -1;
 		} 
 		else if(location_type == 9)
 		{
-			if(location == 0)
-				index = 0;
-			else if(location == 1)
-				index = 1;
-			else if(location == 3)
-				index = 2;
-			else
-				index = -1;
+			if(location == 0) index = 0;
+			else if(location == 1) index = 1;
+			else if(location == 3) index = 2;
+			else index = -1;
 		}
 		return index;
 	}
@@ -5458,22 +5064,14 @@ public class DeltaMapper
 	{
 		int k = y * xdim + x;
 
-		if(location == 0)
-			k = k - xdim - 1;
-		else if(location == 1)
-			k = k - xdim;
-		else if(location == 2)
-			k = k - xdim + 1;
-		else if(location == 3)
-			k = k - 1;
-		else if(location == 4)
-			k = k + 1;
-		if(location == 5)
-			k = k + xdim - 1;
-		if(location == 6)
-			k = k + xdim;
-		if(location == 7)
-			k = k + xdim + 1;
+		if(location == 0) k = k - xdim - 1;
+		else if(location == 1) k = k - xdim;
+		else if(location == 2) k = k - xdim + 1;
+		else if(location == 3) k = k - 1;
+		else if(location == 4) k = k + 1;
+		if(location == 5) k = k + xdim - 1;
+		if(location == 6) k = k + xdim;
+		if(location == 7) k = k + xdim + 1;
 
 		return k;
 	}
@@ -5481,22 +5079,14 @@ public class DeltaMapper
 	public static int getInverseLocation(int location)
 	{
 		int inverse_location = 0;
-		if(location == 0)
-			inverse_location = 7;
-		else if(location == 1)
-			inverse_location = 6;
-		else if(location == 2)
-			inverse_location = 5;
-		else if(location == 3)
-			inverse_location = 4;
-		else if(location == 4)
-			inverse_location = 3;
-		else if(location == 5)
-			inverse_location = 2;
-		else if(location == 6)
-			inverse_location = 1;
-		else if(location == 7)
-			inverse_location = 0;
+		if(location == 0) inverse_location = 7;
+		else if(location == 1) inverse_location = 6;
+		else if(location == 2) inverse_location = 5;
+		else if(location == 3) inverse_location = 4;
+		else if(location == 4) inverse_location = 3;
+		else if(location == 5) inverse_location = 2;
+		else if(location == 6) inverse_location = 1;
+		else if(location == 7) inverse_location = 0;
 
 		return inverse_location;
 	}
@@ -5508,17 +5098,12 @@ public class DeltaMapper
 	// at selecting the ideal delta.
 	public static int[] getIdealDeltasFromList(ArrayList delta_list)
 	{
-		int sum = 0;
 		int[] ideal_delta = new int[delta_list.size()];
 		for(int i = 0; i < delta_list.size(); i++)
 		{
 			int[][] table = (int[][]) delta_list.get(i);
-
-			int delta = table[0][0];
-
-			ideal_delta[i] = delta;
+			ideal_delta[i] = table[0][0];
 		}
-
 		return ideal_delta;
 	}
 
@@ -5526,16 +5111,11 @@ public class DeltaMapper
 	public static int getIdealDeltaSum(ArrayList delta_list)
 	{
 		int sum = 0;
-
 		for(int i = 0; i < delta_list.size(); i++)
 		{
 			int[][] table = (int[][]) delta_list.get(i);
-
-			int delta = table[0][0];
-
-			sum += Math.abs(delta);
+			sum += Math.abs(table[0][0]);
 		}
-
 		return sum;
 	}
 
@@ -5543,16 +5123,11 @@ public class DeltaMapper
 	public static int getWorstlDeltaSum(ArrayList delta_list)
 	{
 		int sum = 0;
-
 		for(int i = 0; i < delta_list.size(); i++)
 		{
 			int[][] table = (int[][]) delta_list.get(i);
-
-			int delta = table[table.length - 1][0];
-
-			sum += Math.abs(delta);
+			sum += Math.abs(table[table.length - 1][0]);
 		}
-
 		return sum;
 	}
 
@@ -5560,69 +5135,17 @@ public class DeltaMapper
 	{
 		int[] channel = new int[3];
 
-		if(set_id == 0)
-		{
-			channel[0] = 0;
-			channel[1] = 1;
-			channel[2] = 2;
-		} 
-		else if(set_id == 1)
-		{
-			channel[0] = 0;
-			channel[1] = 2;
-			channel[2] = 4;
-		} 
-		else if(set_id == 2)
-		{
-			channel[0] = 0;
-			channel[1] = 2;
-			channel[2] = 3;
-		} 
-		else if(set_id == 3)
-		{
-			channel[0] = 0;
-			channel[1] = 3;
-			channel[2] = 4;
-		} 
-		else if(set_id == 4)
-		{
-			channel[0] = 0;
-			channel[1] = 3;
-			channel[2] = 5;
-		} 
-		else if(set_id == 5)
-		{
-			channel[0] = 1;
-			channel[1] = 2;
-			channel[2] = 3;
-		} 
-		else if(set_id == 6)
-		{
-			channel[0] = 2;
-			channel[1] = 3;
-			channel[2] = 4;
-		} 
-		else if(set_id == 7)
-		{
-			channel[0] = 1;
-			channel[1] = 3;
-			channel[2] = 4;
-		} 
-		else if(set_id == 8)
-		{
-			channel[0] = 1;
-			channel[1] = 4;
-			channel[2] = 5;
-		} 
-		else if(set_id == 9)
-		{
-			channel[0] = 2;
-			channel[1] = 4;
-			channel[2] = 5;
-		}
+		if(set_id == 0)      { channel[0]=0; channel[1]=1; channel[2]=2; }
+		else if(set_id == 1) { channel[0]=0; channel[1]=2; channel[2]=4; }
+		else if(set_id == 2) { channel[0]=0; channel[1]=2; channel[2]=3; }
+		else if(set_id == 3) { channel[0]=0; channel[1]=3; channel[2]=4; }
+		else if(set_id == 4) { channel[0]=0; channel[1]=3; channel[2]=5; }
+		else if(set_id == 5) { channel[0]=1; channel[1]=2; channel[2]=3; }
+		else if(set_id == 6) { channel[0]=2; channel[1]=3; channel[2]=4; }
+		else if(set_id == 7) { channel[0]=1; channel[1]=3; channel[2]=4; }
+		else if(set_id == 8) { channel[0]=1; channel[1]=4; channel[2]=5; }
+		else if(set_id == 9) { channel[0]=2; channel[1]=4; channel[2]=5; }
+
 		return channel;
 	}
-
-
-
 }

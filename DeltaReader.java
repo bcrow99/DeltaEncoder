@@ -63,7 +63,25 @@ public class DeltaReader
 	// Frequency tables are shared with the Arithmetic path (freq_list above).
 	ArrayList<byte[][]>       fast_enc_list = new ArrayList<byte[][]>();
 
-	// ---- Viewer state -------------------------------------------------------
+	// ---- Label strings (mirrors DeltaWriter) --------------------------------
+	static final String[] set_string = {
+		"blue, green, and red.",
+		"blue, red, and red-green.",
+		"blue, red, and blue-green.",
+		"blue, blue-green, and red-green.",
+		"blue, blue-green, and red-blue.",
+		"green, red, and blue-green.",
+		"red, blue-green, and red-green.",
+		"green, blue-green, and red-green.",
+		"green, red-green, and red-blue.",
+		"red, red-green, red-blue."};
+
+	static final String[] delta_type_string = {
+		"horizontal","vertical","average","med","directional",
+		"scanline (1)","scanline (2)","scanline (3)","frame map"};
+
+	static final String[] entropy_type_string = {
+		"LZ77","Huffman","Arithmetic","Fast Arithmetic"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -101,9 +119,11 @@ public class DeltaReader
 			compress_type = in.readByte();
 			entropy_type  = in.readByte();
 
-			System.out.println("xdim=" + xdim + " ydim=" + ydim);
-			System.out.println("delta_type=" + delta_type + " compress_type=" + compress_type + " entropy_type=" + entropy_type);
-			System.out.println("set_id=" + set_id);
+			System.out.println("Image:        " + xdim + " x " + ydim);
+			System.out.println("Channel set:  " + set_string[set_id & 0xFF]);
+			System.out.println("Delta type:   " + delta_type_string[delta_type & 0xFF]);
+			System.out.println("Entropy type: " + entropy_type_string[entropy_type & 0xFF]);
+			System.out.println();
 
 			int[] channel_id = DeltaMapper.getChannels(set_id);
 
@@ -644,8 +664,8 @@ public class DeltaReader
 				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 				else if (delta_type == 2) cur_ch = DeltaMapper.getValuesFromAverageDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromPaethDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromGradientDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromMedDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromDirectionalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 				else if (delta_type == 5) cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 6) cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 7) cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
