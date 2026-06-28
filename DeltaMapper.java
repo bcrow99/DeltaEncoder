@@ -229,6 +229,122 @@ public class DeltaMapper
 		return frequency;
 	}
 
+	// Frequency estimate for the 16-predictor causal set used by
+	// getIdealDeltasFromValues16.  Mirrors getIdealFrequency but evaluates
+	// all 16 predictors and records the minimum-absolute-delta for each
+	// interior pixel.  Used by DeltaWriter.init() for auto-selection.
+	// Returns [delta_frequency, map_frequency (4 entries, one per predictor)]
+	// for the same 4-predictor selection used by getIdealDeltasFromValues.
+	// The map_frequency lets the caller charge getShannonLimit(map_freq) as
+	// map overhead when comparing against other delta types in init().
+	public static ArrayList<int[]> getIdealFrequency8(int src[], int xdim, int ydim)
+	{
+		ArrayList<Integer> delta_list = new ArrayList<Integer>();
+		int[] map_freq = new int[4];
+
+		for (int i = 1; i < ydim; i++)
+		{
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int k = i * xdim + j;
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+				int e = src[k];
+
+				int da = Math.abs(e - a), db = Math.abs(e - b);
+				int dc = Math.abs(e - c), dd = Math.abs(e - d);
+
+				int best_idx, delta;
+				if      (da <= db && da <= dc && da <= dd) { best_idx = 0; delta = e - a; }
+				else if (db <= dc && db <= dd)             { best_idx = 1; delta = e - b; }
+				else if (dc <= dd)                         { best_idx = 2; delta = e - c; }
+				else                                       { best_idx = 3; delta = e - d; }
+
+				delta_list.add(delta);
+				map_freq[best_idx]++;
+			}
+		}
+
+		int delta_min = Integer.MAX_VALUE, delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for (int i = 0; i < size; i++)
+		{
+			int v = delta_list.get(i);
+			if (v < delta_min) delta_min = v;
+			if (v > delta_max) delta_max = v;
+		}
+		int[] delta_freq = new int[delta_max - delta_min + 1];
+		for (int i = 0; i < size; i++) delta_freq[delta_list.get(i) - delta_min]++;
+
+		ArrayList<int[]> result = new ArrayList<int[]>();
+		result.add(delta_freq);
+		result.add(map_freq);
+		return result;
+	}
+
+	// Returns [delta_frequency, map_frequency (16 entries, one per predictor)].
+	public static ArrayList<int[]> getIdealFrequency16(int src[], int xdim, int ydim)
+	{
+		ArrayList<Integer> delta_list = new ArrayList<Integer>();
+		int[] map_freq = new int[16];
+
+		for (int i = 1; i < ydim; i++)
+		{
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int k = i * xdim + j;
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+				int e = src[k];
+
+				int med;
+				if (c >= Math.max(a, b))      med = Math.min(a, b);
+				else if (c <= Math.min(a, b)) med = Math.max(a, b);
+				else                          med = a + b - c;
+
+				int[] pred = {
+					a, c, b, d,
+					(a+c)>>1, (c+b)>>1, (b+d)>>1, (d+a)>>1,
+					(a+b)>>1, (c+d)>>1,
+					(a+b+c+d)>>2, med,
+					(a+b+c)>>2, (a+b+d)>>2, (a+c+d)>>2, (b+c+d)>>2
+				};
+
+				int best_abs   = Integer.MAX_VALUE;
+				int best_delta = 0;
+				int best_n     = 0;
+				for (int n = 0; n < 16; n++)
+				{
+					int delta     = e - pred[n];
+					int abs_delta = Math.abs(delta);
+					if (abs_delta < best_abs) { best_abs = abs_delta; best_delta = delta; best_n = n; }
+				}
+				delta_list.add(best_delta);
+				map_freq[best_n]++;
+			}
+		}
+
+		int delta_min = Integer.MAX_VALUE, delta_max = Integer.MIN_VALUE;
+		int size = delta_list.size();
+		for (int i = 0; i < size; i++)
+		{
+			int v = delta_list.get(i);
+			if (v < delta_min) delta_min = v;
+			if (v > delta_max) delta_max = v;
+		}
+		int[] delta_freq = new int[delta_max - delta_min + 1];
+		for (int i = 0; i < size; i++) delta_freq[delta_list.get(i) - delta_min]++;
+
+		ArrayList<int[]> result = new ArrayList<int[]>();
+		result.add(delta_freq);
+		result.add(map_freq);
+		return result;
+	}
+
 	public static ArrayList<int[]> getMedScanlineFrequency(int src[], int xdim, int ydim)
 	{
 		ArrayList<Integer> delta_list = new ArrayList<Integer>();
@@ -1303,7 +1419,123 @@ public class DeltaMapper
 		}
 		return dst;
 	}
-	
+
+	public static ArrayList getGradientDeltasFromValues2(int src[], int xdim, int ydim)
+	{
+		int[] dst      = new int[xdim * ydim];
+		int[] gradient = new int[4];
+		int   init_value = src[0];
+		int   sum = 0;
+		int   k   = 0;
+
+		dst[k++] = 0;
+		for(int i = 1; i < xdim; i++)
+		{
+			int delta = src[k] - src[k - 1];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+		}
+
+		for(int i = 1; i < ydim; i++)
+		{
+			int delta = src[k] - init_value;
+			dst[k++] = delta;
+			init_value += delta;
+			sum += Math.abs(delta);
+
+			delta = src[k] - src[k - 1];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+
+			for(int j = 2; j < xdim - 1; j++)
+			{
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+				int e = src[k - xdim - 2];
+
+				gradient[0] = Math.abs(c - b);
+				gradient[1] = Math.abs(c - a);
+				gradient[2] = Math.abs(a - b);
+				gradient[3] = Math.abs(a - e);
+
+				int max_value = gradient[0];
+				int max_index = 0;
+				for(int m = 1; m < 4; m++)
+				{
+					if(gradient[m] > max_value) { max_value = gradient[m]; max_index = m; }
+				}
+
+				if(max_index == 0)      delta = src[k] - src[k - 1];
+				else if(max_index == 1) delta = src[k] - src[k - xdim];
+				else if(max_index == 2) delta = src[k] - src[k - xdim - 1];
+				else                    delta = src[k] - src[k - xdim + 1];
+				dst[k++] = delta;
+				sum += Math.abs(delta);
+			}
+
+			delta = src[k] - src[k - 1];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+		}
+
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(init_value);
+		return result;
+	}
+
+	public static int[] getValuesFromGradientDeltas2(int src[], int xdim, int ydim, int init_value)
+	{
+		int[] dst      = new int[xdim * ydim];
+		int[] gradient = new int[4];
+		int   k        = 0;
+
+		dst[k++] = init_value;
+		for(int i = 1; i < xdim; i++) { dst[k] = dst[k-1] + src[k]; k++; }
+
+		for(int i = 1; i < ydim; i++)
+		{
+			init_value += src[k];
+			dst[k++] = init_value;
+			dst[k]   = dst[k-1] + src[k];
+			k++;
+
+			for(int j = 2; j < xdim - 1; j++)
+			{
+				int a = dst[k - 1];
+				int b = dst[k - xdim];
+				int c = dst[k - xdim - 1];
+				int d = dst[k - xdim + 1];
+				int e = dst[k - xdim - 2];
+
+				gradient[0] = Math.abs(c - b);
+				gradient[1] = Math.abs(c - a);
+				gradient[2] = Math.abs(a - b);
+				gradient[3] = Math.abs(a - e);
+
+				int max_value = gradient[0];
+				int max_index = 0;
+				for(int m = 1; m < 4; m++)
+				{
+					if(gradient[m] > max_value) { max_value = gradient[m]; max_index = m; }
+				}
+
+				if(max_index == 0)      dst[k] = dst[k-1]      + src[k];
+				else if(max_index == 1) dst[k] = dst[k-xdim]   + src[k];
+				else if(max_index == 2) dst[k] = dst[k-xdim-1] + src[k];
+				else                    dst[k] = dst[k-xdim+1] + src[k];
+				k++;
+			}
+
+			dst[k] = dst[k-1] + src[k];
+			k++;
+		}
+		return dst;
+	}
+
 	public static ArrayList getMixedDeltasFromValues(int src[], int xdim, int ydim)
 	{
 		byte[] map = new byte[ydim - 1];
@@ -2743,6 +2975,211 @@ public class DeltaMapper
 			}
 			dst[k] = dst[k-1] + src[k]; k++;
 		}
+		return dst;
+	}
+
+
+	// -------------------------------------------------------------------------
+	// 16-option ideal delta encoder/decoder — all predictors are causal.
+	//
+	// Predictor set (a=left, b=above, c=above-left, d=above-right):
+	//
+	//   0  a                    8  (a+b)>>1
+	//   1  c                    9  (c+d)>>1
+	//   2  b                   10  (a+b+c+d)>>2
+	//   3  d                   11  MED(a,b,c)
+	//   4  (a+c)>>1            12  (a+b+c)>>2
+	//   5  (c+b)>>1            13  (a+b+d)>>2
+	//   6  (b+d)>>1            14  (a+c+d)>>2
+	//   7  (d+a)>>1            15  (b+c+d)>>2
+	//
+	// Map covers rows 1..ydim-1, cols 1..xdim-2.
+	// Map entries stored as raw bytes (value 0-15, no bit-packing).
+	// -------------------------------------------------------------------------
+	public static ArrayList getIdealDeltasFromValues16(int src[], int xdim, int ydim)
+	{
+		int[]  dst        = new int[xdim * ydim];
+		// Map covers all non-first rows, interior columns.
+		byte[] map        = new byte[(xdim - 2) * (ydim - 1)];
+		int    init_value = src[0];
+		int    sum        = 0;
+		int    m          = 0;
+
+		// Pass 1: choose best of 16 causal predictors for each map pixel.
+		for (int i = 1; i < ydim; i++)
+		{
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int k = i * xdim + j;
+				int a = src[k - 1];           // left
+				int b = src[k - xdim];        // above
+				int c = src[k - xdim - 1];    // above-left
+				int d = src[k - xdim + 1];    // above-right
+				int e = src[k];
+
+				int med;
+				if (c >= Math.max(a, b))      med = Math.min(a, b);
+				else if (c <= Math.min(a, b)) med = Math.max(a, b);
+				else                          med = a + b - c;
+
+				int[] pred = {
+					a,                   //  0: left
+					c,                   //  1: above-left
+					b,                   //  2: above
+					d,                   //  3: above-right
+					(a + c) >> 1,        //  4: avg(left, above-left)
+					(c + b) >> 1,        //  5: avg(above-left, above)
+					(b + d) >> 1,        //  6: avg(above, above-right)
+					(d + a) >> 1,        //  7: avg(above-right, left)
+					(a + b) >> 1,        //  8: avg(left, above)
+					(c + d) >> 1,        //  9: avg(above-left, above-right)
+					(a + b + c + d) >> 2, // 10: all-four average
+					med,                  // 11: MED predictor
+					(a + b + c) >> 2,     // 12: three-way (a, b, c)
+					(a + b + d) >> 2,     // 13: three-way (a, b, d)
+					(a + c + d) >> 2,     // 14: three-way (a, c, d)
+					(b + c + d) >> 2      // 15: three-way (b, c, d)
+				};
+
+				int best_abs = Integer.MAX_VALUE;
+				int best_idx = 0;
+				for (int n = 0; n < 16; n++)
+				{
+					int abs_delta = Math.abs(e - pred[n]);
+					if (abs_delta < best_abs) { best_abs = abs_delta; best_idx = n; }
+				}
+				map[m++] = (byte) best_idx;
+			}
+		}
+
+		// Pass 2: compute deltas.
+		int k = 0;
+		m = 0;
+
+		// Row 0: horizontal deltas.
+		dst[k++] = 0;
+		for (int j = 1; j < xdim; j++)
+		{
+			int delta = src[k] - src[k - 1];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+		}
+
+		// Rows 1..ydim-1: col 0 vertical, interior map-driven, last col horizontal.
+		for (int i = 1; i < ydim; i++)
+		{
+			int delta = src[k] - src[k - xdim];
+			dst[k++] = delta;
+			sum += Math.abs(delta);
+
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int n = map[m++] & 0xFF;
+				int a = src[k - 1];
+				int b = src[k - xdim];
+				int c = src[k - xdim - 1];
+				int d = src[k - xdim + 1];
+
+				int med;
+				if (c >= Math.max(a, b))      med = Math.min(a, b);
+				else if (c <= Math.min(a, b)) med = Math.max(a, b);
+				else                          med = a + b - c;
+
+				int pred_val;
+				switch (n)
+				{
+					case  0: pred_val = a;              break;
+					case  1: pred_val = c;              break;
+					case  2: pred_val = b;              break;
+					case  3: pred_val = d;              break;
+					case  4: pred_val = (a + c) >> 1;  break;
+					case  5: pred_val = (c + b) >> 1;  break;
+					case  6: pred_val = (b + d) >> 1;  break;
+					case  7: pred_val = (d + a) >> 1;  break;
+					case  8: pred_val = (a + b) >> 1;  break;
+					case  9: pred_val = (c + d) >> 1;  break;
+					case 10: pred_val = (a + b + c + d) >> 2; break;
+					case 11: pred_val = med;            break;
+					case 12: pred_val = (a + b + c) >> 2; break;
+					case 13: pred_val = (a + b + d) >> 2; break;
+					case 14: pred_val = (a + c + d) >> 2; break;
+					default: pred_val = (b + c + d) >> 2; break; // 15
+				}
+
+				delta = src[k] - pred_val;
+				dst[k++] = delta;
+				sum += Math.abs(delta);
+			}
+
+			int delta2 = src[k] - src[k - 1];
+			dst[k++] = delta2;
+			sum += Math.abs(delta2);
+		}
+
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(map);
+		result.add(init_value);
+		return result;
+	}
+
+	// All predictors are causal so reconstruction is exact for every pixel.
+	public static int[] getValuesFromIdealDeltas16(int[] src, int xdim, int ydim, int init_value, byte[] map)
+	{
+		int[] dst = new int[xdim * ydim];
+		int   k   = 0;
+		int   m   = 0;
+
+		// Row 0: horizontal cumsum.
+		dst[k++] = init_value;
+		for (int j = 1; j < xdim; j++) { dst[k] = dst[k - 1] + src[k]; k++; }
+
+		// Rows 1..ydim-1: col 0 vertical, interior map-driven, last col horizontal.
+		for (int i = 1; i < ydim; i++)
+		{
+			dst[k] = dst[k - xdim] + src[k]; k++;
+
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int n = map[m++] & 0xFF;
+				int a = dst[k - 1];           // left        [decoded]
+				int b = dst[k - xdim];        // above       [decoded]
+				int c = dst[k - xdim - 1];    // above-left  [decoded]
+				int d = dst[k - xdim + 1];    // above-right [decoded]
+
+				int med;
+				if (c >= Math.max(a, b))      med = Math.min(a, b);
+				else if (c <= Math.min(a, b)) med = Math.max(a, b);
+				else                          med = a + b - c;
+
+				int pred_val;
+				switch (n)
+				{
+					case  0: pred_val = a;              break;
+					case  1: pred_val = c;              break;
+					case  2: pred_val = b;              break;
+					case  3: pred_val = d;              break;
+					case  4: pred_val = (a + c) >> 1;  break;
+					case  5: pred_val = (c + b) >> 1;  break;
+					case  6: pred_val = (b + d) >> 1;  break;
+					case  7: pred_val = (d + a) >> 1;  break;
+					case  8: pred_val = (a + b) >> 1;  break;
+					case  9: pred_val = (c + d) >> 1;  break;
+					case 10: pred_val = (a + b + c + d) >> 2; break;
+					case 11: pred_val = med;            break;
+					case 12: pred_val = (a + b + c) >> 2; break;
+					case 13: pred_val = (a + b + d) >> 2; break;
+					case 14: pred_val = (a + c + d) >> 2; break;
+					default: pred_val = (b + c + d) >> 2; break; // 15
+				}
+
+				dst[k] = pred_val + src[k]; k++;
+			}
+
+			dst[k] = dst[k - 1] + src[k]; k++;
+		}
+
 		return dst;
 	}
 

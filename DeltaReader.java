@@ -35,7 +35,7 @@ public class DeltaReader
 	// ---- Unary-string decode tables (compress_type > 0) --------------------
 	ArrayList<int[]> table_list = new ArrayList<int[]>();
 
-	// ---- Delta-type maps (delta_type 5-8) -----------------------------------
+	// ---- Delta-type maps (delta_type 5-9) -----------------------------------
 	ArrayList<byte[]> map_list = new ArrayList<byte[]>();
 
 	// ---- Decoded channel arrays ---------------------------------------------
@@ -78,7 +78,7 @@ public class DeltaReader
 
 	static final String[] delta_type_string = {
 		"horizontal","vertical","average","med","directional",
-		"scanline (1)","scanline (2)","scanline (3)","frame map"};
+		"scanline (1)","scanline (2)","scanline (3)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
 		"LZ77","Huffman","Arithmetic","Fast Arithmetic"};
@@ -97,8 +97,8 @@ public class DeltaReader
 	// =========================================================================
 	public static void main(String[] args)
 	{
-		if (args.length != 1) { System.out.println("Usage: java DeltaReader2 <filename>"); System.exit(0); }
-		new DeltaReader2(args[0]);
+		if (args.length != 1) { System.out.println("Usage: java DeltaReader <filename>"); System.exit(0); }
+		new DeltaReader(args[0]);
 	}
 
 	// =========================================================================
@@ -141,14 +141,22 @@ public class DeltaReader
 				compressed_length[i]  = in.readInt();
 				channel_iterations[i] = in.readByte();
 
-				// Map (delta_type 5-8)
-				if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
+				// Map (delta_type 5-9)
+				if (delta_type >= 5 && delta_type <= 8)
 				{
 					int    ml  = in.readInt();
 					int    pml = in.readInt();
 					byte[] pm  = new byte[pml];
 					in.readFully(pm);
 					map_list.add(SegmentMapper.unpackBits(pm, ml, 2));
+				}
+				else if (delta_type == 9)
+				{
+					int    ml  = in.readInt();
+					int    pml = in.readInt();
+					byte[] pm  = new byte[pml];
+					in.readFully(pm);
+					map_list.add(SegmentMapper.unpackBits(pm, ml, 4));
 				}
 
 				// String table (compress_type > 0)
@@ -669,7 +677,8 @@ public class DeltaReader
 				else if (delta_type == 5) cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 6) cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 7) cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else                      cur_ch = DeltaMapper.getValuesFromIdealDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 8) cur_ch = DeltaMapper.getValuesFromIdealDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else                      cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 
 				// Restore difference-channel offset
 				if (channel_id[i] > 2)

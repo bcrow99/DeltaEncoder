@@ -143,8 +143,8 @@ public class DeltaWriter
 		for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
 		min_set_id = min_idx;
 
-		int[] channel_id     = DeltaMapper.getChannels(min_set_id);
-		int[] total_delta_sum = new int[8]; // index 8 (frame map) excluded from auto-select
+		int[] channel_id      = DeltaMapper.getChannels(min_set_id);
+		int[] total_delta_sum = new int[10];
 
 		for (int i = 0; i < 3; i++)
 		{
@@ -163,11 +163,20 @@ public class DeltaWriter
 
 			res = DeltaMapper.getMixedDeltas4Frequency(qc, new_xdim, new_ydim);
 			total_delta_sum[7] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
+
+			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
+			total_delta_sum[8] += (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)))
+			                    + (int) Math.floor(CodeMapper.getShannonLimit(res8.get(1)));
+			ArrayList<int[]> res16 = DeltaMapper.getIdealFrequency16(qc, new_xdim, new_ydim);
+			total_delta_sum[9] += (int) Math.floor(CodeMapper.getShannonLimit(res16.get(0)))
+			                    + (int) Math.floor(CodeMapper.getShannonLimit(res16.get(1)));
 		}
 
 		min_sum = total_delta_sum[0]; min_idx = 0;
-		for (int i = 1; i < 8; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
+		for (int i = 1; i < 10; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
+		System.out.println("Frame map (1) estimate:    " + total_delta_sum[8]);
+		System.out.println("Frame map (2) estimate:    " + total_delta_sum[9]);
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 	}
 
@@ -209,7 +218,7 @@ public class DeltaWriter
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
-				"scanline (1)","scanline (2)","scanline (3)","frame map"};
+				"scanline (1)","scanline (2)","scanline (3)","frame map","frame map (2)"};
 
 			channel_init              = new int[6];
 			channel_min               = new int[6];
@@ -372,10 +381,10 @@ public class DeltaWriter
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Med","Directional","Scanline 1","Scanline 2","Scanline 3","Map"};
-				delta_button = new JRadioButtonMenuItem[9];
+				String[] dnames = {"H","V","Average","Med","Directional","Scanline 1","Scanline 2","Scanline 3","Map","Map (2)"};
+				delta_button = new JRadioButtonMenuItem[10];
 				ButtonGroup dg = new ButtonGroup();
-				for (int i = 0; i < 9; i++)
+				for (int i = 0; i < 10; i++)
 				{
 					delta_button[i] = new JRadioButtonMenuItem(dnames[i]);
 					dg.add(delta_button[i]);
@@ -600,7 +609,8 @@ public class DeltaWriter
 				else if (delta_type == 5) { result = DeltaMapper.getMixedDeltasFromValues(qc, new_xdim, new_ydim);   map_list.add(result.get(2)); }
 				else if (delta_type == 6) { result = DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 7) { result = DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
-				else if (delta_type == 8) { result = DeltaMapper.getIdealDeltasFromValues(qc, new_xdim, new_ydim);   map_list.add(result.get(2)); }
+				else if (delta_type == 8) { result = DeltaMapper.getIdealDeltasFromValues(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
+				else if (delta_type == 9) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
 
 				int[] delta = (int[]) result.get(1);
 
@@ -663,6 +673,7 @@ public class DeltaWriter
 				else if (delta_type == 6) ch = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 7) ch = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 8) ch = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 9) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 
 				if (j > 2) for (int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
 
@@ -747,11 +758,20 @@ public class DeltaWriter
 						out.writeInt(channel_compressed_length[j]);
 						out.writeByte(channel_iterations[i]);
 
-						if (delta_type >= 5)
+						if (delta_type >= 5 && delta_type <= 8)
 						{
 							byte[] map = (byte[]) map_list.get(i);
 							byte[] pm  = SegmentMapper.packBits(map, 2);
 							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+						}
+						else if (delta_type == 9)
+						{
+							byte[] map = (byte[]) map_list.get(i);
+							int pm_len = (map.length + 1) / 2;
+							byte[] pm  = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						if (compress_type > 0)
 							writeTable(out, (int[]) table_list.get(i));
@@ -872,11 +892,20 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 5)
+						if (delta_type >= 5 && delta_type <= 8)
 						{
 							byte[] map = (byte[]) map_list.get(i);
 							byte[] pm  = SegmentMapper.packBits(map, 2);
 							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+						}
+						else if (delta_type == 9)
+						{
+							byte[] map = (byte[]) map_list.get(i);
+							int pm_len = (map.length + 1) / 2;
+							byte[] pm  = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
@@ -956,11 +985,20 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 5)
+						if (delta_type >= 5 && delta_type <= 8)
 						{
 							byte[] map = (byte[]) map_list.get(i);
 							byte[] pm  = SegmentMapper.packBits(map, 2);
 							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+						}
+						else if (delta_type == 9)
+						{
+							byte[] map = (byte[]) map_list.get(i);
+							int pm_len = (map.length + 1) / 2;
+							byte[] pm  = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
