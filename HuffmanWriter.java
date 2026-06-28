@@ -32,7 +32,6 @@ public class HuffmanWriter
 	int delta_type     = 2;
 	int compress_type  = 1;
 
-	// zoom_scale is the current zoom level (1.0 = 100%)
 	double zoom_scale = 1.0;
 	double fit_scale  = 1.0;
 
@@ -65,7 +64,6 @@ public class HuffmanWriter
 	JRadioButtonMenuItem[] delta_button = null;
 	boolean initialized = false;
 
-	// Zoom constants
 	static final double ZOOM_FACTOR = 1.25;
 	static final double ZOOM_MIN    = 0.05;
 	static final double ZOOM_MAX    = 32.0;
@@ -80,7 +78,6 @@ public class HuffmanWriter
 		String prefix   = new String("");
 		String filename = new String(args[0]);
 		HuffmanWriter writer = new HuffmanWriter(prefix + filename);
-		// init() is called from showInitialImage() after the UI is fully built
 	}
 
 	public void init()
@@ -89,7 +86,6 @@ public class HuffmanWriter
 		System.out.println("Image xdim = " + xdim + ", ydim = " + ydim);
 		System.out.println();
 
-		// Shift then resize, matching HuffmanWriter's quantization convention.
 		ArrayList<int[]> quantized_channel_list = new ArrayList<int[]>();
 
 		int new_xdim = xdim;
@@ -110,10 +106,7 @@ public class HuffmanWriter
 				if (pixel_shift == 0)
 					quantized_channel_list.add(channel);
 				else
-				{
-					int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
-					quantized_channel_list.add(shifted_channel);
-				}
+					quantized_channel_list.add(DeltaMapper.shift(channel, -pixel_shift));
 			}
 			else
 			{
@@ -121,10 +114,7 @@ public class HuffmanWriter
 				if (pixel_shift == 0)
 					quantized_channel_list.add(resized_channel);
 				else
-				{
-					int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
-					quantized_channel_list.add(shifted_channel);
-				}
+					quantized_channel_list.add(DeltaMapper.shift(resized_channel, -pixel_shift));
 			}
 		}
 
@@ -132,13 +122,9 @@ public class HuffmanWriter
 		int [] quantized_green = quantized_channel_list.get(1);
 		int [] quantized_red   = quantized_channel_list.get(2);
 
-		int [] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-		int [] quantized_red_green  = DeltaMapper.getDifference(quantized_red,  quantized_green);
-		int [] quantized_red_blue   = DeltaMapper.getDifference(quantized_red,  quantized_blue);
-
-		quantized_channel_list.add(quantized_blue_green);
-		quantized_channel_list.add(quantized_red_green);
-		quantized_channel_list.add(quantized_red_blue);
+		quantized_channel_list.add(DeltaMapper.getDifference(quantized_blue,  quantized_green));
+		quantized_channel_list.add(DeltaMapper.getDifference(quantized_red,   quantized_green));
+		quantized_channel_list.add(DeltaMapper.getDifference(quantized_red,   quantized_blue));
 
 		for (int i = 0; i < 6; i++)
 		{
@@ -146,8 +132,7 @@ public class HuffmanWriter
 			int [] quantized_channel = quantized_channel_list.get(i);
 
 			for (int j = 0; j < quantized_channel.length; j++)
-				if (quantized_channel[j] < min)
-					min = quantized_channel[j];
+				if (quantized_channel[j] < min) min = quantized_channel[j];
 			channel_min[i] = min;
 
 			if (i > 2)
@@ -159,7 +144,7 @@ public class HuffmanWriter
 
 			int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
 			double shannon_limit = CodeMapper.getShannonLimit(frequency);
-			channel_sum[i]       = (int)Math.floor(shannon_limit);
+			channel_sum[i]       = (int) Math.floor(shannon_limit);
 		}
 
 		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
@@ -173,51 +158,32 @@ public class HuffmanWriter
 		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
 		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
 
-		int min_index = 0;
+		int min_index     = 0;
 		int min_delta_sum = Integer.MAX_VALUE;
 		for (int i = 0; i < 10; i++)
 		{
-			if (set_sum[i] < min_delta_sum)
-			{
-				min_delta_sum = set_sum[i];
-				min_index = i;
-			}
+			if (set_sum[i] < min_delta_sum) { min_delta_sum = set_sum[i]; min_index = i; }
 		}
 		min_set_id = min_index;
 
 		int[]  channel_id      = DeltaMapper.getChannels(min_set_id);
-		int[]  total_delta_sum = new int[9]; // index 8 (frame map) never filled — excluded from selection
+		int[]  total_delta_sum = new int[9];
 
 		for (int i = 0; i < 3; i++)
 		{
 			int   j                 = channel_id[i];
 			int[] quantized_channel = quantized_channel_list.get(j);
 
+			for (int t = 0; t < 5; t++)
+				total_delta_sum[t] += (int) Math.floor(CodeMapper.getShannonLimit(
+						DeltaMapper.getFrequency(quantized_channel, new_xdim, new_ydim, t)));
+
+			ArrayList<int[]> result;
 			int[]  frequency;
 			double shannon_limit;
 			int    shannon_sum;
 
-			frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			total_delta_sum[0] += (int) Math.floor(shannon_limit);
-
-			frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			total_delta_sum[1] += (int) Math.floor(shannon_limit);
-
-			frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			total_delta_sum[2] += (int) Math.floor(shannon_limit);
-
-			frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			total_delta_sum[3] += (int) Math.floor(shannon_limit);
-
-			frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			total_delta_sum[4] += (int) Math.floor(shannon_limit);
-
-			ArrayList<int[]> result = DeltaMapper.getMedScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			result        = DeltaMapper.getMedScanlineFrequency(quantized_channel, new_xdim, new_ydim);
 			frequency     = result.get(0);
 			shannon_limit = CodeMapper.getShannonLimit(frequency);
 			shannon_sum   = (int) Math.floor(shannon_limit);
@@ -237,19 +203,13 @@ public class HuffmanWriter
 			shannon_sum   = (int) Math.floor(shannon_limit);
 			shannon_sum  += result.get(1).length / 4;
 			total_delta_sum[7] += shannon_sum;
-
-			// index 8 (frame map) intentionally skipped — never auto-selected
 		}
 
 		min_delta_sum = total_delta_sum[0];
 		min_index     = 0;
 		for (int i = 1; i < 8; i++)
 		{
-			if (total_delta_sum[i] < min_delta_sum)
-			{
-				min_delta_sum = total_delta_sum[i];
-				min_index     = i;
-			}
+			if (total_delta_sum[i] < min_delta_sum) { min_delta_sum = total_delta_sum[i]; min_index = i; }
 		}
 		delta_type = min_index;
 		System.out.println("The delta type that produces the smallest entropy sum is " + delta_type_string[delta_type]);
@@ -279,33 +239,28 @@ public class HuffmanWriter
 			code_list          = new ArrayList();
 			code_length_list   = new ArrayList();
 
-			channel_string    = new String[6];
-			channel_string[0] = new String("blue");
-			channel_string[1] = new String("green");
-			channel_string[2] = new String("red");
-			channel_string[3] = new String("blue-green");
-			channel_string[4] = new String("red-green");
-			channel_string[5] = new String("red-blue");
+			channel_string    = new String[]{"blue","green","red","blue-green","red-green","red-blue"};
 
 			set_sum       = new int[10];
-			set_string    = new String[10];
-			set_string[0] = new String("blue, green, and red.");
-			set_string[1] = new String("blue, red, and red-green.");
-			set_string[2] = new String("blue, red, and blue-green.");
-			set_string[3] = new String("blue, blue-green, and red-green.");
-			set_string[4] = new String("blue, blue-green, and red-blue.");
-			set_string[5] = new String("green, red, and blue-green.");
-			set_string[6] = new String("red, blue-green, and red-green.");
-			set_string[7] = new String("green, blue-green, and red-green.");
-			set_string[8] = new String("green, red-green, and red-blue.");
-			set_string[9] = new String("red, red-green, red-blue.");
+			set_string    = new String[]{
+				"blue, green, and red.",
+				"blue, red, and red-green.",
+				"blue, red, and blue-green.",
+				"blue, blue-green, and red-green.",
+				"blue, blue-green, and red-blue.",
+				"green, red, and blue-green.",
+				"red, blue-green, and red-green.",
+				"green, blue-green, and red-green.",
+				"green, red-green, and red-blue.",
+				"red, red-green, red-blue."
+			};
 
 			delta_type_string    = new String[9];
 			delta_type_string[0] = new String("horizontal");
 			delta_type_string[1] = new String("vertical");
 			delta_type_string[2] = new String("average");
-			delta_type_string[3] = new String("paeth");
-			delta_type_string[4] = new String("gradient");
+			delta_type_string[3] = new String("med");
+			delta_type_string[4] = new String("directional");
 			delta_type_string[5] = new String("scanline (1)");
 			delta_type_string[6] = new String("scanline (2)");
 			delta_type_string[7] = new String("scanline (3)");
@@ -326,27 +281,19 @@ public class HuffmanWriter
 			{
 				pixel = new int[xdim * ydim];
 				PixelGrabber pixel_grabber = new PixelGrabber(original_image, 0, 0, xdim, ydim, pixel, 0, xdim);
-				try
-				{
-					pixel_grabber.grabPixels();
-				}
-				catch (InterruptedException e)
-				{
-					System.err.println(e.toString());
-				}
+				try { pixel_grabber.grabPixels(); }
+				catch (InterruptedException e) { System.err.println(e.toString()); }
 				if ((pixel_grabber.getStatus() & ImageObserver.ABORT) != 0)
 				{
 					System.err.println("Error grabbing pixels.");
 					System.exit(1);
 				}
 
-				int [] alpha = new int[xdim * ydim];
 				int [] blue  = new int[xdim * ydim];
 				int [] green = new int[xdim * ydim];
 				int [] red   = new int[xdim * ydim];
 				for (int i = 0; i < xdim * ydim; i++)
 				{
-					alpha[i] = (pixel[i] >> 24) & 0xff;
 					blue[i]  = (pixel[i] >> 16) & 0xff;
 					green[i] = (pixel[i] >> 8)  & 0xff;
 					red[i]   =  pixel[i]         & 0xff;
@@ -360,12 +307,10 @@ public class HuffmanWriter
 					for (int j = 0; j < ydim; j++)
 						working_image.setRGB(i, j, pixel[j * xdim + i]);
 
-				// ── Screen / scale setup ────────────────────────────────────
 				Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 				screen_xdim = (int) screenSize.getWidth();
 				screen_ydim = (int) screenSize.getHeight();
 
-				// Cap the initial window at 70% of the screen in each dimension.
 				int max_canvas_w = (int)(screen_xdim * 0.70) - 40;
 				int max_canvas_h = (int)(screen_ydim * 0.70) - 80;
 				double xscale    = (double) max_canvas_w / xdim;
@@ -373,7 +318,6 @@ public class HuffmanWriter
 				fit_scale        = Math.min(1.0, Math.min(xscale, yscale));
 				zoom_scale       = fit_scale;
 
-				// ── Canvas and scroll pane ──────────────────────────────────
 				image_canvas = new ImageCanvas();
 				image_canvas.setPreferredSize(new Dimension(
 						Math.max(1, (int)(xdim * zoom_scale)),
@@ -385,7 +329,6 @@ public class HuffmanWriter
 				scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
 				scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
 
-				// Ctrl+wheel zooms; plain wheel scrolls.
 				scroll_pane.addMouseWheelListener(new MouseWheelListener()
 				{
 					public void mouseWheelMoved(MouseWheelEvent e)
@@ -417,7 +360,6 @@ public class HuffmanWriter
 							int new_vx   = (int)(mouse_can_x * ratio) - mouse_pt.x;
 							int new_vy   = (int)(mouse_can_y * ratio) - mouse_pt.y;
 							vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
-
 							updateTitle();
 						}
 						else
@@ -427,7 +369,6 @@ public class HuffmanWriter
 					}
 				});
 
-				// ── Frame ───────────────────────────────────────────────────
 				frame = new JFrame("Huffman Writer " + filename);
 				WindowAdapter window_handler = new WindowAdapter()
 				{
@@ -436,17 +377,15 @@ public class HuffmanWriter
 				frame.addWindowListener(window_handler);
 				frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
 
-				// ── Menu bar ────────────────────────────────────────────────
 				JMenuBar menu_bar = new JMenuBar();
 				JMenu file_menu   = new JMenu("File");
 
 				apply_item = new JMenuItem("Apply");
-				ApplyHandler apply_handler = new ApplyHandler();
-				apply_item.addActionListener(apply_handler);
+				apply_item.addActionListener(new ApplyHandler());
 				file_menu.add(apply_item);
 
 				JMenuItem reload_item = new JMenuItem("Reload");
-				ActionListener reload_handler = new ActionListener()
+				reload_item.addActionListener(new ActionListener()
 				{
 					public void actionPerformed(ActionEvent event)
 					{
@@ -458,16 +397,13 @@ public class HuffmanWriter
 						image_canvas.repaint();
 						System.out.println("Reloaded original image.");
 					}
-				};
-				reload_item.addActionListener(reload_handler);
+				});
 				file_menu.add(reload_item);
 
 				JMenuItem save_item = new JMenuItem("Save");
-				SaveHandler save_handler = new SaveHandler();
-				save_item.addActionListener(save_handler);
+				save_item.addActionListener(new SaveHandler());
 				file_menu.add(save_item);
 
-				// ── View / Zoom menu ────────────────────────────────────────
 				JMenu view_menu = new JMenu("View");
 
 				JMenuItem zoom_in_item = new JMenuItem("Zoom In (+)");
@@ -493,16 +429,10 @@ public class HuffmanWriter
 					public void actionPerformed(ActionEvent e)
 					{
 						Dimension vp_size = scroll_pane.getViewport().getSize();
-						double xs = (double) vp_size.width  / xdim;
-						double ys = (double) vp_size.height / ydim;
-						zoom_scale = Math.min(xs, ys);
+						zoom_scale = Math.min((double)vp_size.width/xdim, (double)vp_size.height/ydim);
 						updateDisplayImage();
-						image_canvas.setPreferredSize(new Dimension(
-								(int)(xdim * zoom_scale),
-								(int)(ydim * zoom_scale)));
-						image_canvas.revalidate();
-						image_canvas.repaint();
-						updateTitle();
+						image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+						image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 					}
 				});
 				view_menu.add(zoom_fit_item);
@@ -516,49 +446,38 @@ public class HuffmanWriter
 						zoom_scale = 1.0;
 						updateDisplayImage();
 						image_canvas.setPreferredSize(new Dimension(xdim, ydim));
-						image_canvas.revalidate();
-						image_canvas.repaint();
-						updateTitle();
+						image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 					}
 				});
 				view_menu.add(zoom_actual_item);
 
-				// ── Settings menu ───────────────────────────────────────────
 				JMenu settings_menu = new JMenu("Settings");
 
 				JMenuItem quant_item   = new JMenuItem("Pixel Resolution");
 				JDialog   quant_dialog = new JDialog(frame, "Pixel Resolution");
-				ActionListener quant_handler = new ActionListener()
+				quant_item.addActionListener(new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
-						Point location_point = frame.getLocation();
-						quant_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 50);
-						quant_dialog.pack();
-						quant_dialog.setVisible(true);
+						Point p = frame.getLocation();
+						quant_dialog.setLocation((int)p.getX(), (int)p.getY() - 50);
+						quant_dialog.pack(); quant_dialog.setVisible(true);
 					}
-				};
-				quant_item.addActionListener(quant_handler);
-
+				});
 				JPanel     quant_panel  = new JPanel(new BorderLayout());
-				JSlider    quant_slider = new JSlider();
-				quant_slider.setMinimum(0);
-				quant_slider.setMaximum(10);
-				quant_slider.setValue(pixel_quant);
+				JSlider    quant_slider = new JSlider(0, 10, pixel_quant);
 				JTextField quant_value  = new JTextField(3);
 				quant_value.setText(" " + pixel_quant + " ");
-				ChangeListener quant_slider_handler = new ChangeListener()
+				quant_slider.addChangeListener(new ChangeListener()
 				{
 					public void stateChanged(ChangeEvent e)
 					{
-						JSlider slider = (JSlider) e.getSource();
-						pixel_quant = slider.getValue();
+						JSlider s = (JSlider) e.getSource();
+						pixel_quant = s.getValue();
 						quant_value.setText(" " + pixel_quant + " ");
-						if (slider.getValueIsAdjusting() == false)
-							apply_item.doClick();
+						if (!s.getValueIsAdjusting()) apply_item.doClick();
 					}
-				};
-				quant_slider.addChangeListener(quant_slider_handler);
+				});
 				quant_panel.add(quant_slider, BorderLayout.CENTER);
 				quant_panel.add(quant_value,  BorderLayout.EAST);
 				quant_dialog.add(quant_panel);
@@ -566,37 +485,29 @@ public class HuffmanWriter
 
 				JMenuItem shift_item   = new JMenuItem("Color Resolution");
 				JDialog   shift_dialog = new JDialog(frame, "Color Resolution");
-				ActionListener shift_handler = new ActionListener()
+				shift_item.addActionListener(new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
-						Point location_point = frame.getLocation();
-						shift_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 100);
-						shift_dialog.pack();
-						shift_dialog.setVisible(true);
+						Point p = frame.getLocation();
+						shift_dialog.setLocation((int)p.getX(), (int)p.getY() - 100);
+						shift_dialog.pack(); shift_dialog.setVisible(true);
 					}
-				};
-				shift_item.addActionListener(shift_handler);
-
+				});
 				JPanel     shift_panel  = new JPanel(new BorderLayout());
-				JSlider    shift_slider = new JSlider();
-				shift_slider.setMinimum(0);
-				shift_slider.setMaximum(7);
-				shift_slider.setValue(pixel_shift);
+				JSlider    shift_slider = new JSlider(0, 7, pixel_shift);
 				JTextField shift_value  = new JTextField(3);
 				shift_value.setText(" " + pixel_shift + " ");
-				ChangeListener shift_slider_handler = new ChangeListener()
+				shift_slider.addChangeListener(new ChangeListener()
 				{
 					public void stateChanged(ChangeEvent e)
 					{
-						JSlider slider = (JSlider) e.getSource();
-						pixel_shift = slider.getValue();
+						JSlider s = (JSlider) e.getSource();
+						pixel_shift = s.getValue();
 						shift_value.setText(" " + pixel_shift + " ");
-						if (slider.getValueIsAdjusting() == false)
-							apply_item.doClick();
+						if (!s.getValueIsAdjusting()) apply_item.doClick();
 					}
-				};
-				shift_slider.addChangeListener(shift_slider_handler);
+				});
 				shift_panel.add(shift_slider, BorderLayout.CENTER);
 				shift_panel.add(shift_value,  BorderLayout.EAST);
 				shift_dialog.add(shift_panel);
@@ -604,49 +515,43 @@ public class HuffmanWriter
 
 				JMenuItem correction_item   = new JMenuItem("Error Correction");
 				JDialog   correction_dialog = new JDialog(frame, "Error Correction");
-				ActionListener correction_handler = new ActionListener()
+				correction_item.addActionListener(new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
-						Point location_point = frame.getLocation();
-						correction_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 200);
-						correction_dialog.pack();
-						correction_dialog.setVisible(true);
+						Point p = frame.getLocation();
+						correction_dialog.setLocation((int)p.getX(), (int)p.getY() - 200);
+						correction_dialog.pack(); correction_dialog.setVisible(true);
 					}
-				};
-				correction_item.addActionListener(correction_handler);
-
+				});
 				JPanel     correction_panel  = new JPanel(new BorderLayout());
-				JSlider    correction_slider  = new JSlider();
-				correction_slider.setMinimum(0);
-				correction_slider.setMaximum(10);
-				correction_slider.setValue(correction);
-				JTextField correction_value   = new JTextField(3);
+				JSlider    correction_slider = new JSlider(0, 10, correction);
+				JTextField correction_value  = new JTextField(3);
 				correction_value.setText(" " + correction + " ");
-				ChangeListener correction_slider_handler = new ChangeListener()
+				correction_slider.addChangeListener(new ChangeListener()
 				{
 					public void stateChanged(ChangeEvent e)
 					{
-						JSlider slider = (JSlider) e.getSource();
-						correction = slider.getValue();
+						JSlider s = (JSlider) e.getSource();
+						correction = s.getValue();
 						correction_value.setText(" " + correction + " ");
-						if (slider.getValueIsAdjusting() == false)
-							apply_item.doClick();
+						if (!s.getValueIsAdjusting()) apply_item.doClick();
 					}
-				};
-				correction_slider.addChangeListener(correction_slider_handler);
+				});
 				correction_panel.add(correction_slider, BorderLayout.CENTER);
 				correction_panel.add(correction_value,  BorderLayout.EAST);
 				correction_dialog.add(correction_panel);
 				settings_menu.add(correction_item);
 
-				// ── Datatype menu ───────────────────────────────────────────
 				JMenu datatype_menu = new JMenu("Datatype");
-				JRadioButtonMenuItem [] datatype_button = new JRadioButtonMenuItem[3];
-				datatype_button[0] = new JRadioButtonMenuItem("Integer");
-				datatype_button[1] = new JRadioButtonMenuItem("String");
-				datatype_button[2] = new JRadioButtonMenuItem("String*");
+				JRadioButtonMenuItem[] datatype_button = new JRadioButtonMenuItem[]{
+					new JRadioButtonMenuItem("Integer"),
+					new JRadioButtonMenuItem("String"),
+					new JRadioButtonMenuItem("String*")
+				};
 				datatype_button[compress_type].setSelected(true);
+				ButtonGroup datatype_group = new ButtonGroup();
+				for (int i = 0; i < 3; i++) datatype_group.add(datatype_button[i]);
 
 				class DatatypeButtonHandler implements ActionListener
 				{
@@ -654,41 +559,29 @@ public class HuffmanWriter
 					DatatypeButtonHandler(int index) { this.index = index; }
 					public void actionPerformed(ActionEvent e)
 					{
-						if (compress_type != index)
-						{
-							datatype_button[compress_type].setSelected(false);
-							compress_type = index;
-							datatype_button[compress_type].setSelected(true);
-							apply_item.doClick();
-						}
-						else
-							datatype_button[compress_type].setSelected(true);
+						if (compress_type != index) { compress_type = index; apply_item.doClick(); }
 					}
 				}
-
 				for (int i = 0; i < 3; i++)
 				{
 					datatype_button[i].addActionListener(new DatatypeButtonHandler(i));
 					datatype_menu.add(datatype_button[i]);
 				}
 
-				// ── Delta menu ──────────────────────────────────────────────
 				JMenu delta_menu = new JMenu("Delta");
 				delta_button    = new JRadioButtonMenuItem[9];
 				delta_button[0] = new JRadioButtonMenuItem("H");
 				delta_button[1] = new JRadioButtonMenuItem("V");
 				delta_button[2] = new JRadioButtonMenuItem("Average");
-				delta_button[3] = new JRadioButtonMenuItem("Paeth");
-				delta_button[4] = new JRadioButtonMenuItem("Gradient");
+				delta_button[3] = new JRadioButtonMenuItem("MED");
+				delta_button[4] = new JRadioButtonMenuItem("Directional");
 				delta_button[5] = new JRadioButtonMenuItem("Scanline 1");
 				delta_button[6] = new JRadioButtonMenuItem("Scanline 2");
 				delta_button[7] = new JRadioButtonMenuItem("Scanline 3");
 				delta_button[8] = new JRadioButtonMenuItem("Map");
 
 				ButtonGroup delta_group = new ButtonGroup();
-				for (int i = 0; i < 9; i++)
-					delta_group.add(delta_button[i]);
-
+				for (int i = 0; i < 9; i++) delta_group.add(delta_button[i]);
 				delta_button[delta_type].setSelected(true);
 
 				class DeltaButtonHandler implements ActionListener
@@ -697,14 +590,9 @@ public class HuffmanWriter
 					DeltaButtonHandler(int index) { this.index = index; }
 					public void actionPerformed(ActionEvent e)
 					{
-						if (delta_type != index)
-						{
-							delta_type = index;
-							apply_item.doClick();
-						}
+						if (delta_type != index) { delta_type = index; apply_item.doClick(); }
 					}
 				}
-
 				for (int i = 0; i < 9; i++)
 				{
 					delta_button[i].addActionListener(new DeltaButtonHandler(i));
@@ -718,21 +606,17 @@ public class HuffmanWriter
 				menu_bar.add(settings_menu);
 				frame.setJMenuBar(menu_bar);
 
-				// Initial canvas size and frame bounds.
 				display_image = original_image;
 				image_canvas.setPreferredSize(new Dimension(
-						(int)(xdim * zoom_scale),
-						(int)(ydim * zoom_scale)));
+						(int)(xdim * zoom_scale), (int)(ydim * zoom_scale)));
 				updateTitle();
 
 				int max_frame_w = (int)(screen_xdim * 0.70);
 				int max_frame_h = (int)(screen_ydim * 0.70);
-				frame.setSize(Math.min(xdim + 40, max_frame_w),
-				              Math.min(ydim + 80,  max_frame_h));
+				frame.setSize(Math.min(xdim + 40, max_frame_w), Math.min(ydim + 80, max_frame_h));
 				frame.setLocation(5, 5);
 				frame.setVisible(true);
 
-				// Recompute fit scale against the live viewport once layout is done.
 				SwingUtilities.invokeLater(() -> showInitialImage());
 			}
 		}
@@ -743,10 +627,6 @@ public class HuffmanWriter
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// Zoom helpers
-	// -------------------------------------------------------------------------
-	/** Called once on the EDT after the frame is visible, to lock in the correct fit scale. */
 	private void showInitialImage()
 	{
 		Dimension vp_size = scroll_pane.getViewport().getSize();
@@ -755,13 +635,8 @@ public class HuffmanWriter
 		fit_scale  = Math.min(1.0, Math.min(xs, ys));
 		zoom_scale = fit_scale;
 		updateDisplayImage();
-		image_canvas.setPreferredSize(new Dimension(
-				(int)(xdim * zoom_scale),
-				(int)(ydim * zoom_scale)));
-		image_canvas.revalidate();
-		image_canvas.repaint();
-		updateTitle();
-
+		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 		init();
 		delta_button[delta_type].setSelected(true);
 	}
@@ -774,29 +649,24 @@ public class HuffmanWriter
 		JViewport vp      = scroll_pane.getViewport();
 		Point     vp_pos  = vp.getViewPosition();
 		Dimension vp_size = vp.getSize();
-
-		double centre_x = vp_pos.x + vp_size.width  / 2.0;
-		double centre_y = vp_pos.y + vp_size.height / 2.0;
-		double ratio    = new_scale / zoom_scale;
-		zoom_scale      = new_scale;
+		double centre_x   = vp_pos.x + vp_size.width  / 2.0;
+		double centre_y   = vp_pos.y + vp_size.height / 2.0;
+		double ratio       = new_scale / zoom_scale;
+		zoom_scale         = new_scale;
 
 		updateDisplayImage();
-		image_canvas.setPreferredSize(new Dimension(
-				(int)(xdim * zoom_scale),
-				(int)(ydim * zoom_scale)));
-		image_canvas.revalidate();
-		image_canvas.repaint();
+		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
+		image_canvas.revalidate(); image_canvas.repaint();
 
-		int new_vx = (int)(centre_x * ratio - vp_size.width  / 2.0);
-		int new_vy = (int)(centre_y * ratio - vp_size.height / 2.0);
-		vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
-
+		vp.setViewPosition(new Point(
+				Math.max(0, (int)(centre_x * ratio - vp_size.width  / 2.0)),
+				Math.max(0, (int)(centre_y * ratio - vp_size.height / 2.0))));
 		updateTitle();
 	}
 
 	private void updateDisplayImage()
 	{
-		BufferedImage source = (initialized) ? working_image : original_image;
+		BufferedImage source = initialized ? working_image : original_image;
 		if (zoom_scale == 1.0)
 		{
 			display_image = source;
@@ -819,9 +689,6 @@ public class HuffmanWriter
 		frame.setTitle("Huffman Writer " + filename + "  [" + pct + "%]");
 	}
 
-	// -------------------------------------------------------------------------
-	// ImageCanvas
-	// -------------------------------------------------------------------------
 	class ImageCanvas extends JPanel
 	{
 		public ImageCanvas() { setOpaque(true); }
@@ -838,14 +705,10 @@ public class HuffmanWriter
 		protected synchronized void paintComponent(Graphics g)
 		{
 			super.paintComponent(g);
-			if (display_image != null)
-				g.drawImage(display_image, 0, 0, this);
+			if (display_image != null) g.drawImage(display_image, 0, 0, this);
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// ApplyHandler  (logic unchanged from original)
-	// -------------------------------------------------------------------------
 	class ApplyHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
@@ -856,8 +719,7 @@ public class HuffmanWriter
 			int new_ydim = ydim;
 			if (pixel_quant != 0)
 			{
-				double factor = pixel_quant;
-				factor       /= 10;
+				double factor = pixel_quant / 10.0;
 				new_xdim = xdim - (int)(factor * (xdim / 2 - 2));
 				new_ydim = ydim - (int)(factor * (ydim / 2 - 2));
 			}
@@ -867,59 +729,39 @@ public class HuffmanWriter
 				int [] channel = (int []) channel_list.get(i);
 				if (pixel_quant == 0)
 				{
-					if (pixel_shift == 0)
-						quantized_channel_list.add(channel);
-					else
-					{
-						int [] shifted_channel = DeltaMapper.shift(channel, -pixel_shift);
-						quantized_channel_list.add(shifted_channel);
-					}
+					if (pixel_shift == 0) quantized_channel_list.add(channel);
+					else quantized_channel_list.add(DeltaMapper.shift(channel, -pixel_shift));
 				}
 				else
 				{
-					int [] resized_channel = ResizeMapper.resize(channel, xdim, new_xdim, new_ydim);
-					if (pixel_shift == 0)
-						quantized_channel_list.add(resized_channel);
-					else
-					{
-						int [] shifted_channel = DeltaMapper.shift(resized_channel, -pixel_shift);
-						quantized_channel_list.add(shifted_channel);
-					}
+					int [] resized = ResizeMapper.resize(channel, xdim, new_xdim, new_ydim);
+					if (pixel_shift == 0) quantized_channel_list.add(resized);
+					else quantized_channel_list.add(DeltaMapper.shift(resized, -pixel_shift));
 				}
 			}
 
-			int [] quantized_blue  = (int []) quantized_channel_list.get(0);
-			int [] quantized_green = (int []) quantized_channel_list.get(1);
-			int [] quantized_red   = (int []) quantized_channel_list.get(2);
-
-			int [] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-			int [] quantized_red_green  = DeltaMapper.getDifference(quantized_red,  quantized_green);
-			int [] quantized_red_blue   = DeltaMapper.getDifference(quantized_red,  quantized_blue);
-
-			quantized_channel_list.add(quantized_blue_green);
-			quantized_channel_list.add(quantized_red_green);
-			quantized_channel_list.add(quantized_red_blue);
+			int [] qb = (int []) quantized_channel_list.get(0);
+			int [] qg = (int []) quantized_channel_list.get(1);
+			int [] qr = (int []) quantized_channel_list.get(2);
+			quantized_channel_list.add(DeltaMapper.getDifference(qb, qg));
+			quantized_channel_list.add(DeltaMapper.getDifference(qr, qg));
+			quantized_channel_list.add(DeltaMapper.getDifference(qr, qb));
 
 			for (int i = 0; i < 6; i++)
 			{
 				int min = 256;
 				int [] quantized_channel = (int []) quantized_channel_list.get(i);
-
 				for (int j = 0; j < quantized_channel.length; j++)
-					if (quantized_channel[j] < min)
-						min = quantized_channel[j];
+					if (quantized_channel[j] < min) min = quantized_channel[j];
 				channel_min[i] = min;
-
 				if (i > 2)
 					for (int j = 0; j < quantized_channel.length; j++)
 						quantized_channel[j] -= min;
-
 				channel_init[i] = quantized_channel[0];
 				quantized_channel_list.set(i, quantized_channel);
-
 				int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
 				double shannon_limit = CodeMapper.getShannonLimit(frequency);
-				channel_sum[i]       = (int)Math.floor(shannon_limit);
+				channel_sum[i]       = (int) Math.floor(shannon_limit);
 			}
 
 			set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
@@ -936,18 +778,11 @@ public class HuffmanWriter
 			int min_index     = 0;
 			int min_delta_sum = Integer.MAX_VALUE;
 			for (int i = 0; i < 10; i++)
-			{
-				if (set_sum[i] < min_delta_sum)
-				{
-					min_delta_sum = set_sum[i];
-					min_index = i;
-				}
-			}
+				if (set_sum[i] < min_delta_sum) { min_delta_sum = set_sum[i]; min_index = i; }
 			min_set_id = min_index;
 
 			file_compression_rate  = file_length;
 			file_compression_rate /= xdim * ydim * 3;
-
 			System.out.println("A set of channels with the lowest delta sum is " + set_string[min_index]);
 			System.out.println();
 
@@ -967,32 +802,15 @@ public class HuffmanWriter
 				int [] quantized_channel = (int []) quantized_channel_list.get(j);
 
 				ArrayList result = new ArrayList();
-
 				if      (delta_type == 0) result = DeltaMapper.getHorizontalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				else if (delta_type == 1) result = DeltaMapper.getVerticalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
 				else if (delta_type == 2) result = DeltaMapper.getAverageDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				else if (delta_type == 3) result = DeltaMapper.getPaethDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				else if (delta_type == 4) result = DeltaMapper.getGradientDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-				else if (delta_type == 5)
-				{
-					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					map_list.add((byte []) result.get(2));
-				}
-				else if (delta_type == 6)
-				{
-					result = DeltaMapper.getMixedDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
-					map_list.add((byte []) result.get(2));
-				}
-				else if (delta_type == 7)
-				{
-					result = DeltaMapper.getMixedDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
-					map_list.add((byte []) result.get(2));
-				}
-				else if (delta_type == 8)
-				{
-					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					map_list.add((byte []) result.get(2));
-				}
+				else if (delta_type == 3) result = DeltaMapper.getMedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+				else if (delta_type == 4) result = DeltaMapper.getDirectionalDeltasFromValues(quantized_channel, new_xdim, new_ydim);
+				else if (delta_type == 5) { result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);  map_list.add((byte[]) result.get(2)); }
+				else if (delta_type == 6) { result = DeltaMapper.getMixedDeltasFromValues2(quantized_channel, new_xdim, new_ydim); map_list.add((byte[]) result.get(2)); }
+				else if (delta_type == 7) { result = DeltaMapper.getMixedDeltasFromValues4(quantized_channel, new_xdim, new_ydim); map_list.add((byte[]) result.get(2)); }
+				else if (delta_type == 8) { result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);  map_list.add((byte[]) result.get(2)); }
 
 				int [] delta = (int []) result.get(1);
 
@@ -1005,12 +823,10 @@ public class HuffmanWriter
 
 					int n = histogram.length;
 					ArrayList frequency_list = new ArrayList();
-					for (int k = 0; k < n; k++)
-						frequency_list.add(histogram[k]);
+					for (int k = 0; k < n; k++) frequency_list.add(histogram[k]);
 					Collections.sort(frequency_list, Comparator.reverseOrder());
 					int [] frequency = new int[n];
-					for (int k = 0; k < n; k++)
-						frequency[k] = (int) frequency_list.get(k);
+					for (int k = 0; k < n; k++) frequency[k] = (int) frequency_list.get(k);
 					byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
 					int  [] huffman_code   = CodeMapper.getCanonicalCode(huffman_length);
 					int  [] rank_table     = StringMapper.getRankTable(histogram);
@@ -1020,55 +836,46 @@ public class HuffmanWriter
 					huffman_table_list.add(rank_table);
 
 					delta[0] = 0;
-					for (int k = 1; k < delta.length; k++)
-						delta[k] -= delta_min;
+					for (int k = 1; k < delta.length; k++) delta[k] -= delta_min;
 
-					ArrayList pack_list          = CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length);
-					byte []   packed_delta        = (byte []) pack_list.get(0);
-					int       bit_length          = (int) pack_list.get(1);
-					channel_huffman_length[j]     = bit_length;
+					ArrayList pack_list         = CodeMapper.packCode(delta, rank_table, huffman_code, huffman_length);
+					byte []   packed_delta       = (byte []) pack_list.get(0);
+					int       bit_length         = (int) pack_list.get(1);
+					channel_huffman_length[j]    = bit_length;
 					delta_list.add(packed_delta);
 
 					delta[0] = 0;
-					for (int k = 1; k < delta.length; k++)
-						delta[k] += delta_min;
+					for (int k = 1; k < delta.length; k++) delta[k] += delta_min;
 				}
 				else if (compress_type == 1 || compress_type == 2)
 				{
-					boolean precompress = (compress_type == 2);
+					boolean precompress         = (compress_type == 2);
 					ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
-
-					channel_delta_min[j]     = (int)   delta_string_list.get(0);
-					channel_string_length[j] = (int)   delta_string_list.get(1);
-					int  [] string_table     = (int []) delta_string_list.get(2);
-					byte [] delta_string     = (byte []) delta_string_list.get(3);
-
+					channel_delta_min[j]        = (int)    delta_string_list.get(0);
+					channel_string_length[j]    = (int)    delta_string_list.get(1);
+					int  [] string_table        = (int [])  delta_string_list.get(2);
+					byte [] delta_string        = (byte []) delta_string_list.get(3);
 					string_table_list.add(string_table);
 					string_list.add(delta_string);
-
-					channel_string_length[j] = StringMapper.getBitlength(delta_string);
-					channel_string_type[i]   = StringMapper.getType(delta_string);
-					channel_iterations[i]    = StringMapper.getIterations(delta_string);
+					channel_string_length[j]    = StringMapper.getBitlength(delta_string);
+					channel_string_type[i]      = StringMapper.getType(delta_string);
+					channel_iterations[i]       = StringMapper.getIterations(delta_string);
 
 					int [] delta_string_ints = new int[delta_string.length];
 					for (int k = 0; k < delta_string.length; k++)
 					{
 						delta_string_ints[k] = (int) delta_string[k];
-						if (delta_string_ints[k] < 0)
-							delta_string_ints[k] += 256;
+						if (delta_string_ints[k] < 0) delta_string_ints[k] += 256;
 					}
 
 					ArrayList histogram_list = StringMapper.getHistogram(delta_string_ints);
 					int [] histogram         = (int []) histogram_list.get(1);
-
 					int n = histogram.length;
 					ArrayList frequency_list = new ArrayList();
-					for (int k = 0; k < n; k++)
-						frequency_list.add(histogram[k]);
+					for (int k = 0; k < n; k++) frequency_list.add(histogram[k]);
 					Collections.sort(frequency_list, Comparator.reverseOrder());
 					int [] frequency = new int[n];
-					for (int k = 0; k < n; k++)
-						frequency[k] = (int) frequency_list.get(k);
+					for (int k = 0; k < n; k++) frequency[k] = (int) frequency_list.get(k);
 					byte [] huffman_length = CodeMapper.getHuffmanLength2(frequency);
 					int  [] huffman_code   = CodeMapper.getCanonicalCode(huffman_length);
 					int  [] rank_table     = StringMapper.getRankTable(histogram);
@@ -1077,15 +884,14 @@ public class HuffmanWriter
 					code_length_list.add(huffman_length);
 					huffman_table_list.add(rank_table);
 
-					ArrayList pack_list      = CodeMapper.packCode(delta_string_ints, rank_table, huffman_code, huffman_length);
-					byte []   packed_delta   = (byte []) pack_list.get(0);
-					int       bit_length     = (int) pack_list.get(1);
+					ArrayList pack_list    = CodeMapper.packCode(delta_string_ints, rank_table, huffman_code, huffman_length);
+					byte []   packed_delta = (byte []) pack_list.get(0);
+					int       bit_length   = (int) pack_list.get(1);
 					channel_huffman_length[j] = bit_length;
 					delta_list.add(packed_delta);
 
 					delta[0] = 0;
-					for (int k = 1; k < delta.length; k++)
-						delta[k] += channel_delta_min[j];
+					for (int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 				}
 			}
 
@@ -1094,7 +900,6 @@ public class HuffmanWriter
 			for (int i = 0; i < 3; i++)
 			{
 				int j  = channel_id[i];
-
 				int  [] delta        = new int[new_xdim * new_ydim];
 				byte [] packed_delta = (byte []) delta_list.get(i);
 
@@ -1104,38 +909,31 @@ public class HuffmanWriter
 					int  [] code        = (int [])  code_list.get(i);
 					byte [] code_length = (byte []) code_length_list.get(i);
 					CodeMapper.unpackCode(packed_delta, table, code, code_length, channel_huffman_length[j], delta);
-					for (int k = 1; k < delta.length; k++)
-						delta[k] += channel_delta_min[j];
+					for (int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 				}
 				else if (compress_type == 1 || compress_type == 2)
 				{
-					int bytelength       = StringMapper.getBytelength(channel_string_length[j]);
+					int bytelength           = StringMapper.getBytelength(channel_string_length[j]);
 					int [] delta_string_ints = new int[bytelength];
-					byte [] delta_string = new byte[bytelength];
-					int  [] table        = (int [])  huffman_table_list.get(i);
-					int  [] code         = (int [])  code_list.get(i);
-					byte [] code_length  = (byte []) code_length_list.get(i);
+					byte [] delta_string     = new byte[bytelength];
+					int  [] table            = (int [])  huffman_table_list.get(i);
+					int  [] code             = (int [])  code_list.get(i);
+					byte [] code_length      = (byte []) code_length_list.get(i);
 					CodeMapper.unpackCode(packed_delta, table, code, code_length, channel_huffman_length[j], delta_string_ints);
-
-					for (int k = 0; k < bytelength; k++)
-						delta_string[k] = (byte) delta_string_ints[k];
-
+					for (int k = 0; k < bytelength; k++) delta_string[k] = (byte) delta_string_ints[k];
 					table = (int []) string_table_list.get(i);
-					int current_iterations = StringMapper.getIterations(delta_string);
-					if(current_iterations != 0 && current_iterations != 16)
-						delta_string        = StringMapper.decompressStrings(delta_string);	
-					int    bitlength      = StringMapper.getBitlength(delta_string);
-					delta = StringMapper.unpackStrings(delta_string, table, new_xdim * new_ydim, bitlength);
-					for (int k = 1; k < delta.length; k++)
-						delta[k] += channel_delta_min[j];
+					int bitlength = StringMapper.getBitlength(delta_string);
+					byte[] decompressed_string = StringMapper.decompressStrings(delta_string);
+					delta = StringMapper.unpackStrings(decompressed_string, table, new_xdim * new_ydim, bitlength);
+					for (int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 				}
 
 				int [] channel = new int[0];
 				if      (delta_type == 0) channel = DeltaMapper.getValuesFromHorizontalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 1) channel = DeltaMapper.getValuesFromVerticalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 2) channel = DeltaMapper.getValuesFromAverageDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				else if (delta_type == 3) channel = DeltaMapper.getValuesFromPaethDeltas(delta, new_xdim, new_ydim, channel_init[j]);
-				else if (delta_type == 4) channel = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim, new_ydim, channel_init[j]);
+				else if (delta_type == 3) channel = DeltaMapper.getValuesFromMedDeltas(delta, new_xdim, new_ydim, channel_init[j]);
+				else if (delta_type == 4) channel = DeltaMapper.getValuesFromDirectionalDeltas(delta, new_xdim, new_ydim, channel_init[j]);
 				else if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
 				{
 					byte [] map = (byte []) map_list.get(i);
@@ -1146,10 +944,8 @@ public class HuffmanWriter
 				}
 
 				if (j > 2)
-					for (int k = 0; k < channel.length; k++)
-						channel[k] += channel_min[j];
+					for (int k = 0; k < channel.length; k++) channel[k] += channel_min[j];
 
-				// Dequantize: shift second, matching the encode order.
 				if (pixel_shift == 0)
 				{
 					if (new_xdim != xdim || new_ydim != ydim)
@@ -1192,15 +988,13 @@ public class HuffmanWriter
 			else if (min_set_id == 3)
 			{
 				blue  = (int []) resized_channel_list.get(0);
-				int [] blue_green = (int []) resized_channel_list.get(1);
-				green = DeltaMapper.getDifference(blue, blue_green);
+				green = DeltaMapper.getDifference(blue, (int []) resized_channel_list.get(1));
 				red   = DeltaMapper.getSum((int []) resized_channel_list.get(2), green);
 			}
 			else if (min_set_id == 4)
 			{
 				blue  = (int []) resized_channel_list.get(0);
-				int [] blue_green = (int []) resized_channel_list.get(1);
-				green = DeltaMapper.getDifference(blue, blue_green);
+				green = DeltaMapper.getDifference(blue, (int []) resized_channel_list.get(1));
 				red   = DeltaMapper.getSum(blue, (int []) resized_channel_list.get(2));
 			}
 			else if (min_set_id == 5)
@@ -1214,8 +1008,7 @@ public class HuffmanWriter
 				red = (int []) resized_channel_list.get(0);
 				int [] blue_green = (int []) resized_channel_list.get(1);
 				int [] red_green  = (int []) resized_channel_list.get(2);
-				for (int i = 0; i < red_green.length; i++)
-					red_green[i] = -red_green[i];
+				for (int i = 0; i < red_green.length; i++) red_green[i] = -red_green[i];
 				green = DeltaMapper.getSum(red_green, red);
 				blue  = DeltaMapper.getSum(blue_green, green);
 			}
@@ -1241,7 +1034,6 @@ public class HuffmanWriter
 			int [] original_blue  = (int []) channel_list.get(0);
 			int [] original_green = (int []) channel_list.get(1);
 			int [] original_red   = (int []) channel_list.get(2);
-
 			int [][] error = new int[3][xdim * ydim];
 
 			for (int i = 0; i < xdim * ydim; i++)
@@ -1249,7 +1041,6 @@ public class HuffmanWriter
 				error[0][i] = original_blue[i]  - blue[i];
 				error[1][i] = original_green[i] - green[i];
 				error[2][i] = original_red[i]   - red[i];
-
 				if (correction != 0)
 				{
 					double factor = correction / 10.0;
@@ -1273,15 +1064,11 @@ public class HuffmanWriter
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// SaveHandler  (logic unchanged from original)
-	// -------------------------------------------------------------------------
 	class SaveHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			if (!initialized)
-				apply_item.doClick();
+			if (!initialized) apply_item.doClick();
 			int channel_id[] = DeltaMapper.getChannels(min_set_id);
 
 			try
@@ -1313,14 +1100,12 @@ public class HuffmanWriter
 					if (table.length <= Byte.MAX_VALUE * 2 + 1)
 					{
 						byte [] buffer = new byte[table.length];
-						for (int k = 0; k < buffer.length; k++)
-							buffer[k] = (byte) table[k];
+						for (int k = 0; k < buffer.length; k++) buffer[k] = (byte) table[k];
 						out.write(buffer, 0, buffer.length);
 					}
 					else
 					{
-						for (int k = 0; k < table.length; k++)
-							out.writeShort(table[k]);
+						for (int k = 0; k < table.length; k++) out.writeShort(table[k]);
 					}
 
 					if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
@@ -1353,13 +1138,10 @@ public class HuffmanWriter
 					{
 						System.out.println("Channel string length is " + channel_string_length[j]);
 						out.writeInt(channel_string_length[j]);
-
 						table = (int []) string_table_list.get(i);
 						out.writeShort(table.length);
-
 						byte [] buffer = new byte[table.length];
-						for (int k = 0; k < buffer.length; k++)
-							buffer[k] = (byte) table[k];
+						for (int k = 0; k < buffer.length; k++) buffer[k] = (byte) table[k];
 						out.write(buffer, 0, buffer.length);
 					}
 				}

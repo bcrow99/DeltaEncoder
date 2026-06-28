@@ -37,9 +37,7 @@ public class SimpleWriter
 	int compress_type   = 1;   // 0 = Integer, 1 = String, 2 = String*
 	int deflate_type    = 0;
 	
-	// zoom_scale is the current zoom level (1.0 = 100%, fit-to-window at start)
 	double zoom_scale  = 1.0;
-	// fit_scale is the scale computed to fit the image in the window
 	double fit_scale   = 1.0;
 
 	int[] set_sum, channel_sum;
@@ -68,7 +66,6 @@ public class SimpleWriter
 
 	ArrayList <Object>channel_list, table_list, string_list, map_list, delta_list;
 	
-	
 	BigInteger [][] offset;
 	int        [][] frequency;
 	byte       [][] decoded_segment;
@@ -76,7 +73,6 @@ public class SimpleWriter
 
 	boolean initialized = false;
 
-	// Zoom step factor — each zoom in/out multiplies or divides by this
 	static final double ZOOM_FACTOR = 1.25;
 	static final double ZOOM_MIN    = 0.05;
 	static final double ZOOM_MAX    = 32.0;
@@ -99,7 +95,6 @@ public class SimpleWriter
 	
 	public void init()
 	{
-		// Information we need to handle image.
 		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 		screen_xdim = (int) screenSize.getWidth();
 		screen_ydim = (int) screenSize.getHeight();
@@ -110,7 +105,6 @@ public class SimpleWriter
 	    ArrayList<int[]> quantized_channel_list   = new ArrayList<int[]>();
 		ArrayList<int[]> dequantized_channel_list = new ArrayList<int[]>();
 	
-		
 		int new_xdim = image_xdim;
 		int new_ydim = image_ydim;
 		if (pixel_quant != 0)
@@ -121,7 +115,6 @@ public class SimpleWriter
 			new_ydim = image_ydim - (int) (factor * (image_ydim / 2 - 2));
 		}
 		
-		// Quantize.
 		for(int i = 0; i < 3; i++)
 		{
 			int[] channel = (int[]) channel_list.get(i);
@@ -148,14 +141,13 @@ public class SimpleWriter
 			}
 		}
 		
-		// Get the set of channels with deltas that have a minimum sum, including difference channels.
-		int[] quantized_blue = quantized_channel_list.get(0);
+		int[] quantized_blue  = quantized_channel_list.get(0);
 		int[] quantized_green = quantized_channel_list.get(1);
-		int[] quantized_red = quantized_channel_list.get(2);
+		int[] quantized_red   = quantized_channel_list.get(2);
      
 		int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-		int[] quantized_red_green = DeltaMapper.getDifference(quantized_red, quantized_green);
-		int[] quantized_red_blue = DeltaMapper.getDifference(quantized_red, quantized_blue);
+		int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red, quantized_green);
+		int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red, quantized_blue);
 
 		quantized_channel_list.add(quantized_blue_green);
 		quantized_channel_list.add(quantized_red_green);
@@ -166,29 +158,23 @@ public class SimpleWriter
 			int min = 256;
 			int[] quantized_channel = quantized_channel_list.get(i);
 
-			// Find the channel minimums.
 			for (int j = 0; j < quantized_channel.length; j++)
 				if (quantized_channel[j] < min)
 					min = quantized_channel[j];
 			channel_min[i] = min;
 
-			// Get rid of the negative numbers in the difference channels.
 			if (i > 2)
 				for (int j = 0; j < quantized_channel.length; j++)
 					quantized_channel[j] -= min;
 
-			// Save the initial value.
 			channel_init[i] = quantized_channel[0];
-
-			// Replace the original data with the modified data.
 			quantized_channel_list.set(i, quantized_channel);
 
-			int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
-			double shannon_limit = CodeMapper.getShannonLimit(frequency);
+			int [] freq          = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+			double shannon_limit = CodeMapper.getShannonLimit(freq);
 			channel_sum[i]       = (int)Math.floor(shannon_limit);
 		}
 
-		// Find the optimal set.
 		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
 		set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
 		set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
@@ -214,61 +200,53 @@ public class SimpleWriter
 		
 		int [] channel_id = DeltaMapper.getChannels(min_set_id);
 		
-		int [] channel_delta_sum = new int[7];
+		// index 8 (frame map) never filled — excluded from auto-selection
+		int [] channel_delta_sum = new int[8];
 		
 		for(int i = 0; i < 3; i++)
 		{
 		    int j = channel_id[i];	
 		    int[] quantized_channel = quantized_channel_list.get(j);
 		    
-		    int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
-			double shannon_limit = CodeMapper.getShannonLimit(frequency);
-			int    shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[0] = shannon_sum;
+		    for (int t = 0; t < 5; t++)
+			{
+				int[]  freq          = DeltaMapper.getFrequency(quantized_channel, new_xdim, new_ydim, t);
+				double shannon_limit = CodeMapper.getShannonLimit(freq);
+				channel_delta_sum[t] += (int) Math.floor(shannon_limit);
+			}
 
-		    frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[1] = shannon_sum;
-			
-			frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[2] = shannon_sum;
-			
-			frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[3] = shannon_sum;
-			
-			frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[4] = shannon_sum;
-			
-			ArrayList <int []> result = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
-			frequency     = result.get(0);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[5] = shannon_sum;
-			
-			int [] map = result.get(1);
-			channel_delta_sum[5] += map.length / 4;
-			
-			result     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
-			frequency     = result.get(0);
-			shannon_limit = CodeMapper.getShannonLimit(frequency);
-			shannon_sum   = (int)Math.floor(shannon_limit);
-			channel_delta_sum[6] = shannon_sum;
-			
-			map = result.get(1);
-			channel_delta_sum[6] += map.length / 4;
+			ArrayList<int[]> result;
+			int[]  freq;
+			double shannon_limit;
+			int    shannon_sum;
+
+			result        = DeltaMapper.getMedScanlineFrequency(quantized_channel, new_xdim, new_ydim);
+			freq          = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			shannon_sum   = (int) Math.floor(shannon_limit);
+			shannon_sum  += result.get(1).length / 4;
+			channel_delta_sum[5] += shannon_sum;
+
+			result        = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
+			freq          = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			shannon_sum   = (int) Math.floor(shannon_limit);
+			shannon_sum  += result.get(1).length / 4;
+			channel_delta_sum[6] += shannon_sum;
+
+			result        = DeltaMapper.getMixedDeltas4Frequency(quantized_channel, new_xdim, new_ydim);
+			freq          = result.get(0);
+			shannon_limit = CodeMapper.getShannonLimit(freq);
+			shannon_sum   = (int) Math.floor(shannon_limit);
+			shannon_sum  += result.get(1).length / 4;
+			channel_delta_sum[7] += shannon_sum;
 		}
 		
 		min_delta_sum = channel_delta_sum[0];
 		min_index     = 0;
 		
-		for(int i = 1; i < 7; i++)
+		// frame map (index 8) intentionally excluded from auto-selection
+		for(int i = 1; i < 8; i++)
 		{
 			if(channel_delta_sum[i] < min_delta_sum)
 			{
@@ -319,15 +297,16 @@ public class SimpleWriter
 			set_string[8] = new String("green, red-green, and red-blue.");
 			set_string[9] = new String("red, red-green, red-blue.");
 			
-			delta_type_string = new String[8];
+			delta_type_string    = new String[9];
 			delta_type_string[0] = new String("horizontal");
 			delta_type_string[1] = new String("vertical");
 			delta_type_string[2] = new String("average");
-			delta_type_string[3] = new String("paeth");
-			delta_type_string[4] = new String("gradient");
+			delta_type_string[3] = new String("med");
+			delta_type_string[4] = new String("directional");
 			delta_type_string[5] = new String("scanline (1)");
 			delta_type_string[6] = new String("scanline (2)");
-			delta_type_string[7] = new String("frame map");
+			delta_type_string[7] = new String("scanline (3)");
+			delta_type_string[8] = new String("frame map");
 
 			channel_init      = new int[6];
 			channel_min       = new int[6];
@@ -367,30 +346,23 @@ public class SimpleWriter
 				for (int i = 0; i < image_xdim * image_ydim; i++)
 				{
 					alpha[i] = (pixel[i] >> 24) & 0xff;
-					blue[i] = (pixel[i] >> 16) & 0xff;
-					green[i] = (pixel[i] >> 8) & 0xff;
-					red[i] = pixel[i] & 0xff;
+					blue[i]  = (pixel[i] >> 16) & 0xff;
+					green[i] = (pixel[i] >> 8)  & 0xff;
+					red[i]   =  pixel[i]         & 0xff;
 				}
 				channel_list.add(blue);
 				channel_list.add(green);
 				channel_list.add(red);
 
 				working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
-
 				for (int i = 0; i < image_xdim; i++)
-				{
 					for (int j = 0; j < image_ydim; j++)
 						working_image.setRGB(i, j, pixel[j * image_xdim + i]);
-				}
 
 				frame = new JFrame("Delta Writer " + filename);
-
 				WindowAdapter window_handler = new WindowAdapter()
 				{
-					public void windowClosing(WindowEvent event)
-					{
-						System.exit(0);
-					}
+					public void windowClosing(WindowEvent event) { System.exit(0); }
 				};
 				frame.addWindowListener(window_handler);
 
@@ -398,38 +370,30 @@ public class SimpleWriter
 				screen_xdim = (int) screenSize.getWidth();
 				screen_ydim = (int) screenSize.getHeight();
 
-				// Compute a fit-to-window scale so the image starts fully visible.
-				// Reserve ~150px vertically for the menu bar and window chrome.
 				int max_canvas_w = (int)(screen_xdim * 0.70) - 40;
 				int max_canvas_h = (int)(screen_ydim * 0.70) - 80;
 				double xscale = (double) max_canvas_w / image_xdim;
 				double yscale = (double) max_canvas_h / image_ydim;
-				fit_scale  = Math.min(1.0, Math.min(xscale, yscale)); // never upscale at start
+				fit_scale  = Math.min(1.0, Math.min(xscale, yscale));
 				zoom_scale = fit_scale;
 
-				// ImageCanvas draws display_image at the current zoom level.
-				// Its preferred size drives the scroll pane.
 				image_canvas = new ImageCanvas();
 
-				// Wrap the canvas in a scroll pane that fills the frame.
 				scroll_pane = new JScrollPane(image_canvas,
 						JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 						JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 				scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
 				scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
 
-				// Mouse-wheel zoom: Ctrl+wheel zooms, plain wheel scrolls (default).
 				scroll_pane.addMouseWheelListener(new MouseWheelListener()
 				{
 					public void mouseWheelMoved(MouseWheelEvent e)
 					{
 						if (e.isControlDown())
 						{
-							// Zoom centred on the mouse pointer inside the scroll pane.
 							JViewport vp        = scroll_pane.getViewport();
 							Point     view_pos  = vp.getViewPosition();
-							Point     mouse_pt  = e.getPoint(); // relative to scroll_pane
-							// Convert to image-canvas coordinates
+							Point     mouse_pt  = e.getPoint();
 							int mouse_canvas_x  = mouse_pt.x + view_pos.x;
 							int mouse_canvas_y  = mouse_pt.y + view_pos.y;
 
@@ -441,7 +405,6 @@ public class SimpleWriter
 
 							if (zoom_scale == old_scale) return;
 
-							// Rerender at new scale.
 							updateDisplayImage();
 							image_canvas.setPreferredSize(new Dimension(
 									(int)(image_xdim * zoom_scale),
@@ -449,19 +412,15 @@ public class SimpleWriter
 							image_canvas.revalidate();
 							image_canvas.repaint();
 
-							// Shift the viewport so the pixel under the mouse stays fixed.
 							double ratio = zoom_scale / old_scale;
 							int new_vx   = (int)(mouse_canvas_x * ratio) - mouse_pt.x;
 							int new_vy   = (int)(mouse_canvas_y * ratio) - mouse_pt.y;
-							vp.setViewPosition(new Point(
-									Math.max(0, new_vx),
-									Math.max(0, new_vy)));
+							vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
 
 							updateTitle();
 						}
 						else
 						{
-							// Let the scroll pane handle normal scrolling.
 							scroll_pane.dispatchEvent(e);
 						}
 					}
@@ -469,10 +428,8 @@ public class SimpleWriter
 
 				frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
 
-				// ---- Menu bar ----
 				JMenuBar menu_bar = new JMenuBar();
-
-				JMenu file_menu = new JMenu("File");
+				JMenu file_menu   = new JMenu("File");
 
 				apply_item = new JMenuItem("Apply");
 				ApplyHandler apply_handler = new ApplyHandler();
@@ -497,22 +454,18 @@ public class SimpleWriter
 				reload_item.addActionListener(reload_handler);
 				file_menu.add(reload_item);
 
-				JMenuItem save_item = new JMenuItem("Save");
+				JMenuItem save_item    = new JMenuItem("Save");
 				SaveHandler save_handler = new SaveHandler();
 				save_item.addActionListener(save_handler);
 				file_menu.add(save_item);
 
-				// ---- View / Zoom menu ----
 				JMenu view_menu = new JMenu("View");
 
 				JMenuItem zoom_in_item = new JMenuItem("Zoom In (+)");
 				zoom_in_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
 				zoom_in_item.addActionListener(new ActionListener()
 				{
-					public void actionPerformed(ActionEvent e)
-					{
-						zoomBy(ZOOM_FACTOR);
-					}
+					public void actionPerformed(ActionEvent e) { zoomBy(ZOOM_FACTOR); }
 				});
 				view_menu.add(zoom_in_item);
 
@@ -520,10 +473,7 @@ public class SimpleWriter
 				zoom_out_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
 				zoom_out_item.addActionListener(new ActionListener()
 				{
-					public void actionPerformed(ActionEvent e)
-					{
-						zoomBy(1.0 / ZOOM_FACTOR);
-					}
+					public void actionPerformed(ActionEvent e) { zoomBy(1.0 / ZOOM_FACTOR); }
 				});
 				view_menu.add(zoom_out_item);
 
@@ -533,7 +483,6 @@ public class SimpleWriter
 				{
 					public void actionPerformed(ActionEvent e)
 					{
-						// Recompute fit scale based on current scroll pane viewport size.
 						Dimension vp_size = scroll_pane.getViewport().getSize();
 						double xs = (double) vp_size.width  / image_xdim;
 						double ys = (double) vp_size.height / image_ydim;
@@ -565,28 +514,24 @@ public class SimpleWriter
 				});
 				view_menu.add(zoom_actual_item);
 
-				// ---- Quantization settings menu ----
 				JMenu settings_menu = new JMenu("Quantization");
 
-				JMenuItem quant_item = new JMenuItem("Pixel Resolution");
-				JDialog quant_dialog = new JDialog(frame, "Pixel Resolution");
+				JMenuItem quant_item   = new JMenuItem("Pixel Resolution");
+				JDialog   quant_dialog = new JDialog(frame, "Pixel Resolution");
 				ActionListener quant_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
 						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
-
-						quant_dialog.setLocation(x, y - 50);
+						quant_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 50);
 						quant_dialog.pack();
 						quant_dialog.setVisible(true);
 					}
 				};
 				quant_item.addActionListener(quant_handler);
 
-				JPanel quant_panel = new JPanel(new BorderLayout());
-				JSlider quant_slider = new JSlider();
+				JPanel    quant_panel  = new JPanel(new BorderLayout());
+				JSlider   quant_slider = new JSlider();
 				quant_slider.setMinimum(0);
 				quant_slider.setMaximum(10);
 				quant_slider.setValue(pixel_quant);
@@ -599,37 +544,32 @@ public class SimpleWriter
 						JSlider slider = (JSlider) e.getSource();
 						pixel_quant = slider.getValue();
 						quant_value.setText(" " + pixel_quant + " ");
-						if (slider.getValueIsAdjusting() == false)
-						{
+						if (!slider.getValueIsAdjusting())
 							apply_item.doClick();
-						}
 					}
 				};
 				quant_slider.addChangeListener(quant_slider_handler);
 				quant_panel.add(quant_slider, BorderLayout.CENTER);
-				quant_panel.add(quant_value, BorderLayout.EAST);
+				quant_panel.add(quant_value,  BorderLayout.EAST);
 				quant_dialog.add(quant_panel);
 				settings_menu.add(quant_item);
 
-				JMenuItem shift_item = new JMenuItem("Color Resolution");
-				JDialog shift_dialog = new JDialog(frame, "Color Resolution");
+				JMenuItem shift_item   = new JMenuItem("Color Resolution");
+				JDialog   shift_dialog = new JDialog(frame, "Color Resolution");
 				ActionListener shift_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
 						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
-
-						shift_dialog.setLocation(x, y - 100);
+						shift_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 100);
 						shift_dialog.pack();
 						shift_dialog.setVisible(true);
 					}
 				};
 				shift_item.addActionListener(shift_handler);
 
-				JPanel shift_panel = new JPanel(new BorderLayout());
-				JSlider shift_slider = new JSlider();
+				JPanel    shift_panel  = new JPanel(new BorderLayout());
+				JSlider   shift_slider = new JSlider();
 				shift_slider.setMinimum(0);
 				shift_slider.setMaximum(7);
 				shift_slider.setValue(pixel_shift);
@@ -642,35 +582,32 @@ public class SimpleWriter
 						JSlider slider = (JSlider) e.getSource();
 						pixel_shift = slider.getValue();
 						shift_value.setText(" " + pixel_shift + " ");
-						if (slider.getValueIsAdjusting() == false)
+						if (!slider.getValueIsAdjusting())
 							apply_item.doClick();
 					}
 				};
 				shift_slider.addChangeListener(shift_slider_handler);
 				shift_panel.add(shift_slider, BorderLayout.CENTER);
-				shift_panel.add(shift_value, BorderLayout.EAST);
+				shift_panel.add(shift_value,  BorderLayout.EAST);
 				shift_dialog.add(shift_panel);
 				settings_menu.add(shift_item);
 
-				JMenuItem correction_item = new JMenuItem("Error Correction");
-				JDialog correction_dialog = new JDialog(frame, "Error Correction");
+				JMenuItem correction_item   = new JMenuItem("Error Correction");
+				JDialog   correction_dialog = new JDialog(frame, "Error Correction");
 				ActionListener correction_handler = new ActionListener()
 				{
 					public void actionPerformed(ActionEvent e)
 					{
 						Point location_point = frame.getLocation();
-						int x = (int) location_point.getX();
-						int y = (int) location_point.getY();
-
-						correction_dialog.setLocation(x, y - 150);
+						correction_dialog.setLocation((int)location_point.getX(), (int)location_point.getY() - 150);
 						correction_dialog.pack();
 						correction_dialog.setVisible(true);
 					}
 				};
 				correction_item.addActionListener(correction_handler);
 
-				JPanel correction_panel = new JPanel(new BorderLayout());
-				JSlider correction_slider = new JSlider();
+				JPanel    correction_panel  = new JPanel(new BorderLayout());
+				JSlider   correction_slider = new JSlider();
 				correction_slider.setMinimum(0);
 				correction_slider.setMaximum(10);
 				correction_slider.setValue(correction);
@@ -683,63 +620,15 @@ public class SimpleWriter
 						JSlider slider = (JSlider) e.getSource();
 						correction = slider.getValue();
 						correction_value.setText(" " + correction + " ");
-						if (slider.getValueIsAdjusting() == false)
+						if (!slider.getValueIsAdjusting())
 							apply_item.doClick();
 					}
 				};
 				correction_slider.addChangeListener(correction_slider_handler);
 				correction_panel.add(correction_slider, BorderLayout.CENTER);
-				correction_panel.add(correction_value, BorderLayout.EAST);
+				correction_panel.add(correction_value,  BorderLayout.EAST);
 				correction_dialog.add(correction_panel);
 				settings_menu.add(correction_item);
-			
-				// ---- Delta menu ----
-				JMenu delta_menu = new JMenu("Delta");
-
-				delta_button = new JRadioButtonMenuItem[8];
-
-				delta_button[0] = new JRadioButtonMenuItem("H");
-				delta_button[1] = new JRadioButtonMenuItem("V");
-				delta_button[2] = new JRadioButtonMenuItem("Average");
-				delta_button[3] = new JRadioButtonMenuItem("Paeth");
-				delta_button[4] = new JRadioButtonMenuItem("Gradient");
-				delta_button[5] = new JRadioButtonMenuItem("Scanline 1");
-				delta_button[6] = new JRadioButtonMenuItem("Scanline 2");
-				delta_button[7] = new JRadioButtonMenuItem("Map");
-
-				delta_button[delta_type].setSelected(true);
-
-				class ButtonHandler implements ActionListener
-				{
-					int index;
-
-					ButtonHandler(int index)
-					{
-						this.index = index;
-					}
-
-					public void actionPerformed(ActionEvent e)
-					{
-						if (delta_type != index)
-						{
-							delta_button[delta_type].setSelected(false);
-							delta_type = index;
-							delta_button[delta_type].setSelected(true);
-							apply_item.doClick();
-						} 
-						else
-							delta_button[delta_type].setSelected(true);
-					}
-				}
-
-				for (int i = 0; i < 8; i++)
-				{
-					delta_button[i].addActionListener(new ButtonHandler(i));
-					delta_menu.add(delta_button[i]);
-				}
-
-				menu_bar.add(file_menu);
-				menu_bar.add(view_menu);
 
 				// ---- Datatype menu ----
 				JMenu datatype_menu = new JMenu("Datatype");
@@ -773,26 +662,65 @@ public class SimpleWriter
 					datatype_menu.add(datatype_button[i]);
 				}
 
+				// ---- Delta menu ----
+				JMenu delta_menu = new JMenu("Delta");
+
+				delta_button    = new JRadioButtonMenuItem[9];
+				delta_button[0] = new JRadioButtonMenuItem("H");
+				delta_button[1] = new JRadioButtonMenuItem("V");
+				delta_button[2] = new JRadioButtonMenuItem("Average");
+				delta_button[3] = new JRadioButtonMenuItem("Paeth");
+				delta_button[4] = new JRadioButtonMenuItem("Gradient");
+				delta_button[5] = new JRadioButtonMenuItem("Scanline 1");
+				delta_button[6] = new JRadioButtonMenuItem("Scanline 2");
+				delta_button[7] = new JRadioButtonMenuItem("Scanline 3");
+				delta_button[8] = new JRadioButtonMenuItem("Map");
+
+				ButtonGroup delta_group = new ButtonGroup();
+				for (int i = 0; i < 9; i++)
+					delta_group.add(delta_button[i]);
+
+				delta_button[delta_type].setSelected(true);
+
+				class ButtonHandler implements ActionListener
+				{
+					int index;
+					ButtonHandler(int index) { this.index = index; }
+					public void actionPerformed(ActionEvent e)
+					{
+						if (delta_type != index)
+						{
+							delta_type = index;
+							apply_item.doClick();
+						}
+					}
+				}
+
+				for (int i = 0; i < 9; i++)
+				{
+					delta_button[i].addActionListener(new ButtonHandler(i));
+					delta_menu.add(delta_button[i]);
+				}
+
+				menu_bar.add(file_menu);
+				menu_bar.add(view_menu);
 				menu_bar.add(datatype_menu);
 				menu_bar.add(delta_menu);
 				menu_bar.add(settings_menu);
 
 				frame.setJMenuBar(menu_bar);
 
-				// Initial canvas size based on fit scale.
 				display_image = original_image;
 				image_canvas.setPreferredSize(new Dimension(
 						(int)(image_xdim * zoom_scale),
 						(int)(image_ydim * zoom_scale)));
 				updateTitle();
 
-				// Size the frame to fill most of the screen, then show it.
 				frame.setSize(Math.min(image_xdim + 40, (int)(screen_xdim * 0.70)),
 				              Math.min(image_ydim + 80,  (int)(screen_ydim * 0.70)));
 				frame.setLocation(5, 5);
 				frame.setVisible(true);
 
-				// Recompute fit scale against the live viewport once layout is done.
 				SwingUtilities.invokeLater(() -> showInitialImage());
 			}
 		} 
@@ -803,7 +731,6 @@ public class SimpleWriter
 		}
 	}
 
-	/** Called once on the EDT after the frame is visible, to lock in the correct fit scale. */
 	private void showInitialImage()
 	{
 		Dimension vp_size = scroll_pane.getViewport().getSize();
@@ -820,7 +747,6 @@ public class SimpleWriter
 		updateTitle();
 	}
 
-	/** Zoom by a multiplier, keeping the view centred. */
 	private void zoomBy(double factor)
 	{
 		double new_scale = zoom_scale * factor;
@@ -831,12 +757,10 @@ public class SimpleWriter
 		Point     vp_pos  = vp.getViewPosition();
 		Dimension vp_size = vp.getSize();
 
-		// Centre of the current viewport in canvas coordinates.
 		double centre_x = vp_pos.x + vp_size.width  / 2.0;
 		double centre_y = vp_pos.y + vp_size.height / 2.0;
-
-		double ratio = new_scale / zoom_scale;
-		zoom_scale   = new_scale;
+		double ratio    = new_scale / zoom_scale;
+		zoom_scale      = new_scale;
 
 		updateDisplayImage();
 		image_canvas.setPreferredSize(new Dimension(
@@ -845,7 +769,6 @@ public class SimpleWriter
 		image_canvas.revalidate();
 		image_canvas.repaint();
 
-		// Keep the same logical centre visible.
 		int new_vx = (int)(centre_x * ratio - vp_size.width  / 2.0);
 		int new_vy = (int)(centre_y * ratio - vp_size.height / 2.0);
 		vp.setViewPosition(new Point(Math.max(0, new_vx), Math.max(0, new_vy)));
@@ -853,7 +776,6 @@ public class SimpleWriter
 		updateTitle();
 	}
 
-	/** Re-render display_image (working_image or original_image) at current zoom_scale. */
 	private void updateDisplayImage()
 	{
 		BufferedImage source = (working_image != null && initialized) ? working_image : original_image;
@@ -873,7 +795,6 @@ public class SimpleWriter
 		}
 	}
 
-	/** Put the current zoom percentage in the title bar. */
 	private void updateTitle()
 	{
 		int pct = (int)Math.round(zoom_scale * 100);
@@ -885,15 +806,11 @@ public class SimpleWriter
 	// -----------------------------------------------------------------------
 	class ImageCanvas extends JPanel
 	{
-		public ImageCanvas()
-		{
-			setOpaque(true);
-		}
+		public ImageCanvas() { setOpaque(true); }
 
 		@Override
 		public Dimension getPreferredSize()
 		{
-			// Fallback if setPreferredSize hasn't been called yet.
 			int w = (display_image != null) ? display_image.getWidth()  : (int)(image_xdim * zoom_scale);
 			int h = (display_image != null) ? display_image.getHeight() : (int)(image_ydim * zoom_scale);
 			return new Dimension(w, h);
@@ -954,13 +871,12 @@ public class SimpleWriter
 				}
 			}
 			
-			int[] quantized_blue  = quantized_channel_list.get(0);
-			int[] quantized_green = quantized_channel_list.get(1);
-			int[] quantized_red   = quantized_channel_list.get(2);
-         
+			int[] quantized_blue       = quantized_channel_list.get(0);
+			int[] quantized_green      = quantized_channel_list.get(1);
+			int[] quantized_red        = quantized_channel_list.get(2);
 			int[] quantized_blue_green = DeltaMapper.getDifference(quantized_blue, quantized_green);
-			int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red, quantized_green);
-			int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red, quantized_blue);
+			int[] quantized_red_green  = DeltaMapper.getDifference(quantized_red,  quantized_green);
+			int[] quantized_red_blue   = DeltaMapper.getDifference(quantized_red,  quantized_blue);
 
 			quantized_channel_list.add(quantized_blue_green);
 			quantized_channel_list.add(quantized_red_green);
@@ -970,7 +886,6 @@ public class SimpleWriter
 			{
 				int min = 256;
 				int[] quantized_channel = quantized_channel_list.get(i);
-
 				for (int j = 0; j < quantized_channel.length; j++)
 					if (quantized_channel[j] < min)
 						min = quantized_channel[j];
@@ -981,11 +896,10 @@ public class SimpleWriter
 						quantized_channel[j] -= min;
 
 				channel_init[i] = quantized_channel[0];
-
 				quantized_channel_list.set(i, quantized_channel);
 
-				int [] frequency     = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
-				double shannon_limit = CodeMapper.getShannonLimit(frequency);
+				int [] freq          = DeltaMapper.getIdealFrequency(quantized_channel, new_xdim, new_ydim);
+				double shannon_limit = CodeMapper.getShannonLimit(freq);
 				channel_sum[i]       = (int)Math.floor(shannon_limit);
 			}
 
@@ -1012,7 +926,7 @@ public class SimpleWriter
 			}
 			min_set_id = min_index;
 			
-			file_compression_rate = file_length;
+			file_compression_rate  = file_length;
 			file_compression_rate /= image_xdim * image_ydim * 3;
 
 			System.out.println("A set of channels with the lowest entropy sum is " + set_string[min_index]);
@@ -1029,62 +943,8 @@ public class SimpleWriter
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
-
 				int[] quantized_channel = quantized_channel_list.get(j);
-				
-				double current_sum = channel_sum[j];
-				
-				int [] frequency     = DeltaMapper.getHorizontalFrequency(quantized_channel, new_xdim, new_ydim);
-				double shannon_limit = CodeMapper.getShannonLimit(frequency);
-				int    shannon_sum   = (int)Math.floor(shannon_limit);
-				
-				double horizontal_ratio = shannon_sum;
-				horizontal_ratio       /= current_sum;
-				
-				frequency     = DeltaMapper.getVerticalFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				
-				double vertical_ratio = shannon_sum;
-				vertical_ratio       /= current_sum;
-				
-				frequency     = DeltaMapper.getAverageFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				
-				double average_ratio = shannon_sum;
-				average_ratio       /= current_sum;
-				
-				frequency     = DeltaMapper.getPaethFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				
-				double paeth_ratio = shannon_sum;
-				paeth_ratio       /= current_sum;
-				
-				frequency     = DeltaMapper.getGradientFrequency(quantized_channel, new_xdim, new_ydim);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				
-				double gradient_ratio = shannon_sum;
-				gradient_ratio       /= current_sum;
-				
-				ArrayList <int []> f_result  = DeltaMapper.getScanlineFrequency(quantized_channel, new_xdim, new_ydim);
-				frequency = f_result.get(0);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				shannon_sum += (new_ydim - 1) / 4;
-				double scanline_ratio = shannon_sum;
-				scanline_ratio       /= current_sum;
-				
-				f_result     = DeltaMapper.getScanline2Frequency(quantized_channel, new_xdim, new_ydim);
-				frequency = f_result.get(0);
-				shannon_limit = CodeMapper.getShannonLimit(frequency);
-				shannon_sum   = (int)Math.floor(shannon_limit);
-				shannon_sum += (new_ydim - 1) / 4;
-				double scanline2_ratio = shannon_sum;
-				scanline2_ratio       /= current_sum;
-				
+
 				ArrayList<Object> result = new ArrayList<Object>();
 				
 				if (delta_type == 0)
@@ -1100,20 +960,22 @@ public class SimpleWriter
 				else if (delta_type == 5)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					byte[] map = (byte[]) result.get(2);
-					map_list.add(map);
+					map_list.add((byte[]) result.get(2));
 				}
 				else if (delta_type == 6)
 				{
 					result = DeltaMapper.getMixedDeltasFromValues2(quantized_channel, new_xdim, new_ydim);
-					byte[] map = (byte[]) result.get(2);
-					map_list.add(map);
+					map_list.add((byte[]) result.get(2));
 				}
 				else if (delta_type == 7)
 				{
+					result = DeltaMapper.getMixedDeltasFromValues4(quantized_channel, new_xdim, new_ydim);
+					map_list.add((byte[]) result.get(2));
+				}
+				else if (delta_type == 8)
+				{
 					result = DeltaMapper.getIdealDeltasFromValues(quantized_channel, new_xdim, new_ydim);
-					byte[] map = (byte[]) result.get(2);
-					map_list.add(map);
+					map_list.add((byte[]) result.get(2));
 				}
 
 				int[] delta = (int[]) result.get(1);
@@ -1141,7 +1003,7 @@ public class SimpleWriter
 					boolean precompress = (compress_type == 2);
 					ArrayList delta_string_list = StringMapper.getStringList(delta, precompress);
 
-					channel_delta_min[j]         = (int)   delta_string_list.get(0);
+					channel_delta_min[j]          = (int)   delta_string_list.get(0);
 					channel_length[j]             = (int)   delta_string_list.get(1);
 					int[]  string_table           = (int[]) delta_string_list.get(2);
 					byte[] compression_string     = (byte[]) delta_string_list.get(3);
@@ -1159,6 +1021,7 @@ public class SimpleWriter
 				}
 			}
 
+			// ---- Decode pass (preview in the viewer) ----
 			for (int i = 0; i < 3; i++)
 			{
 				int j = channel_id[i];
@@ -1166,7 +1029,6 @@ public class SimpleWriter
 
 				if (compress_type == 0)
 				{
-					// Integer path: unpack raw bytes directly.
 					byte[] delta_bytes = (byte[]) delta_list.get(i);
 					delta[0] = 0;
 					for (int k = 1; k < delta.length; k++)
@@ -1174,7 +1036,6 @@ public class SimpleWriter
 				}
 				else
 				{
-					// String / String* path.
 					int[]  table          = (int[])  table_list.get(i);
 					byte[] current_string = (byte[]) string_list.get(i);
 					int    bitlength      = StringMapper.getBitlength(current_string);
@@ -1211,9 +1072,14 @@ public class SimpleWriter
 				else if (delta_type == 7)
 				{
 					byte[] map = (byte[]) map_list.get(i);
+					channel    = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], map);
+				}
+				else if (delta_type == 8)
+				{
+					byte[] map = (byte[]) map_list.get(i);
 					channel    = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim, new_ydim, channel_init[j], map);
 				}
-                
+
 				if (j > 2)
 					for (int k = 0; k < channel.length; k++)
 						channel[k] += channel_min[j];
@@ -1223,27 +1089,22 @@ public class SimpleWriter
 				    if(pixel_quant == 0)
 				    	dequantized_channel_list.add(channel);
 				    else
-				    {
-				    	int [] resized_channel = ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim);	
-				    	dequantized_channel_list.add(resized_channel);
-				    }
+				    	dequantized_channel_list.add(ResizeMapper.resize(channel, new_xdim, image_xdim, image_ydim));
 				}
 				else
 				{
-				    int [] shifted_channel = DeltaMapper.shift(channel, pixel_shift);	
+				    int[] shifted_channel = DeltaMapper.shift(channel, pixel_shift);
 				    if(pixel_quant == 0)
-				    	dequantized_channel_list.add(shifted_channel);	
+				    	dequantized_channel_list.add(shifted_channel);
 				    else
-				    {
-				    	int [] resized_channel = ResizeMapper.resize(shifted_channel, new_xdim, image_xdim, image_ydim);	
-				    	dequantized_channel_list.add(resized_channel);	
-				    }
+				    	dequantized_channel_list.add(ResizeMapper.resize(shifted_channel, new_xdim, image_xdim, image_ydim));
 				}
 			}
 
-			int[] blue  = new int[new_xdim * new_ydim];
-			int[] green = new int[new_xdim * new_ydim];
-			int[] red   = new int[new_xdim * new_ydim];
+			int[] blue  = new int[image_xdim * image_ydim];
+			int[] green = new int[image_xdim * image_ydim];
+			int[] red   = new int[image_xdim * image_ydim];
+
 			if(min_set_id == 0)
 			{
 				blue  = dequantized_channel_list.get(0);
@@ -1252,80 +1113,66 @@ public class SimpleWriter
 			}
 			else if(min_set_id == 1)
 			{
-				blue = dequantized_channel_list.get(0);
-				red = dequantized_channel_list.get(1);
-				int[] red_green = dequantized_channel_list.get(2);
-				green = DeltaMapper.getDifference(red, red_green);
+				blue  = dequantized_channel_list.get(0);
+				red   = dequantized_channel_list.get(1);
+				green = DeltaMapper.getDifference(red, dequantized_channel_list.get(2));
 			}
 			else if(min_set_id == 2)
 			{
-				blue = dequantized_channel_list.get(0);
-				red = dequantized_channel_list.get(1);
-				int[] blue_green = dequantized_channel_list.get(2);
-				green = DeltaMapper.getDifference(blue, blue_green);
+				blue  = dequantized_channel_list.get(0);
+				red   = dequantized_channel_list.get(1);
+				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(2));
 			}
 			else if(min_set_id == 3)
 			{
-				blue = dequantized_channel_list.get(0);
-				int[] blue_green = dequantized_channel_list.get(1);
-				green = DeltaMapper.getDifference(blue, blue_green);
-				int[] red_green = dequantized_channel_list.get(2);
-				red = DeltaMapper.getSum(red_green, green);
+				blue  = dequantized_channel_list.get(0);
+				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(1));
+				red   = DeltaMapper.getSum(dequantized_channel_list.get(2), green);
 			}
 			else if(min_set_id == 4)
 			{
-				blue = dequantized_channel_list.get(0);
-				int[] blue_green = dequantized_channel_list.get(1);
-				green = DeltaMapper.getDifference(blue, blue_green);
-				int[] red_blue = dequantized_channel_list.get(2);
-				red = DeltaMapper.getSum(blue, red_blue);
+				blue  = dequantized_channel_list.get(0);
+				green = DeltaMapper.getDifference(blue, dequantized_channel_list.get(1));
+				red   = DeltaMapper.getSum(blue, dequantized_channel_list.get(2));
 			}
 			else if (min_set_id == 5)
 			{
 				green = dequantized_channel_list.get(0);
-				red = dequantized_channel_list.get(1);
-				int[] blue_green = dequantized_channel_list.get(2);
-				blue = DeltaMapper.getSum(blue_green, green);
+				red   = dequantized_channel_list.get(1);
+				blue  = DeltaMapper.getSum(dequantized_channel_list.get(2), green);
 			}
 			else if(min_set_id == 6)
 			{
 				red = dequantized_channel_list.get(0);
 				int[] blue_green = dequantized_channel_list.get(1);
-				int[] red_green = dequantized_channel_list.get(2);
+				int[] red_green  = dequantized_channel_list.get(2);
 				for (int i = 0; i < red_green.length; i++)
 					red_green[i] = -red_green[i];
 				green = DeltaMapper.getSum(red_green, red);
-				blue = DeltaMapper.getSum(blue_green, green);
+				blue  = DeltaMapper.getSum(blue_green, green);
 			}
 			else if(min_set_id == 7)
 			{
 				green = dequantized_channel_list.get(0);
-				int[] blue_green = dequantized_channel_list.get(1);
-				blue = DeltaMapper.getSum(green, blue_green);
-				int[] red_green = dequantized_channel_list.get(2);
-				red = DeltaMapper.getSum(green, red_green);
+				blue  = DeltaMapper.getSum(green, dequantized_channel_list.get(1));
+				red   = DeltaMapper.getSum(green, dequantized_channel_list.get(2));
 			}
 			else if(min_set_id == 8)
 			{
 				green = dequantized_channel_list.get(0);
-				int[] red_green = dequantized_channel_list.get(1);
-				red = DeltaMapper.getSum(green, red_green);
-				int[] red_blue = dequantized_channel_list.get(2);
-				blue = DeltaMapper.getDifference(red, red_blue);
+				red   = DeltaMapper.getSum(green, dequantized_channel_list.get(1));
+				blue  = DeltaMapper.getDifference(red, dequantized_channel_list.get(2));
 			}
 			else if(min_set_id == 9)
 			{
-				red = dequantized_channel_list.get(0);
-				int[] red_green = dequantized_channel_list.get(1);
-				green = DeltaMapper.getDifference(red, red_green);
-				int[] red_blue = dequantized_channel_list.get(2);
-				blue = DeltaMapper.getDifference(red, red_blue);
+				red   = dequantized_channel_list.get(0);
+				green = DeltaMapper.getDifference(red, dequantized_channel_list.get(1));
+				blue  = DeltaMapper.getDifference(red, dequantized_channel_list.get(2));
 			}
 
 			int[] original_blue  = (int[]) channel_list.get(0);
 			int[] original_green = (int[]) channel_list.get(1);
 			int[] original_red   = (int[]) channel_list.get(2);
-
 			int[][] error = new int[3][image_xdim * image_ydim];
 
 			for (int i = 0; i < image_xdim * image_ydim; i++)
@@ -1336,32 +1183,21 @@ public class SimpleWriter
 
 				if (correction != 0)
 				{
-					double factor = correction;
-					factor /= 10;
-
-					double addend = (double) error[0][i] * factor;
-					blue[i] += (int) addend;
-
-					addend = (double) error[1][i] * factor;
-					green[i] += addend;
-
-					addend = (double) error[2][i] * factor;
-					red[i] += addend;
+					double factor = correction / 10.0;
+					blue[i]  += (int)(error[0][i] * factor);
+					green[i] += (int)(error[1][i] * factor);
+					red[i]   += (int)(error[2][i] * factor);
 				}
 			}
 
 			int k = 0;
 			for (int i = 0; i < image_ydim; i++)
-			{
 				for (int j = 0; j < image_xdim; j++)
 				{
 					working_image.setRGB(j, i, (blue[k] << 16) + (green[k] << 8) + red[k]);
 					k++;
 				}
-			}
 
-			// Update display at the current zoom level (no separate canvas size needed here;
-			// the preferred size is already set and zoom hasn't changed).
 			updateDisplayImage();
 			image_canvas.repaint();
 
@@ -1371,6 +1207,9 @@ public class SimpleWriter
 		}
 	}
 
+	// -----------------------------------------------------------------------
+	// SaveHandler
+	// -----------------------------------------------------------------------
 	class SaveHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
@@ -1385,7 +1224,6 @@ public class SimpleWriter
 
 				out.writeShort(image_xdim);
 				out.writeShort(image_ydim);
-
 				out.writeByte(pixel_shift);
 				out.writeByte(pixel_quant);
 				out.writeByte(min_set_id);
@@ -1403,9 +1241,9 @@ public class SimpleWriter
 					out.writeInt(channel_compressed_length[j]);
 					out.writeByte(channel_iterations[i]);
 
-					if (delta_type == 5 || delta_type == 6 || delta_type == 7)
+					if (delta_type == 5 || delta_type == 6 || delta_type == 7 || delta_type == 8)
 					{
-						byte[] map = (byte[]) map_list.get(i);
+						byte[] map        = (byte[]) map_list.get(i);
 						byte[] packed_map = SegmentMapper.packBits(map, 2);
 						out.writeInt(map.length);
 						out.writeInt(packed_map.length);
