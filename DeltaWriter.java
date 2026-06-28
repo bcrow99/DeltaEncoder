@@ -152,11 +152,8 @@ public class DeltaWriter
 			int[] qc = quantized_channel_list.get(j);
 			ArrayList<int[]> res;
 
-			total_delta_sum[0] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getHorizontalFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[1] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getVerticalFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[2] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getAverageFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[3] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getMedFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[4] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getDirectionalFrequency(qc, new_xdim, new_ydim)));
+			for (int t = 0; t < 5; t++)
+				total_delta_sum[t] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getFrequency(qc, new_xdim, new_ydim, t)));
 
 			res = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
 			total_delta_sum[5] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
@@ -921,11 +918,9 @@ public class DeltaWriter
 							}
 					}
 
-					// ---- Time the Fast Arithmetic encoding ----
+					// ---- Encode all segments in parallel ----
 					byte[][][] fast_enc = new byte[3][][];
 					for (int i = 0; i < 3; i++) fast_enc[i] = new byte[n_segs[i]][];
-
-					long fast_start = System.nanoTime();
 
 					Thread[][][] fast_threads = new Thread[3][][];
 					for (int i = 0; i < 3; i++)
@@ -943,43 +938,6 @@ public class DeltaWriter
 					}
 					for (int i = 0; i < 3; i++)
 						for (Thread t : fast_threads[i][0]) t.join();
-
-					long fast_ms = (System.nanoTime() - fast_start) / 1_000_000;
-
-					// ---- BigInteger comparison timing (encode only, not written) ----
-					BigInteger[][][] cmp_offsets = new BigInteger[3][][];
-					for (int i = 0; i < 3; i++) cmp_offsets[i] = new BigInteger[n_segs[i]][2];
-
-					long slow_start = System.nanoTime();
-
-					Thread[][][] cmp_threads = new Thread[3][][];
-					for (int i = 0; i < 3; i++)
-					{
-						cmp_threads[i] = new Thread[1][n_segs[i]];
-						for (int m = 0; m < n_segs[i]; m++)
-						{
-							final BigInteger[] co   = cmp_offsets[i][m];
-							final byte[]       sd   = segs[i][m];
-							final int[]        sf   = freqs[i][m];
-							cmp_threads[i][0][m] = new Thread(() ->
-							{
-								BigInteger[] r = ArithmeticMapper.getIntervalValue(sd, sf);
-								co[0] = r[0]; co[1] = r[1];
-							});
-							cmp_threads[i][0][m].start();
-						}
-					}
-					for (int i = 0; i < 3; i++)
-						for (Thread t : cmp_threads[i][0]) t.join();
-
-					long slow_ms = (System.nanoTime() - slow_start) / 1_000_000;
-
-					// ---- Print timing comparison ----
-					System.out.println("Fast Arithmetic (long):      " + fast_ms + " ms");
-					System.out.println("Arithmetic (BigInteger) cmp: " + slow_ms + " ms");
-					if (fast_ms > 0)
-						System.out.printf("Speedup: %.1fx%n", (double) slow_ms / fast_ms);
-					System.out.println();
 
 					// ---- Deflate frequency tables in parallel ----
 					int[]    len_types  = new int[3];
