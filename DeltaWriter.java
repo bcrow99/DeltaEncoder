@@ -145,6 +145,7 @@ public class DeltaWriter
 
 		int[] channel_id      = DeltaMapper.getChannels(min_set_id);
 		int[] total_delta_sum = new int[10];
+		int   fm1_delta = 0, fm1_map = 0, fm2_delta = 0, fm2_map = 0;
 
 		for (int i = 0; i < 3; i++)
 		{
@@ -165,18 +166,25 @@ public class DeltaWriter
 			total_delta_sum[7] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
 
 			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
-			total_delta_sum[8] += (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)))
-			                    + (int) Math.floor(CodeMapper.getShannonLimit(res8.get(1)));
+			int fm1d = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)));
+			int fm1m = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(1)));
+			total_delta_sum[8] += fm1d + fm1m;
+			fm1_delta          += fm1d;
+			fm1_map            += fm1m;
+
 			ArrayList<int[]> res16 = DeltaMapper.getIdealFrequency16(qc, new_xdim, new_ydim);
-			total_delta_sum[9] += (int) Math.floor(CodeMapper.getShannonLimit(res16.get(0)))
-			                    + (int) Math.floor(CodeMapper.getShannonLimit(res16.get(1)));
+			int fm2d = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(0)));
+			int fm2m = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(1)));
+			total_delta_sum[9] += fm2d + fm2m;
+			fm2_delta          += fm2d;
+			fm2_map            += fm2m;
 		}
 
 		min_sum = total_delta_sum[0]; min_idx = 0;
 		for (int i = 1; i < 10; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
-		System.out.println("Frame map (1) estimate:    " + total_delta_sum[8]);
-		System.out.println("Frame map (2) estimate:    " + total_delta_sum[9]);
+		System.out.println("Frame map (1) delta:       " + fm1_delta + "  map: " + fm1_map + "  total: " + (fm1_delta + fm1_map));
+		System.out.println("Frame map (2) delta:       " + fm2_delta + "  map: " + fm2_map + "  total: " + (fm2_delta + fm2_map));
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 	}
 
@@ -609,7 +617,7 @@ public class DeltaWriter
 				else if (delta_type == 5) { result = DeltaMapper.getMixedDeltasFromValues(qc, new_xdim, new_ydim);   map_list.add(result.get(2)); }
 				else if (delta_type == 6) { result = DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 7) { result = DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
-				else if (delta_type == 8) { result = DeltaMapper.getIdealDeltasFromValues(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
+				else if (delta_type == 8) { result = DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim);   map_list.add(result.get(2)); }
 				else if (delta_type == 9) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
 
 				int[] delta = (int[]) result.get(1);
@@ -672,7 +680,7 @@ public class DeltaWriter
 				else if (delta_type == 5) ch = DeltaMapper.getValuesFromMixedDeltas(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 6) ch = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 7) ch = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
-				else if (delta_type == 8) ch = DeltaMapper.getValuesFromIdealDeltas(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 8) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 9) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 
 				if (j > 2) for (int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
@@ -758,11 +766,27 @@ public class DeltaWriter
 						out.writeInt(channel_compressed_length[j]);
 						out.writeByte(channel_iterations[i]);
 
-						if (delta_type >= 5 && delta_type <= 8)
+						if (delta_type >= 5 && delta_type <= 7)
 						{
-							byte[] map = (byte[]) map_list.get(i);
-							byte[] pm  = SegmentMapper.packBits(map, 2);
-							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length + 3) / 4;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+						}
+						else if (delta_type == 8)
+						{
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length * 3 + 7) / 8;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+							{
+								int bit_pos = q * 3, byte_idx = bit_pos >> 3, bit_off = bit_pos & 7;
+								pm[byte_idx] |= (map[q] & 0x7) << bit_off;
+								if (bit_off + 3 > 8) pm[byte_idx + 1] |= (map[q] & 0x7) >> (8 - bit_off);
+							}
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						else if (delta_type == 9)
 						{
@@ -892,11 +916,27 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 5 && delta_type <= 8)
+						if (delta_type >= 5 && delta_type <= 7)
 						{
-							byte[] map = (byte[]) map_list.get(i);
-							byte[] pm  = SegmentMapper.packBits(map, 2);
-							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length + 3) / 4;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+						}
+						else if (delta_type == 8)
+						{
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length * 3 + 7) / 8;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+							{
+								int bit_pos = q * 3, byte_idx = bit_pos >> 3, bit_off = bit_pos & 7;
+								pm[byte_idx] |= (map[q] & 0x7) << bit_off;
+								if (bit_off + 3 > 8) pm[byte_idx + 1] |= (map[q] & 0x7) >> (8 - bit_off);
+							}
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						else if (delta_type == 9)
 						{
@@ -985,11 +1025,27 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 5 && delta_type <= 8)
+						if (delta_type >= 5 && delta_type <= 7)
 						{
-							byte[] map = (byte[]) map_list.get(i);
-							byte[] pm  = SegmentMapper.packBits(map, 2);
-							out.writeInt(map.length); out.writeInt(pm.length); out.write(pm, 0, pm.length);
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length + 3) / 4;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+						}
+						else if (delta_type == 8)
+						{
+							byte[] map    = (byte[]) map_list.get(i);
+							int    pm_len = (map.length * 3 + 7) / 8;
+							byte[] pm     = new byte[pm_len];
+							for (int q = 0; q < map.length; q++)
+							{
+								int bit_pos = q * 3, byte_idx = bit_pos >> 3, bit_off = bit_pos & 7;
+								pm[byte_idx] |= (map[q] & 0x7) << bit_off;
+								if (bit_off + 3 > 8) pm[byte_idx + 1] |= (map[q] & 0x7) >> (8 - bit_off);
+							}
+							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
 						}
 						else if (delta_type == 9)
 						{

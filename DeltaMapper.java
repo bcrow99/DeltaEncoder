@@ -233,14 +233,12 @@ public class DeltaMapper
 	// getIdealDeltasFromValues16.  Mirrors getIdealFrequency but evaluates
 	// all 16 predictors and records the minimum-absolute-delta for each
 	// interior pixel.  Used by DeltaWriter.init() for auto-selection.
-	// Returns [delta_frequency, map_frequency (4 entries, one per predictor)]
-	// for the same 4-predictor selection used by getIdealDeltasFromValues.
-	// The map_frequency lets the caller charge getShannonLimit(map_freq) as
-	// map overhead when comparing against other delta types in init().
+	// Returns [delta_frequency, map_frequency (8 entries, one per predictor)]
+	// using the same 8-predictor causal ring as getIdealDeltasFromValues8.
 	public static ArrayList<int[]> getIdealFrequency8(int src[], int xdim, int ydim)
 	{
 		ArrayList<Integer> delta_list = new ArrayList<Integer>();
-		int[] map_freq = new int[4];
+		int[] map_freq = new int[8];
 
 		for (int i = 1; i < ydim; i++)
 		{
@@ -253,16 +251,25 @@ public class DeltaMapper
 				int d = src[k - xdim + 1];
 				int e = src[k];
 
-				int da = Math.abs(e - a), db = Math.abs(e - b);
-				int dc = Math.abs(e - c), dd = Math.abs(e - d);
+				int[] pred = {
+					a,           //  0: left
+					(a + c) / 2, //  1: avg(left, above-left)
+					c,           //  2: above-left
+					(c + b) / 2, //  3: avg(above-left, above)
+					b,           //  4: above
+					(b + d) / 2, //  5: avg(above, above-right)
+					d,           //  6: above-right
+					(d + a) / 2  //  7: avg(above-right, left)
+				};
 
-				int best_idx, delta;
-				if      (da <= db && da <= dc && da <= dd) { best_idx = 0; delta = e - a; }
-				else if (db <= dc && db <= dd)             { best_idx = 1; delta = e - b; }
-				else if (dc <= dd)                         { best_idx = 2; delta = e - c; }
-				else                                       { best_idx = 3; delta = e - d; }
-
-				delta_list.add(delta);
+				int best_abs = Integer.MAX_VALUE, best_idx = 0, best_delta = 0;
+				for (int n = 0; n < 8; n++)
+				{
+					int delta     = e - pred[n];
+					int abs_delta = Math.abs(delta);
+					if (abs_delta < best_abs) { best_abs = abs_delta; best_idx = n; best_delta = delta; }
+				}
+				delta_list.add(best_delta);
 				map_freq[best_idx]++;
 			}
 		}
@@ -2933,7 +2940,7 @@ public class DeltaMapper
 					if(n == 0)      delta = src[k]-src[k-1];
 					else if(n == 1) delta = src[k]-(src[k-1]+src[k-xdim-1])/2;
 					else if(n == 2) delta = src[k]-src[k-xdim-1];
-					else if(n == 3) delta = src[k]-(src[k-xdim]+src[k-xdim+1])/2;
+					else if(n == 3) delta = src[k]-(src[k-xdim-1]+src[k-xdim])/2;
 					else if(n == 4) delta = src[k]-src[k-xdim];
 					else if(n == 5) delta = src[k]-(src[k-xdim]+src[k-xdim+1])/2;
 					else if(n == 6) delta = src[k]-src[k-xdim+1];
@@ -2963,14 +2970,14 @@ public class DeltaMapper
 			for(int j = 1; j < xdim - 1; j++)
 			{
 				int n = map[m++];
-				if(n == 0)      dst[k] = dst[k-1]                         + src[k];
-				else if(n == 1) dst[k] = (dst[k-1]+dst[k-xdim-1])   / 2  + src[k];
-				else if(n == 2) dst[k] = dst[k-xdim-1]                    + src[k];
-				else if(n == 3) dst[k] = (dst[k-xdim]+dst[k-xdim+1]) / 2 + src[k];
-				else if(n == 4) dst[k] = dst[k-xdim]                      + src[k];
-				else if(n == 5) dst[k] = (dst[k-xdim]+dst[k-xdim+1]) / 2 + src[k];
-				else if(n == 6) dst[k] = dst[k-xdim+1]                    + src[k];
-				else            dst[k] = (dst[k-xdim+1]+dst[k-1])   / 2  + src[k];
+				if(n == 0)      dst[k] = dst[k-1]                          + src[k];
+				else if(n == 1) dst[k] = (dst[k-1]+dst[k-xdim-1])    / 2  + src[k];
+				else if(n == 2) dst[k] = dst[k-xdim-1]                     + src[k];
+				else if(n == 3) dst[k] = (dst[k-xdim-1]+dst[k-xdim]) / 2  + src[k];
+				else if(n == 4) dst[k] = dst[k-xdim]                       + src[k];
+				else if(n == 5) dst[k] = (dst[k-xdim]+dst[k-xdim+1]) / 2  + src[k];
+				else if(n == 6) dst[k] = dst[k-xdim+1]                     + src[k];
+				else            dst[k] = (dst[k-xdim+1]+dst[k-1])    / 2  + src[k];
 				k++;
 			}
 			dst[k] = dst[k-1] + src[k]; k++;

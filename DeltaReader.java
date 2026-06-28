@@ -142,13 +142,32 @@ public class DeltaReader
 				channel_iterations[i] = in.readByte();
 
 				// Map (delta_type 5-9)
-				if (delta_type >= 5 && delta_type <= 8)
+				if (delta_type >= 5 && delta_type <= 7)
 				{
 					int    ml  = in.readInt();
 					int    pml = in.readInt();
 					byte[] pm  = new byte[pml];
 					in.readFully(pm);
-					map_list.add(SegmentMapper.unpackBits(pm, ml, 2));
+					byte[] map_raw = new byte[ml];
+					for (int q = 0; q < ml; q++)
+						map_raw[q] = (byte) ((pm[q >> 2] >> ((q & 3) << 1)) & 0x3);
+					map_list.add(map_raw);
+				}
+				else if (delta_type == 8)
+				{
+					int    ml  = in.readInt();
+					int    pml = in.readInt();
+					byte[] pm  = new byte[pml];
+					in.readFully(pm);
+					byte[] map_raw = new byte[ml];
+					for (int q = 0; q < ml; q++)
+					{
+						int bit_pos = q * 3, byte_idx = bit_pos >> 3, bit_off = bit_pos & 7;
+						int v = ((pm[byte_idx] & 0xFF) >> bit_off) & 0x7;
+						if (bit_off + 3 > 8) v |= ((pm[byte_idx + 1] & 0xFF) << (8 - bit_off)) & 0x7;
+						map_raw[q] = (byte) v;
+					}
+					map_list.add(map_raw);
 				}
 				else if (delta_type == 9)
 				{
@@ -156,7 +175,10 @@ public class DeltaReader
 					int    pml = in.readInt();
 					byte[] pm  = new byte[pml];
 					in.readFully(pm);
-					map_list.add(SegmentMapper.unpackBits(pm, ml, 4));
+					byte[] map_raw = new byte[ml];
+					for (int q = 0; q < ml; q++)
+						map_raw[q] = (byte) ((pm[q >> 1] >> ((q & 1) << 2)) & 0xF);
+					map_list.add(map_raw);
 				}
 
 				// String table (compress_type > 0)
@@ -677,7 +699,7 @@ public class DeltaReader
 				else if (delta_type == 5) cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 6) cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 7) cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 8) cur_ch = DeltaMapper.getValuesFromIdealDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 8) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else                      cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 
 				// Restore difference-channel offset
