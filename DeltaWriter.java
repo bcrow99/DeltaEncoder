@@ -1,7 +1,6 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
-import java.math.*;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
@@ -33,7 +32,7 @@ public class DeltaWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
-	int entropy_type  = 0;   // 0=LZ77, 1=Huffman, 2=Arithmetic
+	int entropy_type  = 0;   // 0=LZ77, 1=Huffman, 3=Fast Arithmetic
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -468,18 +467,18 @@ public class DeltaWriter
 				}
 				delta_button[delta_type].setSelected(true);
 
-				// Entropy menu — Huffman(1), LZ77(0), Arithmetic(2)
+				// Entropy menu — Huffman(1), LZ77(0), Fast Arithmetic(3)
 				JMenu entropy_menu = new JMenu("Entropy");
 				entropy_button = new JRadioButtonMenuItem[3];
 				entropy_button[0] = new JRadioButtonMenuItem("Huffman");
 				entropy_button[1] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
+				entropy_button[2] = new JRadioButtonMenuItem("Fast Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
 				for (int i = 0; i < 3; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				int[] entropy_map = {1, 0, 2};   // button index → entropy_type value
+				int[] entropy_map = {1, 0, 3};   // button index → entropy_type value
 				entropy_button[0].setSelected(entropy_type == 1);
 				entropy_button[1].setSelected(entropy_type == 0);
-				entropy_button[2].setSelected(entropy_type == 2);
+				entropy_button[2].setSelected(entropy_type == 3);
 				for (int i = 0; i < 3; i++)
 				{
 					final int et = entropy_map[i];
@@ -823,7 +822,7 @@ public class DeltaWriter
 
 	// =========================================================================
 	// =========================================================================
-	// SaveHandler — Huffman (1), LZ77 (0), Arithmetic BigInteger (2)
+	// SaveHandler — Huffman (1), LZ77 (0), Fast Arithmetic (3)
 	// =========================================================================
 	class SaveHandler implements ActionListener
 	{
@@ -939,7 +938,7 @@ public class DeltaWriter
 				}
 				else
 				{
-					// ---- Arithmetic (BigInteger) ----
+					// ---- Fast Arithmetic (long / renormalization) ----
 					byte[][]   payloads = new byte[3][];
 					int[]      n_segs   = new int[3];
 					byte[][][] segs     = new byte[3][][];
@@ -966,42 +965,29 @@ public class DeltaWriter
 							}
 					}
 
-					BigInteger[][][] offsets = new BigInteger[3][][];
-					for (int i = 0; i < 3; i++) offsets[i] = new BigInteger[n_segs[i]][2];
+					byte[][][] fast_enc = new byte[3][][];
+					for (int i = 0; i < 3; i++) fast_enc[i] = new byte[n_segs[i]][];
 
-					int total_segs = n_segs[0] + n_segs[1] + n_segs[2];
-					System.out.println("Arithmetic (BigInteger): starting " + total_segs + " segment(s)...");
-					long encode_start = System.nanoTime();
-
-					Thread[][][] enc_threads = new Thread[3][][];
+					Thread[][][] fast_threads = new Thread[3][][];
 					for (int i = 0; i < 3; i++)
 					{
-						enc_threads[i] = new Thread[1][n_segs[i]];
+						fast_threads[i] = new Thread[1][n_segs[i]];
 						for (int m = 0; m < n_segs[i]; m++)
 						{
-							final BigInteger[] seg_off  = offsets[i][m];
-							final byte[]       seg_data = segs[i][m];
-							final int[]        seg_freq = freqs[i][m];
-							final int          ci = i, si = m;
-							enc_threads[i][0][m] = new Thread(() ->
-							{
-								System.out.println("Arithmetic (BigInteger): channel " + ci + " segment " + si + " encoding (" + seg_data.length + " bytes)...");
-								BigInteger[] r = ArithmeticMapper.getIntervalValue(seg_data, seg_freq);
-								seg_off[0] = r[0]; seg_off[1] = r[1];
-								System.out.println("Arithmetic (BigInteger): channel " + ci + " segment " + si + " done.");
-							});
-							enc_threads[i][0][m].start();
+							final byte[][] fe = fast_enc[i];
+							final int      fm = m;
+							final byte[]   sd = segs[i][m];
+							final int[]    sf = freqs[i][m];
+							fast_threads[i][0][m] = new Thread(() -> fe[fm] = ArithmeticMapper.getIntervalValueFast(sd, sf));
+							fast_threads[i][0][m].start();
 						}
 					}
 					for (int i = 0; i < 3; i++)
-						for (Thread t : enc_threads[i][0]) t.join();
+						for (Thread t : fast_threads[i][0]) t.join();
 
-					long encode_ms = (System.nanoTime() - encode_start) / 1_000_000;
-					System.out.println("Arithmetic (BigInteger) encoding: " + encode_ms + " ms");
-
-					int[]  len_types = new int[3];
+					int[]    len_types = new int[3];
 					byte[][] zip_freqs = new byte[3][];
-					int[]  zip_lens  = new int[3];
+					int[]    zip_lens  = new int[3];
 					deflateFrequencies(n_segs, freqs, len_types, zip_freqs, zip_lens);
 
 					for (int i = 0; i < 3; i++)
@@ -1046,8 +1032,9 @@ public class DeltaWriter
 						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
 						for (int k = 0; k < n_segs[i]; k++)
 						{
-							byte[] b0 = offsets[i][k][0].toByteArray(); out.writeInt(b0.length); out.write(b0, 0, b0.length);
-							byte[] b1 = offsets[i][k][1].toByteArray(); out.writeInt(b1.length); out.write(b1, 0, b1.length);
+							byte[] enc = fast_enc[i][k];
+							out.writeInt(enc.length);
+							out.write(enc, 0, enc.length);
 						}
 					}
 				}
@@ -1062,7 +1049,7 @@ public class DeltaWriter
 				double string_rate  = (double)(string_bits / 8.0)        / (image_xdim * image_ydim * 3);
 				System.out.println("File compression rate:   " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type:              " + delta_type_string[delta_type]);
-				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","Arithmetic"}[entropy_type]);
+				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","","Fast Arithmetic"}[entropy_type]);
 				System.out.println("Integer rate:            " + String.format("%.4f", integer_rate));
 				System.out.println("String rate:             " + String.format("%.4f", string_rate));
 				System.out.println("Output compression rate: " + String.format("%.4f", rate));
