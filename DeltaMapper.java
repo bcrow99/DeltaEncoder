@@ -172,6 +172,186 @@ public class DeltaMapper
 		return frequency;
 	}
 
+	// =========================================================================
+	// Compact Huffman map encoder / decoder.
+	//
+	// Encodes a byte[] map whose values are in 0..n_sym-1 (n_sym must be a
+	// power of 2: 4, 8, or 16) using canonical Huffman coding.
+	//
+	// Output format:
+	//   header : n_sym code lengths, packed as 4 bits each (2 per byte,
+	//            low nibble first), total (n_sym/2) bytes.
+	//   data   : MSB-first Huffman bit stream, zero-padded to a full byte.
+	//
+	// The caller stores bit_count_out[0] (total payload bits) alongside the
+	// encoded array so the decoder knows where the bit stream ends.
+	// =========================================================================
+	public static byte[] encodeMapHuffman(byte[] map, int n_sym, int[] bit_count_out)
+	{
+		// Count symbol frequencies.
+		int[] freq = new int[n_sym];
+		for (byte b : map) freq[b & 0xFF]++;
+
+		// Build Huffman code lengths.
+		int[] len = huffmanLengths(freq, n_sym);
+
+		// Find max code length.
+		int max_len = 0;
+		for (int l : len) if (l > max_len) max_len = l;
+
+		// Assign canonical codes.
+		int[] codes = huffmanCodes(len, n_sym, max_len);
+
+		// Count total payload bits.
+		int total_bits = 0;
+		for (int s = 0; s < n_sym; s++) total_bits += freq[s] * len[s];
+		bit_count_out[0] = total_bits;
+
+		// Build output: header nibbles + bit stream.
+		int    header = n_sym / 2;
+		byte[] out    = new byte[header + (total_bits + 7) / 8];
+
+		// Write code lengths as 4-bit nibbles (low nibble first).
+		for (int s = 0; s < n_sym; s++)
+			out[s >> 1] |= (len[s] & 0xF) << ((s & 1) << 2);
+
+		// Write Huffman bit stream (MSB first within each byte).
+		int bit_pos = 0;
+		for (byte b : map)
+		{
+			int s    = b & 0xFF;
+			int code = codes[s];
+			int clen = len[s];
+			for (int bit = clen - 1; bit >= 0; bit--)
+			{
+				if (((code >> bit) & 1) == 1)
+					out[header + (bit_pos >> 3)] |= 1 << (7 - (bit_pos & 7));
+				bit_pos++;
+			}
+		}
+
+		return out;
+	}
+
+	public static byte[] decodeMapHuffman(byte[] encoded, int n_sym, int map_length, int bit_count)
+	{
+		int header = n_sym / 2;
+
+		// Read code lengths from nibbles.
+		int[] len = new int[n_sym];
+		for (int s = 0; s < n_sym; s++)
+			len[s] = (encoded[s >> 1] >> ((s & 1) << 2)) & 0xF;
+
+		// Find max code length and rebuild canonical codes.
+		int max_len = 0;
+		for (int l : len) if (l > max_len) max_len = l;
+		int[] codes = huffmanCodes(len, n_sym, max_len);
+
+		// Decode bit stream.
+		byte[] map    = new byte[map_length];
+		int    bit_pos = 0;
+
+		for (int q = 0; q < map_length; q++)
+		{
+			int acc = 0, acc_len = 0;
+			outer:
+			while (true)
+			{
+				int byte_idx = header + (bit_pos >> 3);
+				acc     = (acc << 1) | ((encoded[byte_idx] >> (7 - (bit_pos & 7))) & 1);
+				acc_len++;
+				bit_pos++;
+				for (int s = 0; s < n_sym; s++)
+					if (len[s] == acc_len && codes[s] == acc)
+						{ map[q] = (byte) s; break outer; }
+			}
+		}
+
+		return map;
+	}
+
+	// Build Huffman code lengths from a frequency array via a greedy tree.
+	private static int[] huffmanLengths(int[] freq, int n_sym)
+	{
+		int[] len  = new int[n_sym];
+		int   used = 0;
+		for (int f : freq) if (f > 0) used++;
+
+		if (used <= 1)
+		{
+			for (int s = 0; s < n_sym; s++) if (freq[s] > 0) { len[s] = 1; break; }
+			return len;
+		}
+
+		// Nodes 0..n_sym-1 are leaves; n_sym.. are internal.
+		long[]    node_freq = new long[2 * n_sym];
+		int[]     parent    = new int  [2 * n_sym];
+		boolean[] active    = new boolean[2 * n_sym];
+
+		for (int s = 0; s < n_sym; s++)
+		{
+			node_freq[s] = freq[s];
+			active[s]    = freq[s] > 0;
+			parent[s]    = -1;
+		}
+
+		int next = n_sym;
+		while (true)
+		{
+			int m1 = -1, m2 = -1;
+			for (int n = 0; n < next; n++)
+			{
+				if (!active[n]) continue;
+				if (m1 == -1 || node_freq[n] < node_freq[m1]) { m2 = m1; m1 = n; }
+				else if (m2 == -1 || node_freq[n] < node_freq[m2]) m2 = n;
+			}
+			if (m2 == -1) break;
+
+			node_freq[next] = node_freq[m1] + node_freq[m2];
+			parent[m1]  = next; active[m1]   = false;
+			parent[m2]  = next; active[m2]   = false;
+			active[next] = true; parent[next] = -1;
+			next++;
+		}
+
+		int root = next - 1;
+		for (int s = 0; s < n_sym; s++)
+		{
+			if (freq[s] == 0) continue;
+			int depth = 0, node = s;
+			while (node != root) { depth++; node = parent[node]; }
+			len[s] = depth;
+		}
+		return len;
+	}
+
+	// Assign canonical Huffman codes from code lengths.
+	private static int[] huffmanCodes(int[] len, int n_sym, int max_len)
+	{
+		if (max_len == 0) return new int[n_sym];
+
+		// Count symbols at each length.
+		int[] bl_count = new int[max_len + 1];
+		for (int s = 0; s < n_sym; s++) bl_count[len[s]]++;
+		bl_count[0] = 0;
+
+		// First code at each length (standard canonical assignment).
+		int[] next_code = new int[max_len + 2];
+		int   code      = 0;
+		for (int bits = 1; bits <= max_len; bits++)
+		{
+			code = (code + bl_count[bits - 1]) << 1;
+			next_code[bits] = code;
+		}
+
+		// Assign codes to symbols in order (canonical: sorted by symbol index).
+		int[] codes = new int[n_sym];
+		for (int s = 0; s < n_sym; s++)
+			if (len[s] > 0) codes[s] = next_code[len[s]]++;
+
+		return codes;
+	}
+
 	public static int[] getIdealFrequency(int src[], int xdim, int ydim)
 	{
 		ArrayList<Integer> delta_list = new ArrayList<Integer>();
@@ -3188,6 +3368,138 @@ public class DeltaMapper
 		}
 
 		return dst;
+	}
+
+	// =========================================================================
+	// Adaptive predictor — no map, deterministic from causal neighbors.
+	//
+	// Uses local gradient indicators:
+	//   h = |a-c| + |d-b|  (horizontal variation)
+	//   v = |b-c| + |a-d|  (vertical variation)
+	//
+	// Smooth  → all-four average
+	// h >> v  → above-based average  (vertical-edge region)
+	// v >> h  → left-based average   (horizontal-edge region)
+	// mixed   → MED predictor
+	// =========================================================================
+	private static int adaptivePred(int a, int b, int c, int d)
+	{
+		int pa = Math.abs(b - c);   // vertical gradient at above-left corner
+		int pb = Math.abs(a - c);   // horizontal gradient at above-left corner
+		if (pb > pa * 2) return a;  // strong horizontal edge → left
+		if (pa > pb * 2) return b;  // strong vertical edge → above
+		// Mixed or smooth → MED
+		if (c >= Math.max(a, b)) return Math.min(a, b);
+		if (c <= Math.min(a, b)) return Math.max(a, b);
+		return a + b - c;
+	}
+
+	public static ArrayList getAdaptiveDeltasFromValues(int[] src, int xdim, int ydim)
+	{
+		int[] dst        = new int[xdim * ydim];
+		int   init_value = src[0];
+		int   sum        = 0;
+		int   k          = 0;
+
+		// Row 0: horizontal.
+		dst[k++] = 0;
+		for (int j = 1; j < xdim; j++)
+		{
+			int delta = src[k] - src[k - 1];
+			dst[k++]  = delta;
+			sum      += Math.abs(delta);
+		}
+
+		// Rows 1..ydim-1.
+		for (int i = 1; i < ydim; i++)
+		{
+			// Col 0: vertical.
+			int delta = src[k] - src[k - xdim];
+			dst[k++]  = delta;
+			sum      += Math.abs(delta);
+
+			// Cols 1..xdim-2: adaptive rule.
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k - 1], b = src[k - xdim];
+				int c = src[k - xdim - 1], d = src[k - xdim + 1];
+				delta    = src[k] - adaptivePred(a, b, c, d);
+				dst[k++] = delta;
+				sum     += Math.abs(delta);
+			}
+
+			// Last col: horizontal.
+			int delta2 = src[k] - src[k - 1];
+			dst[k++]   = delta2;
+			sum       += Math.abs(delta2);
+		}
+
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(init_value);
+		return result;
+	}
+
+	public static int[] getValuesFromAdaptiveDeltas(int[] src, int xdim, int ydim, int init_value)
+	{
+		int[] dst = new int[xdim * ydim];
+		int   k   = 0;
+
+		// Row 0: horizontal cumsum.
+		dst[k++] = init_value;
+		for (int j = 1; j < xdim; j++) { dst[k] = dst[k - 1] + src[k]; k++; }
+
+		// Rows 1..ydim-1.
+		for (int i = 1; i < ydim; i++)
+		{
+			// Col 0: vertical.
+			dst[k] = dst[k - xdim] + src[k]; k++;
+
+			// Cols 1..xdim-2: adaptive rule.
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int a = dst[k - 1], b = dst[k - xdim];
+				int c = dst[k - xdim - 1], d = dst[k - xdim + 1];
+				dst[k] = adaptivePred(a, b, c, d) + src[k]; k++;
+			}
+
+			// Last col: horizontal.
+			dst[k] = dst[k - 1] + src[k]; k++;
+		}
+
+		return dst;
+	}
+
+	// Frequency distribution for the adaptive predictor (used by init() for
+	// auto-selection).  Covers all pixels so the estimate is comparable to
+	// the other types in total_delta_sum.
+	public static int[] getAdaptiveFrequency(int[] src, int xdim, int ydim)
+	{
+		ArrayList<Integer> delta_list = new ArrayList<Integer>();
+		int k = 1;  // skip pixel 0 (delta = 0)
+
+		// Row 0: horizontal.
+		for (int j = 1; j < xdim; j++) { delta_list.add(src[k] - src[k - 1]); k++; }
+
+		// Rows 1..ydim-1.
+		for (int i = 1; i < ydim; i++)
+		{
+			delta_list.add(src[k] - src[k - xdim]); k++;  // col 0: vertical
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				int a = src[k-1], b = src[k-xdim];
+				int c = src[k-xdim-1], d = src[k-xdim+1];
+				delta_list.add(src[k] - adaptivePred(a, b, c, d)); k++;
+			}
+			delta_list.add(src[k] - src[k - 1]); k++;  // last col: horizontal
+		}
+
+		int mn = Integer.MAX_VALUE, mx = Integer.MIN_VALUE;
+		for (int v : delta_list) { if (v < mn) mn = v; if (v > mx) mx = v; }
+		int[] freq = new int[mx - mn + 1];
+		for (int v : delta_list) freq[v - mn]++;
+		return freq;
 	}
 
 	// =========================================================================

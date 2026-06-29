@@ -200,6 +200,11 @@ public class StringMapper
 		for (int i = 0; i < n; i++)
 			inverse_table[table[i]] = i;
 
+		// Cap bitlength to the actual bits encoded in src.  A trailing-zero edge
+		// case in compressZeroBits can leave the decompressed length one bit off
+		// from what was stored in channel_compressed_length, causing an AIOOBE.
+		bitlength = Math.min(bitlength, getBitlength(src));
+
 		int length    = 1;
 		int src_byte  = 0;
 		int dst_byte  = 0;
@@ -541,7 +546,14 @@ public class StringMapper
 		else
 			System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
 		setData(transform_type, iterations, compressed_length, dst);
-		return dst;
+
+		// Only return the compressed result if savings exceed a threshold.
+		// A marginal reduction can increase Huffman entropy and hurt overall
+		// compression.  Require at least 5% savings over the original length.
+		if (compressed_length < bit_length - bit_length / 20)
+			return dst;
+		else
+			return src.clone();
 	}
 
 	public static byte[] decompressStrings(byte[] string)
@@ -553,10 +565,13 @@ public class StringMapper
 		int    bitlength  = getBitlength(string);
 		int    type       = getType(string);
 		int    bytelength = getBytelength(bitlength);
-		double factor     = Math.pow(2, iterations);
 
-		byte[] buffer1 = new byte[(int)(bytelength * factor)];
-		byte[] buffer2 = new byte[(int)(bytelength * factor)];
+		// Start with 2x the compressed size — enough for one decompression pass.
+		// Only the output buffer is grown on demand each iteration, so we never
+		// pre-allocate 2^iterations times the input (which OOMs for large strings
+		// with many compression iterations).
+		byte[] buffer1 = new byte[bytelength * 2 + 16];
+		byte[] buffer2 = new byte[bytelength * 2 + 16];
 
 		int uncompressed_length;
 		if (type == 0)
@@ -568,8 +583,11 @@ public class StringMapper
 		while (iterations > 0)
 		{
 			int previous_length = uncompressed_length;
+			int need            = getBytelength(previous_length * 2 + 16);
 			if (iterations % 2 == 1)
 			{
+				// source = buffer1, output = buffer2
+				if (buffer2.length < need) buffer2 = new byte[need];
 				if (type == 0)
 					uncompressed_length = decompressZeroBits(buffer1, previous_length, buffer2);
 				else
@@ -577,6 +595,8 @@ public class StringMapper
 			}
 			else
 			{
+				// source = buffer2, output = buffer1
+				if (buffer1.length < need) buffer1 = new byte[need];
 				if (type == 0)
 					uncompressed_length = decompressZeroBits(buffer2, previous_length, buffer1);
 				else
@@ -587,7 +607,7 @@ public class StringMapper
 
 		int    out_bytelength = getBytelength(uncompressed_length);
 		byte[] dst            = new byte[out_bytelength];
-		if (getIterations(string) % 2 == 0)   // original iterations was even → result in buffer2
+		if (getIterations(string) % 2 == 0)
 			System.arraycopy(buffer2, 0, dst, 0, out_bytelength - 1);
 		else
 			System.arraycopy(buffer1, 0, dst, 0, out_bytelength - 1);
