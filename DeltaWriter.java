@@ -63,15 +63,25 @@ public class DeltaWriter
 	double file_compression_rate;
 	boolean initialized = false;
 
+	static int openWindowCount  = 0;
+	static int nextWindowOffset = 0;
+
 	// =========================================================================
 	public static void main(String[] args)
 	{
-		if (args.length != 1)
+		if (args.length == 1)
 		{
-			System.out.println("Usage: java DeltaWriter <filename>");
-			System.exit(0);
+			new DeltaWriter(args[0]);
 		}
-		DeltaWriter writer = new DeltaWriter(args[0]);
+		else
+		{
+			FileDialog fd = new FileDialog((java.awt.Frame) null, "Open Image", FileDialog.LOAD);
+			fd.setVisible(true);
+			if (fd.getFile() != null)
+				new DeltaWriter(new File(fd.getDirectory(), fd.getFile()).getPath());
+			else
+				System.exit(0);
+		}
 	}
 
 	// =========================================================================
@@ -306,7 +316,8 @@ public class DeltaWriter
 				});
 
 				frame = new JFrame("Delta Writer  " + filename);
-				frame.addWindowListener(new WindowAdapter() { public void windowClosing(WindowEvent e) { System.exit(0); }});
+				openWindowCount++;
+				frame.addWindowListener(new WindowAdapter() { public void windowClosing(WindowEvent e) { frame.dispose(); if (--openWindowCount == 0) System.exit(0); } });
 				frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
 
 				// ---- Menu bar ----
@@ -314,6 +325,19 @@ public class DeltaWriter
 
 				// File menu
 				JMenu file_menu = new JMenu("File");
+
+				JMenuItem open_item = new JMenuItem("Open...");
+				open_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+				open_item.addActionListener(e ->
+				{
+					FileDialog fd = new FileDialog(frame, "Open Image", FileDialog.LOAD);
+					fd.setVisible(true);
+					if (fd.getFile() != null)
+						new DeltaWriter(fd.getDirectory() + fd.getFile());
+				});
+				file_menu.add(open_item);
+				file_menu.addSeparator();
+
 				apply_item = new JMenuItem("Apply");
 				apply_item.addActionListener(new ApplyHandler());
 				file_menu.add(apply_item);
@@ -433,7 +457,8 @@ public class DeltaWriter
 				image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale)));
 				updateTitle();
 				frame.setSize(Math.min(image_xdim+40,(int)(screen_xdim*0.70)), Math.min(image_ydim+80,(int)(screen_ydim*0.70)));
-				frame.setLocation(5, 5);
+				int _off = nextWindowOffset; nextWindowOffset = (_off + 30) % 270;
+				frame.setLocation(5 + _off, 5 + _off);
 				frame.setVisible(true);
 				SwingUtilities.invokeLater(() -> showInitialImage());
 			}
@@ -475,10 +500,31 @@ public class DeltaWriter
 		fit_scale  = Math.min(1.0, Math.min(vps.width>0?(double)vps.width/image_xdim:1.0, vps.height>0?(double)vps.height/image_ydim:1.0));
 		zoom_scale = fit_scale;
 		updateDisplayImage();
-		image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale)));
+
+		// Shrink frame to match actual canvas size — avoids excess space for
+		// landscape images where height is not the limiting dimension.
+		int display_w  = (int)(image_xdim * zoom_scale);
+		int display_h  = (int)(image_ydim * zoom_scale);
+		int overhead_w = frame.getWidth()  - vps.width;
+		int overhead_h = frame.getHeight() - vps.height;
+		int new_frame_w = Math.min(display_w + overhead_w, (int)(screen_xdim * 0.70));
+		int new_frame_h = Math.min(display_h + overhead_h, (int)(screen_ydim * 0.70));
+		if (new_frame_w < frame.getWidth() || new_frame_h < frame.getHeight())
+			frame.setSize(new_frame_w, new_frame_h);
+
+		image_canvas.setPreferredSize(new Dimension(display_w, display_h));
 		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
-		init();
-		delta_button[delta_type].setSelected(true);
+
+		apply_item.setEnabled(false);
+		new javax.swing.SwingWorker<Void, Void>()
+		{
+			@Override protected Void doInBackground() { init(); return null; }
+			@Override protected void done()
+			{
+				delta_button[delta_type].setSelected(true);
+				apply_item.setEnabled(true);
+			}
+		}.execute();
 	}
 
 	private void zoomBy(double factor)
