@@ -222,7 +222,7 @@ public class SegmentMapper
 			int type       = StringMapper.getType(segment);
 			int bitlength  = StringMapper.getBitlength(segment);
 			double ratio   = StringMapper.getZeroRatio(segment, bitlength, bit_table);
-			byte[]  compressed_segment   = StringMapper.compressStrings2(segment);
+			byte[]  compressed_segment   = StringMapper.compressStrings(segment);
 			
 			compressed_segments.add(compressed_segment);
 			if(compressed_segment.length - 1 > max_segment_bytelength)
@@ -425,7 +425,7 @@ public class SegmentMapper
 					int     current_bitlength      = StringMapper.getBitlength(current_segment); 
 					byte [] next_segment           = segments.get(i + 1);
 					int     next_bitlength         = StringMapper.getBitlength(next_segment);
-					byte [] decompressed_segment   = StringMapper.decompressStrings2(next_segment);
+					byte [] decompressed_segment   = StringMapper.decompressStrings(next_segment);
 					int	    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
 					
 					int augmented_bitlength        = current_bitlength + decompressed_bitlength;
@@ -480,7 +480,7 @@ public class SegmentMapper
 						augmented_segment[augmented_segment.length - 2] &= mask;
 					}
 				
-					byte [] compressed_segment   = StringMapper.compressStrings2(augmented_segment);
+					byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
 					int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 					int     spliced_bits         = current_bitlength;
 					//int     bit_reduction        = spliced_bits - (compressed_bitlength - next_bitlength);
@@ -521,7 +521,7 @@ public class SegmentMapper
 							shifted_segment[shifted_segment.length - 2] &= mask;
 						}
 					
-						compressed_segment   = StringMapper.compressStrings2(shifted_segment);
+						compressed_segment   = StringMapper.compressStrings(shifted_segment);
 						compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 						
 						int current_bits  = current_bitlength - j;
@@ -542,7 +542,7 @@ public class SegmentMapper
 						if(spliced_bits == current_bitlength)
 						{
 						    //System.out.println("Eliminated uncompressed segment 1.");	
-							compressed_segment   = StringMapper.compressStrings2(augmented_segment);
+							compressed_segment   = StringMapper.compressStrings(augmented_segment);
 							if(compressed_segment.length - 1 > max_segment_bytelength)
 							{
 								max_segment_bytelength = compressed_segment.length - 1;
@@ -618,7 +618,7 @@ public class SegmentMapper
 								shifted_segment[shifted_segment.length - 2] &= mask;
 							}
 							
-							compressed_segment  = StringMapper.compressStrings2(shifted_segment);
+							compressed_segment  = StringMapper.compressStrings(shifted_segment);
 							if(compressed_segment.length - 1 > max_segment_bytelength)
 								max_segment_bytelength = compressed_segment.length - 1;
 							
@@ -688,7 +688,7 @@ public class SegmentMapper
 				else
 				{
 					byte[] previous_segment       = spliced_segments.getLast();
-				    byte[] decompressed_segment   = StringMapper.decompressStrings2(previous_segment);
+				    byte[] decompressed_segment   = StringMapper.decompressStrings(previous_segment);
 				    int    previous_bitlength     = StringMapper.getBitlength(previous_segment);
 				    int    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
 				    int    current_bitlength      = StringMapper.getBitlength(current_segment);
@@ -745,7 +745,7 @@ public class SegmentMapper
 					    augmented_segment[augmented_segment.length - 2] &= mask;
 				    }
 				
-				    byte [] compressed_segment   = StringMapper.compressStrings2(augmented_segment);
+				    byte [] compressed_segment   = StringMapper.compressStrings(augmented_segment);
 				    int     compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 				    int     spliced_bits         = current_bitlength;
 				    //int   bit_reduction          = spliced_bits - (compressed_bitlength - previous_bitlength);
@@ -780,7 +780,7 @@ public class SegmentMapper
 						    clipped_segment[clipped_segment.length - 2] &= mask;
 					    }
 					
-					    compressed_segment   = StringMapper.compressStrings2(clipped_segment);
+					    compressed_segment   = StringMapper.compressStrings(clipped_segment);
 					    compressed_bitlength = StringMapper.getBitlength(compressed_segment);
 					
 					    int current_bits  = current_bitlength - j;
@@ -801,7 +801,7 @@ public class SegmentMapper
 				        if(spliced_bits == current_bitlength)
 				        {
 				            //System.out.println("Eliminated uncompressed segment 2.");
-				            compressed_segment   = StringMapper.compressStrings2(augmented_segment);
+				            compressed_segment   = StringMapper.compressStrings(augmented_segment);
 				            int j = spliced_segments.size();
 				            spliced_segments.set(j - 1, compressed_segment);
 				            if(compressed_segment.length - 1 > max_segment_bytelength)
@@ -841,7 +841,7 @@ public class SegmentMapper
 							    byte mask = getTrailingMask(clipped_odd_bits);
 							    clipped_segment[clipped_segment.length - 2] &= mask;
 						    }
-				            compressed_segment = StringMapper.compressStrings2(clipped_segment);
+				            compressed_segment = StringMapper.compressStrings(clipped_segment);
 				            if(compressed_segment.length - 1 > max_segment_bytelength)
 			            	        max_segment_bytelength = compressed_segment.length - 1;
 				            
@@ -907,7 +907,7 @@ public class SegmentMapper
 	    	    }
 	    	    else
 	    	    {
-	    	    	    byte [] decompressed_segment = StringMapper.decompressStrings2(segment);
+	    	    	    byte [] decompressed_segment = StringMapper.decompressStrings(segment);
 	    	    	    int     bitlength            = StringMapper.getBitlength(decompressed_segment);
 		    	    total_bitlength             += bitlength;
 	    	    }
@@ -926,7 +926,7 @@ public class SegmentMapper
         	    int    iterations = StringMapper.getIterations(segment);
         	    if(iterations != 0 && iterations != 16)
         	    {
-        	    	    segment = StringMapper.decompressStrings2(segment);
+        	    	    segment = StringMapper.decompressStrings(segment);
         	    	    iterations = StringMapper.getIterations(segment);
         	    }
         	    
@@ -2170,110 +2170,96 @@ public class SegmentMapper
 			buffer[byte_offset] |= mask;
 		}
 	}
-	
-	public static byte [] packBits(byte [] src, int number_of_pack_bits)
+	public static byte[] packBits(byte[] src, int number_of_pack_bits)
 	{
 		int j               = number_of_pack_bits;
 		int number_of_bits  = src.length * j;
 		int number_of_bytes = number_of_bits / 8;
-		if(number_of_bits % 8 != 0)
+		if (number_of_bits % 8 != 0)
 			number_of_bytes++;
-		byte [] dst = new byte[number_of_bytes];
-		
-		byte [] trailing_mask = getTrailingMask();
-	
+		byte[] dst = new byte[number_of_bytes];
+
+		byte[] trailing_mask = getTrailingMask();
+
 		int offset       = 0;
 		int current_bit  = 0;
 		int current_byte = 0;
-		
-		for(int i = 0; i < src.length; i++)
+
+		for (int i = 0; i < src.length; i++)
 		{
-		    byte value = src[i];
-		    if(current_bit + j <= 8)
-		    {
-		    	    if(current_bit == 0)
-		    	    	    dst[current_byte] = value;
-		    	    else
-		    	    	    dst[current_byte] |= (byte)(value << current_bit);
-		    } 
-		    else
-		    {
-		    	    dst[current_byte]  |= (byte) (value << current_bit);
-		    	    
-		    	    int number_of_extra_bits  = (current_bit + j) % 8;
-		    	    
-		    	    int k                 = j - number_of_extra_bits;
-		    	    byte extra_value      = (byte) (value >> k);
-		    	    extra_value          &= trailing_mask[number_of_extra_bits - 1] ;
-		    	    
-		    	    dst[current_byte + 1] = extra_value;
-		    	   
-		    }
-		    offset      += j;
-    	        current_bit  = offset % 8;
-    	        current_byte = offset / 8;
-		}
-		
-		return dst;
-	}
-	
-	public static byte [] unpackBits(byte [] src, int number_of_bytes, int number_of_pack_bits)
-	{
-		byte [] dst = new byte[number_of_bytes];
-		
-		int offset       = 0;
-		int current_bit  = 0;
-		int current_byte = 0;
-		
-		byte [] leading_mask  = getLeadingMask();
-		byte [] trailing_mask = getTrailingMask();
-		
-		int j = number_of_pack_bits;
-		
-		int i = 0;
-		
-		while(i < number_of_bytes)
-		{
-			byte value = src[current_byte];
-			if(current_bit + j <= 8)
+			// Mask the source value to exactly j bits before packing.
+			byte value = (byte)(src[i] & trailing_mask[j - 1]);
+
+			if (current_bit + j <= 8)
 			{
-				if(current_bit == 0)
-				{
-					value &= trailing_mask[j - 1];
-					
-					dst[i++] = value;
-				}
-				else 
-				{
-				    value >>= current_bit;
-			        value &= trailing_mask[j - 1];
-			        
-				    dst[i++] = value;
-				}
+				dst[current_byte] |= (byte)(value << current_bit);
 			}
 			else
 			{
-				int number_of_extra_bits = current_bit + j - 8;
-				int number_of_bits       = j - number_of_extra_bits;
-				
-				value >>= current_bit;
-		    	    	value &= trailing_mask[number_of_bits - 1];
-		    	    	
-		    	    	byte extra_bits = src[current_byte + 1];
-		    	    	extra_bits &= trailing_mask[number_of_extra_bits - 1];
-		    	    	extra_bits <<= number_of_bits;
-		    	    	
-		    	    	value |= extra_bits;
-		    	    	
-		    	    	dst[i++] = value;
+				// Low bits fit in the current byte.
+				dst[current_byte] |= (byte)(value << current_bit);
+
+				// High bits spill into the next byte.
+				int number_of_extra_bits = (current_bit + j) % 8;
+				int k                    = j - number_of_extra_bits;
+				byte extra_value         = (byte)((value & 0xFF) >> k);
+				extra_value             &= trailing_mask[number_of_extra_bits - 1];
+				dst[current_byte + 1]    = extra_value;
 			}
-			
 			offset      += j;
 			current_bit  = offset % 8;
 			current_byte = offset / 8;
 		}
-		
+
 		return dst;
 	}
-	
+
+	public static byte[] unpackBits(byte[] src, int number_of_bytes, int number_of_pack_bits)
+	{
+		byte[] dst = new byte[number_of_bytes];
+
+		int offset       = 0;
+		int current_bit  = 0;
+		int current_byte = 0;
+
+		byte[] trailing_mask = getTrailingMask();
+
+		int j = number_of_pack_bits;
+
+		int i = 0;
+
+		while (i < number_of_bytes)
+		{
+			byte value = src[current_byte];
+			if (current_bit + j <= 8)
+			{
+				// All j bits are within the current byte.
+				value >>= current_bit;
+				value  &= trailing_mask[j - 1];
+				dst[i++] = value;
+			}
+			else
+			{
+				// j bits straddle a byte boundary.
+				int number_of_extra_bits = current_bit + j - 8;
+				int number_of_bits       = j - number_of_extra_bits;
+
+				value >>= current_bit;
+				value  &= trailing_mask[number_of_bits - 1];
+
+				byte extra_bits  = src[current_byte + 1];
+				extra_bits      &= trailing_mask[number_of_extra_bits - 1];
+				extra_bits     <<= number_of_bits;
+
+				value   |= extra_bits;
+				dst[i++] = value;
+			}
+
+			offset      += j;
+			current_bit  = offset % 8;
+			current_byte = offset / 8;
+		}
+
+		return dst;
+	}
 }
