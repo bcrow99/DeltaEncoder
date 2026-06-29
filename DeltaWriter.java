@@ -61,6 +61,7 @@ public class DeltaWriter
 
 	long   file_length;
 	double file_compression_rate;
+	int    new_xdim, new_ydim;   // quantized image dimensions, set by ApplyHandler
 	boolean initialized = false;
 
 	static int openWindowCount  = 0;
@@ -467,23 +468,22 @@ public class DeltaWriter
 				}
 				delta_button[delta_type].setSelected(true);
 
-				// Entropy menu
+				// Entropy menu — Huffman(1), LZ77(0), Arithmetic(2)
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button    = new JRadioButtonMenuItem[4];
-				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[1] = new JRadioButtonMenuItem("Huffman");
+				entropy_button = new JRadioButtonMenuItem[3];
+				entropy_button[0] = new JRadioButtonMenuItem("Huffman");
+				entropy_button[1] = new JRadioButtonMenuItem("LZ77");
 				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
-				entropy_button[3] = new JRadioButtonMenuItem("Fast Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
-				for (int i = 0; i < 4; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				entropy_button[entropy_type].setSelected(true);
-				for (int i = 0; i < 4; i++)
+				for (int i = 0; i < 3; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
+				int[] entropy_map = {1, 0, 2};   // button index → entropy_type value
+				entropy_button[0].setSelected(entropy_type == 1);
+				entropy_button[1].setSelected(entropy_type == 0);
+				entropy_button[2].setSelected(entropy_type == 2);
+				for (int i = 0; i < 3; i++)
 				{
-					final int idx = i;
-					entropy_button[i].addActionListener(e ->
-					{
-						if (entropy_type != idx) { entropy_type = idx; }
-					});
+					final int et = entropy_map[i];
+					entropy_button[i].addActionListener(e -> { if (entropy_type != et) entropy_type = et; });
 				}
 
 				menu_bar.add(file_menu);
@@ -641,7 +641,7 @@ public class DeltaWriter
 			ArrayList<int[]> qcl  = new ArrayList<int[]>();   // quantized channel list
 			ArrayList<int[]> dqcl = new ArrayList<int[]>();   // dequantized channel list
 
-			int new_xdim = image_xdim, new_ydim = image_ydim;
+			new_xdim = image_xdim; new_ydim = image_ydim;
 			if (pixel_quant != 0)
 			{
 				double f = pixel_quant / 10.0;
@@ -822,7 +822,8 @@ public class DeltaWriter
 	}
 
 	// =========================================================================
-	// SaveHandler — branches on entropy_type
+	// =========================================================================
+	// SaveHandler — Huffman (1), LZ77 (0), Arithmetic BigInteger (2)
 	// =========================================================================
 	class SaveHandler implements ActionListener
 	{
@@ -936,24 +937,23 @@ public class DeltaWriter
 						}
 					}
 				}
-				else if (entropy_type == 2)
+				else
 				{
 					// ---- Arithmetic (BigInteger) ----
-					// Segment all payloads and compute per-segment frequencies.
-					byte[][]   payloads  = new byte[3][];
-					int[]      n_segs    = new int[3];
-					byte[][][] segs      = new byte[3][][];
-					int[][][]  freqs     = new int[3][][];
+					byte[][]   payloads = new byte[3][];
+					int[]      n_segs   = new int[3];
+					byte[][][] segs     = new byte[3][][];
+					int[][][]  freqs    = new int[3][][];
 
 					for (int i = 0; i < 3; i++)
 					{
-						payloads[i]  = getPayload(i);
-						int min_seg  = 500 + pixel_segment * 500;
-						n_segs[i]    = (pixel_segment >= 10) ? 1 : Math.max(1, payloads[i].length / min_seg);
-						int seg_len  = payloads[i].length / n_segs[i];
-						int odd_len  = seg_len + payloads[i].length % n_segs[i];
-						segs[i]      = new byte[n_segs[i]][];
-						freqs[i]     = new int[n_segs[i]][256];
+						payloads[i] = getPayload(i);
+						int min_seg = 500 + pixel_segment * 500;
+						n_segs[i]   = (pixel_segment >= 10) ? 1 : Math.max(1, payloads[i].length / min_seg);
+						int seg_len = payloads[i].length / n_segs[i];
+						int odd_len = seg_len + payloads[i].length % n_segs[i];
+						segs[i]     = new byte[n_segs[i]][];
+						freqs[i]    = new int[n_segs[i]][256];
 						for (int m = 0; m < n_segs[i]; m++)
 							segs[i][m] = new byte[m < n_segs[i]-1 ? seg_len : odd_len];
 						int pos = 0;
@@ -966,7 +966,6 @@ public class DeltaWriter
 							}
 					}
 
-					// ---- Time the BigInteger encoding ----
 					BigInteger[][][] offsets = new BigInteger[3][][];
 					for (int i = 0; i < 3; i++) offsets[i] = new BigInteger[n_segs[i]][2];
 
@@ -1000,13 +999,11 @@ public class DeltaWriter
 					long encode_ms = (System.nanoTime() - encode_start) / 1_000_000;
 					System.out.println("Arithmetic (BigInteger) encoding: " + encode_ms + " ms");
 
-					// ---- Deflate frequency tables in parallel ----
-					int[]  len_types  = new int[3];
-					byte[] [] zip_freqs = new byte[3][];
-					int[]  zip_lens   = new int[3];
+					int[]  len_types = new int[3];
+					byte[][] zip_freqs = new byte[3][];
+					int[]  zip_lens  = new int[3];
 					deflateFrequencies(n_segs, freqs, len_types, zip_freqs, zip_lens);
 
-					// ---- Write per channel ----
 					for (int i = 0; i < 3; i++)
 					{
 						int j = channel_id[i];
@@ -1054,132 +1051,26 @@ public class DeltaWriter
 						}
 					}
 				}
-				else
-				{
-					// ---- Fast Arithmetic (long / renormalization) ----
-					// Segment all payloads and compute per-segment frequencies.
-					byte[][]   payloads = new byte[3][];
-					int[]      n_segs   = new int[3];
-					byte[][][] segs     = new byte[3][][];
-					int[][][]  freqs    = new int[3][][];
-
-					for (int i = 0; i < 3; i++)
-					{
-						payloads[i]  = getPayload(i);
-						int min_seg  = 500 + pixel_segment * 500;
-						n_segs[i]    = (pixel_segment >= 10) ? 1 : Math.max(1, payloads[i].length / min_seg);
-						int seg_len  = payloads[i].length / n_segs[i];
-						int odd_len  = seg_len + payloads[i].length % n_segs[i];
-						segs[i]      = new byte[n_segs[i]][];
-						freqs[i]     = new int[n_segs[i]][256];
-						for (int m = 0; m < n_segs[i]; m++)
-							segs[i][m] = new byte[m < n_segs[i]-1 ? seg_len : odd_len];
-						int pos = 0;
-						for (int m = 0; m < n_segs[i]; m++)
-							for (int nn = 0; nn < segs[i][m].length; nn++)
-							{
-								segs[i][m][nn] = payloads[i][pos];
-								int p = payloads[i][pos]; if (p < 0) p += 256;
-								freqs[i][m][p]++; pos++;
-							}
-					}
-
-					// ---- Encode all segments in parallel ----
-					byte[][][] fast_enc = new byte[3][][];
-					for (int i = 0; i < 3; i++) fast_enc[i] = new byte[n_segs[i]][];
-
-					Thread[][][] fast_threads = new Thread[3][][];
-					for (int i = 0; i < 3; i++)
-					{
-						fast_threads[i] = new Thread[1][n_segs[i]];
-						for (int m = 0; m < n_segs[i]; m++)
-						{
-							final byte[][] fe  = fast_enc[i];
-							final int      fm  = m;
-							final byte[]   sd  = segs[i][m];
-							final int[]    sf  = freqs[i][m];
-							fast_threads[i][0][m] = new Thread(() -> fe[fm] = ArithmeticMapper.getIntervalValueFast(sd, sf));
-							fast_threads[i][0][m].start();
-						}
-					}
-					for (int i = 0; i < 3; i++)
-						for (Thread t : fast_threads[i][0]) t.join();
-
-					// ---- Deflate frequency tables in parallel ----
-					int[]    len_types  = new int[3];
-					byte[][] zip_freqs  = new byte[3][];
-					int[]    zip_lens   = new int[3];
-					deflateFrequencies(n_segs, freqs, len_types, zip_freqs, zip_lens);
-
-					// ---- Write per channel ----
-					// Fast Arithmetic format: same freq-table header as Arithmetic,
-					// but each segment stores the raw byte[] from getIntervalValueFast
-					// (which carries its own 4-byte bit-length header) rather than a
-					// BigInteger numerator/denominator pair.
-					for (int i = 0; i < 3; i++)
-					{
-						int j = channel_id[i];
-						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
-						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
-						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 6 && delta_type <= 8)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 3) / 4;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++)
-								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 9)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 1) / 2;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++) pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 10)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
-						else if (delta_type == 11)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
-						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
-						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
-						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
-						for (int k = 0; k < n_segs[i]; k++)
-						{
-							byte[] enc = fast_enc[i][k];
-							out.writeInt(enc.length);
-							out.write(enc, 0, enc.length);
-						}
-					}
-				}
 
 				out.flush(); out.close();
 
-				File   saved = new File("foo");
-				double rate  = (double) saved.length() / (image_xdim * image_ydim * 3);
+				File   saved       = new File("foo");
+				double rate        = (double) saved.length() / (image_xdim * image_ydim * 3);
+				long   string_bits = 0;
+				for (int i = 0; i < 3; i++) string_bits += channel_length[channel_id[i]];
+				double integer_rate = (double)(new_xdim * new_ydim * 3) / (image_xdim * image_ydim * 3);
+				double string_rate  = (double)(string_bits / 8.0)        / (image_xdim * image_ydim * 3);
 				System.out.println("File compression rate:   " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type:              " + delta_type_string[delta_type]);
-				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","Arithmetic","Fast Arithmetic"}[entropy_type]);
+				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","Arithmetic"}[entropy_type]);
+				System.out.println("Integer rate:            " + String.format("%.4f", integer_rate));
+				System.out.println("String rate:             " + String.format("%.4f", string_rate));
 				System.out.println("Output compression rate: " + String.format("%.4f", rate));
 				System.out.println();
 			}
 			catch (Exception e) { System.out.println(e.toString()); }
 		}
 
-		// Shared helper: deflate per-channel frequency tables in parallel.
-		// Writes results into the caller-supplied arrays.
 		private void deflateFrequencies(int[] n_segs, int[][][] freqs,
 		                                int[] len_types, byte[][] zip_freqs, int[] zip_lens)
 		    throws InterruptedException
