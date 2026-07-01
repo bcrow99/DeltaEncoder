@@ -557,6 +557,8 @@ public class DeltaWriter
 				delta_button[delta_type].setSelected(true);
 				compress_button[compress_type].setSelected(true);
 				apply_item.setEnabled(true);
+				try   { applyImpl(); }
+				catch (Exception e) { System.out.println("ApplyHandler exception (done): " + e); e.printStackTrace(); }
 			}
 		}.execute();
 	}
@@ -670,27 +672,12 @@ public class DeltaWriter
 	}
 
 	// =========================================================================
-	// ApplyHandler — preview (no entropy coding; same for all entropy types)
+	// applyImpl — build preview; called from ApplyHandler, SaveHandler, done()
 	// =========================================================================
-	class ApplyHandler implements ActionListener
+	void applyImpl()
 	{
-		public void actionPerformed(ActionEvent event)
-		{
-			try
-			{
-				applyImpl();
-			}
-			catch (Exception e)
-			{
-				System.out.println("ApplyHandler exception: " + e);
-				e.printStackTrace();
-			}
-		}
-
-		private void applyImpl()
-		{
-			ArrayList<int[]> qcl  = new ArrayList<int[]>();   // quantized channel list
-			ArrayList<int[]> dqcl = new ArrayList<int[]>();   // dequantized channel list
+		ArrayList<int[]> qcl  = new ArrayList<int[]>();   // quantized channel list
+		ArrayList<int[]> dqcl = new ArrayList<int[]>();   // dequantized channel list
 
 			int new_xdim = image_xdim, new_ydim = image_ydim;
 			if (pixel_quant != 0)
@@ -820,7 +807,7 @@ public class DeltaWriter
 				{
 					int[]  tbl  = (int[])  table_list.get(i);
 					byte[] str  = StringMapper.decompressStrings((byte[]) string_list.get(i));
-					delta       = StringMapper.unpackStrings(str, tbl, new_xdim * new_ydim, channel_compressed_length[j]);
+					delta       = StringMapper.unpackStrings(str, tbl, new_xdim * new_ydim, channel_length[j]);
 					delta[0]    = 0;
 					for (int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 				}
@@ -882,6 +869,17 @@ public class DeltaWriter
 			System.out.println("Loaded quantized image.");
 			System.out.println();
 			initialized = true;
+	}
+
+	// =========================================================================
+	// ApplyHandler — thin wrapper so apply_item can keep its ActionListener
+	// =========================================================================
+	class ApplyHandler implements ActionListener
+	{
+		public void actionPerformed(ActionEvent event)
+		{
+			try   { applyImpl(); }
+			catch (Exception e) { System.out.println("ApplyHandler exception: " + e); e.printStackTrace(); }
 		}
 	}
 
@@ -893,7 +891,7 @@ public class DeltaWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			if (!initialized) new ApplyHandler().actionPerformed(null);
+			if (!initialized) applyImpl();
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
 			try
