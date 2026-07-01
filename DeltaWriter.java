@@ -32,7 +32,7 @@ public class DeltaWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
-	int entropy_type  = 0;   // 0=LZ77, 1=Huffman, 3=Fast Arithmetic
+	int entropy_type  = 0;   // 0=LZ77, 1=Huffman, 3=Arithmetic
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -45,9 +45,7 @@ public class DeltaWriter
 	int[]  set_sum, channel_sum;
 	int[]  channel_init, channel_min, channel_delta_min;
 	int[]  channel_length, channel_compressed_length;
-	int[]  channel_string_type;
 	byte[] channel_iterations;
-	int[]  max_bytelength, min_bytelength;
 
 	// ---- Labels / menu widgets ----------------------------------------------
 	String[] set_string, delta_type_string, channel_string;
@@ -60,7 +58,6 @@ public class DeltaWriter
 
 	long   file_length;
 	double file_compression_rate;
-	int    new_xdim, new_ydim;   // quantized image dimensions, set by ApplyHandler
 	boolean initialized = false;
 
 	static int openWindowCount  = 0;
@@ -138,16 +135,7 @@ public class DeltaWriter
 					DeltaMapper.getIdealFrequency(qc, new_xdim, new_ydim)));
 		}
 
-		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
-		set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
-		set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
-		set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
-		set_sum[4] = channel_sum[0] + channel_sum[3] + channel_sum[5];
-		set_sum[5] = channel_sum[3] + channel_sum[1] + channel_sum[2];
-		set_sum[6] = channel_sum[3] + channel_sum[4] + channel_sum[2];
-		set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
-		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
-		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+		computeSetSums();
 
 		int min_sum = Integer.MAX_VALUE, min_idx = 0;
 		for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
@@ -200,8 +188,6 @@ public class DeltaWriter
 		min_sum = total_delta_sum[0]; min_idx = 0;
 		for (int i = 1; i < 12; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
-		System.out.println("Frame map (1) delta:       " + fm1_delta + "  map: " + fm1_map + "  total: " + (fm1_delta + fm1_map));
-		System.out.println("Frame map (2) delta:       " + fm2_delta + "  map: " + fm2_map + "  total: " + (fm2_delta + fm2_map));
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 
 		// Select compress_type by trying String and String* on all three channels
@@ -231,9 +217,19 @@ public class DeltaWriter
 				str_star_bits_total += StringMapper.getBitlength((byte[]) StringMapper.getStringList(td.clone(), true ).get(3));
 			}
 			compress_type = (str_star_bits_total < str_bits_total) ? 2 : 1;
-			// Byte overflow guard: Integer mode is unsafe when pixel_shift=0
-			// because difference channels can produce deltas > 255.
-			if (pixel_shift == 0 && compress_type == 0) compress_type = 1;
+			// Integer compress type stores deltas as bytes; max possible delta = 2 × channel
+			// value range, which must fit in 0..255.  Check the actual selected channels.
+			if (compress_type == 0)
+			{
+				int[] cid = DeltaMapper.getChannels(min_set_id);
+				for (int i = 0; i < 3; i++)
+				{
+					int[] qc = quantized_channel_list.get(cid[i]);
+					int cmin = qc[0], cmax = qc[0];
+					for (int v : qc) { if (v < cmin) cmin = v; if (v > cmax) cmax = v; }
+					if ((cmax - cmin) * 2 > 255) { compress_type = 1; break; }
+				}
+			}
 			System.out.println("Best compress type is " + new String[]{"Integer","String","String*"}[compress_type]
 			                 + "  (String " + str_bits_total + " bits  String* " + str_star_bits_total + " bits)");
 		}
@@ -285,16 +281,13 @@ public class DeltaWriter
 			channel_sum               = new int[6];
 			channel_length            = new int[6];
 			channel_compressed_length = new int[6];
-			channel_string_type       = new int[3];
 			channel_iterations        = new byte[3];
-			min_bytelength            = new int[3];
-			max_bytelength            = new int[3];
 
 			if (raster_type == BufferedImage.TYPE_3BYTE_BGR)
 			{
 				pixel = new int[image_xdim * image_ydim];
 				PixelGrabber pg = new PixelGrabber(original_image, 0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
-				try { pg.grabPixels(); } catch (InterruptedException e) { System.err.println(e); }
+				try { pg.grabPixels(); } catch (InterruptedException e) { System.err.println(e); e.printStackTrace(); }
 				if ((pg.getStatus() & ImageObserver.ABORT) != 0) { System.err.println("Pixel grab aborted."); System.exit(1); }
 
 				int[] blue = new int[image_xdim * image_ydim];
@@ -467,12 +460,12 @@ public class DeltaWriter
 				}
 				delta_button[delta_type].setSelected(true);
 
-				// Entropy menu — Huffman(1), LZ77(0), Fast Arithmetic(3)
+				// Entropy menu — Huffman(1), LZ77(0), Arithmetic(3)
 				JMenu entropy_menu = new JMenu("Entropy");
 				entropy_button = new JRadioButtonMenuItem[3];
 				entropy_button[0] = new JRadioButtonMenuItem("Huffman");
 				entropy_button[1] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[2] = new JRadioButtonMenuItem("Fast Arithmetic");
+				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
 				for (int i = 0; i < 3; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
 				int[] entropy_map = {1, 0, 3};   // button index → entropy_type value
@@ -503,7 +496,7 @@ public class DeltaWriter
 				SwingUtilities.invokeLater(() -> showInitialImage());
 			}
 		}
-		catch (Exception e) { System.out.println(e.getMessage()); System.exit(1); }
+		catch (Exception e) { System.out.println(e); e.printStackTrace(); System.exit(1); }
 	}
 
 	// ---- Slider-dialog factory helper ----------------------------------------
@@ -611,6 +604,52 @@ public class DeltaWriter
 			for (int v : table) out.writeShort(v);
 	}
 
+	private void computeSetSums()
+	{
+		set_sum[0] = channel_sum[0] + channel_sum[1] + channel_sum[2];
+		set_sum[1] = channel_sum[0] + channel_sum[4] + channel_sum[2];
+		set_sum[2] = channel_sum[0] + channel_sum[3] + channel_sum[2];
+		set_sum[3] = channel_sum[0] + channel_sum[1] + channel_sum[4];
+		set_sum[4] = channel_sum[0] + channel_sum[3] + channel_sum[5];
+		set_sum[5] = channel_sum[3] + channel_sum[1] + channel_sum[2];
+		set_sum[6] = channel_sum[3] + channel_sum[4] + channel_sum[2];
+		set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
+		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
+		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+	}
+
+	private void writeMap(DataOutputStream out, int i) throws IOException
+	{
+		byte[] map = (byte[]) map_list.get(i);
+		if (delta_type >= 6 && delta_type <= 8)
+		{
+			int    pm_len = (map.length + 3) / 4;
+			byte[] pm     = new byte[pm_len];
+			for (int q = 0; q < map.length; q++)
+				pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
+			out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+		}
+		else if (delta_type == 9)
+		{
+			int    pm_len = (map.length + 1) / 2;
+			byte[] pm     = new byte[pm_len];
+			for (int q = 0; q < map.length; q++) pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
+			out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+		}
+		else if (delta_type == 10)
+		{
+			int[]  bit_count = new int[1];
+			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
+			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
+		}
+		else if (delta_type == 11)
+		{
+			int[]  bit_count = new int[1];
+			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
+			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
+		}
+	}
+
 	// =========================================================================
 	// ImageCanvas
 	// =========================================================================
@@ -637,10 +676,23 @@ public class DeltaWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
+			try
+			{
+				applyImpl();
+			}
+			catch (Exception e)
+			{
+				System.out.println("ApplyHandler exception: " + e);
+				e.printStackTrace();
+			}
+		}
+
+		private void applyImpl()
+		{
 			ArrayList<int[]> qcl  = new ArrayList<int[]>();   // quantized channel list
 			ArrayList<int[]> dqcl = new ArrayList<int[]>();   // dequantized channel list
 
-			new_xdim = image_xdim; new_ydim = image_ydim;
+			int new_xdim = image_xdim, new_ydim = image_ydim;
 			if (pixel_quant != 0)
 			{
 				double f = pixel_quant / 10.0;
@@ -675,11 +727,7 @@ public class DeltaWriter
 				channel_sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc, new_xdim, new_ydim)));
 			}
 
-			set_sum[0]=channel_sum[0]+channel_sum[1]+channel_sum[2]; set_sum[1]=channel_sum[0]+channel_sum[4]+channel_sum[2];
-			set_sum[2]=channel_sum[0]+channel_sum[3]+channel_sum[2]; set_sum[3]=channel_sum[0]+channel_sum[1]+channel_sum[4];
-			set_sum[4]=channel_sum[0]+channel_sum[3]+channel_sum[5]; set_sum[5]=channel_sum[3]+channel_sum[1]+channel_sum[2];
-			set_sum[6]=channel_sum[3]+channel_sum[4]+channel_sum[2]; set_sum[7]=channel_sum[3]+channel_sum[1]+channel_sum[4];
-			set_sum[8]=channel_sum[5]+channel_sum[1]+channel_sum[4]; set_sum[9]=channel_sum[5]+channel_sum[4]+channel_sum[2];
+			computeSetSums();
 
 			int min_sum = Integer.MAX_VALUE, min_idx = 0;
 			for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
@@ -689,6 +737,24 @@ public class DeltaWriter
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 			table_list.clear(); string_list.clear(); map_list.clear(); delta_list.clear();
+
+			// Guard: Integer mode overflows if 2 × channel value range > 255.
+			// Re-check here since pixel_shift or pixel_quant may have changed since init().
+			if (compress_type == 0)
+			{
+				for (int i = 0; i < 3; i++)
+				{
+					int[] qc = qcl.get(channel_id[i]);
+					int cmin = qc[0], cmax = qc[0];
+					for (int v : qc) { if (v < cmin) cmin = v; if (v > cmax) cmax = v; }
+					if ((cmax - cmin) * 2 > 255)
+					{
+						compress_type = 1;
+						SwingUtilities.invokeLater(() -> compress_button[1].setSelected(true));
+						break;
+					}
+				}
+			}
 
 			for (int i = 0; i < 3; i++)
 			{
@@ -733,7 +799,6 @@ public class DeltaWriter
 					table_list.add(string_table);
 					string_list.add(compression_string);
 					channel_compressed_length[j]  = StringMapper.getBitlength(compression_string);
-					channel_string_type[i]        = StringMapper.getType(compression_string);
 					channel_iterations[i]         = StringMapper.getIterations(compression_string);
 					for (int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 				}
@@ -822,13 +887,13 @@ public class DeltaWriter
 
 	// =========================================================================
 	// =========================================================================
-	// SaveHandler — Huffman (1), LZ77 (0), Fast Arithmetic (3)
+	// SaveHandler — Huffman (1), LZ77 (0), Arithmetic (3)
 	// =========================================================================
 	class SaveHandler implements ActionListener
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			if (!initialized) apply_item.doClick();
+			if (!initialized) new ApplyHandler().actionPerformed(null);
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
 			try
@@ -858,37 +923,7 @@ public class DeltaWriter
 						out.writeInt(channel_compressed_length[j]);
 						out.writeByte(channel_iterations[i]);
 
-						if (delta_type >= 6 && delta_type <= 8)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 3) / 4;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++)
-								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 9)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 1) / 2;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++) pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 10)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
-						else if (delta_type == 11)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
+						if (delta_type >= 6) writeMap(out, i);
 						if (compress_type > 0)
 							writeTable(out, (int[]) table_list.get(i));
 
@@ -938,7 +973,7 @@ public class DeltaWriter
 				}
 				else
 				{
-					// ---- Fast Arithmetic (long / renormalization) ----
+					// ---- Arithmetic (fast / renormalization) ----
 					byte[][]   payloads = new byte[3][];
 					int[]      n_segs   = new int[3];
 					byte[][][] segs     = new byte[3][][];
@@ -996,37 +1031,7 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 6 && delta_type <= 8)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 3) / 4;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++)
-								pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 9)
-						{
-							byte[] map    = (byte[]) map_list.get(i);
-							int    pm_len = (map.length + 1) / 2;
-							byte[] pm     = new byte[pm_len];
-							for (int q = 0; q < map.length; q++) pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
-							out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-						}
-						else if (delta_type == 10)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
-						else if (delta_type == 11)
-						{
-							byte[] map       = (byte[]) map_list.get(i);
-							int[]  bit_count = new int[1];
-							byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
-							out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
-						}
+						if (delta_type >= 6) writeMap(out, i);
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
 						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
@@ -1041,21 +1046,15 @@ public class DeltaWriter
 
 				out.flush(); out.close();
 
-				File   saved       = new File("foo");
-				double rate        = (double) saved.length() / (image_xdim * image_ydim * 3);
-				long   string_bits = 0;
-				for (int i = 0; i < 3; i++) string_bits += channel_length[channel_id[i]];
-				double integer_rate = (double)(new_xdim * new_ydim * 3) / (image_xdim * image_ydim * 3);
-				double string_rate  = (double)(string_bits / 8.0)        / (image_xdim * image_ydim * 3);
+				File   saved = new File("foo");
+				double rate  = (double) saved.length() / (image_xdim * image_ydim * 3);
 				System.out.println("File compression rate:   " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type:              " + delta_type_string[delta_type]);
-				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","","Fast Arithmetic"}[entropy_type]);
-				System.out.println("Integer rate:            " + String.format("%.4f", integer_rate));
-				System.out.println("String rate:             " + String.format("%.4f", string_rate));
+				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","","Arithmetic"}[entropy_type]);
 				System.out.println("Output compression rate: " + String.format("%.4f", rate));
 				System.out.println();
 			}
-			catch (Exception e) { System.out.println(e.toString()); }
+			catch (Exception e) { System.out.println("SaveHandler exception: " + e); e.printStackTrace(); }
 		}
 
 		private void deflateFrequencies(int[] n_segs, int[][][] freqs,
