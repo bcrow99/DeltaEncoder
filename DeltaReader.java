@@ -78,7 +78,7 @@ public class DeltaReader
 
 	static final String[] delta_type_string = {
 		"horizontal","vertical","average","med","directional",
-		"adaptive","scanline (1)","scanline (2)","scanline (3)","frame map","frame map (2)"};
+		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
 		"LZ77","Huffman","Arithmetic","Fast Arithmetic"};
@@ -155,6 +155,16 @@ public class DeltaReader
 				}
 				else if (delta_type == 9)
 				{
+					int    ml     = in.readInt();
+					int    pm_len = in.readInt();
+					byte[] pm     = new byte[pm_len];
+					in.readFully(pm);
+					byte[] map = new byte[ml];
+					for (int q = 0; q < ml; q++) map[q] = (byte)((pm[q >> 1] >> ((q & 1) << 2)) & 0xF);
+					map_list.add(map);
+				}
+				else if (delta_type == 10)
+				{
 					int    ml          = in.readInt();
 					int    bit_count   = in.readInt();
 					int    encoded_len = in.readInt();
@@ -162,7 +172,7 @@ public class DeltaReader
 					in.readFully(encoded);
 					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 8, ml, bit_count));
 				}
-				else if (delta_type == 10)
+				else if (delta_type == 11)
 				{
 					int    ml          = in.readInt();
 					int    bit_count   = in.readInt();
@@ -682,7 +692,7 @@ public class DeltaReader
 					int[]  tbl  = table_list.get(i);
 					byte[] str  = payload;
 					str         = StringMapper.decompressStrings(str);
-					delta       = StringMapper.unpackStrings(str, tbl, size, compressed_length[i]);
+					delta       = StringMapper.unpackStrings(str, tbl, size, length[i]);
 					delta[0]    = 0;
 					for (int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 				}
@@ -698,8 +708,9 @@ public class DeltaReader
 				else if (delta_type == 6)  cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 7)  cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 8)  cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 
 				// Restore difference-channel offset
