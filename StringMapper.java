@@ -564,6 +564,10 @@ public class StringMapper
 		int    type       = getType(string);
 		int    bytelength = getBytelength(bitlength);
 
+		// getIterations returns actual_iterations + (type==1 ? 16 : 0),
+		// so mask out the type bit to get the true loop count.
+		iterations = iterations & 15;
+
 		byte[] buffer1 = new byte[bytelength * 2 + 16];
 		byte[] buffer2 = new byte[bytelength * 2 + 16];
 
