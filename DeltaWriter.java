@@ -142,7 +142,7 @@ public class DeltaWriter
 		min_set_id = min_idx;
 
 		int[] channel_id      = DeltaMapper.getChannels(min_set_id);
-		int[] total_delta_sum = new int[12];
+		int[] total_delta_sum = new int[13];
 		int   fm1_delta = 0, fm1_map = 0, fm2_delta = 0, fm2_map = 0;
 
 		for (int i = 0; i < 3; i++)
@@ -170,23 +170,28 @@ public class DeltaWriter
 			int sl4m = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(1)));
 			total_delta_sum[9] += sl4d + sl4m;
 
+			ArrayList<int[]> res8r = DeltaMapper.getMixedDeltas8Frequency(qc, new_xdim, new_ydim);
+			int sl5d = (int) Math.floor(CodeMapper.getShannonLimit(res8r.get(0)));
+			int sl5m = (int) Math.floor(CodeMapper.getShannonLimit(res8r.get(1)));
+			total_delta_sum[10] += sl5d + sl5m;
+
 			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
 			int fm1d = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)));
 			int fm1m = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(1)));
-			total_delta_sum[10] += fm1d + fm1m;
+			total_delta_sum[11] += fm1d + fm1m;
 			fm1_delta           += fm1d;
 			fm1_map             += fm1m;
 
 			ArrayList<int[]> res16 = DeltaMapper.getIdealFrequency16(qc, new_xdim, new_ydim);
 			int fm2d = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(0)));
 			int fm2m = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(1)));
-			total_delta_sum[11] += fm2d + fm2m;
+			total_delta_sum[12] += fm2d + fm2m;
 			fm2_delta           += fm2d;
 			fm2_map             += fm2m;
 		}
 
 		min_sum = total_delta_sum[0]; min_idx = 0;
-		for (int i = 1; i < 12; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
+		for (int i = 1; i < 13; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 
@@ -209,7 +214,7 @@ public class DeltaWriter
 				else if (delta_type == 7) tr = DeltaMapper.getMixedDeltasFromValues2(qc_test, new_xdim, new_ydim);
 				else if (delta_type == 8) tr = DeltaMapper.getMixedDeltasFromValues4(qc_test, new_xdim, new_ydim);
 				else if (delta_type == 9) tr = DeltaMapper.getMixedDeltasFromValues16Rows(qc_test, new_xdim, new_ydim);
-				else if (delta_type == 10) tr = DeltaMapper.getIdealDeltasFromValues8(qc_test, new_xdim, new_ydim);
+				else if (delta_type == 11) tr = DeltaMapper.getIdealDeltasFromValues8(qc_test, new_xdim, new_ydim);
 				else                       tr = DeltaMapper.getIdealDeltasFromValues16(qc_test, new_xdim, new_ydim);
 
 				int[] td = (int[]) tr.get(1);
@@ -273,7 +278,7 @@ public class DeltaWriter
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
-				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","frame map","frame map (2)"};
+				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 			channel_init              = new int[6];
 			channel_min               = new int[6];
@@ -447,10 +452,10 @@ public class DeltaWriter
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Map","Map (2)"};
-				delta_button = new JRadioButtonMenuItem[12];
+				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Scanline 5","Map","Map (2)"};
+				delta_button = new JRadioButtonMenuItem[13];
 				ButtonGroup dg = new ButtonGroup();
-				for (int i = 0; i < 12; i++)
+				for (int i = 0; i < 13; i++)
 				{
 					delta_button[i] = new JRadioButtonMenuItem(dnames[i]);
 					dg.add(delta_button[i]);
@@ -557,8 +562,6 @@ public class DeltaWriter
 				delta_button[delta_type].setSelected(true);
 				compress_button[compress_type].setSelected(true);
 				apply_item.setEnabled(true);
-				try   { applyImpl(); }
-				catch (Exception e) { System.out.println("ApplyHandler exception (done): " + e); e.printStackTrace(); }
 			}
 		}.execute();
 	}
@@ -633,22 +636,45 @@ public class DeltaWriter
 		}
 		else if (delta_type == 9)
 		{
-			int    pm_len = (map.length + 1) / 2;
-			byte[] pm     = new byte[pm_len];
-			for (int q = 0; q < map.length; q++) pm[q >> 1] |= (map[q] & 0xF) << ((q & 1) << 2);
-			out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
+			int[]  map_int = new int[map.length];
+			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
+			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
+			int        dmin    = (int)    dsl.get(0);
+			int[]      tbl     = (int[])  dsl.get(2);
+			byte[]     str     = (byte[]) dsl.get(3);
+			int        bl      = StringMapper.getBitlength(str);
+			out.writeInt(map.length);
+			writeTable(out, tbl);
+			out.writeInt(dmin);
+			out.writeInt(bl);
+			out.write(str, 0, StringMapper.getBytelength(bl));
 		}
-		else if (delta_type == 10)
+		else if (delta_type == 11)
 		{
 			int[]  bit_count = new int[1];
 			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
 			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
 		}
-		else if (delta_type == 11)
+		else if (delta_type == 12)
 		{
 			int[]  bit_count = new int[1];
 			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
 			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
+		}
+		else if (delta_type == 10)
+		{
+			int[]  map_int = new int[map.length];
+			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
+			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
+			int        dmin    = (int)    dsl.get(0);
+			int[]      tbl     = (int[])  dsl.get(2);
+			byte[]     str     = (byte[]) dsl.get(3);
+			int        bl      = StringMapper.getBitlength(str);
+			out.writeInt(map.length);
+			writeTable(out, tbl);
+			out.writeInt(dmin);
+			out.writeInt(bl);
+			out.write(str, 0, StringMapper.getBytelength(bl));
 		}
 	}
 
@@ -672,10 +698,18 @@ public class DeltaWriter
 	}
 
 	// =========================================================================
-	// applyImpl — build preview; called from ApplyHandler, SaveHandler, done()
+	// ApplyHandler — preview (no entropy coding; same for all entropy types)
 	// =========================================================================
-	void applyImpl()
+	class ApplyHandler implements ActionListener
 	{
+		public void actionPerformed(ActionEvent event)
+		{
+			try   { applyImpl(); }
+			catch (Exception e) { System.out.println("ApplyHandler exception: " + e); e.printStackTrace(); }
+		}
+
+		private void applyImpl()
+		{
 		ArrayList<int[]> qcl  = new ArrayList<int[]>();   // quantized channel list
 		ArrayList<int[]> dqcl = new ArrayList<int[]>();   // dequantized channel list
 
@@ -759,8 +793,9 @@ public class DeltaWriter
 				else if (delta_type == 7)  { result = DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 8)  { result = DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 9)  { result = DeltaMapper.getMixedDeltasFromValues16Rows(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
-				else if (delta_type == 10) { result = DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
-				else if (delta_type == 11) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
+				else if (delta_type == 11) { result = DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
+				else if (delta_type == 12) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
+			else if (delta_type == 10) { result = DeltaMapper.getMixedDeltasFromValues8Rows(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
 
 				int[] delta = (int[]) result.get(1);
 
@@ -823,8 +858,9 @@ public class DeltaWriter
 				else if (delta_type == 7)  ch = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 8)  ch = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 9)  ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
-				else if (delta_type == 10) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
-				else if (delta_type == 11) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 11) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 12) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 10) ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 
 				if (j > 2) for (int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
 
@@ -869,17 +905,6 @@ public class DeltaWriter
 			System.out.println("Loaded quantized image.");
 			System.out.println();
 			initialized = true;
-	}
-
-	// =========================================================================
-	// ApplyHandler — thin wrapper so apply_item can keep its ActionListener
-	// =========================================================================
-	class ApplyHandler implements ActionListener
-	{
-		public void actionPerformed(ActionEvent event)
-		{
-			try   { applyImpl(); }
-			catch (Exception e) { System.out.println("ApplyHandler exception: " + e); e.printStackTrace(); }
 		}
 	}
 
@@ -891,7 +916,7 @@ public class DeltaWriter
 	{
 		public void actionPerformed(ActionEvent event)
 		{
-			if (!initialized) applyImpl();
+			if (!initialized) new ApplyHandler().actionPerformed(null);
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
 			try

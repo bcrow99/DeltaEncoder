@@ -78,7 +78,7 @@ public class DeltaReader
 
 	static final String[] delta_type_string = {
 		"horizontal","vertical","average","med","directional",
-		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","frame map","frame map (2)"};
+		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
 		"LZ77","Huffman","Arithmetic","Fast Arithmetic"};
@@ -155,22 +155,17 @@ public class DeltaReader
 				}
 				else if (delta_type == 9)
 				{
-					int    ml     = in.readInt();
-					int    pm_len = in.readInt();
-					byte[] pm     = new byte[pm_len];
-					in.readFully(pm);
-					byte[] map = new byte[ml];
-					for (int q = 0; q < ml; q++) map[q] = (byte)((pm[q >> 1] >> ((q & 1) << 2)) & 0xF);
+					int    ml   = in.readInt();
+					int[]  tbl  = readTable(in);
+					int    dmin = in.readInt();
+					int    bl   = in.readInt();
+					byte[] str  = new byte[StringMapper.getBytelength(bl)];
+					in.readFully(str);
+					byte[] decomp = StringMapper.decompressStrings(str);
+					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
+					byte[] map  = new byte[ml];
+					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
 					map_list.add(map);
-				}
-				else if (delta_type == 10)
-				{
-					int    ml          = in.readInt();
-					int    bit_count   = in.readInt();
-					int    encoded_len = in.readInt();
-					byte[] encoded     = new byte[encoded_len];
-					in.readFully(encoded);
-					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 8, ml, bit_count));
 				}
 				else if (delta_type == 11)
 				{
@@ -179,7 +174,30 @@ public class DeltaReader
 					int    encoded_len = in.readInt();
 					byte[] encoded     = new byte[encoded_len];
 					in.readFully(encoded);
+					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 8, ml, bit_count));
+				}
+				else if (delta_type == 12)
+				{
+					int    ml          = in.readInt();
+					int    bit_count   = in.readInt();
+					int    encoded_len = in.readInt();
+					byte[] encoded     = new byte[encoded_len];
+					in.readFully(encoded);
 					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 16, ml, bit_count));
+				}
+				else if (delta_type == 10)
+				{
+					int    ml   = in.readInt();
+					int[]  tbl  = readTable(in);
+					int    dmin = in.readInt();
+					int    bl   = in.readInt();
+					byte[] str  = new byte[StringMapper.getBytelength(bl)];
+					in.readFully(str);
+					byte[] decomp = StringMapper.decompressStrings(str);
+					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
+					byte[] map  = new byte[ml];
+					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
+					map_list.add(map);
 				}
 
 				// String table (compress_type > 0)
@@ -709,8 +727,9 @@ public class DeltaReader
 				else if (delta_type == 7)  cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 8)  cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 12) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 
 				// Restore difference-channel offset
