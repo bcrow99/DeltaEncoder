@@ -167,12 +167,14 @@ public class DeltaWriter
 
 			ArrayList<int[]> res16r = DeltaMapper.getMixedDeltas16Frequency(qc, new_xdim, new_ydim);
 			int sl4d = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(0)));
-			int sl4m = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(1)));
+			ArrayList dsl16 = StringMapper.getStringList(res16r.get(1), false);
+			int sl4m = StringMapper.getBitlength((byte[]) dsl16.get(3));
 			total_delta_sum[9] += sl4d + sl4m;
 
 			ArrayList<int[]> res8r = DeltaMapper.getMixedDeltas8Frequency(qc, new_xdim, new_ydim);
 			int sl5d = (int) Math.floor(CodeMapper.getShannonLimit(res8r.get(0)));
-			int sl5m = (int) Math.floor(CodeMapper.getShannonLimit(res8r.get(1)));
+			ArrayList dsl8 = StringMapper.getStringList(res8r.get(1), false);
+			int sl5m = StringMapper.getBitlength((byte[]) dsl8.get(3));
 			total_delta_sum[10] += sl5d + sl5m;
 
 			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
