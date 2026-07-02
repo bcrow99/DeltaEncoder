@@ -32,7 +32,7 @@ public class DeltaWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
-	int entropy_type  = 0;   // 0=LZ77, 1=Huffman, 3=Arithmetic
+	int entropy_type  = 0;   // 0=LZ77, 3=Arithmetic
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -465,19 +465,17 @@ public class DeltaWriter
 				}
 				delta_button[delta_type].setSelected(true);
 
-				// Entropy menu — Huffman(1), LZ77(0), Arithmetic(3)
+				// Entropy menu — LZ77(0), Arithmetic(3)
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button = new JRadioButtonMenuItem[3];
-				entropy_button[0] = new JRadioButtonMenuItem("Huffman");
-				entropy_button[1] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
+				entropy_button = new JRadioButtonMenuItem[2];
+				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
+				entropy_button[1] = new JRadioButtonMenuItem("Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
-				for (int i = 0; i < 3; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				int[] entropy_map = {1, 0, 3};   // button index → entropy_type value
-				entropy_button[0].setSelected(entropy_type == 1);
-				entropy_button[1].setSelected(entropy_type == 0);
-				entropy_button[2].setSelected(entropy_type == 3);
-				for (int i = 0; i < 3; i++)
+				for (int i = 0; i < 2; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
+				int[] entropy_map = {0, 3};   // button index → entropy_type value
+				entropy_button[0].setSelected(entropy_type == 0);
+				entropy_button[1].setSelected(entropy_type == 3);
+				for (int i = 0; i < 2; i++)
 				{
 					final int et = entropy_map[i];
 					entropy_button[i].addActionListener(e -> { if (entropy_type != et) entropy_type = et; });
@@ -910,7 +908,7 @@ public class DeltaWriter
 
 	// =========================================================================
 	// =========================================================================
-	// SaveHandler — Huffman (1), LZ77 (0), Arithmetic (3)
+	// SaveHandler — LZ77 (0), Arithmetic (3)
 	// =========================================================================
 	class SaveHandler implements ActionListener
 	{
@@ -933,9 +931,9 @@ public class DeltaWriter
 				out.writeByte(compress_type);
 				out.writeByte(entropy_type);
 
-				if (entropy_type == 0 || entropy_type == 1)
+				if (entropy_type == 0)
 				{
-					// ---- LZ77 and Huffman: per-channel sequential write ----
+					// ---- LZ77: per-channel sequential write ----
 					for (int i = 0; i < 3; i++)
 					{
 						int j = channel_id[i];
@@ -951,47 +949,11 @@ public class DeltaWriter
 							writeTable(out, (int[]) table_list.get(i));
 
 						byte[] payload = getPayload(i);
-
-						if (entropy_type == 0)
-						{
-							// LZ77
-							Deflater def    = new Deflater(Deflater.BEST_COMPRESSION);
-							byte[]   zipped = new byte[2 * payload.length];
-							def.setInput(payload); def.finish();
-							int zl = def.deflate(zipped); def.end();
-							out.writeInt(payload.length); out.writeInt(zl); out.write(zipped, 0, zl);
-						}
-						else
-						{
-							// Huffman — code over unsigned payload byte values
-							int[] pi = new int[payload.length];
-							for (int k = 0; k < payload.length; k++) { pi[k] = payload[k]; if (pi[k] < 0) pi[k] += 256; }
-							ArrayList hl  = StringMapper.getHistogram(pi);
-							int pmin      = (int) hl.get(0);
-							int[] hist    = (int[]) hl.get(1);
-							int[] rt      = StringMapper.getRankTable(hist);
-							for (int k = 0; k < pi.length; k++) pi[k] -= pmin;
-							int n = hist.length;
-							ArrayList<Integer> fl = new ArrayList<>();
-							for (int v : hist) fl.add(v);
-							Collections.sort(fl, Comparator.reverseOrder());
-							int[] freq = new int[n]; for (int k = 0; k < n; k++) freq[k] = fl.get(k);
-							byte[] hl2  = CodeMapper.getHuffmanLength2(freq);
-							int[]  hc   = CodeMapper.getCanonicalCode(hl2);
-							ArrayList pl = CodeMapper.packCode(pi, rt, hc, hl2);
-							byte[] pb   = (byte[]) pl.get(0);
-							int    bl   = (int)    pl.get(1);
-							writeTable(out, rt);
-							out.writeInt(pmin);
-							ArrayList ltl  = CodeMapper.packLengthTable(hl2);
-							int    ltn     = (int)   ltl.get(0);
-							byte   ltinit  = (byte)  ltl.get(1);
-							byte   ltmax   = (byte)  ltl.get(2);
-							byte[] ltdelta = (byte[]) ltl.get(3);
-							out.writeInt(ltn); out.writeByte(ltinit); out.writeByte(ltmax);
-							out.writeByte(ltdelta.length); out.write(ltdelta, 0, ltdelta.length);
-							out.writeInt(bl); out.writeInt(pb.length); out.write(pb, 0, pb.length);
-						}
+						Deflater def    = new Deflater(Deflater.BEST_COMPRESSION);
+						byte[]   zipped = new byte[2 * payload.length];
+						def.setInput(payload); def.finish();
+						int zl = def.deflate(zipped); def.end();
+						out.writeInt(payload.length); out.writeInt(zl); out.write(zipped, 0, zl);
 					}
 				}
 				else
@@ -1073,7 +1035,7 @@ public class DeltaWriter
 				double rate  = (double) saved.length() / (image_xdim * image_ydim * 3);
 				System.out.println("File compression rate:   " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type:              " + delta_type_string[delta_type]);
-				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","","Arithmetic"}[entropy_type]);
+				System.out.println("Entropy type:            " + new String[]{"LZ77","","","Arithmetic"}[entropy_type]);
 				System.out.println("Output compression rate: " + String.format("%.4f", rate));
 				System.out.println();
 			}
