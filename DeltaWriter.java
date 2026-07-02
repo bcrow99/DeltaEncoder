@@ -32,7 +32,8 @@ public class DeltaWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
-	int entropy_type  = 0;   // 0=LZ77, 3=Arithmetic
+	int entropy_type      = 0;   // 0=LZ77, 3=Arithmetic
+	int smooth_level      = 0;   // bilateral pre-smoothing strength 0=off, 1-10
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -171,11 +172,6 @@ public class DeltaWriter
 			int sl4m = StringMapper.getBitlength((byte[]) dsl16.get(3));
 			total_delta_sum[9] += sl4d + sl4m;
 
-			ArrayList<int[]> res8r = DeltaMapper.getMixedDeltas8Frequency(qc, new_xdim, new_ydim);
-			int sl5d = (int) Math.floor(CodeMapper.getShannonLimit(res8r.get(0)));
-			ArrayList dsl8 = StringMapper.getStringList(res8r.get(1), false);
-			int sl5m = StringMapper.getBitlength((byte[]) dsl8.get(3));
-			total_delta_sum[10] += sl5d + sl5m;
 
 			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
 			int fm1d = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)));
@@ -193,7 +189,7 @@ public class DeltaWriter
 		}
 
 		min_sum = total_delta_sum[0]; min_idx = 0;
-		for (int i = 1; i < 13; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
+		for (int i = 1; i < 13; i++) if (i != 10 && total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 
@@ -280,7 +276,7 @@ public class DeltaWriter
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
-				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
+				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","","frame map","frame map (2)"};
 
 			channel_init              = new int[6];
 			channel_min               = new int[6];
@@ -429,6 +425,7 @@ public class DeltaWriter
 
 				// Quantization menu
 				JMenu quant_menu = new JMenu("Quantization");
+				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level, v -> { smooth_level = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Pixel Resolution",  0, 10, pixel_quant,  v -> { pixel_quant  = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Color Resolution",  0,  7, pixel_shift, v -> { pixel_shift = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Segment Length",    0, 10, pixel_segment, v -> pixel_segment = v));
@@ -454,11 +451,12 @@ public class DeltaWriter
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Scanline 5","Map","Map (2)"};
+				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4",null,"Map","Map (2)"};
 				delta_button = new JRadioButtonMenuItem[13];
 				ButtonGroup dg = new ButtonGroup();
 				for (int i = 0; i < 13; i++)
 				{
+					if (dnames[i] == null) { delta_button[i] = new JRadioButtonMenuItem(""); continue; }
 					delta_button[i] = new JRadioButtonMenuItem(dnames[i]);
 					dg.add(delta_button[i]);
 					delta_menu.add(delta_button[i]);
@@ -488,6 +486,8 @@ public class DeltaWriter
 				menu_bar.add(datatype_menu);
 				menu_bar.add(delta_menu);
 				menu_bar.add(entropy_menu);
+
+
 				menu_bar.add(quant_menu);
 				frame.setJMenuBar(menu_bar);
 
@@ -661,21 +661,6 @@ public class DeltaWriter
 			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
 			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
 		}
-		else if (delta_type == 10)
-		{
-			int[]  map_int = new int[map.length];
-			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
-			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
-			int        dmin    = (int)    dsl.get(0);
-			int[]      tbl     = (int[])  dsl.get(2);
-			byte[]     str     = (byte[]) dsl.get(3);
-			int        bl      = StringMapper.getBitlength(str);
-			out.writeInt(map.length);
-			writeTable(out, tbl);
-			out.writeInt(dmin);
-			out.writeInt(bl);
-			out.write(str, 0, StringMapper.getBytelength(bl));
-		}
 	}
 
 	// =========================================================================
@@ -724,6 +709,8 @@ public class DeltaWriter
 			for (int i = 0; i < 3; i++)
 			{
 				int[] ch = (int[]) channel_list.get(i);
+				if (smooth_level > 0)
+					ch = DeltaMapper.bilateralSmooth(ch, image_xdim, image_ydim, smooth_level);
 				if (pixel_quant == 0)
 					qcl.add(pixel_shift == 0 ? ch : DeltaMapper.shift(ch, -pixel_shift));
 				else
@@ -795,7 +782,6 @@ public class DeltaWriter
 				else if (delta_type == 9)  { result = DeltaMapper.getMixedDeltasFromValues16Rows(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
 				else if (delta_type == 11) { result = DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
 				else if (delta_type == 12) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
-			else if (delta_type == 10) { result = DeltaMapper.getMixedDeltasFromValues8Rows(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
 
 				int[] delta = (int[]) result.get(1);
 
@@ -860,7 +846,6 @@ public class DeltaWriter
 				else if (delta_type == 9)  ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 11) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 12) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
-				else if (delta_type == 10) ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 
 				if (j > 2) for (int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
 
