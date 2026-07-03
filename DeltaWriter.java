@@ -34,6 +34,7 @@ public class DeltaWriter
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
 	int entropy_type      = 0;   // 0=LZ77, 3=Arithmetic
 	int smooth_level      = 0;   // bilateral pre-smoothing strength 0=off, 1-10
+	int smooth2_level     = 0;   // anisotropic diffusion strength 0=off, 1-10
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -425,7 +426,8 @@ public class DeltaWriter
 
 				// Quantization menu
 				JMenu quant_menu = new JMenu("Quantization");
-				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level, v -> { smooth_level = v; apply_item.doClick(); }));
+				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level,  v -> { smooth_level  = v; apply_item.doClick(); }));
+				quant_menu.add(makeSliderDialog(frame, "Smooth2",          0, 10, smooth2_level, v -> { smooth2_level = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Pixel Resolution",  0, 10, pixel_quant,  v -> { pixel_quant  = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Color Resolution",  0,  7, pixel_shift, v -> { pixel_shift = v; apply_item.doClick(); }));
 				quant_menu.add(makeSliderDialog(frame, "Segment Length",    0, 10, pixel_segment, v -> pixel_segment = v));
@@ -711,6 +713,8 @@ public class DeltaWriter
 				int[] ch = (int[]) channel_list.get(i);
 				if (smooth_level > 0)
 					ch = DeltaMapper.bilateralSmooth(ch, image_xdim, image_ydim, smooth_level);
+				if (smooth2_level > 0)
+					ch = DeltaMapper.anisotropicSmooth(ch, image_xdim, image_ydim, smooth2_level);
 				if (pixel_quant == 0)
 					qcl.add(pixel_shift == 0 ? ch : DeltaMapper.shift(ch, -pixel_shift));
 				else

@@ -2551,6 +2551,382 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
+	// Scanline (4) — per-row selection from 16 predictors
+	// =========================================================================
+
+	private static int pred16(int a, int b, int c, int d, int p)
+	{
+		switch (p)
+		{
+			case  0: return a;                                                              // left
+			case  1: return b;                                                              // above
+			case  2: return c;                                                              // above-left
+			case  3: return d;                                                              // above-right
+			case  4: return (a + b) >> 1;                                                  // avg left+above
+			case  5: return (b + c) >> 1;                                                  // avg above+above-left
+			case  6: return (a + c) >> 1;                                                  // avg left+above-left
+			case  7: return (b + d) >> 1;                                                  // avg above+above-right
+			case  8: return (c + d) >> 1;                                                  // avg above-left+above-right
+			case  9: return (a + b + c + d + 2) >> 2;                                     // avg all four
+			case 10: return a + b - c;                                                     // gradient (lossless JPEG)
+			case 11: {                                                                      // MED
+				if (c >= Math.max(a, b)) return Math.min(a, b);
+				if (c <= Math.min(a, b)) return Math.max(a, b);
+				return a + b - c;
+			}
+			case 12: return (a * 3 + b + 2) >> 2;                                         // weighted 3:1 left:above
+			case 13: return (a + b * 3 + 2) >> 2;                                         // weighted 1:3 left:above
+			case 14: return (a * 3 + d + 2) >> 2;                                         // weighted left+above-right
+			case 15: return (b * 3 + a + 2) >> 2;                                         // weighted above+left
+			default: return a;
+		}
+	}
+
+	public static ArrayList<int[]> getMixedDeltas16Frequency(int[] src, int xdim, int ydim)
+	{
+		int[] delta_freq = new int[511];
+		int[] map_seq    = new int[ydim];   // actual per-row predictor indices
+
+		for (int row = 0; row < ydim; row++)
+		{
+			int best_pred = 0, best_sad = Integer.MAX_VALUE;
+			for (int p = 0; p < 16; p++)
+			{
+				int sad = 0;
+				for (int col = 0; col < xdim; col++)
+				{
+					int k = row * xdim + col;
+					if (k == 0) continue;
+					int a = (col > 0)                    ? src[k - 1]        : 0;
+					int b = (row > 0)                    ? src[k - xdim]     : 0;
+					int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+					int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+					sad += Math.abs(src[k] - pred16(a, b, c, d, p));
+				}
+				if (sad < best_sad) { best_sad = sad; best_pred = p; }
+			}
+			map_seq[row] = best_pred;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? src[k - 1]        : 0;
+				int b = (row > 0)                    ? src[k - xdim]     : 0;
+				int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+				int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+				int delta = src[k] - pred16(a, b, c, d, best_pred);
+				int idx   = delta + 255;
+				if (idx >= 0 && idx < 511) delta_freq[idx]++;
+			}
+		}
+		ArrayList<int[]> result = new ArrayList<>();
+		result.add(delta_freq);
+		result.add(map_seq);
+		return result;
+	}
+
+	public static ArrayList getMixedDeltasFromValues16Rows(int[] src, int xdim, int ydim)
+	{
+		int[]  dst = new int[xdim * ydim];
+		byte[] map = new byte[ydim];   // one entry per row, value 0-15
+
+		dst[0] = 0;
+		for (int row = 0; row < ydim; row++)
+		{
+			int best_pred = 0, best_sad = Integer.MAX_VALUE;
+			for (int p = 0; p < 16; p++)
+			{
+				int sad = 0;
+				for (int col = 0; col < xdim; col++)
+				{
+					int k = row * xdim + col;
+					if (k == 0) continue;
+					int a = (col > 0)                    ? src[k - 1]         : 0;
+					int b = (row > 0)                    ? src[k - xdim]      : 0;
+					int c = (row > 0 && col > 0)         ? src[k - xdim - 1]  : 0;
+					int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1]  : 0;
+					sad += Math.abs(src[k] - pred16(a, b, c, d, p));
+				}
+				if (sad < best_sad) { best_sad = sad; best_pred = p; }
+			}
+			map[row] = (byte) best_pred;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? src[k - 1]         : 0;
+				int b = (row > 0)                    ? src[k - xdim]      : 0;
+				int c = (row > 0 && col > 0)         ? src[k - xdim - 1]  : 0;
+				int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1]  : 0;
+				dst[k] = src[k] - pred16(a, b, c, d, best_pred);
+			}
+		}
+		int total = 0;
+		for (int v : dst) total += Math.abs(v);
+
+		ArrayList result = new ArrayList();
+		result.add(total);
+		result.add(dst);
+		result.add(map);
+		result.add(src[0]);
+		return result;
+	}
+
+	public static int[] getValuesFromMixedDeltas16Rows(int[] src, int xdim, int ydim, int init_value, byte[] map)
+	{
+		int[] dst = new int[xdim * ydim];
+		dst[0] = init_value;
+
+		for (int row = 0; row < ydim; row++)
+		{
+			int p = map[row] & 0xF;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? dst[k - 1]         : 0;
+				int b = (row > 0)                    ? dst[k - xdim]      : 0;
+				int c = (row > 0 && col > 0)         ? dst[k - xdim - 1]  : 0;
+				int d = (row > 0 && col < xdim - 1) ? dst[k - xdim + 1]  : 0;
+				dst[k] = src[k] + pred16(a, b, c, d, p);
+			}
+		}
+		return dst;
+	}
+
+	// =========================================================================
+	// Bilateral smoothing — preserves edges, suppresses noise.
+	// threshold 0 = no-op; 1-10 maps range sigma 10-100.
+	// =========================================================================
+	public static int[] bilateralSmooth(int[] src, int xdim, int ydim, int threshold)
+	{
+		if (threshold == 0) return src.clone();
+
+		double sigma_r = threshold * threshold;  // quadratic: 1,4,9,16,25 for threshold 1-5
+		double sigma_s = 1.5;                // spatial sigma (fixed, 5x5 kernel)
+		int    radius  = 2;
+
+		// Range weight lookup: indexed by absolute intensity difference 0-255
+		double[] rw = new double[256];
+		double   r2 = 2.0 * sigma_r * sigma_r;
+		for (int d = 0; d < 256; d++) rw[d] = Math.exp(-(d * d) / r2);
+
+		// Spatial weight kernel
+		int    ksize = 2 * radius + 1;
+		double[][]  sw = new double[ksize][ksize];
+		double s2 = 2.0 * sigma_s * sigma_s;
+		for (int dy = -radius; dy <= radius; dy++)
+			for (int dx = -radius; dx <= radius; dx++)
+				sw[dy + radius][dx + radius] = Math.exp(-(dx * dx + dy * dy) / s2);
+
+		int[] dst = new int[src.length];
+		for (int row = 0; row < ydim; row++)
+		{
+			for (int col = 0; col < xdim; col++)
+			{
+				int    center = src[row * xdim + col];
+				double sum_w  = 0.0, sum_v = 0.0;
+				for (int dy = -radius; dy <= radius; dy++)
+				{
+					int ny = row + dy;
+					if (ny < 0 || ny >= ydim) continue;
+					for (int dx = -radius; dx <= radius; dx++)
+					{
+						int nx = col + dx;
+						if (nx < 0 || nx >= xdim) continue;
+						int    v = src[ny * xdim + nx];
+						double w = sw[dy + radius][dx + radius] * rw[Math.abs(v - center)];
+						sum_w += w; sum_v += w * v;
+					}
+				}
+				dst[row * xdim + col] = (int) Math.round(sum_v / sum_w);
+			}
+		}
+		return dst;
+	}
+
+
+	// =========================================================================
+	// Anisotropic diffusion (Perona-Malik) — iterative edge-preserving smooth.
+	// threshold 0 = no-op; iterations = threshold, K = threshold*3+5 (8-35).
+	// λ = 0.25 (stability limit for 4-directional scheme).
+	// =========================================================================
+	public static int[] anisotropicSmooth(int[] src, int xdim, int ydim, int threshold)
+	{
+		if (threshold == 0) return src.clone();
+
+		int    iterations = threshold;
+		double K2         = (threshold * 3.0 + 5.0) * (threshold * 3.0 + 5.0);
+		double lambda     = 0.25;
+
+		// Conductance lookup: c[d+255] = exp(-d²/K²) for d in [-255,255]
+		double[] c = new double[511];
+		for (int d = -255; d <= 255; d++) c[d + 255] = Math.exp(-(d * d) / K2);
+
+		double[] img  = new double[src.length];
+		double[] next = new double[src.length];
+		for (int i = 0; i < src.length; i++) img[i] = src[i];
+
+		for (int iter = 0; iter < iterations; iter++)
+		{
+			for (int row = 0; row < ydim; row++)
+			{
+				for (int col = 0; col < xdim; col++)
+				{
+					int    k  = row * xdim + col;
+					double v  = img[k];
+					double dN = (row > 0)        ? img[k - xdim] - v : 0;
+					double dS = (row < ydim - 1) ? img[k + xdim] - v : 0;
+					double dE = (col < xdim - 1) ? img[k + 1]    - v : 0;
+					double dW = (col > 0)        ? img[k - 1]    - v : 0;
+					int iN = Math.max(0, Math.min(510, (int)(dN + 255.5)));
+					int iS = Math.max(0, Math.min(510, (int)(dS + 255.5)));
+					int iE = Math.max(0, Math.min(510, (int)(dE + 255.5)));
+					int iW = Math.max(0, Math.min(510, (int)(dW + 255.5)));
+					next[k] = v + lambda * (c[iN]*dN + c[iS]*dS + c[iE]*dE + c[iW]*dW);
+				}
+			}
+			double[] tmp = img; img = next; next = tmp;
+		}
+
+		int[] dst = new int[src.length];
+		for (int i = 0; i < src.length; i++)
+			dst[i] = Math.max(0, Math.min(255, (int) Math.round(img[i])));
+		return dst;
+	}
+
+	// =========================================================================
+
+	// Each row maps local predictor index 0-7 to a pred16 index.
+	// Add new rows here to define new variants; variant 0 is the default.
+	public static final int[][] FILTER_SETS_8 = {
+		// variant 0: spread coverage — directional anchors + best composites
+		{ 0, 1, 2, 3, 4, 10, 9, 5 },
+		// variant 1: averaging focus — left, above, avg(l,a), avg-all-4, gradient, MED, weighted blends
+		{ 0, 1, 4, 9, 10, 11, 12, 13 },
+		// variant 2: variant 1 with weighted 1:3 swapped for avg(above, above-right)
+		{ 0, 1, 4, 9, 10, 11, 12, 7 },
+	};
+
+	public static int pred8(int a, int b, int c, int d, int p, int variant)
+	{
+		return pred16(a, b, c, d, FILTER_SETS_8[variant][p]);
+	}
+
+	public static ArrayList<int[]> getMixedDeltas8Frequency(int[] src, int xdim, int ydim, int variant)
+	{
+		int[] delta_freq = new int[511];
+		int[] map_seq    = new int[ydim];
+
+		for (int row = 0; row < ydim; row++)
+		{
+			int best_pred = 0, best_sad = Integer.MAX_VALUE;
+			for (int p = 0; p < 8; p++)
+			{
+				int sad = 0;
+				for (int col = 0; col < xdim; col++)
+				{
+					int k = row * xdim + col;
+					if (k == 0) continue;
+					int a = (col > 0)                    ? src[k - 1]        : 0;
+					int b = (row > 0)                    ? src[k - xdim]     : 0;
+					int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+					int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+					sad += Math.abs(src[k] - pred8(a, b, c, d, p, variant));
+				}
+				if (sad < best_sad) { best_sad = sad; best_pred = p; }
+			}
+			map_seq[row] = best_pred;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? src[k - 1]        : 0;
+				int b = (row > 0)                    ? src[k - xdim]     : 0;
+				int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+				int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+				int delta = src[k] - pred8(a, b, c, d, best_pred, variant);
+				int idx   = delta + 255;
+				if (idx >= 0 && idx < 511) delta_freq[idx]++;
+			}
+		}
+		ArrayList<int[]> result = new ArrayList<>();
+		result.add(delta_freq);
+		result.add(map_seq);
+		return result;
+	}
+
+	public static ArrayList getMixedDeltasFromValues8Rows(int[] src, int xdim, int ydim, int variant)
+	{
+		int[]  dst = new int[xdim * ydim];
+		byte[] map = new byte[ydim];
+
+		dst[0] = 0;
+		for (int row = 0; row < ydim; row++)
+		{
+			int best_pred = 0, best_sad = Integer.MAX_VALUE;
+			for (int p = 0; p < 8; p++)
+			{
+				int sad = 0;
+				for (int col = 0; col < xdim; col++)
+				{
+					int k = row * xdim + col;
+					if (k == 0) continue;
+					int a = (col > 0)                    ? src[k - 1]        : 0;
+					int b = (row > 0)                    ? src[k - xdim]     : 0;
+					int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+					int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+					sad += Math.abs(src[k] - pred8(a, b, c, d, p, variant));
+				}
+				if (sad < best_sad) { best_sad = sad; best_pred = p; }
+			}
+			map[row] = (byte) best_pred;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? src[k - 1]        : 0;
+				int b = (row > 0)                    ? src[k - xdim]     : 0;
+				int c = (row > 0 && col > 0)         ? src[k - xdim - 1] : 0;
+				int d = (row > 0 && col < xdim - 1) ? src[k - xdim + 1] : 0;
+				dst[k] = src[k] - pred8(a, b, c, d, best_pred, variant);
+			}
+		}
+		int total = 0;
+		for (int v : dst) total += Math.abs(v);
+
+		ArrayList result = new ArrayList();
+		result.add(total);
+		result.add(dst);
+		result.add(map);
+		result.add(src[0]);
+		return result;
+	}
+
+	public static int[] getValuesFromMixedDeltas8Rows(int[] src, int xdim, int ydim,
+	                                                   int init_value, byte[] map, int variant)
+	{
+		int[] dst = new int[xdim * ydim];
+		dst[0] = init_value;
+
+		for (int row = 0; row < ydim; row++)
+		{
+			int p = map[row] & 0x7;
+			for (int col = 0; col < xdim; col++)
+			{
+				int k = row * xdim + col;
+				if (k == 0) continue;
+				int a = (col > 0)                    ? dst[k - 1]        : 0;
+				int b = (row > 0)                    ? dst[k - xdim]     : 0;
+				int c = (row > 0 && col > 0)         ? dst[k - xdim - 1] : 0;
+				int d = (row > 0 && col < xdim - 1) ? dst[k - xdim + 1] : 0;
+				dst[k] = src[k] + pred8(a, b, c, d, p, variant);
+			}
+		}
+		return dst;
+	}
+
+	// =========================================================================
 	// Ideal delta helpers (pixel-map variants)
 	// =========================================================================
 
