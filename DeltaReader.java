@@ -22,7 +22,8 @@ public class DeltaReader
 	int  set_id        = 0;
 	byte delta_type    = 0;
 	byte compress_type = 0;
-	byte entropy_type  = 0;   // 0=LZ77, 1=Huffman, 2=Arithmetic, 3=Fast Arithmetic
+	byte entropy_type     = 0;
+	byte scanline5_variant = 0;
 
 	// ---- Per-channel scalars ------------------------------------------------
 	int[]  min               = new int[3];
@@ -117,7 +118,8 @@ public class DeltaReader
 			set_id       = in.readByte();
 			delta_type   = in.readByte();
 			compress_type = in.readByte();
-			entropy_type  = in.readByte();
+			entropy_type      = in.readByte();
+				scanline5_variant = in.readByte();
 
 			System.out.println("Image:        " + xdim + " x " + ydim);
 			System.out.println("Channel set:  " + set_string[set_id & 0xFF]);
@@ -169,21 +171,31 @@ public class DeltaReader
 				}
 				else if (delta_type == 11)
 				{
-					int    ml          = in.readInt();
-					int    bit_count   = in.readInt();
-					int    encoded_len = in.readInt();
-					byte[] encoded     = new byte[encoded_len];
-					in.readFully(encoded);
-					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 8, ml, bit_count));
+					int    ml   = in.readInt();
+					int[]  tbl  = readTable(in);
+					int    dmin = in.readInt();
+					int    bl   = in.readInt();
+					byte[] str  = new byte[StringMapper.getBytelength(bl)];
+					in.readFully(str);
+					byte[] decomp = StringMapper.decompressStrings(str);
+					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
+					byte[] map  = new byte[ml];
+					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
+					map_list.add(map);
 				}
 				else if (delta_type == 12)
 				{
-					int    ml          = in.readInt();
-					int    bit_count   = in.readInt();
-					int    encoded_len = in.readInt();
-					byte[] encoded     = new byte[encoded_len];
-					in.readFully(encoded);
-					map_list.add(DeltaMapper.decodeMapHuffman(encoded, 16, ml, bit_count));
+					int    ml   = in.readInt();
+					int[]  tbl  = readTable(in);
+					int    dmin = in.readInt();
+					int    bl   = in.readInt();
+					byte[] str  = new byte[StringMapper.getBytelength(bl)];
+					in.readFully(str);
+					byte[] decomp = StringMapper.decompressStrings(str);
+					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
+					byte[] map  = new byte[ml];
+					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
+					map_list.add(map);
 				}
 				else if (delta_type == 10)
 				{
@@ -729,7 +741,7 @@ public class DeltaReader
 				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
 				else if (delta_type == 12) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
+				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i), scanline5_variant);
 				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 
 				// Restore difference-channel offset

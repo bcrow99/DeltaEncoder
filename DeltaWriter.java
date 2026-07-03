@@ -192,6 +192,8 @@ public class DeltaWriter
 		min_sum = total_delta_sum[0]; min_idx = 0;
 		for (int i = 1; i < 13; i++) if (i != 10 && total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
+		System.out.println("Frame map (1) delta: " + fm1_delta + "  map: " + fm1_map + "  total: " + (fm1_delta + fm1_map));
+		System.out.println("Frame map (2) delta: " + fm2_delta + "  map: " + fm2_map + "  total: " + (fm2_delta + fm2_map));
 		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 
 		// Select compress_type by trying String and String* on all three channels
@@ -653,15 +655,33 @@ public class DeltaWriter
 		}
 		else if (delta_type == 11)
 		{
-			int[]  bit_count = new int[1];
-			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 8, bit_count);
-			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
+			int[]  map_int = new int[map.length];
+			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
+			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
+			int        dmin    = (int)    dsl.get(0);
+			int[]      tbl     = (int[])  dsl.get(2);
+			byte[]     str     = (byte[]) dsl.get(3);
+			int        bl      = StringMapper.getBitlength(str);
+			out.writeInt(map.length);
+			writeTable(out, tbl);
+			out.writeInt(dmin);
+			out.writeInt(bl);
+			out.write(str, 0, StringMapper.getBytelength(bl));
 		}
 		else if (delta_type == 12)
 		{
-			int[]  bit_count = new int[1];
-			byte[] encoded   = DeltaMapper.encodeMapHuffman(map, 16, bit_count);
-			out.writeInt(map.length); out.writeInt(bit_count[0]); out.writeInt(encoded.length); out.write(encoded, 0, encoded.length);
+			int[]  map_int = new int[map.length];
+			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
+			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
+			int        dmin    = (int)    dsl.get(0);
+			int[]      tbl     = (int[])  dsl.get(2);
+			byte[]     str     = (byte[]) dsl.get(3);
+			int        bl      = StringMapper.getBitlength(str);
+			out.writeInt(map.length);
+			writeTable(out, tbl);
+			out.writeInt(dmin);
+			out.writeInt(bl);
+			out.write(str, 0, StringMapper.getBytelength(bl));
 		}
 	}
 
