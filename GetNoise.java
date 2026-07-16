@@ -28,62 +28,59 @@ public class GetNoise
 			System.exit(0);	
 		}
 		
-		/*
+		int xdim = 512;
+		int ydim = 256;
+		int size = xdim * ydim * 3;
+		
+		
 		Random random = new Random();
-		
-		double mean = 64;
-		double std_dev = 64;
-		
-		
-		double min = Double.MAX_VALUE;
-		double max = Double.MIN_VALUE;
-		ArrayList <Double> random_list = new ArrayList <Double> ();
-		for(int i = 0; i < size; i++)
-		{
-			double value = mean + std_dev * random.nextGaussian();
-			if(value < min)
-				min = value;
-			if(value > max)
-				max = value;
-			random_list.add(value);
-		}
-		
-		double range = max - min;
-		
-		double range_factor = 1. / range;
-		
-		for(int i = 0; i < size; i++)
-		{
-			double value = random_list.get(i);
-			value -= min;
-			value *= range_factor;
-			value *= 5;
-			
-			image[i] = (int)value;
-		}
-		*/
+		ArrayList <Integer> random_list = new ArrayList <Integer> ();
 		
 		if(args[0].equals("r"))
 		{
-		    int xdim = 512;
-		    int ydim = 256;
-		    
-		    BufferedImage grayscale = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		   
-		    for(int i = 0; i < ydim; i++)
+		    for(int i = 0; i < size; i++)	
 		    {
-		    	    for(int j = 0; j < xdim; j++)
-		    	    {
-		    	    	    int gray_value = j / 2;
-		    	    	    
-		    	    	    int rgb_value = ((gray_value&0x0ff)<<16)|((gray_value&0x0ff)<<8)|(gray_value&0x0ff);
-		            	grayscale.setRGB(j, i, rgb_value);
-		    	    }
+		    	    int value = random.nextInt(256);
+		    	    random_list.add(value);
 		    }
-		    
+		}
+		else
+		{
+			double mean    = 128;
+			double std_dev = 42;
+			
+			for(int i = 0; i < size; i++)
+			{
+			    double value = mean + std_dev * random.nextGaussian();
+			    if(value < 0.)
+				    value = 0;
+			    else if(value > 255.)
+				    value = 255;
+			    random_list.add((int)value);	
+			}
+		}
+		
+		BufferedImage noise = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+		
+		int k = 0;
+	    for(int i = 0; i < ydim; i++)
+	    {
+	    	    for(int j = 0; j < xdim; j++)
+	    	    {
+	    	    	    int blue  = random_list.get(k++);
+	    	    	    int green = random_list.get(k++);
+	    	    	    int red   = random_list.get(k++);
+	    	    	    
+	    	    	    int rgb_value = ((blue & 0x0ff) << 16) |((green & 0x0ff) << 8) | (red & 0x0ff);
+	            	noise.setRGB(j, i, rgb_value);
+	    	    }
+	    }
+
+		if(args[0].equals("r"))
+		{
 		    try 
 	        {  
-	            ImageIO.write(grayscale, "jpg", new File("C:/Users/bcrow/Desktop/random.jpg")); 
+	            ImageIO.write(noise, "png", new File("C:/Users/bcrow/Desktop/random.png")); 
 	        } 
 	        catch(IOException e) 
 	        {  
@@ -92,25 +89,9 @@ public class GetNoise
 		}
 		else if(args[0].equals("g"))
 		{
-			int xdim = 256;
-		    int ydim = 512;
-		    
-		    BufferedImage grayscale = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		   
-		    for(int i = 0; i < xdim; i++)
-		    {
-		    	    for(int j = 0; j < ydim; j++)
-		    	    {
-		    	    	    int gray_value = j / 2;
-		    	    	    
-		    	    	    int rgb_value = ((gray_value&0x0ff)<<16)|((gray_value&0x0ff)<<8)|(gray_value&0x0ff);
-		            	grayscale.setRGB(i, j, rgb_value);
-		    	    }
-		    }
-		    
 		    try 
 	        {  
-	            ImageIO.write(grayscale, "jpg", new File("C:/Users/bcrow/Desktop/gaussian.jpg")); 
+	            ImageIO.write(noise, "png", new File("C:/Users/bcrow/Desktop/gaussian.png")); 
 	        } 
 	        catch(IOException e) 
 	        {  
