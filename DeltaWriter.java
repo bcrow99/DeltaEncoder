@@ -385,6 +385,19 @@ public class DeltaWriter
 				file_menu.addSeparator();
 
 
+				JMenuItem reset_item = new JMenuItem("Reset");
+				reset_item.addActionListener(e ->
+				{
+					smooth_level = 0;  smooth2_level = 0;
+					pixel_quant  = 0;  pixel_shift   = 0;  correction = 0;
+					if (smooth_slider  != null) smooth_slider.setValue(0);
+					if (smooth2_slider != null) smooth2_slider.setValue(0);
+					if (pquant_slider  != null) pquant_slider.setValue(0);
+					if (pshift_slider  != null) pshift_slider.setValue(0);
+					if (corr_slider    != null) corr_slider.setValue(0);
+					new ApplyHandler().actionPerformed(null);
+				});
+				file_menu.add(reset_item);
 				JMenuItem save_item = new JMenuItem("Save");
 				save_item.addActionListener(new SaveHandler());
 				file_menu.add(save_item);
