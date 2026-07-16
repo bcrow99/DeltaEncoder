@@ -1402,9 +1402,9 @@ public class DeltaMapper
 				else
 					pred = a + b - c;
 
-				delta = src[k] - pred;
-				dst[k++]  = delta;
-				sum      += Math.abs(delta);
+				delta    = src[k] - pred;
+				dst[k++] = delta;
+				sum     += Math.abs(delta);
 			}
 		}
 
@@ -2585,7 +2585,7 @@ public class DeltaMapper
 	public static ArrayList<int[]> getMixedDeltas16Frequency(int[] src, int xdim, int ydim)
 	{
 		int[] delta_freq = new int[511];
-		int[] map_seq    = new int[ydim];   // actual per-row predictor indices
+		int[] map_freq   = new int[16];
 
 		for (int row = 0; row < ydim; row++)
 		{
@@ -2605,7 +2605,7 @@ public class DeltaMapper
 				}
 				if (sad < best_sad) { best_sad = sad; best_pred = p; }
 			}
-			map_seq[row] = best_pred;
+			map_freq[best_pred]++;
 			for (int col = 0; col < xdim; col++)
 			{
 				int k = row * xdim + col;
@@ -2621,7 +2621,7 @@ public class DeltaMapper
 		}
 		ArrayList<int[]> result = new ArrayList<>();
 		result.add(delta_freq);
-		result.add(map_seq);
+		result.add(map_freq);
 		return result;
 	}
 
@@ -2816,7 +2816,7 @@ public class DeltaMapper
 	public static ArrayList<int[]> getMixedDeltas8Frequency(int[] src, int xdim, int ydim, int variant)
 	{
 		int[] delta_freq = new int[511];
-		int[] map_seq    = new int[ydim];
+		int[] map_freq   = new int[8];
 
 		for (int row = 0; row < ydim; row++)
 		{
@@ -2836,7 +2836,7 @@ public class DeltaMapper
 				}
 				if (sad < best_sad) { best_sad = sad; best_pred = p; }
 			}
-			map_seq[row] = best_pred;
+			map_freq[best_pred]++;
 			for (int col = 0; col < xdim; col++)
 			{
 				int k = row * xdim + col;
@@ -2852,7 +2852,7 @@ public class DeltaMapper
 		}
 		ArrayList<int[]> result = new ArrayList<>();
 		result.add(delta_freq);
-		result.add(map_seq);
+		result.add(map_freq);
 		return result;
 	}
 

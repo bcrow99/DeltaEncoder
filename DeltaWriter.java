@@ -1,6 +1,7 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
+import java.math.*;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
@@ -32,7 +33,7 @@ public class DeltaWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int compress_type = 1;   // 0=Integer, 1=String, 2=String*
-	int entropy_type      = 0;   // 0=LZ77, 3=Arithmetic
+	int entropy_type      = 0;   // 0=LZ77, 1=Huffman, 2=Slow Arithmetic, 3=Arithmetic
 	int smooth_level      = 0;   // bilateral pre-smoothing strength 0=off, 1-10
 	int smooth2_level     = 0;   // anisotropic diffusion strength 0=off, 1-10
 
@@ -159,18 +160,20 @@ public class DeltaWriter
 			total_delta_sum[5] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getAdaptiveFrequency(qc, new_xdim, new_ydim)));
 
 			res = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
-			total_delta_sum[6] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
+			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
+			   total_delta_sum[6] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
 
 			res = DeltaMapper.getScanline2Frequency(qc, new_xdim, new_ydim);
-			total_delta_sum[7] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
+			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
+			   total_delta_sum[7] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
 
 			res = DeltaMapper.getMixedDeltas4Frequency(qc, new_xdim, new_ydim);
-			total_delta_sum[8] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + res.get(1).length / 4;
+			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
+			   total_delta_sum[8] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
 
 			ArrayList<int[]> res16r = DeltaMapper.getMixedDeltas16Frequency(qc, new_xdim, new_ydim);
 			int sl4d = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(0)));
-			ArrayList dsl16 = StringMapper.getStringList(res16r.get(1), false);
-			int sl4m = StringMapper.getBitlength((byte[]) dsl16.get(3));
+			int sl4m = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(1)));
 			total_delta_sum[9] += sl4d + sl4m;
 
 
@@ -279,7 +282,7 @@ public class DeltaWriter
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
-				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","","frame map","frame map (2)"};
+				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","","frame map (1)","frame map (2)"};
 
 			channel_init              = new int[6];
 			channel_min               = new int[6];
@@ -455,7 +458,7 @@ public class DeltaWriter
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4",null,"Map","Map (2)"};
+				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4",null,"Map (1)","Map (2)"};
 				delta_button = new JRadioButtonMenuItem[13];
 				ButtonGroup dg = new ButtonGroup();
 				for (int i = 0; i < 13; i++)
@@ -469,17 +472,21 @@ public class DeltaWriter
 				}
 				delta_button[delta_type].setSelected(true);
 
-				// Entropy menu — LZ77(0), Arithmetic(3)
+				// Entropy menu — LZ77(0), Huffman(1), Arithmetic(3), Slow Arithmetic(2)
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button = new JRadioButtonMenuItem[2];
+				entropy_button = new JRadioButtonMenuItem[4];
 				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[1] = new JRadioButtonMenuItem("Arithmetic");
+				entropy_button[1] = new JRadioButtonMenuItem("Huffman");
+				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
+				entropy_button[3] = new JRadioButtonMenuItem("Slow Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
-				for (int i = 0; i < 2; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				int[] entropy_map = {0, 3};   // button index → entropy_type value
+				for (int i = 0; i < 4; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
+				int[] entropy_map = {0, 1, 3, 2};   // button index → entropy_type value
 				entropy_button[0].setSelected(entropy_type == 0);
-				entropy_button[1].setSelected(entropy_type == 3);
-				for (int i = 0; i < 2; i++)
+				entropy_button[1].setSelected(entropy_type == 1);
+				entropy_button[2].setSelected(entropy_type == 3);
+				entropy_button[3].setSelected(entropy_type == 2);
+				for (int i = 0; i < 4; i++)
 				{
 					final int et = entropy_map[i];
 					entropy_button[i].addActionListener(e -> { if (entropy_type != et) entropy_type = et; });
@@ -629,60 +636,19 @@ public class DeltaWriter
 
 	private void writeMap(DataOutputStream out, int i) throws IOException
 	{
-		byte[] map = (byte[]) map_list.get(i);
-		if (delta_type >= 6 && delta_type <= 8)
-		{
-			int    pm_len = (map.length + 3) / 4;
-			byte[] pm     = new byte[pm_len];
-			for (int q = 0; q < map.length; q++)
-				pm[q >> 2] |= (map[q] & 0x3) << ((q & 3) << 1);
-			out.writeInt(map.length); out.writeInt(pm_len); out.write(pm, 0, pm_len);
-		}
-		else if (delta_type == 9)
-		{
-			int[]  map_int = new int[map.length];
-			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
-			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
-			int        dmin    = (int)    dsl.get(0);
-			int[]      tbl     = (int[])  dsl.get(2);
-			byte[]     str     = (byte[]) dsl.get(3);
-			int        bl      = StringMapper.getBitlength(str);
-			out.writeInt(map.length);
-			writeTable(out, tbl);
-			out.writeInt(dmin);
-			out.writeInt(bl);
-			out.write(str, 0, StringMapper.getBytelength(bl));
-		}
-		else if (delta_type == 11)
-		{
-			int[]  map_int = new int[map.length];
-			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
-			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
-			int        dmin    = (int)    dsl.get(0);
-			int[]      tbl     = (int[])  dsl.get(2);
-			byte[]     str     = (byte[]) dsl.get(3);
-			int        bl      = StringMapper.getBitlength(str);
-			out.writeInt(map.length);
-			writeTable(out, tbl);
-			out.writeInt(dmin);
-			out.writeInt(bl);
-			out.write(str, 0, StringMapper.getBytelength(bl));
-		}
-		else if (delta_type == 12)
-		{
-			int[]  map_int = new int[map.length];
-			for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
-			ArrayList  dsl     = StringMapper.getStringList(map_int, false);
-			int        dmin    = (int)    dsl.get(0);
-			int[]      tbl     = (int[])  dsl.get(2);
-			byte[]     str     = (byte[]) dsl.get(3);
-			int        bl      = StringMapper.getBitlength(str);
-			out.writeInt(map.length);
-			writeTable(out, tbl);
-			out.writeInt(dmin);
-			out.writeInt(bl);
-			out.write(str, 0, StringMapper.getBytelength(bl));
-		}
+		byte[] map     = (byte[]) map_list.get(i);
+		int[]  map_int = new int[map.length];
+		for (int q = 0; q < map.length; q++) map_int[q] = map[q] & 0xFF;
+		ArrayList  dsl    = StringMapper.getStringList(map_int, false);
+		int        dmin   = (int)    dsl.get(0);
+		int[]      tbl    = (int[])  dsl.get(2);
+		byte[]     str    = (byte[]) dsl.get(3);
+		int        bl     = StringMapper.getBitlength(str);
+		out.writeInt(map.length);
+		writeTable(out, tbl);
+		out.writeInt(dmin);
+		out.writeInt(bl);
+		out.write(str, 0, StringMapper.getBytelength(bl));
 	}
 
 	// =========================================================================
@@ -919,7 +885,7 @@ public class DeltaWriter
 
 	// =========================================================================
 	// =========================================================================
-	// SaveHandler — LZ77 (0), Arithmetic (3)
+	// SaveHandler — LZ77 (0), Huffman (1), Slow Arithmetic BigInteger (2), Arithmetic (3)
 	// =========================================================================
 	class SaveHandler implements ActionListener
 	{
@@ -942,9 +908,9 @@ public class DeltaWriter
 				out.writeByte(compress_type);
 				out.writeByte(entropy_type);
 
-				if (entropy_type == 0)
+				if (entropy_type == 0 || entropy_type == 1)
 				{
-					// ---- LZ77: per-channel sequential write ----
+					// ---- LZ77 and Huffman: per-channel sequential write ----
 					for (int i = 0; i < 3; i++)
 					{
 						int j = channel_id[i];
@@ -954,17 +920,129 @@ public class DeltaWriter
 						out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]);
 						out.writeByte(channel_iterations[i]);
-
 						if (delta_type >= 6) writeMap(out, i);
-						if (compress_type > 0)
-							writeTable(out, (int[]) table_list.get(i));
+						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 
 						byte[] payload = getPayload(i);
-						Deflater def    = new Deflater(Deflater.BEST_COMPRESSION);
-						byte[]   zipped = new byte[2 * payload.length];
-						def.setInput(payload); def.finish();
-						int zl = def.deflate(zipped); def.end();
-						out.writeInt(payload.length); out.writeInt(zl); out.write(zipped, 0, zl);
+						if (entropy_type == 0)
+						{
+							// LZ77
+							Deflater def    = new Deflater(Deflater.BEST_COMPRESSION);
+							byte[]   zipped = new byte[2 * payload.length];
+							def.setInput(payload); def.finish();
+							int zl = def.deflate(zipped); def.end();
+							out.writeInt(payload.length); out.writeInt(zl); out.write(zipped, 0, zl);
+						}
+						else
+						{
+							// Huffman
+							int[] pi = new int[payload.length];
+							for (int k = 0; k < payload.length; k++) { pi[k] = payload[k]; if (pi[k] < 0) pi[k] += 256; }
+							ArrayList hl  = StringMapper.getHistogram(pi);
+							int pmin      = (int) hl.get(0);
+							int[] hist    = (int[]) hl.get(1);
+							int[] rt      = StringMapper.getRankTable(hist);
+							for (int k = 0; k < pi.length; k++) pi[k] -= pmin;
+							int n = hist.length;
+							ArrayList<Integer> fl = new ArrayList<>();
+							for (int v : hist) fl.add(v);
+							Collections.sort(fl, Comparator.reverseOrder());
+							int[] freq = new int[n]; for (int k = 0; k < n; k++) freq[k] = fl.get(k);
+							byte[] hl2  = CodeMapper.getHuffmanLength2(freq);
+							int[]  hc   = CodeMapper.getCanonicalCode(hl2);
+							ArrayList pl = CodeMapper.packCode(pi, rt, hc, hl2);
+							byte[] pb   = (byte[]) pl.get(0);
+							int    bl   = (int)    pl.get(1);
+							writeTable(out, rt);
+							out.writeInt(pmin);
+							ArrayList ltl  = CodeMapper.packLengthTable(hl2);
+							int    ltn     = (int)   ltl.get(0);
+							byte   ltinit  = (byte)  ltl.get(1);
+							byte   ltmax   = (byte)  ltl.get(2);
+							byte[] ltdelta = (byte[]) ltl.get(3);
+							out.writeInt(ltn); out.writeByte(ltinit); out.writeByte(ltmax);
+							out.writeByte(ltdelta.length); out.write(ltdelta, 0, ltdelta.length);
+							out.writeInt(bl); out.writeInt(pb.length); out.write(pb, 0, pb.length);
+						}
+					}
+				}
+				else if (entropy_type == 2)
+				{
+					// ---- Slow Arithmetic (BigInteger) ----
+					byte[][]   payloads = new byte[3][];
+					int[]      n_segs   = new int[3];
+					byte[][][] segs     = new byte[3][][];
+					int[][][]  freqs    = new int[3][][];
+
+					for (int i = 0; i < 3; i++)
+					{
+						payloads[i] = getPayload(i);
+						int min_seg = 500 + pixel_segment * 500;
+						n_segs[i]   = (pixel_segment >= 10) ? 1 : Math.max(1, payloads[i].length / min_seg);
+						int seg_len = payloads[i].length / n_segs[i];
+						int odd_len = seg_len + payloads[i].length % n_segs[i];
+						segs[i]     = new byte[n_segs[i]][];
+						freqs[i]    = new int[n_segs[i]][256];
+						for (int m = 0; m < n_segs[i]; m++)
+							segs[i][m] = new byte[m < n_segs[i]-1 ? seg_len : odd_len];
+						int pos = 0;
+						for (int m = 0; m < n_segs[i]; m++)
+							for (int nn = 0; nn < segs[i][m].length; nn++)
+							{
+								segs[i][m][nn] = payloads[i][pos];
+								int p = payloads[i][pos]; if (p < 0) p += 256;
+								freqs[i][m][p]++; pos++;
+							}
+					}
+
+					BigInteger[][][] offsets = new BigInteger[3][][];
+					for (int i = 0; i < 3; i++) offsets[i] = new BigInteger[n_segs[i]][2];
+
+					int total_segs = n_segs[0] + n_segs[1] + n_segs[2];
+					System.out.println("Slow Arithmetic: starting " + total_segs + " segment(s)...");
+
+					Thread[][][] enc_threads = new Thread[3][][];
+					for (int i = 0; i < 3; i++)
+					{
+						enc_threads[i] = new Thread[1][n_segs[i]];
+						for (int m = 0; m < n_segs[i]; m++)
+						{
+							final BigInteger[] seg_off  = offsets[i][m];
+							final byte[]       seg_data = segs[i][m];
+							final int[]        seg_freq = freqs[i][m];
+							final int ci = i, si = m;
+							enc_threads[i][0][m] = new Thread(() ->
+							{
+								System.out.println("Slow Arithmetic: channel " + ci + " segment " + si + " (" + seg_data.length + " bytes)...");
+								BigInteger[] r = ArithmeticMapper.getIntervalValue(seg_data, seg_freq);
+								seg_off[0] = r[0]; seg_off[1] = r[1];
+							});
+							enc_threads[i][0][m].start();
+						}
+					}
+					for (int i = 0; i < 3; i++)
+						for (Thread t : enc_threads[i][0]) t.join();
+
+					int[]    len_types = new int[3];
+					byte[][] zip_freqs = new byte[3][];
+					int[]    zip_lens  = new int[3];
+					deflateFrequencies(n_segs, freqs, len_types, zip_freqs, zip_lens);
+
+					for (int i = 0; i < 3; i++)
+					{
+						int j = channel_id[i];
+						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
+						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
+						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
+						if (delta_type >= 6) writeMap(out, i);
+						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
+						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
+						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
+						for (int k = 0; k < n_segs[i]; k++)
+						{
+							byte[] b0 = offsets[i][k][0].toByteArray(); out.writeInt(b0.length); out.write(b0, 0, b0.length);
+							byte[] b1 = offsets[i][k][1].toByteArray(); out.writeInt(b1.length); out.write(b1, 0, b1.length);
+						}
 					}
 				}
 				else
@@ -1046,7 +1124,7 @@ public class DeltaWriter
 				double rate  = (double) saved.length() / (image_xdim * image_ydim * 3);
 				System.out.println("File compression rate:   " + String.format("%.4f", file_compression_rate));
 				System.out.println("Delta type:              " + delta_type_string[delta_type]);
-				System.out.println("Entropy type:            " + new String[]{"LZ77","","","Arithmetic"}[entropy_type]);
+				System.out.println("Entropy type:            " + new String[]{"LZ77","Huffman","Slow Arithmetic","Arithmetic"}[entropy_type]);
 				System.out.println("Output compression rate: " + String.format("%.4f", rate));
 				System.out.println();
 			}
