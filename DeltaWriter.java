@@ -23,7 +23,6 @@ public class DeltaWriter
 	int[]         pixel;
 	int           image_xdim, image_ydim;
 	int           screen_xdim, screen_ydim;
-	JMenuItem     apply_item;
 
 	// ---- Compression parameters ---------------------------------------------
 	int pixel_quant   = 4;
@@ -36,6 +35,9 @@ public class DeltaWriter
 	int entropy_type      = 0;   // 0=LZ77, 1=Huffman, 2=Slow Arithmetic, 3=Arithmetic
 	int smooth_level      = 0;   // bilateral pre-smoothing strength 0=off, 1-10
 	int smooth2_level     = 0;   // anisotropic diffusion strength 0=off, 1-10
+
+	// Slider references so showInitialImage() can reset them
+	JSlider smooth_slider, smooth2_slider, pquant_slider, pshift_slider, corr_slider;
 
 	// ---- Zoom ---------------------------------------------------------------
 	double zoom_scale = 1.0;
@@ -158,6 +160,7 @@ public class DeltaWriter
 				total_delta_sum[t] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getFrequency(qc, new_xdim, new_ydim, t)));
 
 			total_delta_sum[5] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getAdaptiveFrequency(qc, new_xdim, new_ydim)));
+			total_delta_sum[10] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getGradientFrequency(qc, new_xdim, new_ydim)));
 
 			res = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
 			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
@@ -193,7 +196,7 @@ public class DeltaWriter
 		}
 
 		min_sum = total_delta_sum[0]; min_idx = 0;
-		for (int i = 1; i < 13; i++) if (i != 10 && total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
+		for (int i = 1; i < 13; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
 		System.out.println("Frame map (1) delta: " + fm1_delta + "  map: " + fm1_map + "  total: " + (fm1_delta + fm1_map));
 		System.out.println("Frame map (2) delta: " + fm2_delta + "  map: " + fm2_map + "  total: " + (fm2_delta + fm2_map));
@@ -282,7 +285,7 @@ public class DeltaWriter
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
-				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","","frame map (1)","frame map (2)"};
+				"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","gradient","frame map (1)","frame map (2)"};
 
 			channel_init              = new int[6];
 			channel_min               = new int[6];
@@ -381,19 +384,7 @@ public class DeltaWriter
 				file_menu.add(open_item);
 				file_menu.addSeparator();
 
-				apply_item = new JMenuItem("Apply");
-				apply_item.addActionListener(new ApplyHandler());
-				file_menu.add(apply_item);
 
-				JMenuItem reload_item = new JMenuItem("Reload");
-				reload_item.addActionListener(e ->
-				{
-					updateDisplayImage();
-					image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale)));
-					image_canvas.revalidate(); image_canvas.repaint();
-					System.out.println("Reloaded original image.");
-				});
-				file_menu.add(reload_item);
 				JMenuItem save_item = new JMenuItem("Save");
 				save_item.addActionListener(new SaveHandler());
 				file_menu.add(save_item);
@@ -431,12 +422,13 @@ public class DeltaWriter
 
 				// Quantization menu
 				JMenu quant_menu = new JMenu("Quantization");
-				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level,  v -> { smooth_level  = v; apply_item.doClick(); }));
-				quant_menu.add(makeSliderDialog(frame, "Smooth2",          0, 10, smooth2_level, v -> { smooth2_level = v; apply_item.doClick(); }));
-				quant_menu.add(makeSliderDialog(frame, "Pixel Resolution",  0, 10, pixel_quant,  v -> { pixel_quant  = v; apply_item.doClick(); }));
-				quant_menu.add(makeSliderDialog(frame, "Color Resolution",  0,  7, pixel_shift, v -> { pixel_shift = v; apply_item.doClick(); }));
+				JSlider[] ss = new JSlider[1];
+				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level,  v -> { smooth_level  = v; new ApplyHandler().actionPerformed(null); }, ss)); smooth_slider  = ss[0];
+				quant_menu.add(makeSliderDialog(frame, "Smooth2",          0, 10, smooth2_level, v -> { smooth2_level = v; new ApplyHandler().actionPerformed(null); }, ss)); smooth2_slider = ss[0];
+				quant_menu.add(makeSliderDialog(frame, "Pixel Resolution",  0, 10, pixel_quant,  v -> { pixel_quant  = v; new ApplyHandler().actionPerformed(null); }, ss)); pquant_slider  = ss[0];
+				quant_menu.add(makeSliderDialog(frame, "Color Resolution",  0,  7, pixel_shift,  v -> { pixel_shift  = v; new ApplyHandler().actionPerformed(null); }, ss)); pshift_slider  = ss[0];
 				quant_menu.add(makeSliderDialog(frame, "Segment Length",    0, 10, pixel_segment, v -> pixel_segment = v));
-				quant_menu.add(makeSliderDialog(frame, "Error Correction",  0, 10, correction,   v -> { correction   = v; apply_item.doClick(); }));
+				quant_menu.add(makeSliderDialog(frame, "Error Correction",  0, 10, correction,   v -> { correction   = v; new ApplyHandler().actionPerformed(null); }, ss)); corr_slider    = ss[0];
 
 				// Datatype menu
 				JMenu datatype_menu = new JMenu("Datatype");
@@ -452,25 +444,25 @@ public class DeltaWriter
 					final int idx = i;
 					compress_button[i].addActionListener(e ->
 					{
-						if (compress_type != idx) { compress_type = idx; apply_item.doClick(); }
+						if (compress_type != idx) { compress_type = idx; new ApplyHandler().actionPerformed(null); }
 					});
 				}
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
-				String[] dnames = {"H","V","Average","Med","Directional","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4",null,"Map (1)","Map (2)"};
+				String[] dnames   = {"H","V","Average","Med","Directional","Gradient","Adaptive","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Map (1)","Map (2)"};
+				int[]    dtype_map = { 0,  1,  2,       3,    4,            10,        5,         6,           7,           8,           9,           11,        12};
 				delta_button = new JRadioButtonMenuItem[13];
 				ButtonGroup dg = new ButtonGroup();
 				for (int i = 0; i < 13; i++)
 				{
-					if (dnames[i] == null) { delta_button[i] = new JRadioButtonMenuItem(""); continue; }
 					delta_button[i] = new JRadioButtonMenuItem(dnames[i]);
 					dg.add(delta_button[i]);
 					delta_menu.add(delta_button[i]);
-					final int idx = i;
-					delta_button[i].addActionListener(e -> { if (delta_type != idx) { delta_type = idx; apply_item.doClick(); }});
+					final int dt = dtype_map[i];
+					delta_button[i].addActionListener(e -> { if (delta_type != dt) { delta_type = dt; new ApplyHandler().actionPerformed(null); }});
 				}
-				delta_button[delta_type].setSelected(true);
+				delta_button[0].setSelected(true);
 
 				// Entropy menu — LZ77(0), Huffman(1), Arithmetic(3), Slow Arithmetic(2)
 				JMenu entropy_menu = new JMenu("Entropy");
@@ -518,16 +510,22 @@ public class DeltaWriter
 	// ---- Slider-dialog factory helper ----------------------------------------
 	private JMenuItem makeSliderDialog(JFrame parent, String title, int lo, int hi, int init, java.util.function.IntConsumer onChange)
 	{
+		return makeSliderDialog(parent, title, lo, hi, init, onChange, null);
+	}
+
+	private JMenuItem makeSliderDialog(JFrame parent, String title, int lo, int hi, int init, java.util.function.IntConsumer onChange, JSlider[] ref)
+	{
 		JMenuItem item   = new JMenuItem(title);
 		JDialog   dialog = new JDialog(parent, title);
 		JSlider   slider = new JSlider(lo, hi, init);
+		if (ref != null) ref[0] = slider;
 		JTextField field = new JTextField(3);
 		field.setText(" " + init + " ");
 		slider.addChangeListener(e ->
 		{
 			int v = slider.getValue();
 			field.setText(" " + v + " ");
-			if (!slider.getValueIsAdjusting()) onChange.accept(v);
+			onChange.accept(v);
 		});
 		JPanel p = new JPanel(new BorderLayout());
 		p.add(slider, BorderLayout.CENTER);
@@ -545,6 +543,14 @@ public class DeltaWriter
 
 	private void showInitialImage()
 	{
+		// Reset all quantization parameters for each new image
+		smooth_level = 0;  smooth2_level = 0;
+		pixel_quant  = 4;  pixel_shift   = 3;  correction = 0;
+		if (smooth_slider  != null) smooth_slider.setValue(0);
+		if (smooth2_slider != null) smooth2_slider.setValue(0);
+		if (pquant_slider  != null) pquant_slider.setValue(4);
+		if (pshift_slider  != null) pshift_slider.setValue(3);
+		if (corr_slider    != null) corr_slider.setValue(0);
 		Dimension vps = scroll_pane.getViewport().getSize();
 		fit_scale  = Math.min(1.0, Math.min(vps.width>0?(double)vps.width/image_xdim:1.0, vps.height>0?(double)vps.height/image_ydim:1.0));
 		zoom_scale = fit_scale;
@@ -564,15 +570,18 @@ public class DeltaWriter
 		image_canvas.setPreferredSize(new Dimension(display_w, display_h));
 		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 
-		apply_item.setEnabled(false);
+		// Show immediate preview with current parameters while init() runs
+		new ApplyHandler().actionPerformed(null);
+
 		new javax.swing.SwingWorker<Void, Void>()
 		{
 			@Override protected Void doInBackground() { init(); return null; }
 			@Override protected void done()
 			{
-				delta_button[delta_type].setSelected(true);
+				int[] dm = {0,1,2,3,4,10,5,6,7,8,9,11,12};
+				for (int i2 = 0; i2 < 13; i2++) if (dm[i2] == delta_type) { delta_button[i2].setSelected(true); break; }
 				compress_button[compress_type].setSelected(true);
-				apply_item.setEnabled(true);
+				new ApplyHandler().actionPerformed(null);
 			}
 		}.execute();
 	}
@@ -770,6 +779,7 @@ public class DeltaWriter
 				else if (delta_type == 7)  { result = DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 8)  { result = DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 				else if (delta_type == 9)  { result = DeltaMapper.getMixedDeltasFromValues16Rows(qc, new_xdim, new_ydim); map_list.add(result.get(2)); }
+				else if (delta_type == 10) { result = DeltaMapper.getGradientDeltasFromValues(qc, new_xdim, new_ydim); }
 				else if (delta_type == 11) { result = DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim);    map_list.add(result.get(2)); }
 				else if (delta_type == 12) { result = DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim);  map_list.add(result.get(2)); }
 
@@ -834,7 +844,8 @@ public class DeltaWriter
 				else if (delta_type == 7)  ch = DeltaMapper.getValuesFromMixedDeltas2(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 8)  ch = DeltaMapper.getValuesFromMixedDeltas4(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 9)  ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
-				else if (delta_type == 11) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
+				else if (delta_type == 10) ch = DeltaMapper.getValuesFromGradientDeltas(delta, new_xdim, new_ydim, channel_init[j]);
+					else if (delta_type == 11) ch = DeltaMapper.getValuesFromIdealDeltas8(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 				else if (delta_type == 12) ch = DeltaMapper.getValuesFromIdealDeltas16(delta, new_xdim, new_ydim, channel_init[j], (byte[]) map_list.get(i));
 
 				if (j > 2) for (int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
@@ -920,7 +931,7 @@ public class DeltaWriter
 						out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]);
 						out.writeByte(channel_iterations[i]);
-						if (delta_type >= 6) writeMap(out, i);
+						if (delta_type >= 6 && delta_type != 10) writeMap(out, i);
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 
 						byte[] payload = getPayload(i);
@@ -1034,7 +1045,7 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 6) writeMap(out, i);
+						if (delta_type >= 6 && delta_type != 10) writeMap(out, i);
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
 						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
@@ -1105,7 +1116,7 @@ public class DeltaWriter
 						out.writeInt(channel_min[j]); out.writeInt(channel_init[j]);
 						out.writeInt(channel_delta_min[j]); out.writeInt(channel_length[j]);
 						out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
-						if (delta_type >= 6) writeMap(out, i);
+						if (delta_type >= 6 && delta_type != 10) writeMap(out, i);
 						if (compress_type > 0) writeTable(out, (int[]) table_list.get(i));
 						out.writeInt(n_segs[i]); out.writeInt(len_types[i]);
 						out.writeInt(zip_lens[i]); out.write(zip_freqs[i], 0, zip_lens[i]);
