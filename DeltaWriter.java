@@ -48,6 +48,15 @@ public class DeltaWriter
 
 	// ---- Channel stats -------------------------------------------------------
 	int[]  set_sum, channel_sum;
+	int[]  rank_delta_sum     = new int[13];
+	int[]  rank_delta_cost    = new int[13];
+	int[]  rank_map_cost      = new int[13];
+	boolean[] rank_delta_comp = new boolean[13];
+	boolean[] rank_map_comp   = new boolean[13];
+	Integer[] rank_set_order  = new Integer[10];
+	Integer[] rank_dt_order   = new Integer[13];
+	boolean   skip_ranking    = false;
+	javax.swing.table.DefaultTableModel set_table_model, delta_table_model;
 	int[]  channel_init, channel_min, channel_delta_min;
 	int[]  channel_length, channel_compressed_length;
 	byte[] channel_iterations;
@@ -146,61 +155,14 @@ public class DeltaWriter
 		for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
 		min_set_id = min_idx;
 
-		int[] channel_id      = DeltaMapper.getChannels(min_set_id);
-		int[] total_delta_sum = new int[13];
-		int   fm1_delta = 0, fm1_map = 0, fm2_delta = 0, fm2_map = 0;
+		int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
-		for (int i = 0; i < 3; i++)
-		{
-			int   j  = channel_id[i];
-			int[] qc = quantized_channel_list.get(j);
-			ArrayList<int[]> res;
-
-			for (int t = 0; t < 5; t++)
-				total_delta_sum[t] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getFrequency(qc, new_xdim, new_ydim, t)));
-
-			total_delta_sum[5] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getAdaptiveFrequency(qc, new_xdim, new_ydim)));
-			total_delta_sum[10] += (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getGradientFrequency(qc, new_xdim, new_ydim)));
-
-			res = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
-			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
-			   total_delta_sum[6] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
-
-			res = DeltaMapper.getScanline2Frequency(qc, new_xdim, new_ydim);
-			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
-			   total_delta_sum[7] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
-
-			res = DeltaMapper.getMixedDeltas4Frequency(qc, new_xdim, new_ydim);
-			{  ArrayList dsl = StringMapper.getStringList(res.get(1), false);
-			   total_delta_sum[8] += (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))) + StringMapper.getBitlength((byte[]) dsl.get(3)); }
-
-			ArrayList<int[]> res16r = DeltaMapper.getMixedDeltas16Frequency(qc, new_xdim, new_ydim);
-			int sl4d = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(0)));
-			int sl4m = (int) Math.floor(CodeMapper.getShannonLimit(res16r.get(1)));
-			total_delta_sum[9] += sl4d + sl4m;
+		// Compute ranking results (sets delta_type); printing happens via done()'s ApplyHandler
+		skip_ranking = true;
+		computeRanking(quantized_channel_list, channel_id, new_xdim, new_ydim, true);
+		skip_ranking = false;
 
 
-			ArrayList<int[]> res8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
-			int fm1d = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(0)));
-			int fm1m = (int) Math.floor(CodeMapper.getShannonLimit(res8.get(1)));
-			total_delta_sum[11] += fm1d + fm1m;
-			fm1_delta           += fm1d;
-			fm1_map             += fm1m;
-
-			ArrayList<int[]> res16 = DeltaMapper.getIdealFrequency16(qc, new_xdim, new_ydim);
-			int fm2d = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(0)));
-			int fm2m = (int) Math.floor(CodeMapper.getShannonLimit(res16.get(1)));
-			total_delta_sum[12] += fm2d + fm2m;
-			fm2_delta           += fm2d;
-			fm2_map             += fm2m;
-		}
-
-		min_sum = total_delta_sum[0]; min_idx = 0;
-		for (int i = 1; i < 13; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
-		delta_type = min_idx;
-		System.out.println("Frame map (1) delta: " + fm1_delta + "  map: " + fm1_map + "  total: " + (fm1_delta + fm1_map));
-		System.out.println("Frame map (2) delta: " + fm2_delta + "  map: " + fm2_map + "  total: " + (fm2_delta + fm2_map));
-		System.out.println("Best delta type is " + delta_type_string[delta_type]);
 
 		// Select compress_type by trying String and String* on all three channels
 		// and comparing total bit lengths.  Using only one channel is unreliable
@@ -221,6 +183,7 @@ public class DeltaWriter
 				else if (delta_type == 7) tr = DeltaMapper.getMixedDeltasFromValues2(qc_test, new_xdim, new_ydim);
 				else if (delta_type == 8) tr = DeltaMapper.getMixedDeltasFromValues4(qc_test, new_xdim, new_ydim);
 				else if (delta_type == 9) tr = DeltaMapper.getMixedDeltasFromValues16Rows(qc_test, new_xdim, new_ydim);
+				else if (delta_type == 10) tr = DeltaMapper.getGradientDeltasFromValues(qc_test, new_xdim, new_ydim);
 				else if (delta_type == 11) tr = DeltaMapper.getIdealDeltasFromValues8(qc_test, new_xdim, new_ydim);
 				else                       tr = DeltaMapper.getIdealDeltasFromValues16(qc_test, new_xdim, new_ydim);
 
@@ -229,6 +192,8 @@ public class DeltaWriter
 				str_star_bits_total += StringMapper.getBitlength((byte[]) StringMapper.getStringList(td.clone(), true ).get(3));
 			}
 			compress_type = (str_star_bits_total < str_bits_total) ? 2 : 1;
+			// Only keep String* if delta string compression genuinely helped for this delta type
+			if (compress_type == 2 && !rank_delta_comp[delta_type]) compress_type = 1;
 			// Integer compress type stores deltas as bytes; max possible delta = 2 × channel
 			// value range, which must fit in 0..255.  Check the actual selected channels.
 			if (compress_type == 0)
@@ -272,16 +237,16 @@ public class DeltaWriter
 
 			set_sum    = new int[10];
 			set_string = new String[]{
-				"blue, green, and red.",
-				"blue, red, and red-green.",
-				"blue, red, and blue-green.",
-				"blue, blue-green, and red-green.",
-				"blue, blue-green, and red-blue.",
-				"green, red, and blue-green.",
-				"red, blue-green, and red-green.",
-				"green, blue-green, and red-green.",
-				"green, red-green, and red-blue.",
-				"red, red-green, red-blue."};
+				"blue,   green,        red",
+				"blue,   red,          red-green",
+				"blue,   red,          blue-green",
+				"blue,   blue-green,   red-green",
+				"blue,   blue-green,   red-blue",
+				"green,  red,          blue-green",
+				"red,    blue-green,   red-green",
+				"green,  blue-green,   red-green",
+				"green,  red-green,    red-blue",
+				"red,    red-green,    red-blue"};
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
@@ -498,14 +463,48 @@ public class DeltaWriter
 				}
 
 				menu_bar.add(file_menu);
-				menu_bar.add(view_menu);
-				menu_bar.add(datatype_menu);
-				menu_bar.add(delta_menu);
-				menu_bar.add(entropy_menu);
+					menu_bar.add(view_menu);
+					menu_bar.add(quant_menu);
+					menu_bar.add(delta_menu);
+					menu_bar.add(datatype_menu);
+					menu_bar.add(entropy_menu);
 
+					// Statistics menu
+					set_table_model = new javax.swing.table.DefaultTableModel(
+						new String[]{"Rank","Channel Set","Entropy"}, 0) {
+						public boolean isCellEditable(int r, int c) { return false; }
+						public Class getColumnClass(int c) { return c==0||c==2 ? Integer.class : String.class; }
+					};
+					delta_table_model = new javax.swing.table.DefaultTableModel(
+						new String[]{"Rank","Type","Delta","D*","Map","M*","Total",""}, 0) {
+						public boolean isCellEditable(int r, int c) { return false; }
+						public Class getColumnClass(int c) { return (c==0||c==2||c==4||c==6) ? Integer.class : String.class; }
+					};
 
-				menu_bar.add(quant_menu);
-				frame.setJMenuBar(menu_bar);
+					JTable set_jtable   = new JTable(set_table_model);
+					JTable delta_jtable = new JTable(delta_table_model);
+					set_jtable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+					delta_jtable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+
+					javax.swing.table.DefaultTableCellRenderer center = new javax.swing.table.DefaultTableCellRenderer();
+					center.setHorizontalAlignment(JLabel.CENTER);
+					for (int c = 0; c < set_table_model.getColumnCount();   c++) set_jtable.getColumnModel().getColumn(c).setCellRenderer(center);
+					for (int c = 0; c < delta_table_model.getColumnCount(); c++) delta_jtable.getColumnModel().getColumn(c).setCellRenderer(center);
+					JDialog set_dialog   = new JDialog(frame, "Color Sets",   false);
+					JDialog delta_dialog = new JDialog(frame, "Delta Types",  false);
+					set_dialog.add(new JScrollPane(set_jtable));
+					delta_dialog.add(new JScrollPane(delta_jtable));
+					set_dialog.setSize(480, 260); delta_dialog.setSize(680, 360);
+
+					JMenu stats_menu = new JMenu("Statistics");
+					JMenuItem stats_set   = new JMenuItem("Color Sets");
+					JMenuItem stats_delta = new JMenuItem("Delta Types");
+					stats_set.addActionListener(e   -> { set_dialog.setVisible(true); });
+					stats_delta.addActionListener(e -> { delta_dialog.setVisible(true); });
+					stats_menu.add(stats_set); stats_menu.add(stats_delta);
+					menu_bar.add(stats_menu);
+
+					frame.setJMenuBar(menu_bar);
 
 				display_image = original_image;
 				image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale)));
@@ -556,6 +555,7 @@ public class DeltaWriter
 
 	private void showInitialImage()
 	{
+		skip_ranking = true;
 		// Reset all quantization parameters for each new image
 		smooth_level = 0;  smooth2_level = 0;
 		pixel_quant  = 4;  pixel_shift   = 3;  correction = 0;
@@ -584,7 +584,9 @@ public class DeltaWriter
 		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 
 		// Show immediate preview with current parameters while init() runs
+		skip_ranking = true;
 		new ApplyHandler().actionPerformed(null);
+		skip_ranking = false;
 
 		new javax.swing.SwingWorker<Void, Void>()
 		{
@@ -640,6 +642,148 @@ public class DeltaWriter
 			for (int v : table) out.writeByte(v);
 		else
 			for (int v : table) out.writeShort(v);
+	}
+
+	private void computeRanking(ArrayList<int[]> qcl6, int[] cid, int xdim, int ydim, boolean set_delta_type)
+	{
+		rank_delta_sum  = new int[13];
+		rank_delta_cost = new int[13];
+		rank_map_cost   = new int[13];
+		rank_delta_comp = new boolean[13];
+		rank_map_comp   = new boolean[13];
+
+		for (int i = 0; i < 3; i++)
+		{
+			int[]            qc  = qcl6.get(cid[i]);
+			ArrayList<int[]> res;
+
+			ArrayList[] encs = {
+				DeltaMapper.getHorizontalDeltasFromValues(qc, xdim, ydim),
+				DeltaMapper.getVerticalDeltasFromValues(qc, xdim, ydim),
+				DeltaMapper.getAverageDeltasFromValues(qc, xdim, ydim),
+				DeltaMapper.getMedDeltasFromValues(qc, xdim, ydim),
+				DeltaMapper.getDirectionalDeltasFromValues(qc, xdim, ydim),
+				DeltaMapper.getAdaptiveDeltasFromValues(qc, xdim, ydim),
+			};
+			for (int t = 0; t < 6; t++)
+			{
+				byte[] packed = (byte[]) StringMapper.getStringList((int[]) encs[t].get(1), false).get(3);
+				byte[] cstr   = StringMapper.compressStrings(packed);
+				int    bl     = StringMapper.getBitlength(cstr);
+				rank_delta_sum[t] += bl; rank_delta_cost[t] += bl;
+				if ((StringMapper.getIterations(cstr) & 15) > 0) rank_delta_comp[t] = true;
+			}
+			{ byte[] p10 = (byte[]) StringMapper.getStringList((int[]) DeltaMapper.getGradientDeltasFromValues(qc, xdim, ydim).get(1), false).get(3);
+			  byte[] c10 = StringMapper.compressStrings(p10);
+			  int bl10   = StringMapper.getBitlength(c10);
+			  rank_delta_sum[10] += bl10; rank_delta_cost[10] += bl10;
+			  if ((StringMapper.getIterations(c10) & 15) > 0) rank_delta_comp[10] = true; }
+
+			res = DeltaMapper.getMedScanlineFrequency(qc, xdim, ydim);
+			{ ArrayList dsl = StringMapper.getStringList(res.get(1), false); byte[] ms = (byte[]) dsl.get(3);
+			  int dc = (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))), mc = StringMapper.getBitlength(ms);
+			  rank_delta_sum[6] += dc+mc; rank_delta_cost[6] += dc; rank_map_cost[6] += mc;
+			  if ((StringMapper.getIterations(StringMapper.compressStrings(ms)) & 15) > 0) rank_map_comp[6] = true; }
+
+			res = DeltaMapper.getScanline2Frequency(qc, xdim, ydim);
+			{ ArrayList dsl = StringMapper.getStringList(res.get(1), false); byte[] ms = (byte[]) dsl.get(3);
+			  int dc = (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))), mc = StringMapper.getBitlength(ms);
+			  rank_delta_sum[7] += dc+mc; rank_delta_cost[7] += dc; rank_map_cost[7] += mc;
+			  if ((StringMapper.getIterations(StringMapper.compressStrings(ms)) & 15) > 0) rank_map_comp[7] = true; }
+
+			res = DeltaMapper.getMixedDeltas4Frequency(qc, xdim, ydim);
+			{ ArrayList dsl = StringMapper.getStringList(res.get(1), false); byte[] ms = (byte[]) dsl.get(3);
+			  int dc = (int) Math.floor(CodeMapper.getShannonLimit(res.get(0))), mc = StringMapper.getBitlength(ms);
+			  rank_delta_sum[8] += dc+mc; rank_delta_cost[8] += dc; rank_map_cost[8] += mc;
+			  if ((StringMapper.getIterations(StringMapper.compressStrings(ms)) & 15) > 0) rank_map_comp[8] = true; }
+
+			ArrayList<int[]> r16r = DeltaMapper.getMixedDeltas16Frequency(qc, xdim, ydim);
+			{ ArrayList dsl = StringMapper.getStringList(r16r.get(1), false); byte[] ms = (byte[]) dsl.get(3);
+			  int dc = (int) Math.floor(CodeMapper.getShannonLimit(r16r.get(0))), mc = StringMapper.getBitlength(ms);
+			  rank_delta_sum[9] += dc+mc; rank_delta_cost[9] += dc; rank_map_cost[9] += mc;
+			  if ((StringMapper.getIterations(StringMapper.compressStrings(ms)) & 15) > 0) rank_map_comp[9] = true; }
+
+			ArrayList<int[]> r8 = DeltaMapper.getIdealFrequency8(qc, xdim, ydim);
+			rank_delta_sum[11] += (int) Math.floor(CodeMapper.getShannonLimit(r8.get(0)) + CodeMapper.getShannonLimit(r8.get(1)));
+			rank_delta_cost[11] += (int) Math.floor(CodeMapper.getShannonLimit(r8.get(0)));
+			rank_map_cost[11]   += (int) Math.floor(CodeMapper.getShannonLimit(r8.get(1)));
+
+			ArrayList<int[]> r16 = DeltaMapper.getIdealFrequency16(qc, xdim, ydim);
+			rank_delta_sum[12] += (int) Math.floor(CodeMapper.getShannonLimit(r16.get(0)) + CodeMapper.getShannonLimit(r16.get(1)));
+			rank_delta_cost[12] += (int) Math.floor(CodeMapper.getShannonLimit(r16.get(0)));
+			rank_map_cost[12]   += (int) Math.floor(CodeMapper.getShannonLimit(r16.get(1)));
+		}
+
+		int min_sum = rank_delta_sum[0], min_idx = 0;
+		for (int i = 1; i < 13; i++) if (rank_delta_sum[i] < min_sum) { min_sum = rank_delta_sum[i]; min_idx = i; }
+		if (set_delta_type) delta_type = min_idx;
+
+		rank_set_order = new Integer[10];
+		for (int i = 0; i < 10; i++) rank_set_order[i] = i;
+		java.util.Arrays.sort(rank_set_order, (a, b) -> set_sum[a] - set_sum[b]);
+		rank_dt_order = new Integer[13];
+		for (int i = 0; i < 13; i++) rank_dt_order[i] = i;
+		java.util.Arrays.sort(rank_dt_order, (a, b) -> rank_delta_sum[a] - rank_delta_sum[b]);
+		final boolean do_update = !skip_ranking;
+		SwingUtilities.invokeLater(() -> { if (do_update) DeltaWriter.this.updateTables(); });
+	}
+
+	private void updateTables()
+	{
+		if (rank_set_order == null || rank_set_order[0] == null || skip_ranking) return;
+
+		// Console output
+		System.out.println("=== " + filename + " ===");
+		System.out.println("Channel sets (ranked):");
+		for (int rank = 0; rank < 10; rank++)
+		{
+			int idx = rank_set_order[rank];
+			System.out.println(String.format("  %2d. %-34s %12d", rank+1, set_string[idx], set_sum[idx]));
+		}
+		System.out.println();
+		System.out.println("Delta types (ranked):");
+		for (int rank = 0; rank < 13; rank++)
+		{
+			int    idx  = rank_dt_order[rank];
+			String dm   = rank_delta_comp[idx] ? "*" : " ";
+			String mm   = rank_map_comp[idx]   ? "*" : " ";
+			String sel  = (idx == delta_type)  ? " **" : "";
+			if (rank_map_cost[idx] > 0)
+				System.out.println(String.format("  %2d. %-16s delta: %12d%s      map: %12d%s      total: %12d%s",
+					rank+1, delta_type_string[idx], rank_delta_cost[idx], dm, rank_map_cost[idx], mm, rank_delta_sum[idx], sel));
+			else
+				System.out.println(String.format("  %2d. %-16s delta: %12d%s                              total: %12d%s",
+					rank+1, delta_type_string[idx], rank_delta_cost[idx], dm, rank_delta_sum[idx], sel));
+		}
+		System.out.println();
+
+		// JTable update
+		if (set_table_model == null || delta_table_model == null) return;
+
+		set_table_model.setRowCount(0);
+		for (int rank = 0; rank < 10; rank++)
+		{
+			int idx = rank_set_order[rank];
+			set_table_model.addRow(new Object[]{ rank+1, set_string[idx], set_sum[idx] });
+		}
+
+		delta_table_model.setRowCount(0);
+		for (int rank = 0; rank < 13; rank++)
+		{
+			int    idx  = rank_dt_order[rank];
+			Object map  = rank_map_cost[idx] > 0 ? rank_map_cost[idx] : null;
+			Object mstar = rank_map_cost[idx] > 0 ? (rank_map_comp[idx] ? "\u2713" : "") : null;
+			delta_table_model.addRow(new Object[]{
+				rank + 1,
+				delta_type_string[idx],
+				rank_delta_cost[idx],
+				rank_delta_comp[idx] ? "\u2713" : "",
+				map,
+				mstar,
+				rank_delta_sum[idx],
+				idx == delta_type ? "\u2605" : ""
+			});
+		}
 	}
 
 	private void computeSetSums()
@@ -747,13 +891,12 @@ public class DeltaWriter
 				channel_sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc, new_xdim, new_ydim)));
 			}
 
-			computeSetSums();
+			DeltaWriter.this.computeSetSums();
 
 			int min_sum = Integer.MAX_VALUE, min_idx = 0;
 			for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
 			min_set_id = min_idx;
 			file_compression_rate = (double) file_length / (image_xdim * image_ydim * 3);
-			System.out.println("Best channel set is " + set_string[min_set_id]);
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 			table_list.clear(); string_list.clear(); map_list.clear(); delta_list.clear();
@@ -901,9 +1044,8 @@ public class DeltaWriter
 					working_image.setRGB(j, i, (blue[k]<<16)+(green[k]<<8)+red[k++]);
 
 			updateDisplayImage(); image_canvas.repaint();
-			System.out.println("Loaded quantized image.");
-			System.out.println();
 			initialized = true;
+			DeltaWriter.this.computeRanking(qcl, DeltaMapper.getChannels(min_set_id), new_xdim, new_ydim, false);
 		}
 	}
 
