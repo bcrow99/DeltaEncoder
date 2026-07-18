@@ -48,6 +48,7 @@ public class DeltaWriter
 
 	// ---- Channel stats -------------------------------------------------------
 	int[]  set_sum, channel_sum;
+	int[][] set_channel_sum = new int[10][3];
 	int[]  rank_delta_sum     = new int[13];
 	int[]  rank_delta_cost    = new int[13];
 	int[]  rank_map_cost      = new int[13];
@@ -57,6 +58,8 @@ public class DeltaWriter
 	Integer[] rank_dt_order   = new Integer[13];
 	boolean   skip_ranking    = false;
 	javax.swing.table.DefaultTableModel set_table_model, delta_table_model;
+	JTable set_jtable, delta_jtable;
+	JDialog stats_set_dialog, stats_delta_dialog;
 	int[]  channel_init, channel_min, channel_delta_min;
 	int[]  channel_length, channel_compressed_length;
 	byte[] channel_iterations;
@@ -233,20 +236,20 @@ public class DeltaWriter
 			map_list     = new ArrayList<Object>();
 			delta_list   = new ArrayList<Object>();
 
-			channel_string    = new String[]{"blue","green","red","blue-green","red-green","red-blue"};
+			channel_string    = new String[]{"blue","green","red","blue  -  green","red   -  green","red   -  blue"};
 
 			set_sum    = new int[10];
 			set_string = new String[]{
 				"blue,   green,        red",
-				"blue,   red,          red-green",
-				"blue,   red,          blue-green",
-				"blue,   blue-green,   red-green",
-				"blue,   blue-green,   red-blue",
-				"green,  red,          blue-green",
-				"red,    blue-green,   red-green",
-				"green,  blue-green,   red-green",
-				"green,  red-green,    red-blue",
-				"red,    red-green,    red-blue"};
+				"blue,   red,          red   -  green",
+				"blue,   red,          blue  -  green",
+				"blue,   blue  -  green,   red   -  green",
+				"blue,   blue  -  green,   red   -  blue",
+				"green,  red,          blue  -  green",
+				"red,    blue  -  green,   red   -  green",
+				"green,  blue  -  green,   red   -  green",
+				"green,  red   -  green,    red   -  blue",
+				"red,    red   -  green,    red   -  blue"};
 
 			delta_type_string = new String[]{
 				"horizontal","vertical","average","med","directional",
@@ -471,9 +474,9 @@ public class DeltaWriter
 
 					// Statistics menu
 					set_table_model = new javax.swing.table.DefaultTableModel(
-						new String[]{"Rank","Channel Set","Entropy"}, 0) {
+						new String[]{"Rank","Channel 1","Channel 2","Channel 3","Entropy 1","Entropy 2","Entropy 3","Total"}, 0) {
 						public boolean isCellEditable(int r, int c) { return false; }
-						public Class getColumnClass(int c) { return c==0||c==2 ? Integer.class : String.class; }
+						public Class getColumnClass(int c) { return (c==1||c==2||c==3) ? String.class : Integer.class; }
 					};
 					delta_table_model = new javax.swing.table.DefaultTableModel(
 						new String[]{"Rank","Type","Delta","D*","Map","M*","Total",""}, 0) {
@@ -481,26 +484,28 @@ public class DeltaWriter
 						public Class getColumnClass(int c) { return (c==0||c==2||c==4||c==6) ? Integer.class : String.class; }
 					};
 
-					JTable set_jtable   = new JTable(set_table_model);
-					JTable delta_jtable = new JTable(delta_table_model);
+					set_jtable   = new JTable(set_table_model);
+					delta_jtable = new JTable(delta_table_model);
 					set_jtable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 					delta_jtable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 
 					javax.swing.table.DefaultTableCellRenderer center = new javax.swing.table.DefaultTableCellRenderer();
 					center.setHorizontalAlignment(JLabel.CENTER);
-					for (int c = 0; c < set_table_model.getColumnCount();   c++) set_jtable.getColumnModel().getColumn(c).setCellRenderer(center);
+					javax.swing.table.DefaultTableCellRenderer left = new javax.swing.table.DefaultTableCellRenderer();
+					left.setHorizontalAlignment(JLabel.LEFT);
+					for (int c = 0; c < set_table_model.getColumnCount(); c++)
+						set_jtable.getColumnModel().getColumn(c).setCellRenderer(c>=1&&c<=3 ? left : center);
 					for (int c = 0; c < delta_table_model.getColumnCount(); c++) delta_jtable.getColumnModel().getColumn(c).setCellRenderer(center);
-					JDialog set_dialog   = new JDialog(frame, "Color Sets",   false);
-					JDialog delta_dialog = new JDialog(frame, "Delta Types",  false);
-					set_dialog.add(new JScrollPane(set_jtable));
-					delta_dialog.add(new JScrollPane(delta_jtable));
-					set_dialog.setSize(480, 260); delta_dialog.setSize(680, 360);
+					stats_set_dialog   = new JDialog(frame, "Color Sets",  false);
+					stats_delta_dialog = new JDialog(frame, "Delta Types", false);
+					stats_set_dialog.add(new JScrollPane(set_jtable));
+					stats_delta_dialog.add(new JScrollPane(delta_jtable));
 
 					JMenu stats_menu = new JMenu("Statistics");
 					JMenuItem stats_set   = new JMenuItem("Color Sets");
 					JMenuItem stats_delta = new JMenuItem("Delta Types");
-					stats_set.addActionListener(e   -> { set_dialog.setVisible(true); });
-					stats_delta.addActionListener(e -> { delta_dialog.setVisible(true); });
+					stats_set.addActionListener(e   -> { stats_set_dialog.setVisible(true); });
+					stats_delta.addActionListener(e -> { stats_delta_dialog.setVisible(true); });
 					stats_menu.add(stats_set); stats_menu.add(stats_delta);
 					menu_bar.add(stats_menu);
 
@@ -527,17 +532,21 @@ public class DeltaWriter
 
 	private JMenuItem makeSliderDialog(JFrame parent, String title, int lo, int hi, int init, java.util.function.IntConsumer onChange, JSlider[] ref)
 	{
-		JMenuItem item   = new JMenuItem(title);
-		JDialog   dialog = new JDialog(parent, title);
-		JSlider   slider = new JSlider(lo, hi, init);
+		JMenuItem  item   = new JMenuItem(title);
+		JDialog    dialog = new JDialog(parent, title);
+		JSlider    slider = new JSlider(lo, hi, init);
 		if (ref != null) ref[0] = slider;
-		JTextField field = new JTextField(3);
+		slider.setMajorTickSpacing(1);
+		slider.setPaintTicks(true);
+		slider.setSnapToTicks(true);
+		JTextField field  = new JTextField(3);
 		field.setText(" " + init + " ");
 		slider.addChangeListener(e ->
 		{
 			int v = slider.getValue();
 			field.setText(" " + v + " ");
-			onChange.accept(v);
+			if (!slider.getValueIsAdjusting())
+				onChange.accept(v);
 		});
 		JPanel p = new JPanel(new BorderLayout());
 		p.add(slider, BorderLayout.CENTER);
@@ -728,6 +737,20 @@ public class DeltaWriter
 		SwingUtilities.invokeLater(() -> { if (do_update) DeltaWriter.this.updateTables(); });
 	}
 
+	private void fitColumns(JTable t)
+	{
+		for (int col = 0; col < t.getColumnCount(); col++)
+		{
+			int w = t.getTableHeader().getDefaultRenderer()
+				.getTableCellRendererComponent(t, t.getColumnModel().getColumn(col).getHeaderValue(), false, false, 0, col)
+				.getPreferredSize().width;
+			for (int row = 0; row < t.getRowCount(); row++)
+				w = Math.max(w, t.prepareRenderer(t.getCellRenderer(row, col), row, col).getPreferredSize().width);
+			t.getColumnModel().getColumn(col).setPreferredWidth(w + 12);
+		}
+		t.setPreferredScrollableViewportSize(t.getPreferredSize());
+	}
+
 	private void updateTables()
 	{
 		if (rank_set_order == null || rank_set_order[0] == null || skip_ranking) return;
@@ -763,8 +786,14 @@ public class DeltaWriter
 		set_table_model.setRowCount(0);
 		for (int rank = 0; rank < 10; rank++)
 		{
-			int idx = rank_set_order[rank];
-			set_table_model.addRow(new Object[]{ rank+1, set_string[idx], set_sum[idx] });
+			int    idx = rank_set_order[rank];
+			int[]  cid = DeltaMapper.getChannels(idx);
+			set_table_model.addRow(new Object[]{
+				rank+1,
+				channel_string[cid[0]], channel_string[cid[1]], channel_string[cid[2]],
+				set_channel_sum[idx][0], set_channel_sum[idx][1], set_channel_sum[idx][2],
+				set_sum[idx]
+			});
 		}
 
 		delta_table_model.setRowCount(0);
@@ -784,6 +813,8 @@ public class DeltaWriter
 				idx == delta_type ? "\u2605" : ""
 			});
 		}
+		if (set_jtable   != null) { fitColumns(set_jtable);   if (stats_set_dialog   != null) stats_set_dialog.pack(); }
+		if (delta_jtable != null) { fitColumns(delta_jtable); if (stats_delta_dialog != null) stats_delta_dialog.pack(); }
 	}
 
 	private void computeSetSums()
@@ -798,6 +829,13 @@ public class DeltaWriter
 		set_sum[7] = channel_sum[3] + channel_sum[1] + channel_sum[4];
 		set_sum[8] = channel_sum[5] + channel_sum[1] + channel_sum[4];
 		set_sum[9] = channel_sum[5] + channel_sum[4] + channel_sum[2];
+		for (int i = 0; i < 10; i++)
+		{
+			int[] cid = DeltaMapper.getChannels(i);
+			set_channel_sum[i][0] = channel_sum[cid[0]];
+			set_channel_sum[i][1] = channel_sum[cid[1]];
+			set_channel_sum[i][2] = channel_sum[cid[2]];
+		}
 	}
 
 	private void writeMap(DataOutputStream out, int i) throws IOException
