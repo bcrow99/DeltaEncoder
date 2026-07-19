@@ -760,8 +760,13 @@ public class DeltaWriter
 		System.out.println("Channel sets (ranked):");
 		for (int rank = 0; rank < 10; rank++)
 		{
-			int idx = rank_set_order[rank];
-			System.out.println(String.format("  %2d. %-34s %12d", rank+1, set_string[idx], set_sum[idx]));
+			int    idx = rank_set_order[rank];
+			int[]  cid = DeltaMapper.getChannels(idx);
+			System.out.println(String.format("  %2d. %-8s%-17s%-14s %10d %10d %10d %12d",
+				rank+1,
+				channel_string[cid[0]], channel_string[cid[1]], channel_string[cid[2]],
+				set_channel_sum[idx][0], set_channel_sum[idx][1], set_channel_sum[idx][2],
+				set_sum[idx]));
 		}
 		System.out.println();
 		System.out.println("Delta types (ranked):");
