@@ -200,11 +200,6 @@ public class StringMapper
 		for (int i = 0; i < n; i++)
 			inverse_table[table[i]] = i;
 
-		// Cap bitlength to the actual bits encoded in src.  A trailing-zero edge
-		// case in compressZeroBits can leave the decompressed length one bit off
-		// from what was stored in channel_compressed_length, causing an AIOOBE.
-		bitlength = Math.min(bitlength, getBitlength(src));
-
 		int length    = 1;
 		int src_byte  = 0;
 		int dst_byte  = 0;
@@ -241,7 +236,6 @@ public class StringMapper
 		{
 			System.out.println(e);
 			System.out.println("Exiting unpackStrings with an exception.");
-			e.printStackTrace();
 		}
 		return dst;
 	}
@@ -305,7 +299,6 @@ public class StringMapper
 		{
 			System.out.println(e.toString());
 			System.out.println("Exiting compressZeroBits with an exception.");
-			e.printStackTrace();
 		}
 		result[0] = current_byte * 8 + current_bit;
 		return result;
@@ -318,47 +311,50 @@ public class StringMapper
 		byte mask = 0x01;
 
 		int i = 0, j = 0, k = 0;
-		for (i = 0; i < size; i++)
+		try
 		{
-			if ((src[k] & (mask << j)) != 0 && i < size - 1)
+			for (i = 0; i < size; i++)
 			{
-				i++; j++;
-				if (j == 8) { j = 0; k++; }
-				if ((src[k] & (mask << j)) != 0)
+				if ((src[k] & (mask << j)) != 0 && i < size - 1)
 				{
-					// "11" → "01"
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					if (current_byte >= dst.length - 1) break;
-					dst[current_byte] |= (byte) mask << current_bit;
+					i++; j++;
+					if (j == 8) { j = 0; k++; }
+					if ((src[k] & (mask << j)) != 0)
+					{
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+						dst[current_byte] |= (byte) mask << current_bit;
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+					}
+					else
+					{
+						dst[current_byte] |= (byte) mask << current_bit;
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+					}
+				}
+				else if ((src[k] & (mask << j)) != 0 && i == size - 1)
+				{
 					current_bit++;
 					if (current_bit == 8) { current_byte++; current_bit = 0; }
 				}
 				else
 				{
-					// "10" → "1"
-					if (current_byte >= dst.length - 1) break;
-					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
+					if (current_bit == 8) { current_byte++; if (current_byte < dst.length) current_bit = 0; }
+					current_bit++;
+					if (current_bit == 8) { current_byte++; if (current_byte < dst.length) current_bit = 0; }
 				}
+				j++;
+				if (j == 8) { j = 0; k++; }
 			}
-			else if ((src[k] & (mask << j)) != 0 && i == size - 1)
-			{
-				// "1" at end → "0"
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			else
-			{
-				// "0" → "00"
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			j++;
-			if (j == 8) { j = 0; k++; }
+		}
+		catch (Exception e)
+		{
+			System.out.println(e.toString());
+			System.out.println("Input size was " + size + ", exception at index " + i);
+			System.out.println("Exiting decompressZeroBits with an exception.");
 		}
 		return current_byte * 8 + current_bit;
 	}
@@ -425,49 +421,50 @@ public class StringMapper
 		int i = 0, j = 0, k = 0;
 		for (i = 0; i < size; i++)
 		{
-			if ((src[k] & (mask << j)) == 0 && i < size - 1)
+			try
 			{
-				i++; j++;
-				if (j == 8) { j = 0; k++; }
-				if ((src[k] & (mask << j)) == 0)
+				if ((src[k] & (mask << j)) == 0 && i < size - 1)
 				{
-					// "00" → "0"
+					i++; j++;
+					if (j == 8) { j = 0; k++; }
+					if ((src[k] & (mask << j)) == 0)
+					{
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+					}
+					else
+					{
+						dst[current_byte] |= (byte) mask << current_bit;
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+						current_bit++;
+						if (current_bit == 8) { current_byte++; current_bit = 0; }
+					}
+				}
+				else if ((src[k] & (mask << j)) == 0 && i == size - 1)
+				{
+					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
 					if (current_bit == 8) { current_byte++; current_bit = 0; }
 				}
 				else
 				{
-					// "01" → "10"
-					if (current_byte >= dst.length - 1) break;
 					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
+					if (current_bit == 8) { current_byte++; if (current_byte < dst.length) current_bit = 0; }
+					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
+					if (current_bit == 8) { current_byte++; if (current_byte < dst.length) current_bit = 0; }
 				}
+				j++;
+				if (j == 8) { j = 0; k++; }
 			}
-			else if ((src[k] & (mask << j)) == 0 && i == size - 1)
+			catch (Exception e)
 			{
-				// "0" at end → "1"
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
+				System.out.println(e.toString());
+				System.out.println("Size of input was " + size + ", exception on index " + i);
+				System.out.println("Exiting decompressOneBits.");
 			}
-			else
-			{
-				// "1" → "11"
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			j++;
-			if (j == 8) { j = 0; k++; }
 		}
 		return current_byte * 8 + current_bit;
 	}
@@ -491,8 +488,8 @@ public class StringMapper
 		if (transform_type == 1 && one_amount >= 0)
 			return src.clone();
 
-		byte[] buffer1 = new byte[src.length * 2 + 16];
-		byte[] buffer2 = new byte[src.length * 2 + 16];
+		byte[] buffer1 = new byte[src.length];
+		byte[] buffer2 = new byte[src.length];
 
 		int[] result;
 		int   compressed_length;
@@ -544,14 +541,7 @@ public class StringMapper
 		else
 			System.arraycopy(buffer1, 0, dst, 0, bytelength - 1);
 		setData(transform_type, iterations, compressed_length, dst);
-
-		// Only return the compressed result if savings exceed a threshold.
-		// A marginal reduction can increase Huffman entropy and hurt overall
-		// compression.  Require at least 5% savings over the original length.
-		if (compressed_length < bit_length - bit_length / 20)
-			return dst;
-		else
-			return src.clone();
+		return dst;
 	}
 
 	public static byte[] decompressStrings(byte[] string)
@@ -563,13 +553,10 @@ public class StringMapper
 		int    bitlength  = getBitlength(string);
 		int    type       = getType(string);
 		int    bytelength = getBytelength(bitlength);
+		double factor     = Math.pow(2, iterations);
 
-		// getIterations returns actual_iterations + (type==1 ? 16 : 0),
-		// so mask out the type bit to get the true loop count.
-		iterations = iterations & 15;
-
-		byte[] buffer1 = new byte[bytelength * 2 + 16];
-		byte[] buffer2 = new byte[bytelength * 2 + 16];
+		byte[] buffer1 = new byte[(int)(bytelength * factor)];
+		byte[] buffer2 = new byte[(int)(bytelength * factor)];
 
 		int uncompressed_length;
 		if (type == 0)
@@ -577,19 +564,12 @@ public class StringMapper
 		else
 			uncompressed_length = decompressOneBits(string, bitlength, buffer1);
 
-		// Track which buffer holds the current data rather than relying on
-		// iterations%2 parity, which gives the wrong source buffer for odd
-		// stored iteration counts >= 3.
-		boolean inBuffer1 = true;
 		iterations--;
 		while (iterations > 0)
 		{
 			int previous_length = uncompressed_length;
-			int need            = getBytelength(previous_length * 2 + 16);
-			if (inBuffer1)
+			if (iterations % 2 == 1)
 			{
-				// source = buffer1, output = buffer2
-				if (buffer2.length < need) buffer2 = new byte[need];
 				if (type == 0)
 					uncompressed_length = decompressZeroBits(buffer1, previous_length, buffer2);
 				else
@@ -597,23 +577,20 @@ public class StringMapper
 			}
 			else
 			{
-				// source = buffer2, output = buffer1
-				if (buffer1.length < need) buffer1 = new byte[need];
 				if (type == 0)
 					uncompressed_length = decompressZeroBits(buffer2, previous_length, buffer1);
 				else
 					uncompressed_length = decompressOneBits(buffer2, previous_length, buffer1);
 			}
-			inBuffer1 = !inBuffer1;
 			iterations--;
 		}
 
 		int    out_bytelength = getBytelength(uncompressed_length);
 		byte[] dst            = new byte[out_bytelength];
-		if (inBuffer1)
-			System.arraycopy(buffer1, 0, dst, 0, out_bytelength - 1);
-		else
+		if (getIterations(string) % 2 == 0)   // original iterations was even → result in buffer2
 			System.arraycopy(buffer2, 0, dst, 0, out_bytelength - 1);
+		else
+			System.arraycopy(buffer1, 0, dst, 0, out_bytelength - 1);
 		setData(type, 0, uncompressed_length, dst);
 		return dst;
 	}
