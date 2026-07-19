@@ -67,7 +67,8 @@ public class DeltaWriter
 	// ---- Labels / menu widgets ----------------------------------------------
 	String[] set_string, delta_type_string, channel_string;
 	JRadioButtonMenuItem[] delta_button;
-	JRadioButtonMenuItem[] compress_button;
+	JRadioButton[] compress_button;
+	JRadioButton[] int_radio_btns;   // all Integer radio buttons — disable when range too large
 	JRadioButtonMenuItem[] entropy_button;
 
 	// ---- Working data lists ------------------------------------------------
@@ -210,8 +211,6 @@ public class DeltaWriter
 					if ((cmax - cmin) * 2 > 255) { compress_type = 1; break; }
 				}
 			}
-			System.out.println("Best compress type is " + new String[]{"Integer","String","String*"}[compress_type]
-			                 + "  (String " + str_bits_total + " bits  String* " + str_star_bits_total + " bits)");
 		}
 	}
 
@@ -404,30 +403,68 @@ public class DeltaWriter
 				// Quantization menu
 				JMenu quant_menu = new JMenu("Quantization");
 				JSlider[] ss = new JSlider[1];
-				quant_menu.add(makeSliderDialog(frame, "Smooth",           0, 10, smooth_level,  v -> { smooth_level  = v; new ApplyHandler().actionPerformed(null); }, ss)); smooth_slider  = ss[0];
-				quant_menu.add(makeSliderDialog(frame, "Smooth2",          0, 10, smooth2_level, v -> { smooth2_level = v; new ApplyHandler().actionPerformed(null); }, ss)); smooth2_slider = ss[0];
+				// Combined smooth dialog
+				{ JMenuItem item     = new JMenuItem("Smooth");
+				  JDialog   dialog   = new JDialog(frame, "Smooth");
+				  smooth_slider  = new JSlider(0, 10, smooth_level);
+				  smooth2_slider = new JSlider(0, 10, smooth2_level);
+				  for (JSlider sl : new JSlider[]{smooth_slider, smooth2_slider})
+				  { sl.setMajorTickSpacing(1); sl.setPaintTicks(true); sl.setSnapToTicks(true); }
+				  JTextField f1 = new JTextField(" 0 ", 3);
+				  JTextField f2 = new JTextField(" 0 ", 3);
+				  smooth_slider.addChangeListener(e  -> { f1.setText(" " + smooth_slider.getValue()  + " "); smooth_level  = smooth_slider.getValue();  if (!smooth_slider.getValueIsAdjusting())  new ApplyHandler().actionPerformed(null); });
+				  smooth2_slider.addChangeListener(e -> { f2.setText(" " + smooth2_slider.getValue() + " "); smooth2_level = smooth2_slider.getValue(); if (!smooth2_slider.getValueIsAdjusting()) new ApplyHandler().actionPerformed(null); });
+				  JPanel p = new JPanel(new java.awt.GridLayout(2, 3, 4, 4));
+				  p.add(new JLabel("Bilateral:"));   p.add(smooth_slider);  p.add(f1);
+				  p.add(new JLabel("Anisotropic:")); p.add(smooth2_slider); p.add(f2);
+				  dialog.add(p);
+				  item.addActionListener(e -> { Point loc = frame.getLocation(); dialog.setLocation((int)loc.getX(), (int)loc.getY() - 80); dialog.pack(); dialog.setVisible(true); });
+				  quant_menu.add(item); }
 				quant_menu.add(makeSliderDialog(frame, "Pixel Resolution",  0, 10, pixel_quant,  v -> { pixel_quant  = v; new ApplyHandler().actionPerformed(null); }, ss)); pquant_slider  = ss[0];
 				quant_menu.add(makeSliderDialog(frame, "Color Resolution",  0,  7, pixel_shift,  v -> { pixel_shift  = v; new ApplyHandler().actionPerformed(null); }, ss)); pshift_slider  = ss[0];
-				quant_menu.add(makeSliderDialog(frame, "Segment Length",    0, 10, pixel_segment, v -> pixel_segment = v));
 				quant_menu.add(makeSliderDialog(frame, "Error Correction",  0, 10, correction,   v -> { correction   = v; new ApplyHandler().actionPerformed(null); }, ss)); corr_slider    = ss[0];
 
 				// Datatype menu
 				JMenu datatype_menu = new JMenu("Datatype");
-				compress_button    = new JRadioButtonMenuItem[3];
-				compress_button[0] = new JRadioButtonMenuItem("Integer");
-				compress_button[1] = new JRadioButtonMenuItem("String");
-				compress_button[2] = new JRadioButtonMenuItem("String*");
-				ButtonGroup cg = new ButtonGroup();
-				for (int i = 0; i < 3; i++) { cg.add(compress_button[i]); datatype_menu.add(compress_button[i]); }
-				compress_button[compress_type].setSelected(true);
-				for (int i = 0; i < 3; i++)
-				{
-					final int idx = i;
-					compress_button[i].addActionListener(e ->
-					{
-						if (compress_type != idx) { compress_type = idx; new ApplyHandler().actionPerformed(null); }
-					});
-				}
+
+				// Shared radio group across both dialogs
+				ButtonGroup cg  = new ButtonGroup();
+				JRadioButton int_a = new JRadioButton("Integer"), str_a = new JRadioButton("String");
+				JRadioButton int_b = new JRadioButton("Integer"), str_b = new JRadioButton("String");
+				cg.add(int_a); cg.add(str_a); cg.add(int_b); cg.add(str_b);
+				compress_button = new JRadioButton[]{int_a, str_a};
+				int_radio_btns  = new JRadioButton[]{int_a, int_b};
+				(compress_type == 0 ? int_a : str_a).setSelected(true);
+				int_a.addActionListener(e -> { if (compress_type != 0) { compress_type = 0; new ApplyHandler().actionPerformed(null); } });
+				int_b.addActionListener(e -> { if (compress_type != 0) { compress_type = 0; new ApplyHandler().actionPerformed(null); } });
+				str_a.addActionListener(e -> { if (compress_type == 0) { compress_type = 1; new ApplyHandler().actionPerformed(null); } });
+				str_b.addActionListener(e -> { if (compress_type == 0) { compress_type = 1; new ApplyHandler().actionPerformed(null); } });
+
+				// Integer dialog
+				{ JLabel  warn = new JLabel("  (unavailable — range too large)");
+				  warn.setForeground(java.awt.Color.RED); warn.setVisible(false);
+				  JDialog dlg  = new JDialog(frame, "Integer");
+				  JPanel  p    = new JPanel(new java.awt.GridLayout(3,1,4,4));
+				  p.add(int_a); p.add(str_a); p.add(warn); dlg.add(p);
+				  JMenuItem mi = new JMenuItem("Integer");
+				  mi.addActionListener(e -> { Point loc = frame.getLocation(); dlg.setLocation((int)loc.getX(), (int)loc.getY()-80); dlg.pack(); dlg.setVisible(true); });
+				  datatype_menu.add(mi); }
+
+				// String dialog with threshold slider
+				{ JSlider   thr_sl = new JSlider(0, 20, 5);
+				  thr_sl.setMajorTickSpacing(1); thr_sl.setPaintTicks(true); thr_sl.setSnapToTicks(true);
+				  JTextField tf    = new JTextField(" 5 ", 3);
+				  thr_sl.addChangeListener(e -> { tf.setText(" " + thr_sl.getValue() + " "); StringMapper.compress_threshold = thr_sl.getValue() / 100.0; if (!thr_sl.getValueIsAdjusting()) new ApplyHandler().actionPerformed(null); });
+				  JDialog dlg  = new JDialog(frame, "String");
+				  JPanel  rp   = new JPanel(); rp.add(int_b); rp.add(str_b);
+				  JPanel  sp   = new JPanel(new BorderLayout(4,4));
+				  sp.add(new JLabel("Threshold %:"), BorderLayout.WEST);
+				  sp.add(thr_sl, BorderLayout.CENTER); sp.add(tf, BorderLayout.EAST);
+				  JPanel  p    = new JPanel(new java.awt.GridLayout(2,1,4,4));
+				  p.add(rp); p.add(sp); dlg.add(p);
+				  JMenuItem mi = new JMenuItem("String");
+				  mi.addActionListener(e -> { Point loc = frame.getLocation(); dlg.setLocation((int)loc.getX(), (int)loc.getY()-80); dlg.pack(); dlg.setVisible(true); });
+				  datatype_menu.add(mi); }
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
@@ -447,23 +484,43 @@ public class DeltaWriter
 
 				// Entropy menu — LZ77(0), Huffman(1), Arithmetic(3), Slow Arithmetic(2)
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button = new JRadioButtonMenuItem[4];
+				entropy_button = new JRadioButtonMenuItem[3];
 				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
 				entropy_button[1] = new JRadioButtonMenuItem("Huffman");
 				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
-				entropy_button[3] = new JRadioButtonMenuItem("Slow Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
-				for (int i = 0; i < 4; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				int[] entropy_map = {0, 1, 3, 2};   // button index → entropy_type value
+				for (int i = 0; i < 3; i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
 				entropy_button[0].setSelected(entropy_type == 0);
 				entropy_button[1].setSelected(entropy_type == 1);
-				entropy_button[2].setSelected(entropy_type == 3);
-				entropy_button[3].setSelected(entropy_type == 2);
-				for (int i = 0; i < 4; i++)
-				{
-					final int et = entropy_map[i];
-					entropy_button[i].addActionListener(e -> { if (entropy_type != et) entropy_type = et; });
-				}
+				entropy_button[2].setSelected(entropy_type == 2 || entropy_type == 3);
+				entropy_button[0].addActionListener(e -> entropy_type = 0);
+				entropy_button[1].addActionListener(e -> entropy_type = 1);
+
+				// Arithmetic dialog: Fast/Slow + Segment Length
+				{ JDialog arith_dialog = new JDialog(frame, "Arithmetic");
+				  JRadioButtonMenuItem fast_btn = new JRadioButtonMenuItem("Fast");
+				  JRadioButtonMenuItem slow_btn = new JRadioButtonMenuItem("Slow");
+				  ButtonGroup ag = new ButtonGroup(); ag.add(fast_btn); ag.add(slow_btn);
+				  fast_btn.setSelected(entropy_type != 2); slow_btn.setSelected(entropy_type == 2);
+				  fast_btn.addActionListener(e -> entropy_type = 3);
+				  slow_btn.addActionListener(e -> entropy_type = 2);
+				  JSlider seg_sl = new JSlider(0, 10, pixel_segment);
+				  seg_sl.setMajorTickSpacing(1); seg_sl.setPaintTicks(true); seg_sl.setSnapToTicks(true);
+				  JTextField sf = new JTextField(" 0 ", 3);
+				  seg_sl.addChangeListener(e -> { sf.setText(" " + seg_sl.getValue() + " "); pixel_segment = seg_sl.getValue(); });
+				  JPanel rp = new JPanel(); rp.add(fast_btn); rp.add(slow_btn);
+				  JPanel sp = new JPanel(new BorderLayout(4,4));
+				  sp.add(new JLabel("Segment Length:"), BorderLayout.WEST);
+				  sp.add(seg_sl, BorderLayout.CENTER); sp.add(sf, BorderLayout.EAST);
+				  JPanel ap = new JPanel(new java.awt.GridLayout(2,1,4,4));
+				  ap.add(rp); ap.add(sp);
+				  arith_dialog.add(ap);
+				  entropy_button[2].addActionListener(e ->
+				  { if (entropy_type != 2 && entropy_type != 3) entropy_type = 3;
+				    Point loc = frame.getLocation();
+				    arith_dialog.setLocation((int)loc.getX(), (int)loc.getY() - 80);
+				    arith_dialog.pack(); arith_dialog.setVisible(true); }); }
+
 
 				menu_bar.add(file_menu);
 					menu_bar.add(view_menu);
@@ -604,7 +661,7 @@ public class DeltaWriter
 			{
 				int[] dm = {0,1,2,3,4,10,5,6,7,8,9,11,12};
 				for (int i2 = 0; i2 < 13; i2++) if (dm[i2] == delta_type) { delta_button[i2].setSelected(true); break; }
-				compress_button[compress_type].setSelected(true);
+				compress_button[compress_type == 0 ? 0 : 1].setSelected(true);
 				new ApplyHandler().actionPerformed(null);
 			}
 		}.execute();
@@ -946,20 +1003,23 @@ public class DeltaWriter
 
 			// Guard: Integer mode overflows if 2 × channel value range > 255.
 			// Re-check here since pixel_shift or pixel_quant may have changed since init().
-			if (compress_type == 0)
+			boolean int_allowed = true;
+			for (int i = 0; i < 3; i++)
 			{
-				for (int i = 0; i < 3; i++)
-				{
-					int[] qc = qcl.get(channel_id[i]);
-					int cmin = qc[0], cmax = qc[0];
-					for (int v : qc) { if (v < cmin) cmin = v; if (v > cmax) cmax = v; }
-					if ((cmax - cmin) * 2 > 255)
-					{
-						compress_type = 1;
-						SwingUtilities.invokeLater(() -> compress_button[1].setSelected(true));
-						break;
-					}
-				}
+				int[] qc = qcl.get(channel_id[i]);
+				int cmin = qc[0], cmax = qc[0];
+				for (int v : qc) { if (v < cmin) cmin = v; if (v > cmax) cmax = v; }
+				if ((cmax - cmin) * 2 > 255) { int_allowed = false; break; }
+			}
+			if (!int_allowed && compress_type == 0)
+			{
+				compress_type = 1;
+				SwingUtilities.invokeLater(() -> compress_button[1].setSelected(true));
+			}
+			if (int_radio_btns != null)
+			{
+				final boolean ena = int_allowed;
+				SwingUtilities.invokeLater(() -> { for (JRadioButton b : int_radio_btns) b.setEnabled(ena); });
 			}
 
 			for (int i = 0; i < 3; i++)
