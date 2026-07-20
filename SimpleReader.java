@@ -11,7 +11,7 @@ public class SimpleReader
 {
 	int  xdim=0, ydim=0, intermediate_xdim=0, intermediate_ydim=0;
 	int  pixel_shift=0, pixel_quant=0, set_id=0;
-	byte delta_type=0, entropy_type=0;
+	byte delta_type=0, entropy_type=0, data_type=0;
 
 	ArrayList string_list  = new ArrayList();
 	ArrayList table_list   = new ArrayList();
@@ -22,6 +22,11 @@ public class SimpleReader
 	ArrayList<byte[]> huff_pay_list  = new ArrayList<>();
 	int[] huff_bl      = new int[3];
 	int[] huff_pay_min = new int[3];
+
+	ArrayList<int[][]>                  freq_list     = new ArrayList<>();
+	ArrayList<java.math.BigInteger[][]> offset_list   = new ArrayList<>();
+	ArrayList<byte[][]>                 fast_enc_list = new ArrayList<>();
+	int[] n_segs_arr = new int[3];
 
 	int[][] channel_array = new int[3][0];
 	int[][] resize_array  = new int[3][0];
@@ -61,6 +66,7 @@ public class SimpleReader
 			set_id       = in.readByte();
 			delta_type   = in.readByte();
 			entropy_type = in.readByte();
+			data_type    = in.readByte();
 
 			System.out.println("Image: " + xdim + " x " + ydim);
 			System.out.println("Set id: " + set_id + "  Delta type: " + delta_type + "  Entropy: " + entropy_type);
@@ -109,7 +115,7 @@ public class SimpleReader
 					inf.end();
 					string_list.add(str);
 				}
-				else
+				else if (entropy_type == 1)
 				{
 					// Huffman
 					int[]  rt   = readTable(in);
@@ -130,6 +136,40 @@ public class SimpleReader
 					huff_pay_list.add(pb);
 					huff_bl[i]      = hbl;
 					huff_pay_min[i] = pmin;
+				}
+				else
+				{
+					// Arithmetic (2=slow, 3=fast) — always String payload
+					int orig_len = in.readInt();
+					int n_segs = in.readInt(), lt = in.readInt(), zfl = in.readInt();
+					byte[] zfd = new byte[zfl]; in.readFully(zfd);
+					int bpe = (lt==0)?1:(lt==1)?2:4;
+					byte[] fb = new byte[n_segs*256*bpe];
+					Inflater inf = new Inflater(); inf.setInput(zfd,0,zfl); inf.inflate(fb); inf.end();
+					int[][] freqs = new int[n_segs][256];
+					for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){
+						int base=m*256*bpe+k*bpe, v=0;
+						for(int b=0;b<bpe;b++){int bv=fb[base+b]&0xFF; v|=bv<<(8*b);}
+						freqs[m][k]=v;
+					}
+					freq_list.add(freqs); n_segs_arr[i]=n_segs;
+					string_list.add(new byte[]{(byte)(orig_len>>24),(byte)(orig_len>>16),(byte)(orig_len>>8),(byte)orig_len});
+					if (entropy_type == 2)
+					{
+						java.math.BigInteger[][] offsets = new java.math.BigInteger[n_segs][2];
+						for(int m=0;m<n_segs;m++){
+							int ll; byte[] bb;
+							ll=in.readInt(); bb=new byte[ll]; in.readFully(bb); offsets[m][0]=new java.math.BigInteger(bb);
+							ll=in.readInt(); bb=new byte[ll]; in.readFully(bb); offsets[m][1]=new java.math.BigInteger(bb);
+						}
+						offset_list.add(offsets);
+					}
+					else
+					{
+						byte[][] encs = new byte[n_segs][];
+						for(int m=0;m<n_segs;m++){int el=in.readInt();encs[m]=new byte[el];in.readFully(encs[m]);}
+						fast_enc_list.add(encs);
+					}
 				}
 			}
 			in.close();
@@ -301,7 +341,7 @@ public class SimpleReader
 				{
 					payload = (byte[])string_list.get(i);
 				}
-				else
+				else if (entropy_type == 1)
 				{
 					int[]  rt   = huff_rank_list.get(i);
 					byte[] cl   = huff_cl_list.get(i);
@@ -314,6 +354,30 @@ public class SimpleReader
 					CodeMapper.unpackCode(pb, rt, hc, cl, hbl, dec);
 					payload = new byte[sl];
 					for (int k = 0; k < sl; k++) payload[k] = (byte)(dec[k] + pmin);
+				}
+				else
+				{
+					// Arithmetic — always String payload
+					byte[] lb = (byte[])string_list.get(i);
+					int expected = ((lb[0]&0xFF)<<24)|((lb[1]&0xFF)<<16)|((lb[2]&0xFF)<<8)|(lb[3]&0xFF);
+					int n_segs = n_segs_arr[i];
+					int seg_len = expected/n_segs, odd_len = seg_len+expected%n_segs;
+					int[][] freqs = freq_list.get(i);
+					byte[][] segs = new byte[n_segs][];
+					for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
+					if (entropy_type == 2)
+					{
+						java.math.BigInteger[][] offsets = offset_list.get(i);
+						for(int m=0;m<n_segs;m++) segs[m]=ArithmeticMapper.getArithmeticValues(offsets[m],freqs[m],segs[m].length);
+					}
+					else
+					{
+						byte[][] encs = fast_enc_list.get(i);
+						for(int m=0;m<n_segs;m++) segs[m]=ArithmeticMapper.getArithmeticValuesFast(encs[m],freqs[m],segs[m].length);
+					}
+					byte[] buf = new byte[expected]; int pos=0;
+					for(int m=0;m<n_segs;m++){System.arraycopy(segs[m],0,buf,pos,segs[m].length);pos+=segs[m].length;}
+					payload = buf;
 				}
 
 				// String decode -> delta values

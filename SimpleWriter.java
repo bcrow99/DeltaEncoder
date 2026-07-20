@@ -1,6 +1,7 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
+import java.math.*;
 import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.util.*;
@@ -28,6 +29,7 @@ public class SimpleWriter
 	int min_set_id    = 0;
 	int delta_type    = 5;
 	int entropy_type  = 0;
+	int pixel_segment = 0;
 	int data_type     = 0;   // 0=String, 1=byte, 2=short, 3=int
 
 	double zoom_scale = 1.0;
@@ -203,14 +205,39 @@ public class SimpleWriter
 
 				// Entropy menu
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button = new JRadioButtonMenuItem[2];
+				entropy_button = new JRadioButtonMenuItem[3];
 				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
 				entropy_button[1] = new JRadioButtonMenuItem("Huffman");
+				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
 				ButtonGroup eg = new ButtonGroup();
-				for (int i=0;i<2;i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
+				for (int i=0;i<3;i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
 				entropy_button[0].setSelected(true);
 				entropy_button[0].addActionListener(e -> entropy_type=0);
 				entropy_button[1].addActionListener(e -> entropy_type=1);
+				{ JDialog arith_dlg = new JDialog(frame,"Arithmetic");
+				  JRadioButtonMenuItem fast_btn=new JRadioButtonMenuItem("Fast");
+				  JRadioButtonMenuItem slow_btn=new JRadioButtonMenuItem("Slow");
+				  ButtonGroup ag=new ButtonGroup(); ag.add(fast_btn); ag.add(slow_btn);
+				  fast_btn.setSelected(true);
+				  fast_btn.addActionListener(e2->entropy_type=3);
+				  slow_btn.addActionListener(e2->entropy_type=2);
+				  JSlider seg_sl=new JSlider(0,10,pixel_segment);
+				  seg_sl.setMajorTickSpacing(1); seg_sl.setPaintTicks(true); seg_sl.setSnapToTicks(true);
+				  JTextField seg_tf=new JTextField(" 0 ",3);
+				  seg_sl.addChangeListener(e2->{ seg_tf.setText(" "+seg_sl.getValue()+" "); pixel_segment=seg_sl.getValue(); });
+				  JPanel rp=new JPanel(); rp.add(fast_btn); rp.add(slow_btn);
+				  JPanel sp=new JPanel(new BorderLayout(4,4));
+				  sp.add(new javax.swing.JLabel("Segment Length:"),BorderLayout.WEST);
+				  sp.add(seg_sl,BorderLayout.CENTER); sp.add(seg_tf,BorderLayout.EAST);
+				  JPanel ap=new JPanel(new java.awt.GridLayout(2,1,4,4)); ap.add(rp); ap.add(sp);
+				  arith_dlg.add(ap);
+				  entropy_button[2].addActionListener(e->{
+				    if(entropy_type!=2&&entropy_type!=3) entropy_type=3;
+				    fast_btn.setSelected(entropy_type==3); slow_btn.setSelected(entropy_type==2);
+				    Point loc=frame.getLocation();
+				    arith_dlg.setLocation((int)loc.getX(),(int)loc.getY()-80);
+				    arith_dlg.pack(); arith_dlg.setVisible(true);
+				  }); }
 
 				menu_bar.add(file_menu); menu_bar.add(view_menu); menu_bar.add(quant_menu);
 				menu_bar.add(delta_menu); menu_bar.add(data_menu); menu_bar.add(entropy_menu);
@@ -515,6 +542,9 @@ public class SimpleWriter
 					channel_length[j]=delta.length;
 					channel_iterations[i]=0;
 					raw_deltas[i]=delta;
+					// Also encode as String for arithmetic fallback
+					ArrayList dsl=StringMapper.getStringList(delta.clone(),true);
+					string_list.add((byte[])dsl.get(3));
 					table_list.add(new int[0]);  // empty table (written as 0-length)
 				}
 			}
@@ -600,7 +630,9 @@ public class SimpleWriter
 				out.writeShort(image_xdim); out.writeShort(image_ydim);
 				out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 				out.writeByte(min_set_id);  out.writeByte(delta_type);
-				out.writeByte(entropy_type); out.writeByte(data_type);
+				out.writeByte(entropy_type);
+				// Arithmetic always uses String payload; signal data_type=0 to reader
+				out.writeByte((entropy_type>=2 && data_type>0) ? 0 : data_type);
 
 				for(int i=0;i<3;i++){
 					int j=channel_id[i];
@@ -624,9 +656,9 @@ public class SimpleWriter
 					writeTable(out,(int[])table_list.get(i));
 
 					// Payload
-					if(data_type==0)
+					if(data_type==0 || entropy_type>=2)
 					{
-						// String payload
+						// String payload (arithmetic always uses String)
 						byte[] payload=(byte[])string_list.get(i);
 						if(entropy_type==0)
 						{
@@ -636,21 +668,53 @@ public class SimpleWriter
 							int zl=def.deflate(zipped); def.end();
 							out.writeInt(payload.length); out.writeInt(zl); out.write(zipped,0,zl);
 						}
-						else
+						else if(entropy_type==1)
 						{
-							// Huffman String: byte symbols (0-255)
+							// Huffman String
 							int[] pi=new int[payload.length];
 							for(int k=0;k<payload.length;k++) pi[k]=payload[k]&0xFF;
 							encodeHuffman(out,pi);
 						}
+						else
+						{
+							// Arithmetic (fast=3, slow=2)
+							int min_seg=500+pixel_segment*500;
+							int n_segs=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
+							int seg_len=payload.length/n_segs, odd_len=seg_len+payload.length%n_segs;
+							byte[][] segs=new byte[n_segs][]; int[][] freqs=new int[n_segs][256];
+							for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
+							int pos=0;
+							for(int m=0;m<n_segs;m++) for(int nn=0;nn<segs[m].length;nn++){segs[m][nn]=payload[pos];freqs[m][payload[pos]&0xFF]++;pos++;}
+							int fmax=0; for(int[] row:freqs)for(int v:row)if(v>fmax)fmax=v;
+							int lt=(fmax<256)?0:(fmax<65536)?1:2; int bpe=(lt==0)?1:(lt==1)?2:4;
+							byte[] fb=new byte[n_segs*256*bpe];
+							for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){int v=freqs[m][k];int base=m*256*bpe+k*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
+							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
+							byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
+							out.writeInt(payload.length); out.writeInt(n_segs); out.writeInt(lt); out.writeInt(zl); out.write(zf,0,zl);
+							if(entropy_type==2)
+							{
+								for(int m=0;m<n_segs;m++){
+									java.math.BigInteger[] r=ArithmeticMapper.getIntervalValue(segs[m],freqs[m]);
+									byte[] b0=r[0].toByteArray(); out.writeInt(b0.length); out.write(b0,0,b0.length);
+									byte[] b1=r[1].toByteArray(); out.writeInt(b1.length); out.write(b1,0,b1.length);
+								}
+							}
+							else
+							{
+								for(int m=0;m<n_segs;m++){
+									byte[] enc=ArithmeticMapper.getIntervalValueFast(segs[m],freqs[m]);
+									out.writeInt(enc.length); out.write(enc,0,enc.length);
+								}
+							}
+						}
 					}
 					else
 					{
-						// Integer payload
+						// Integer payload (LZ77 or Huffman only)
 						byte[] payload=(byte[])delta_list.get(i);
 						if(entropy_type==0)
 						{
-							// LZ77: just Deflate the packed bytes
 							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
 							byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
 							int zl=def.deflate(zipped); def.end();
@@ -658,14 +722,14 @@ public class SimpleWriter
 						}
 						else
 						{
-							// Huffman Integer: use shifted delta values as int symbols directly
+							// Huffman Integer: shifted delta values as int symbols
 							int width=channel_compressed_length[j];
 							int size=channel_length[j];
 							int[] pi=new int[size]; pi[0]=0;
 							for(int k=1;k<size;k++){
 								int base=k*width,v=0;
 								for(int b=0;b<width;b++) v|=(payload[base+b]&0xFF)<<(8*b);
-								pi[k]=v;  // already shifted (0..max_shifted)
+								pi[k]=v;
 							}
 							encodeHuffman(out,pi);
 						}
