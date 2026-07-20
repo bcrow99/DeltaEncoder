@@ -381,10 +381,25 @@ public class SimpleReader
 				}
 
 				// String decode -> delta values
-				int[]  tbl   = (int[])table_list.get(i);
-				byte[] str   = StringMapper.decompressStrings(payload);
-				int[]  delta = StringMapper.unpackStrings(str, tbl, size, StringMapper.getBitlength(str));
-				for (int j = 1; j < delta.length; j++) delta[j] += delta_min[i];
+				int[] delta;
+				if(data_type==0)
+				{
+					int[]  tbl   = (int[])table_list.get(i);
+					byte[] str   = StringMapper.decompressStrings(payload);
+					delta = StringMapper.unpackStrings(str, tbl, size, StringMapper.getBitlength(str));
+					for (int j = 1; j < delta.length; j++) delta[j] += delta_min[i];
+				}
+				else
+				{
+					// Integer: unpack bytes of width 1, 2, or 4
+					int width = (data_type==1)?1:(data_type==2)?2:4;
+					delta = new int[size]; delta[0] = 0;
+					for(int k=1;k<size;k++){
+						int base=k*width, v=0;
+						for(int b=0;b<width;b++) v|=(payload[base+b]&0xFF)<<(8*b);
+						delta[k]=v+delta_min[i];
+					}
+				}
 
 				// Delta -> channel values
 				int[] cur_ch;

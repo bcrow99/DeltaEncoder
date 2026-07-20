@@ -48,8 +48,19 @@ public class SimpleWriter
 	boolean initialized   = false;
 	boolean print_ranking = false;
 
+	// Saved statistics for the Statistics dialog
+	int[]     saved_dt_cost  = new int[12];
+	int[]     saved_map_cost = new int[12];
+	boolean[] saved_dt_comp  = new boolean[12];
+	boolean[] saved_map_comp = new boolean[12];
+	Integer[] saved_dt_order = new Integer[12];
+	int[]     saved_ss       = new int[10];
+	int[]     saved_cs       = new int[6];
+	Integer[] saved_set_order= new Integer[10];
+
 	JRadioButtonMenuItem[] delta_button;
 	JRadioButtonMenuItem[] entropy_button;
+	JSlider quant_slider, shift_slider, corr_slider, smooth1_slider, smooth2_slider;
 	JFrame frame = null;
 
 	// encode lists
@@ -139,7 +150,11 @@ public class SimpleWriter
 				file_menu.add(open_item); file_menu.addSeparator();
 				apply_item = new JMenuItem("Apply"); apply_item.addActionListener(new ApplyHandler());
 				JMenuItem reset_item = new JMenuItem("Reset");
-				reset_item.addActionListener(e -> { pixel_quant=0; pixel_shift=0; correction=0; smooth_level=0; smooth2_level=0; apply_item.doClick(); });
+				reset_item.addActionListener(e -> {
+					// setValue triggers onChange which sets field + calls Apply
+					quant_slider.setValue(0); shift_slider.setValue(0);
+					corr_slider.setValue(0); smooth1_slider.setValue(0); smooth2_slider.setValue(0);
+				});
 				file_menu.add(reset_item);
 				JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
 
@@ -154,22 +169,25 @@ public class SimpleWriter
 				JMenu quant_menu = new JMenu("Quantization");
 				// Smooth dialog with bilateral + anisotropic sliders
 				{ JDialog smooth_dlg = new JDialog(frame, "Smooth");
-				  JSlider sl1=new JSlider(0,10,smooth_level), sl2=new JSlider(0,10,smooth2_level);
-				  sl1.setMajorTickSpacing(1); sl1.setPaintTicks(true); sl1.setSnapToTicks(true);
-				  sl2.setMajorTickSpacing(1); sl2.setPaintTicks(true); sl2.setSnapToTicks(true);
+				  smooth1_slider=new JSlider(0,10,smooth_level); smooth2_slider=new JSlider(0,10,smooth2_level);
+				  smooth1_slider.setMajorTickSpacing(1); smooth1_slider.setPaintTicks(true); smooth1_slider.setSnapToTicks(true);
+				  smooth2_slider.setMajorTickSpacing(1); smooth2_slider.setPaintTicks(true); smooth2_slider.setSnapToTicks(true);
 				  JTextField tf1=new JTextField(" 0 ",3), tf2=new JTextField(" 0 ",3);
-				  sl1.addChangeListener(e->{tf1.setText(" "+sl1.getValue()+" ");if(!sl1.getValueIsAdjusting()){smooth_level=sl1.getValue();print_ranking=true;apply_item.doClick();}});
-				  sl2.addChangeListener(e->{tf2.setText(" "+sl2.getValue()+" ");if(!sl2.getValueIsAdjusting()){smooth2_level=sl2.getValue();print_ranking=true;apply_item.doClick();}});
-				  JPanel p1=new JPanel(new BorderLayout(4,4)); p1.add(new javax.swing.JLabel(" Bilateral:     "),BorderLayout.WEST); p1.add(sl1,BorderLayout.CENTER); p1.add(tf1,BorderLayout.EAST);
-				  JPanel p2=new JPanel(new BorderLayout(4,4)); p2.add(new javax.swing.JLabel(" Anisotropic:"),BorderLayout.WEST); p2.add(sl2,BorderLayout.CENTER); p2.add(tf2,BorderLayout.EAST);
+				  smooth1_slider.addChangeListener(e->{tf1.setText(" "+smooth1_slider.getValue()+" ");if(!smooth1_slider.getValueIsAdjusting()){smooth_level=smooth1_slider.getValue();print_ranking=true;apply_item.doClick();}});
+				  smooth2_slider.addChangeListener(e->{tf2.setText(" "+smooth2_slider.getValue()+" ");if(!smooth2_slider.getValueIsAdjusting()){smooth2_level=smooth2_slider.getValue();print_ranking=true;apply_item.doClick();}});
+				  JPanel p1=new JPanel(new BorderLayout(4,4)); p1.add(new javax.swing.JLabel(" Bilateral:     "),BorderLayout.WEST); p1.add(smooth1_slider,BorderLayout.CENTER); p1.add(tf1,BorderLayout.EAST);
+				  JPanel p2=new JPanel(new BorderLayout(4,4)); p2.add(new javax.swing.JLabel(" Anisotropic:"),BorderLayout.WEST); p2.add(smooth2_slider,BorderLayout.CENTER); p2.add(tf2,BorderLayout.EAST);
 				  JPanel sp=new JPanel(new java.awt.GridLayout(2,1,4,4)); sp.add(p1); sp.add(p2);
 				  smooth_dlg.add(sp);
 				  JMenuItem smooth_mi=new JMenuItem("Smooth");
 				  smooth_mi.addActionListener(e->{Point loc=frame.getLocation();smooth_dlg.setLocation((int)loc.getX(),(int)loc.getY()-80);smooth_dlg.pack();smooth_dlg.setVisible(true);});
 				  quant_menu.add(smooth_mi); }
-				quant_menu.add(makeSlider("Pixel Resolution", 0, 10, pixel_quant,   v -> { pixel_quant=v;   print_ranking=true; apply_item.doClick(); }));
-				quant_menu.add(makeSlider("Color Resolution", 0, 7,  pixel_shift,   v -> { pixel_shift=v;   print_ranking=true; apply_item.doClick(); }));
-				quant_menu.add(makeSlider("Error Correction", 0, 10, correction,    v -> { correction=v;    print_ranking=true; apply_item.doClick(); }));
+				quant_slider = new JSlider(0,10,pixel_quant);
+				shift_slider = new JSlider(0,7, pixel_shift);
+				corr_slider  = new JSlider(0,10,correction);
+				quant_menu.add(makeSliderWithRef("Pixel Resolution", quant_slider, v -> { pixel_quant=v; print_ranking=true; apply_item.doClick(); }));
+				quant_menu.add(makeSliderWithRef("Color Resolution", shift_slider, v -> { pixel_shift=v; print_ranking=true; apply_item.doClick(); }));
+				quant_menu.add(makeSliderWithRef("Error Correction", corr_slider,  v -> { correction=v;  print_ranking=true; apply_item.doClick(); }));
 
 				// Delta menu
 				JMenu delta_menu = new JMenu("Delta");
@@ -239,8 +257,14 @@ public class SimpleWriter
 				    arith_dlg.pack(); arith_dlg.setVisible(true);
 				  }); }
 
+				// Statistics menu
+				JMenu stats_menu = new JMenu("Statistics");
+				JMenuItem stats_mi = new JMenuItem("Show...");
+				stats_mi.addActionListener(e -> showStatistics());
+				stats_menu.add(stats_mi);
+
 				menu_bar.add(file_menu); menu_bar.add(view_menu); menu_bar.add(quant_menu);
-				menu_bar.add(delta_menu); menu_bar.add(data_menu); menu_bar.add(entropy_menu);
+				menu_bar.add(delta_menu); menu_bar.add(data_menu); menu_bar.add(entropy_menu); menu_bar.add(stats_menu);
 				frame.setJMenuBar(menu_bar);
 
 				display_image = original_image;
@@ -261,11 +285,16 @@ public class SimpleWriter
 
 	private JMenuItem makeSlider(String title, int lo, int hi, int init, java.util.function.IntConsumer onChange)
 	{
+		JSlider slider = new JSlider(lo, hi, init);
+		return makeSliderWithRef(title, slider, onChange);
+	}
+
+	private JMenuItem makeSliderWithRef(String title, JSlider slider, java.util.function.IntConsumer onChange)
+	{
 		JMenuItem item = new JMenuItem(title);
 		JDialog dialog = new JDialog(frame, title);
-		JSlider slider = new JSlider(lo, hi, init);
 		slider.setMajorTickSpacing(1); slider.setPaintTicks(true); slider.setSnapToTicks(true);
-		JTextField field = new JTextField(3); field.setText(" "+init+" ");
+		JTextField field = new JTextField(3); field.setText(" "+slider.getValue()+" ");
 		slider.addChangeListener(e -> { int v=slider.getValue(); field.setText(" "+v+" "); if(!slider.getValueIsAdjusting()) onChange.accept(v); });
 		JPanel p = new JPanel(new BorderLayout()); p.add(slider,BorderLayout.CENTER); p.add(field,BorderLayout.EAST); dialog.add(p);
 		item.addActionListener(e -> { Point loc=frame.getLocation(); dialog.setLocation((int)loc.getX(),(int)loc.getY()-60); dialog.pack(); dialog.setVisible(true); });
@@ -315,6 +344,7 @@ public class SimpleWriter
 		ss[6]=cs[3]+cs[4]+cs[2]; ss[7]=cs[3]+cs[1]+cs[4]; ss[8]=cs[5]+cs[1]+cs[4]; ss[9]=cs[5]+cs[4]+cs[2];
 		Integer[] so=new Integer[10]; for(int i=0;i<10;i++)so[i]=i;
 		java.util.Arrays.sort(so,(a,b)->ss[a]-ss[b]);
+		saved_ss=ss.clone(); saved_cs=cs.clone(); saved_set_order=so.clone();
 		int best_set=so[0]; int[] cid=DeltaMapper.getChannels(best_set);
 
 		print_ranking=true;
@@ -388,6 +418,9 @@ public class SimpleWriter
 		Integer[] dto=new Integer[12]; for(int i=0;i<12;i++)dto[i]=i;
 		java.util.Arrays.sort(dto,(a,b)->total[a]-total[b]);
 		if(set_delta_type) delta_type=dto[0];
+		saved_dt_cost=dt_cost.clone(); saved_map_cost=map_cost.clone();
+		saved_dt_comp=dt_comp.clone(); saved_map_comp=map_comp.clone();
+		saved_dt_order=dto.clone();
 		System.out.println("Delta types (ranked):");
 		for(int r=0;r<12;r++){
 			int idx=dto[r]; String sel=(idx==delta_type)?" **":"";
@@ -462,6 +495,62 @@ public class SimpleWriter
 		if(dt==9)  return DeltaMapper.getValuesFromMixedDeltas16Rows(delta,nx,ny,init,(byte[])map_list.get(idx));
 		if(dt==10) return DeltaMapper.getValuesFromIdealDeltas8(delta,nx,ny,init,(byte[])map_list.get(idx));
 		           return DeltaMapper.getValuesFromIdealDeltas16(delta,nx,ny,init,(byte[])map_list.get(idx));
+	}
+
+	private void showStatistics()
+	{
+		if(saved_set_order==null || saved_set_order[0]==null) return;
+
+		JDialog dlg = new JDialog(frame, "Statistics");
+		dlg.setLayout(new java.awt.GridLayout(2,1,8,8));
+
+		// Channel sets table
+		String[][] set_disp={
+			{"blue",  "green",         "red"},
+			{"blue",  "red",           "red - green"},
+			{"blue",  "red",           "blue - green"},
+			{"blue",  "blue - green",  "red - green"},
+			{"blue",  "blue - green",  "red - blue"},
+			{"green", "red",           "blue - green"},
+			{"red",   "blue - green",  "red - green"},
+			{"green", "blue - green",  "red - green"},
+			{"green", "red - green",   "red - blue"},
+			{"red",   "red - green",   "red - blue"}
+		};
+		String[] set_cols={"Rank","Ch 1","Ch 2","Ch 3","Entropy 1","Entropy 2","Entropy 3","Total"};
+		Object[][] set_data=new Object[10][8];
+		for(int r=0;r<10;r++){
+			int idx=saved_set_order[r]; int[] c=DeltaMapper.getChannels(idx);
+			set_data[r][0]=r+1; set_data[r][1]=set_disp[idx][0];
+			set_data[r][2]=set_disp[idx][1]; set_data[r][3]=set_disp[idx][2];
+			set_data[r][4]=saved_cs[c[0]]; set_data[r][5]=saved_cs[c[1]];
+			set_data[r][6]=saved_cs[c[2]]; set_data[r][7]=saved_ss[idx];
+		}
+		javax.swing.JTable set_table=new javax.swing.JTable(set_data,set_cols);
+		set_table.setEnabled(false);
+		dlg.add(new JScrollPane(set_table));
+
+		// Delta types table
+		String[] dt_names={"H","V","Average","Med","Adaptive","Directional","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Map 1","Map 2"};
+		String[] dt_cols={"Rank","Type","Delta","*","Map","*","Total","**"};
+		Object[][] dt_data=new Object[12][8];
+		for(int r=0;r<12;r++){
+			int idx=saved_dt_order[r];
+			int total=saved_dt_cost[idx]+saved_map_cost[idx];
+			dt_data[r][0]=r+1; dt_data[r][1]=dt_names[idx];
+			dt_data[r][2]=saved_dt_cost[idx]; dt_data[r][3]=saved_dt_comp[idx]?"*":" ";
+			dt_data[r][4]=saved_map_cost[idx]>0?saved_map_cost[idx]:null;
+			dt_data[r][5]=saved_map_cost[idx]>0&&saved_map_comp[idx]?"*":" ";
+			dt_data[r][6]=total; dt_data[r][7]=idx==delta_type?"**":" ";
+		}
+		javax.swing.JTable dt_table=new javax.swing.JTable(dt_data,dt_cols);
+		dt_table.setEnabled(false);
+		dlg.add(new JScrollPane(dt_table));
+
+		dlg.setSize(700,500);
+		Point loc=frame.getLocation();
+		dlg.setLocation((int)loc.getX()+20,(int)loc.getY()+20);
+		dlg.setVisible(true);
 	}
 
 	class ImageCanvas extends JPanel
@@ -542,10 +631,7 @@ public class SimpleWriter
 					channel_length[j]=delta.length;
 					channel_iterations[i]=0;
 					raw_deltas[i]=delta;
-					// Also encode as String for arithmetic fallback
-					ArrayList dsl=StringMapper.getStringList(delta.clone(),true);
-					string_list.add((byte[])dsl.get(3));
-					table_list.add(new int[0]);  // empty table (written as 0-length)
+					table_list.add(new int[0]);
 				}
 			}
 
@@ -630,15 +716,14 @@ public class SimpleWriter
 				out.writeShort(image_xdim); out.writeShort(image_ydim);
 				out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 				out.writeByte(min_set_id);  out.writeByte(delta_type);
-				out.writeByte(entropy_type);
-				// Arithmetic always uses String payload; signal data_type=0 to reader
-				out.writeByte((entropy_type>=2 && data_type>0) ? 0 : data_type);
+				out.writeByte(entropy_type); out.writeByte(data_type);
 
 				for(int i=0;i<3;i++){
 					int j=channel_id[i];
 					out.writeInt(channel_min[j]); out.writeInt(channel_init[j]); out.writeInt(channel_delta_min[j]);
 					out.writeInt(channel_length[j]); out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
 
+					int map_bits=0;
 					// Map (for scanline/map delta types)
 					if(delta_type>=6){
 						byte[] map=(byte[])map_list.get(i); int[] map_int=new int[map.length];
@@ -647,6 +732,7 @@ public class SimpleWriter
 						ArrayList dsl=StringMapper.getStringList(map_int,true);
 						int dmin=(int)dsl.get(0); int[] tbl=(int[])dsl.get(2);
 						byte[] mstr=(byte[])dsl.get(3); int bl=StringMapper.getBitlength(mstr);
+						map_bits=bl;
 						out.writeInt(map0-dmin); out.writeInt(map.length);
 						writeTable(out,tbl); out.writeInt(dmin); out.writeInt(bl);
 						out.write(mstr,0,StringMapper.getBytelength(bl));
@@ -655,74 +741,33 @@ public class SimpleWriter
 					// Table: always present (empty for Integer)
 					writeTable(out,(int[])table_list.get(i));
 
-					// Payload
-					if(data_type==0 || entropy_type>=2)
+					byte[] payload=(data_type==0)?(byte[])string_list.get(i):(byte[])delta_list.get(i);
+
+					// Wrap to count bytes written for this channel's entropy payload
+					java.io.ByteArrayOutputStream baos=new java.io.ByteArrayOutputStream();
+					DataOutputStream dout=new DataOutputStream(baos);
+
+					if(entropy_type==0)
 					{
-						// String payload (arithmetic always uses String)
-						byte[] payload=(byte[])string_list.get(i);
-						if(entropy_type==0)
+						// LZ77 — same for String and Integer
+						Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
+						byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
+						int zl=def.deflate(zipped); def.end();
+						dout.writeInt(payload.length); dout.writeInt(zl); dout.write(zipped,0,zl);
+					}
+					else if(entropy_type==1)
+					{
+						// Huffman
+						if(data_type==0)
 						{
-							// LZ77
-							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
-							byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
-							int zl=def.deflate(zipped); def.end();
-							out.writeInt(payload.length); out.writeInt(zl); out.write(zipped,0,zl);
-						}
-						else if(entropy_type==1)
-						{
-							// Huffman String
+							// String: byte symbols (0-255)
 							int[] pi=new int[payload.length];
 							for(int k=0;k<payload.length;k++) pi[k]=payload[k]&0xFF;
-							encodeHuffman(out,pi);
+							encodeHuffman(dout,pi);
 						}
 						else
 						{
-							// Arithmetic (fast=3, slow=2)
-							int min_seg=500+pixel_segment*500;
-							int n_segs=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
-							int seg_len=payload.length/n_segs, odd_len=seg_len+payload.length%n_segs;
-							byte[][] segs=new byte[n_segs][]; int[][] freqs=new int[n_segs][256];
-							for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
-							int pos=0;
-							for(int m=0;m<n_segs;m++) for(int nn=0;nn<segs[m].length;nn++){segs[m][nn]=payload[pos];freqs[m][payload[pos]&0xFF]++;pos++;}
-							int fmax=0; for(int[] row:freqs)for(int v:row)if(v>fmax)fmax=v;
-							int lt=(fmax<256)?0:(fmax<65536)?1:2; int bpe=(lt==0)?1:(lt==1)?2:4;
-							byte[] fb=new byte[n_segs*256*bpe];
-							for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){int v=freqs[m][k];int base=m*256*bpe+k*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
-							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
-							byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
-							out.writeInt(payload.length); out.writeInt(n_segs); out.writeInt(lt); out.writeInt(zl); out.write(zf,0,zl);
-							if(entropy_type==2)
-							{
-								for(int m=0;m<n_segs;m++){
-									java.math.BigInteger[] r=ArithmeticMapper.getIntervalValue(segs[m],freqs[m]);
-									byte[] b0=r[0].toByteArray(); out.writeInt(b0.length); out.write(b0,0,b0.length);
-									byte[] b1=r[1].toByteArray(); out.writeInt(b1.length); out.write(b1,0,b1.length);
-								}
-							}
-							else
-							{
-								for(int m=0;m<n_segs;m++){
-									byte[] enc=ArithmeticMapper.getIntervalValueFast(segs[m],freqs[m]);
-									out.writeInt(enc.length); out.write(enc,0,enc.length);
-								}
-							}
-						}
-					}
-					else
-					{
-						// Integer payload (LZ77 or Huffman only)
-						byte[] payload=(byte[])delta_list.get(i);
-						if(entropy_type==0)
-						{
-							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
-							byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
-							int zl=def.deflate(zipped); def.end();
-							out.writeInt(payload.length); out.writeInt(zl); out.write(zipped,0,zl);
-						}
-						else
-						{
-							// Huffman Integer: shifted delta values as int symbols
+							// Integer: shifted delta values as int symbols directly
 							int width=channel_compressed_length[j];
 							int size=channel_length[j];
 							int[] pi=new int[size]; pi[0]=0;
@@ -731,9 +776,68 @@ public class SimpleWriter
 								for(int b=0;b<width;b++) v|=(payload[base+b]&0xFF)<<(8*b);
 								pi[k]=v;
 							}
-							encodeHuffman(out,pi);
+							encodeHuffman(dout,pi);
 						}
 					}
+					else
+					{
+						// Arithmetic — same for String and Integer (bytes are bytes)
+						int min_seg=500+pixel_segment*500;
+						int n_segs=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
+						int seg_len=payload.length/n_segs, odd_len=seg_len+payload.length%n_segs;
+						byte[][] segs=new byte[n_segs][]; int[][] freqs=new int[n_segs][256];
+						for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
+						int pos=0;
+						for(int m=0;m<n_segs;m++) for(int nn=0;nn<segs[m].length;nn++){segs[m][nn]=payload[pos];freqs[m][payload[pos]&0xFF]++;pos++;}
+						int fmax=0; for(int[] row:freqs)for(int v:row)if(v>fmax)fmax=v;
+						int lt=(fmax<256)?0:(fmax<65536)?1:2; int bpe=(lt==0)?1:(lt==1)?2:4;
+						byte[] fb=new byte[n_segs*256*bpe];
+						for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){int v=freqs[m][k];int base=m*256*bpe+k*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
+						Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
+						byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
+						dout.writeInt(payload.length); dout.writeInt(n_segs); dout.writeInt(lt); dout.writeInt(zl); dout.write(zf,0,zl);
+						if(entropy_type==2)
+						{
+							for(int m=0;m<n_segs;m++){
+								BigInteger[] r=ArithmeticMapper.getIntervalValue(segs[m],freqs[m]);
+								byte[] b0=r[0].toByteArray(); dout.writeInt(b0.length); dout.write(b0,0,b0.length);
+								byte[] b1=r[1].toByteArray(); dout.writeInt(b1.length); dout.write(b1,0,b1.length);
+							}
+						}
+						else
+						{
+							for(int m=0;m<n_segs;m++){
+								byte[] enc=ArithmeticMapper.getIntervalValueFast(segs[m],freqs[m]);
+								dout.writeInt(enc.length); dout.write(enc,0,enc.length);
+							}
+						}
+					}
+					dout.flush();
+					byte[] chan_bytes=baos.toByteArray();
+					out.write(chan_bytes);
+
+					// Print per-channel stats
+					int entropy_bits;
+					if(data_type==0)
+					{
+						// String: channel_length is already the entropy-coded bit count
+						entropy_bits=channel_length[j];
+					}
+					else
+					{
+						// Integer: compute Shannon entropy of the delta value distribution
+						int[] freq=new int[256];
+						for(int k=0;k<payload.length;k++) freq[payload[k]&0xFF]++;
+						entropy_bits=(int)Math.floor(CodeMapper.getShannonLimit(freq));
+					}
+					int compressed_bits=chan_bytes.length*8;
+					String ch_name=channel_string[channel_id[i]];
+					if(map_bits>0)
+						System.out.println(String.format("  ch%-2d %-12s entropy: %10d   map: %8d   compressed: %10d",
+							i, ch_name, entropy_bits, map_bits, compressed_bits));
+					else
+						System.out.println(String.format("  ch%-2d %-12s entropy: %10d                  compressed: %10d",
+							i, ch_name, entropy_bits, compressed_bits));
 				}
 				out.flush(); out.close();
 				double rate=(double)new File("foo").length()/(image_xdim*image_ydim*3);
