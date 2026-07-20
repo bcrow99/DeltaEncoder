@@ -554,7 +554,7 @@ public class StringMapper
 			return src.clone();
 	}
 
-	public static double compress_threshold = 0.05;  // default 5% savings required
+	public static double compress_threshold = 0.10;  // default 10% savings required
 
 	public static byte[] decompressStrings(byte[] string)
 	{
