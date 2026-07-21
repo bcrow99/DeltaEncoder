@@ -425,7 +425,7 @@ public class SimpleWriter
 		for(int r=0;r<12;r++){
 			int idx=dto[r]; String sel=(idx==delta_type)?" **":"";
 			String dc=dt_comp[idx]?"*":" ", mc=map_comp[idx]?"*":" ";
-			if(map_cost[idx]>0)
+			if(map_cost[idx]>0 || idx>=6)
 				System.out.println(String.format("  %2d. %-12s delta: %12d%s      map: %12d%s      total: %12d%s",
 					r+1,dt_names[idx],dt_cost[idx],dc,map_cost[idx],mc,total[idx],sel));
 			else
