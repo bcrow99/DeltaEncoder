@@ -60,7 +60,6 @@ public class SimpleWriter
 	Integer[] saved_set_order= new Integer[10];
 
 	JRadioButtonMenuItem[] delta_button;
-	JRadioButtonMenuItem[] entropy_button;
 	JSlider quant_slider, shift_slider, corr_slider, smooth1_slider, smooth2_slider;
 	JFrame frame = null;
 
@@ -225,39 +224,35 @@ public class SimpleWriter
 
 				// Entropy menu
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button = new JRadioButtonMenuItem[3];
-				entropy_button[0] = new JRadioButtonMenuItem("LZ77");
-				entropy_button[1] = new JRadioButtonMenuItem("Huffman");
-				entropy_button[2] = new JRadioButtonMenuItem("Arithmetic");
-				ButtonGroup eg = new ButtonGroup();
-				for (int i=0;i<3;i++) { eg.add(entropy_button[i]); entropy_menu.add(entropy_button[i]); }
-				entropy_button[0].setSelected(true);
-				entropy_button[0].addActionListener(e -> entropy_type=0);
-				entropy_button[1].addActionListener(e -> entropy_type=1);
-				{ JDialog arith_dlg = new JDialog(frame,"Arithmetic");
-				  JRadioButtonMenuItem fast_btn=new JRadioButtonMenuItem("Fast");
-				  JRadioButtonMenuItem slow_btn=new JRadioButtonMenuItem("Slow");
-				  ButtonGroup ag=new ButtonGroup(); ag.add(fast_btn); ag.add(slow_btn);
-				  fast_btn.setSelected(true);
-				  fast_btn.addActionListener(e2->entropy_type=3);
-				  slow_btn.addActionListener(e2->entropy_type=2);
-				  JSlider seg_sl=new JSlider(0,10,pixel_segment);
-				  seg_sl.setMajorTickSpacing(1); seg_sl.setPaintTicks(true); seg_sl.setSnapToTicks(true);
-				  JTextField seg_tf=new JTextField(" 0 ",3);
-				  seg_sl.addChangeListener(e2->{ seg_tf.setText(" "+seg_sl.getValue()+" "); pixel_segment=seg_sl.getValue(); });
-				  JPanel rp=new JPanel(); rp.add(fast_btn); rp.add(slow_btn);
-				  JPanel sp=new JPanel(new BorderLayout(4,4));
-				  sp.add(new javax.swing.JLabel("Segment Length:"),BorderLayout.WEST);
-				  sp.add(seg_sl,BorderLayout.CENTER); sp.add(seg_tf,BorderLayout.EAST);
-				  JPanel ap=new JPanel(new java.awt.GridLayout(2,1,4,4)); ap.add(rp); ap.add(sp);
-				  arith_dlg.add(ap);
-				  entropy_button[2].addActionListener(e->{
-				    if(entropy_type!=2&&entropy_type!=3) entropy_type=3;
-				    fast_btn.setSelected(entropy_type==3); slow_btn.setSelected(entropy_type==2);
-				    Point loc=frame.getLocation();
-				    arith_dlg.setLocation((int)loc.getX(),(int)loc.getY()-80);
-				    arith_dlg.pack(); arith_dlg.setVisible(true);
-				  }); }
+
+				// Type dialog: LZ77 / Huffman / Arithmetic / Slow Arithmetic
+				JDialog entropy_type_dlg = new JDialog(frame, "Type");
+				JRadioButton lz77_r   = new JRadioButton("LZ77",            true);
+				JRadioButton huff_r   = new JRadioButton("Huffman",         false);
+				JRadioButton arith_r  = new JRadioButton("Arithmetic",      false);
+				JRadioButton sarith_r = new JRadioButton("Slow Arithmetic", false);
+				ButtonGroup entropy_grp = new ButtonGroup();
+				entropy_grp.add(lz77_r); entropy_grp.add(huff_r); entropy_grp.add(arith_r); entropy_grp.add(sarith_r);
+				lz77_r.addActionListener(e -> entropy_type=0);
+				huff_r.addActionListener(e -> entropy_type=1);
+				arith_r.addActionListener(e -> entropy_type=3);
+				sarith_r.addActionListener(e -> entropy_type=2);
+				JPanel entropy_type_pnl = new JPanel();
+				entropy_type_pnl.add(lz77_r); entropy_type_pnl.add(huff_r); entropy_type_pnl.add(arith_r); entropy_type_pnl.add(sarith_r);
+				entropy_type_dlg.add(entropy_type_pnl);
+				JMenuItem entropy_type_mi = new JMenuItem("Type");
+				entropy_type_mi.addActionListener(e -> {
+					lz77_r.setSelected(entropy_type==0); huff_r.setSelected(entropy_type==1);
+					arith_r.setSelected(entropy_type==3); sarith_r.setSelected(entropy_type==2);
+					Point loc=frame.getLocation();
+					entropy_type_dlg.setLocation((int)loc.getX(),(int)loc.getY()-80);
+					entropy_type_dlg.pack(); entropy_type_dlg.setVisible(true);
+				});
+				entropy_menu.add(entropy_type_mi);
+
+				// Granularity slider (Arithmetic only)
+				entropy_menu.add(makeSliderWithRef("Granularity (Arithmetic only)",
+					new JSlider(0,10,pixel_segment), v -> { pixel_segment=v; }));
 
 				// Statistics menu
 				JMenu stats_menu = new JMenu("Statistics");
@@ -803,6 +798,31 @@ public class SimpleWriter
 					}
 					else if(entropy_type==1)
 					{
+						/* Segmentation check (tested — not worth it): with granularity turned up,
+						   the segmented Huffman estimate came in ~6% under the whole-channel cost
+						   at low granularity, shrinking to ~0% as segment count grew. The real
+						   implementation would also need a rank table + code-length table per
+						   segment, which would eat the small savings before they could pay for
+						   themselves. Left here in case finer-grained delta statistics (e.g. a
+						   very non-uniform image) make revisiting this worthwhile.
+
+						int whole_bits = CodeMapper.getHuffmanBitlength(payload);
+						int min_seg = 500 + pixel_segment*500;
+						int n_segs = (pixel_segment>=10) ? 1 : Math.max(1, payload.length/min_seg);
+						int seg_len = payload.length/n_segs, odd_len = seg_len + payload.length%n_segs;
+						int segmented_bits = 0;
+						int seg_pos = 0;
+						for(int m=0; m<n_segs; m++){
+							int len = (m<n_segs-1) ? seg_len : odd_len;
+							byte[] seg = java.util.Arrays.copyOfRange(payload, seg_pos, seg_pos+len);
+							segmented_bits += CodeMapper.getHuffmanBitlength(seg);
+							seg_pos += len;
+						}
+						System.out.println(String.format(
+							"  Huffman check: whole=%d bits, segmented(%d segs)=%d bits (%.1f%% of whole)",
+							whole_bits, n_segs, segmented_bits, 100.0*segmented_bits/whole_bits));
+						*/
+
 						// Huffman
 						if(data_type==0)
 						{
