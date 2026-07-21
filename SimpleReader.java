@@ -365,15 +365,37 @@ public class SimpleReader
 					int[][] freqs = freq_list.get(i);
 					byte[][] segs = new byte[n_segs][];
 					for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
+					int n_procs=Math.max(1,Math.min(n_segs,Runtime.getRuntime().availableProcessors()));
+					long arith_start=System.nanoTime();
 					if (entropy_type == 2)
 					{
 						java.math.BigInteger[][] offsets = offset_list.get(i);
-						for(int m=0;m<n_segs;m++) segs[m]=ArithmeticMapper.getArithmeticValues(offsets[m],freqs[m],segs[m].length);
+						Thread[] at=new Thread[n_procs];
+						for(int p=0;p<n_procs;p++){
+							final int fp=p;
+							at[p]=new Thread(()->{
+								for(int m=fp;m<n_segs;m+=n_procs)
+									segs[m]=ArithmeticMapper.getArithmeticValuesFenwick(offsets[m],freqs[m],segs[m].length);
+							});
+							at[p].start();
+						}
+						try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+						System.out.println(String.format("  Slow arithmetic decode ch%d: %d segs, %d threads, %d ms", i, n_segs, n_procs, (System.nanoTime()-arith_start)/1_000_000));
 					}
 					else
 					{
 						byte[][] encs = fast_enc_list.get(i);
-						for(int m=0;m<n_segs;m++) segs[m]=ArithmeticMapper.getArithmeticValuesFast(encs[m],freqs[m],segs[m].length);
+						Thread[] at=new Thread[n_procs];
+						for(int p=0;p<n_procs;p++){
+							final int fp=p;
+							at[p]=new Thread(()->{
+								for(int m=fp;m<n_segs;m+=n_procs)
+									segs[m]=ArithmeticMapper.getArithmeticValuesFastFenwick(encs[m],freqs[m],segs[m].length);
+							});
+							at[p].start();
+						}
+						try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+						System.out.println(String.format("  Fast arithmetic decode ch%d: %d segs, %d threads, %d ms", i, n_segs, n_procs, (System.nanoTime()-arith_start)/1_000_000));
 					}
 					byte[] buf = new byte[expected]; int pos=0;
 					for(int m=0;m<n_segs;m++){System.arraycopy(segs[m],0,buf,pos,segs[m].length);pos+=segs[m].length;}

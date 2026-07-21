@@ -823,19 +823,47 @@ public class SimpleWriter
 						Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
 						byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
 						dout.writeInt(payload.length); dout.writeInt(n_segs); dout.writeInt(lt); dout.writeInt(zl); dout.write(zf,0,zl);
+						int n_procs=Math.max(1,Math.min(n_segs,Runtime.getRuntime().availableProcessors()));
+						long arith_start=System.nanoTime();
 						if(entropy_type==2)
 						{
+							// Slow arithmetic (Fenwick)
+							BigInteger[][] slow_results=new BigInteger[n_segs][2];
+							Thread[] at=new Thread[n_procs];
+							for(int p=0;p<n_procs;p++){
+								final int fp=p;
+								at[p]=new Thread(()->{
+									for(int m=fp;m<n_segs;m+=n_procs)
+										slow_results[m]=ArithmeticMapper.getIntervalValueFenwick(segs[m],freqs[m]);
+								});
+								at[p].start();
+							}
+							try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+							long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
+							System.out.println(String.format("  Slow arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
 							for(int m=0;m<n_segs;m++){
-								BigInteger[] r=ArithmeticMapper.getIntervalValue(segs[m],freqs[m]);
-								byte[] b0=r[0].toByteArray(); dout.writeInt(b0.length); dout.write(b0,0,b0.length);
-								byte[] b1=r[1].toByteArray(); dout.writeInt(b1.length); dout.write(b1,0,b1.length);
+								byte[] b0=slow_results[m][0].toByteArray(); dout.writeInt(b0.length); dout.write(b0,0,b0.length);
+								byte[] b1=slow_results[m][1].toByteArray(); dout.writeInt(b1.length); dout.write(b1,0,b1.length);
 							}
 						}
 						else
 						{
+							// Fast arithmetic (Fenwick)
+							byte[][] fast_results=new byte[n_segs][];
+							Thread[] at=new Thread[n_procs];
+							for(int p=0;p<n_procs;p++){
+								final int fp=p;
+								at[p]=new Thread(()->{
+									for(int m=fp;m<n_segs;m+=n_procs)
+										fast_results[m]=ArithmeticMapper.getIntervalValueFastFenwick(segs[m],freqs[m]);
+								});
+								at[p].start();
+							}
+							try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+							long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
+							System.out.println(String.format("  Fast arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
 							for(int m=0;m<n_segs;m++){
-								byte[] enc=ArithmeticMapper.getIntervalValueFast(segs[m],freqs[m]);
-								dout.writeInt(enc.length); dout.write(enc,0,enc.length);
+								dout.writeInt(fast_results[m].length); dout.write(fast_results[m],0,fast_results[m].length);
 							}
 						}
 					}

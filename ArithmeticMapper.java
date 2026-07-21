@@ -269,6 +269,160 @@ public class ArithmeticMapper
 			return a;
 		return gcd(b, a % b);
 	}
+	
+	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
+	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
+	// We think the problem with this is it doesn't appear to produce a set of start bits and then repeating bits that resolve to a pair of integers.
+	// The reduction in precision means there is a limit on how many values can be produced from a single frequency table.
+	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
+	{
+		int [] f = frequency.clone();
+		
+	    int [] s = new int[f.length];
+		
+	    int    m = 0;
+		for(int i = 0; i < f.length; i++)
+		{
+			s[i] = m;
+			m    += f[i];
+		}
+		
+		byte [] bit_buffer = new byte[src.length * 2];
+		
+		int     bit_offset       = 0;
+		int     byte_offset      = 0;
+		int     bits_outstanding = 0;
+	
+		long [] offset = {1L, 4L};
+		long [] range  = {1L, 2L};
+		
+		int n = src.length;
+		
+		for(int i = 0; i < n; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    j = table.get(j);
+	    	   
+	    	    long [] addend = {range[0], range[1]};
+	    	    addend[0] *= s[j];
+	    	    addend[1] *= m;
+	    	    
+	    	   
+	    	    long gcd = gcd(addend[0], addend[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	    	    addend[0] /= gcd;
+	    	    	    addend[1] /= gcd;
+	    	    }
+	    	   
+	    	    
+	    	    offset[0] *= addend[1];
+	    	    addend[0] *= offset[1];
+	    	    offset[1] *= addend[1];
+	    	    offset[0] += addend[0];
+	    	     
+	    	    
+	    	    gcd = gcd(offset[0], offset[1]);
+	    	    if(gcd > 1)
+	    	    {
+	    	        offset[0] /= gcd;
+    	    	        offset[1] /= gcd;
+	    	    }
+	    	   
+	    	    
+			range[0] *= f[j];
+			range[1] *= m;
+			
+			
+			gcd = gcd(range[0], range[1]);
+    	        if(gcd > 1)
+    	        {
+    	            range[0] /= gcd;
+	    	        range[1] /= gcd;
+    	        }
+    	      
+    	        double p = offset[0];
+    	        p       /= offset[1];
+    	        double r = range[0];
+    	        r       /= range[1];
+    	        while(r <= .25)
+    	        {
+    	        	    if(p + r <= .5) 
+    	        	    {
+    	        	        bit_offset++;
+    	        	        if(bit_offset == 8)
+    	        	        {
+    	        	    	        byte_offset++;
+    	        	    	        bit_offset = 0;
+    	        	        }
+    	        	        int value = 1;
+    	        	        while(bits_outstanding > 0)
+    	        	        {
+    	        	        	    int position = byte_offset * 8 + bit_offset;
+    	        	        	    bit_buffer[byte_offset] |= (byte)(value << bit_offset);
+    	        	        	    bit_offset++;
+    	    	        	        if(bit_offset == 8)
+    	    	        	        {
+    	    	        	    	        byte_offset++;
+    	    	        	    	        bit_offset = 0;
+    	    	        	        } 
+    	    	        	        bits_outstanding--;
+    	        	        }
+    	        	    }
+    	        	    else if(p >= .5)
+    	        	    {
+    	        	    	    int value = 1;
+    	        	    	    int position = byte_offset * 8 + bit_offset;
+    	        	    	    bit_buffer[byte_offset] |= (byte)(value << bit_offset);
+    	        	    	    while(bits_outstanding > 0)
+    	        	    	    {
+    	        	    	        bit_offset++;
+        	        	        if(bit_offset == 8)
+        	        	        {
+        	        	    	        byte_offset++;
+        	        	    	        bit_offset = 0;
+        	        	        }
+        	        	        bits_outstanding--;
+    	        	    	    }
+    	        	    	    p = p - .5;   
+    	        	    }
+    	        	    else
+    	        	    {
+    	        	    	    bits_outstanding++;
+    	        	    	    p = p - .25;
+    	        	    }
+    	        	    p *= 2;
+    	        	    r *= 2;  
+    	        }
+            
+	    	    f[j]--;
+	    	    m--;
+	    	    for(int k = j + 1; k < s.length; k++)
+	    	        s[k]--;
+	    	    
+	    	    offset[0] = 1;
+	    	    offset[1] = 4;
+	    	    range[0]  = 1;
+	    	    range[1]  = 2;
+	    	   
+	    }
+	
+	    byte [] bits = new byte[byte_offset + 1];
+	    for(int i = 0; i < bits.length; i++)
+	    	    bits[i] = bit_buffer[i];
+	    int extra_bits = 0;
+	    if(bit_offset != 0)
+	    	    extra_bits = 8 - bit_offset;
+	    int bitlength = bits.length * 8 - extra_bits;
+		
+	    ArrayList result = new ArrayList();
+	    result.add(bits);
+	    result.add(bitlength);
+	    
+	    return result;
+	}
 
     // Continued-fraction helpers for the optimal method for getting interval values.
     /**
@@ -1677,4 +1831,293 @@ public class ArithmeticMapper
 		}
 		return lo;
 	}
+
+	// =========================================================================
+	// Fenwick-tree accelerated slow arithmetic coder.
+	//
+	// Same exact BigInteger interval arithmetic as getIntervalValue /
+	// getArithmeticValues, but replaces the O(256) cumulative-frequency
+	// update loop with a Fenwick (Binary Indexed) tree giving O(log 256) = 8
+	// operations per symbol for both prefix-sum queries and updates.
+	// =========================================================================
+
+	private static int[] fenwickBuild(int[] frequency)
+	{
+		int[] bit = new int[257];
+		for (int i = 0; i < 256; i++)
+			if (frequency[i] > 0) fenwickUpdate(bit, i, frequency[i]);
+		return bit;
+	}
+
+	private static void fenwickUpdate(int[] bit, int i, int delta)
+	{
+		for (i += 1; i <= 256; i += i & -i) bit[i] += delta;
+	}
+
+	private static int fenwickQuery(int[] bit, int i)
+	{
+		int sum = 0;
+		for (i += 1; i > 0; i -= i & -i) sum += bit[i];
+		return sum;
+	}
+
+	// Find 0-indexed symbol j: prefix_sum[0..j-1] <= target < prefix_sum[0..j]
+	private static int fenwickFind(int[] bit, int target)
+	{
+		int pos = 0;
+		for (int b = 8; b >= 0; b--)
+		{
+			int nxt = pos + (1 << b);
+			if (nxt <= 256 && bit[nxt] <= target) { target -= bit[nxt]; pos = nxt; }
+		}
+		return pos;
+	}
+
+	/**
+	 * Encoder: same as getIntervalValue but O(log 256) adaptive updates via Fenwick tree.
+	 */
+	public static BigInteger[] getIntervalValueFenwick(byte[] src, int[] frequency)
+	{
+		int[] f = frequency.clone();
+		int   n = src.length;
+		int[] bit = fenwickBuild(f);
+		int   m = 0; for (int v : f) m += v;
+
+		BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;
+		BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i]; if (j < 0) j += 256;
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+
+			// Reduce sj/m by integer GCD before BigInteger multiply
+			long ig = (sj > 0) ? gcd(sj, m) : 1;
+			BigInteger addN = rngN.multiply(BigInteger.valueOf(sj / ig));
+			BigInteger addD = rngD.multiply(BigInteger.valueOf(m  / ig));
+
+			offN = offN.multiply(addD).add(addN.multiply(offD));
+			offD = offD.multiply(addD);
+			BigInteger g = offN.gcd(offD);
+			if (g.compareTo(BigInteger.ONE) > 0) { offN = offN.divide(g); offD = offD.divide(g); }
+
+			// Reduce f[j]/m by integer GCD before BigInteger multiply
+			ig = gcd(f[j], m);
+			rngN = rngN.multiply(BigInteger.valueOf(f[j] / ig));
+			rngD = rngD.multiply(BigInteger.valueOf(m   / ig));
+			g = rngN.gcd(rngD);
+			if (g.compareTo(BigInteger.ONE) > 0) { rngN = rngN.divide(g); rngD = rngD.divide(g); }
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		if (!offD.equals(rngD))
+		{
+			offN = offN.multiply(rngD); rngN = rngN.multiply(offD);
+			BigInteger commonD = offD.multiply(rngD); offD = commonD; rngD = commonD;
+		}
+		BigInteger hiN = offN.add(rngN), hiD = offD;
+		return simplestFractionInInterval(offN, offD, hiN, hiD);
+	}
+
+	/**
+	 * Decoder: same as getArithmeticValues but O(log 256) symbol search and updates via Fenwick tree.
+	 */
+	public static byte[] getArithmeticValuesFenwick(BigInteger[] v, int[] frequency, int n)
+	{
+		int[] f = frequency.clone();
+		int[] bit = fenwickBuild(f);
+		int   m = 0; for (int fv : f) m += fv;
+
+		BigInteger[] offset = {BigInteger.ZERO, BigInteger.ONE};
+		BigInteger[] range  = {BigInteger.ONE,  BigInteger.ONE};
+		BigInteger[] w      = {v[0], v[1]};
+
+		byte[] value = new byte[n];
+
+		for (int i = 0; i < n; i++)
+		{
+			if (offset[0].compareTo(BigInteger.ZERO) != 0)
+			{
+				w[0] = v[0].multiply(offset[1]).subtract(offset[0].multiply(v[1]));
+				w[1] = v[1].multiply(offset[1]);
+				BigInteger g2 = w[0].gcd(w[1]);
+				if (g2.compareTo(BigInteger.ONE) > 0) { w[0]=w[0].divide(g2); w[1]=w[1].divide(g2); }
+			}
+
+			// Find symbol via Fenwick: target = floor(w[0] * range[1] * m / (w[1] * range[0]))
+			BigInteger scaled = w[0].multiply(range[1]).multiply(BigInteger.valueOf(m))
+			                        .divide(range[0].multiply(w[1]));
+			int target = (int) Math.min(Math.max(scaled.longValue(), 0L), (long)(m - 1));
+			int j = fenwickFind(bit, target);
+			while (j < 255 && f[j] == 0) j++;
+
+			value[i] = (byte) j;
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+
+			// Reduce sj/m by integer GCD before BigInteger multiply
+			long ig = (sj > 0) ? gcd(sj, m) : 1;
+			BigInteger addN = range[0].multiply(BigInteger.valueOf(sj / ig));
+			BigInteger addD = range[1].multiply(BigInteger.valueOf(m  / ig));
+			offset[0] = offset[0].multiply(addD).add(addN.multiply(offset[1]));
+			offset[1] = offset[1].multiply(addD);
+			BigInteger g = offset[0].gcd(offset[1]);
+			if (g.compareTo(BigInteger.ONE) > 0) { offset[0]=offset[0].divide(g); offset[1]=offset[1].divide(g); }
+
+			// Reduce f[j]/m by integer GCD before BigInteger multiply
+			ig = gcd(f[j], m);
+			range[0] = range[0].multiply(BigInteger.valueOf(f[j] / ig));
+			range[1] = range[1].multiply(BigInteger.valueOf(m   / ig));
+			g = range[0].gcd(range[1]);
+			if (g.compareTo(BigInteger.ONE) > 0) { range[0]=range[0].divide(g); range[1]=range[1].divide(g); }
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		return value;
+	}
+
+
+	// =========================================================================
+	// Fenwick-tree accelerated fast arithmetic coder.
+	// Same 32-bit renormalization as getIntervalValueFast/getArithmeticValuesFast
+	// but O(log 256) cumulative frequency updates instead of O(256).
+	// =========================================================================
+
+	public static byte[] getIntervalValueFastFenwick(byte[] src, int[] frequency)
+	{
+		int[] f   = frequency.clone();
+		int   n   = src.length;
+		int[] bit = fenwickBuild(f);
+		int   m   = 0; for (int v : f) m += v;
+
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
+
+		long low = 0L, high = TOP;
+		int  pending = 0;
+
+		byte[] buf     = new byte[n * 2 + 16];
+		int    bit_pos = 0;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i]; if (j < 0) j += 256;
+
+			int sj     = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+			int sj_fj  = fenwickQuery(bit, j);
+
+			long range    = high - low;
+			long new_low  = low + (range * sj) / m;
+			long new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
+			low = new_low; high = new_high;
+
+			for (;;)
+			{
+				if (high <= HALF) {
+					fastWriteBit(buf, bit_pos++, 0);
+					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
+					pending = 0; low <<= 1; high <<= 1;
+				} else if (low >= HALF) {
+					fastWriteBit(buf, bit_pos++, 1);
+					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
+					pending = 0; low = (low - HALF) << 1; high = (high - HALF) << 1;
+				} else if (low >= QTR && high <= TQTR) {
+					pending++; low = (low - QTR) << 1; high = (high - QTR) << 1;
+				} else break;
+			}
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		pending++;
+		if (low < QTR) {
+			fastWriteBit(buf, bit_pos++, 0);
+			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
+		} else {
+			fastWriteBit(buf, bit_pos++, 1);
+			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
+		}
+
+		int bit_length = bit_pos, byte_length = (bit_length + 7) / 8;
+		byte[] result = new byte[4 + byte_length];
+		result[0] = (byte)(bit_length >>> 24); result[1] = (byte)(bit_length >>> 16);
+		result[2] = (byte)(bit_length >>> 8);  result[3] = (byte) bit_length;
+		System.arraycopy(buf, 0, result, 4, byte_length);
+		return result;
+	}
+
+	public static byte[] getArithmeticValuesFastFenwick(byte[] encoded, int[] frequency, int n)
+	{
+		int bit_length = ((encoded[0] & 0xFF) << 24) | ((encoded[1] & 0xFF) << 16)
+		               | ((encoded[2] & 0xFF) <<  8) |  (encoded[3] & 0xFF);
+
+		int[] f   = frequency.clone();
+		int[] bit = fenwickBuild(f);
+		int   m   = 0; for (int fv : f) m += fv;
+
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
+		final long MASK = 0xFFFFFFFFL;
+
+		long low = 0L, high = TOP;
+		int  bit_ptr = 0;
+
+		long code = 0L;
+		for (int b = 0; b < 32; b++) {
+			int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+			code = (code << 1) | bt;
+		}
+
+		byte[] value = new byte[n];
+
+		for (int i = 0; i < n; i++)
+		{
+			long range  = high - low;
+			long scaled = (code - low) * m / range;
+			if (scaled < 0) scaled = 0; if (scaled >= m) scaled = m - 1;
+
+			int j = fenwickFind(bit, (int)scaled);
+			while (j < f.length - 1 && f[j] == 0) j++;
+
+			value[i] = (byte) j;
+
+			int sj    = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+			int sj_fj = fenwickQuery(bit, j);
+
+			long new_low  = low + (range * sj) / m;
+			long new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
+			low = new_low; high = new_high;
+
+			for (;;)
+			{
+				if (high <= HALF) {
+					low <<= 1; high <<= 1;
+					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = ((code << 1) | bt) & MASK;
+				} else if (low >= HALF) {
+					low = (low - HALF) << 1; high = (high - HALF) << 1;
+					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = (((code - HALF) << 1) | bt) & MASK;
+				} else if (low >= QTR && high <= TQTR) {
+					low = (low - QTR) << 1; high = (high - QTR) << 1;
+					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
+					code = (((code - QTR) << 1) | bt) & MASK;
+				} else break;
+			}
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		return value;
+	}
+
 }
