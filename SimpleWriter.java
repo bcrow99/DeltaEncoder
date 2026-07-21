@@ -380,40 +380,47 @@ public class SimpleWriter
 		String[] dt_names={"H","V","Average","Med","Adaptive","Directional","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Map 1","Map 2"};
 		int[] dt_cost=new int[12], map_cost=new int[12];
 		boolean[] dt_comp=new boolean[12], map_comp=new boolean[12];
-		for(int ci=0;ci<3;ci++){
-			int[] qc=qcl.get(cid[ci]);
-			ArrayList[] enc={
-				DeltaMapper.getHorizontalDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getVerticalDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getAverageDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getMedDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getAdaptiveDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getDirectionalDeltasFromValues(qc,nx,ny)
-			};
-			for(int t=0;t<6;t++){
-				byte[] str=(byte[])StringMapper.getStringList((int[])enc[t].get(1),true).get(3);
-				dt_cost[t]+=StringMapper.getBitlength(str);
-				if((StringMapper.getIterations(str)&15)>0) dt_comp[t]=true;
-			}
-			ArrayList[] menc={
-				DeltaMapper.getMixedDeltasFromValues(qc,nx,ny),
-				DeltaMapper.getMixedDeltasFromValues2(qc,nx,ny),
-				DeltaMapper.getMixedDeltasFromValues4(qc,nx,ny),
-				DeltaMapper.getMixedDeltasFromValues16Rows(qc,nx,ny),
-				DeltaMapper.getIdealDeltasFromValues8(qc,nx,ny),
-				DeltaMapper.getIdealDeltasFromValues16(qc,nx,ny)
-			};
-			for(int t=0;t<6;t++){
-				byte[] dstr=(byte[])StringMapper.getStringList((int[])menc[t].get(1),true).get(3);
-				dt_cost[6+t]+=StringMapper.getBitlength(dstr);
-				if((StringMapper.getIterations(dstr)&15)>0) dt_comp[6+t]=true;
-				byte[] map=(byte[])menc[t].get(2); int[] mi=new int[map.length];
-				for(int k=0;k<map.length;k++) mi[k]=map[k]&0xFF;
-				byte[] mstr=(byte[])StringMapper.getStringList(mi,true).get(3);
-				map_cost[6+t]+=StringMapper.getBitlength(mstr);
-				if((StringMapper.getIterations(mstr)&15)>0) map_comp[6+t]=true;
-			}
+
+		Thread[] threads=new Thread[12];
+		for(int t=0;t<12;t++){
+			final int ft=t;
+			threads[t]=new Thread(()->{
+				int cost=0, mcost=0; boolean comp=false, mcomp=false;
+				for(int ci=0;ci<3;ci++){
+					int[] qc=qcl.get(cid[ci]);
+					ArrayList result;
+					if(ft==0)result=DeltaMapper.getHorizontalDeltasFromValues(qc,nx,ny);
+					else if(ft==1)result=DeltaMapper.getVerticalDeltasFromValues(qc,nx,ny);
+					else if(ft==2)result=DeltaMapper.getAverageDeltasFromValues(qc,nx,ny);
+					else if(ft==3)result=DeltaMapper.getMedDeltasFromValues(qc,nx,ny);
+					else if(ft==4)result=DeltaMapper.getAdaptiveDeltasFromValues(qc,nx,ny);
+					else if(ft==5)result=DeltaMapper.getDirectionalDeltasFromValues(qc,nx,ny);
+					else if(ft==6)result=DeltaMapper.getMixedDeltasFromValues(qc,nx,ny);
+					else if(ft==7)result=DeltaMapper.getMixedDeltasFromValues2(qc,nx,ny);
+					else if(ft==8)result=DeltaMapper.getMixedDeltasFromValues4(qc,nx,ny);
+					else if(ft==9)result=DeltaMapper.getMixedDeltasFromValues16Rows(qc,nx,ny);
+					else if(ft==10)result=DeltaMapper.getIdealDeltasFromValues8(qc,nx,ny);
+					else result=DeltaMapper.getIdealDeltasFromValues16(qc,nx,ny);
+
+					byte[] dstr=(byte[])StringMapper.getStringList((int[])result.get(1),true).get(3);
+					cost+=StringMapper.getBitlength(dstr);
+					if((StringMapper.getIterations(dstr)&15)>0) comp=true;
+
+					if(ft>=6){
+						byte[] map=(byte[])result.get(2); int[] mi=new int[map.length];
+						for(int k=0;k<map.length;k++) mi[k]=map[k]&0xFF;
+						byte[] mstr=(byte[])StringMapper.getStringList(mi,true).get(3);
+						mcost+=StringMapper.getBitlength(mstr);
+						if((StringMapper.getIterations(mstr)&15)>0) mcomp=true;
+					}
+				}
+				dt_cost[ft]=cost; map_cost[ft]=mcost;
+				dt_comp[ft]=comp; map_comp[ft]=mcomp;
+			});
+			threads[t].start();
 		}
+		try{ for(Thread t:threads) t.join(); } catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+
 		int[] total=new int[12]; for(int t=0;t<12;t++) total[t]=dt_cost[t]+map_cost[t];
 		Integer[] dto=new Integer[12]; for(int i=0;i<12;i++)dto[i]=i;
 		java.util.Arrays.sort(dto,(a,b)->total[a]-total[b]);
@@ -499,7 +506,12 @@ public class SimpleWriter
 
 	private void showStatistics()
 	{
-		if(saved_set_order==null || saved_set_order[0]==null) return;
+		if(saved_set_order==null || saved_set_order[0]==null ||
+		   saved_dt_order==null  || saved_dt_order[0]==null)
+		{
+			JOptionPane.showMessageDialog(frame, "Data collection still in progress, please wait.");
+			return;
+		}
 
 		JDialog dlg = new JDialog(frame, "Statistics");
 		dlg.setLayout(new java.awt.GridLayout(2,1,8,8));
@@ -600,49 +612,63 @@ public class SimpleWriter
 			int[] channel_id=DeltaMapper.getChannels(min_set_id);
 			table_list.clear(); string_list.clear(); map_list.clear(); delta_list.clear();
 
-			// ---- Encode pass ------------------------------------------------
-			// For Integer: first pass collects raw deltas and finds global max
+			// ---- Encode pass (3 threads, one per channel) ----------------------
 			int global_dmax = 0;
-			int[][] raw_deltas = new int[3][];  // stored for Integer second pass
+			int[][] raw_deltas = new int[3][];
+			// Pre-allocate result slots so threads write by index, not add()
+			int[][]  enc_tables  = new int[3][];
+			byte[][] enc_strings = new byte[3][];
+			byte[][] enc_maps    = new byte[3][];
+			byte[][] enc_deltas  = new byte[3][];
+			int[]    local_dmax  = new int[3];
 
+			final int fnx=new_xdim, fny=new_ydim;
+			Thread[] enc_threads = new Thread[3];
 			for(int i=0;i<3;i++){
-				int j=channel_id[i]; int[] qc=qcl.get(j);
-				ArrayList<Object> result = computeDeltas(qc, new_xdim, new_ydim, delta_type);
-				if(delta_type>=6) map_list.add((byte[])result.get(2));
-				int[] delta=(int[])result.get(1);
+				final int fi=i;
+				enc_threads[i]=new Thread(()->{
+					int fj=channel_id[fi]; int[] qc=qcl.get(fj);
+					ArrayList<Object> result=computeDeltas(qc,fnx,fny,delta_type);
+					if(delta_type>=6) enc_maps[fi]=(byte[])result.get(2);
+					int[] delta=(int[])result.get(1);
+					if(data_type==0)
+					{
+						ArrayList dsl=StringMapper.getStringList(delta,true);
+						channel_delta_min[fj]=(int)dsl.get(0); channel_length[fj]=(int)dsl.get(1);
+						enc_tables[fi]=(int[])dsl.get(2); enc_strings[fi]=(byte[])dsl.get(3);
+						channel_compressed_length[fj]=StringMapper.getBitlength(enc_strings[fi]);
+						channel_iterations[fi]=StringMapper.getIterations(enc_strings[fi]);
+						for(int k=1;k<delta.length;k++) delta[k]+=channel_delta_min[fj];
+					}
+					else
+					{
+						int dmin=delta[1]; for(int k=2;k<delta.length;k++) if(delta[k]<dmin) dmin=delta[k];
+						channel_delta_min[fj]=dmin;
+						int dmax=0; for(int k=1;k<delta.length;k++){int v=delta[k]-dmin;if(v>dmax)dmax=v;}
+						local_dmax[fi]=dmax;
+						channel_length[fj]=delta.length; channel_iterations[fi]=0;
+						raw_deltas[fi]=delta; enc_tables[fi]=new int[0];
+					}
+				});
+				enc_threads[i].start();
+			}
+			try{ for(Thread t:enc_threads) t.join(); } catch(InterruptedException e){ Thread.currentThread().interrupt(); }
 
-				if(data_type==0)
-				{
-					// String encode
-					ArrayList dsl=StringMapper.getStringList(delta,true);
-					channel_delta_min[j]=(int)dsl.get(0); channel_length[j]=(int)dsl.get(1);
-					table_list.add((int[])dsl.get(2)); string_list.add((byte[])dsl.get(3));
-					channel_compressed_length[j]=StringMapper.getBitlength((byte[])dsl.get(3));
-					channel_iterations[i]=StringMapper.getIterations((byte[])dsl.get(3));
-					for(int k=1;k<delta.length;k++) delta[k]+=channel_delta_min[j];
-				}
-				else
-				{
-					// Integer: find delta_min and max shifted value
-					int dmin=delta[1]; for(int k=2;k<delta.length;k++) if(delta[k]<dmin) dmin=delta[k];
-					channel_delta_min[j]=dmin;
-					int dmax=0; for(int k=1;k<delta.length;k++){int v=delta[k]-dmin;if(v>dmax)dmax=v;}
-					if(dmax>global_dmax) global_dmax=dmax;
-					channel_length[j]=delta.length;
-					channel_iterations[i]=0;
-					raw_deltas[i]=delta;
-					table_list.add(new int[0]);
-				}
+			// Add results in order
+			for(int i=0;i<3;i++){
+				if(delta_type>=6) map_list.add(enc_maps[i]);
+				table_list.add(enc_tables[i]);
+				if(data_type==0) string_list.add(enc_strings[i]);
 			}
 
 			// For Integer: determine global width and pack all channels
 			if(data_type!=0)
 			{
+				for(int i=0;i<3;i++) if(local_dmax[i]>global_dmax) global_dmax=local_dmax[i];
 				data_type=(global_dmax<=255)?1:(global_dmax<=65535)?2:3;
 				int width=(data_type==1)?1:(data_type==2)?2:4;
 				for(int i=0;i<3;i++){
-					int j=channel_id[i]; int[] delta=raw_deltas[i];
-					int dmin=channel_delta_min[j];
+					int j=channel_id[i]; int[] delta=raw_deltas[i]; int dmin=channel_delta_min[j];
 					channel_compressed_length[j]=width;
 					byte[] db=new byte[delta.length*width]; db[0]=0;
 					for(int k=1;k<delta.length;k++){
@@ -650,7 +676,6 @@ public class SimpleWriter
 						for(int b=0;b<width;b++) db[base+b]=(byte)(v>>(8*b));
 					}
 					delta_list.add(db);
-					for(int k=1;k<delta.length;k++) delta[k]+=0;  // delta unchanged for preview
 				}
 			}
 
@@ -701,7 +726,9 @@ public class SimpleWriter
 				working_image.setRGB(j,i,(blue[k]<<16)+(green[k]<<8)+red[k]); k++;
 			}
 			updateDisplayImage(); image_canvas.repaint(); initialized=true;
-			SimpleWriter.this.collectData(qcl,channel_id,new_xdim,new_ydim,false);
+			final ArrayList<int[]> fqcl=qcl; final int[] fcid=channel_id;
+			final int cdnx=new_xdim, cdny=new_ydim;
+			new Thread(()->SimpleWriter.this.collectData(fqcl,fcid,cdnx,cdny,false)).start();
 		}
 	}
 
