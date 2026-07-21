@@ -906,12 +906,13 @@ public class SimpleWriter
 					}
 					int compressed_bits=chan_bytes.length*8;
 					String ch_name=channel_string[channel_id[i]];
+					ch_name = Character.toUpperCase(ch_name.charAt(0)) + ch_name.substring(1);
 					if(map_bits>0)
-						System.out.println(String.format("  ch%-2d %-12s entropy: %10d   map: %8d   compressed: %10d",
-							i, ch_name, entropy_bits, map_bits, compressed_bits));
+						System.out.println(String.format("%-12s delta: %10d   map: %8d   actual: %10d",
+							ch_name, entropy_bits, map_bits, compressed_bits));
 					else
-						System.out.println(String.format("  ch%-2d %-12s entropy: %10d                  compressed: %10d",
-							i, ch_name, entropy_bits, compressed_bits));
+						System.out.println(String.format("%-12s delta: %10d                  actual: %10d",
+							ch_name, entropy_bits, compressed_bits));
 				}
 				out.flush(); out.close();
 				double rate=(double)new File("foo").length()/(image_xdim*image_ydim*3);
