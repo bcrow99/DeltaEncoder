@@ -27,6 +27,7 @@ public class SimpleWriter
 	int smooth_level  = 0;
 	int smooth2_level = 0;
 	int min_set_id    = 0;
+	int previous_min_set_id = -1;
 	int delta_type    = 5;
 	int entropy_type  = 0;
 	int pixel_segment = 0;
@@ -89,6 +90,7 @@ public class SimpleWriter
 			int raster_type = original_image.getType();
 			image_xdim = original_image.getWidth();
 			image_ydim = original_image.getHeight();
+			System.out.println("Loaded " + filename + "  (" + image_xdim + " x " + image_ydim + ")");
 
 			channel_list = new ArrayList<>(); table_list = new ArrayList<>();
 			string_list  = new ArrayList<>(); map_list   = new ArrayList<>();
@@ -318,6 +320,31 @@ public class SimpleWriter
 		}.execute();
 	}
 
+	// Prints the ranked channel-set table (rank, channel names, per-channel
+	// entropy estimate, total). Shared by init() and by ApplyHandler when the
+	// optimal set changes.
+	private void printColorSetRanking(int[] ss, int[] cs, Integer[] so)
+	{
+		String[][] set_disp={
+			{"blue",  "green",         "red"},
+			{"blue",  "red",           "red   -  green"},
+			{"blue",  "red",           "blue  -  green"},
+			{"blue",  "blue  -  green","red   -  green"},
+			{"blue",  "blue  -  green","red   -  blue"},
+			{"green", "red",           "blue  -  green"},
+			{"red",   "blue  -  green","red   -  green"},
+			{"green", "blue  -  green","red   -  green"},
+			{"green", "red   -  green","red   -  blue"},
+			{"red",   "red   -  green","red   -  blue"}
+		};
+		for(int r=0;r<10;r++){
+			int idx=so[r]; int[] c=DeltaMapper.getChannels(idx);
+			System.out.println(String.format("  %2d. %-8s%-20s%-14s %10d %10d %10d %12d",
+				r+1,set_disp[idx][0],set_disp[idx][1],set_disp[idx][2],cs[c[0]],cs[c[1]],cs[c[2]],ss[idx]));
+		}
+		System.out.println();
+	}
+
 	private void init()
 	{
 		ArrayList<int[]> qcl=new ArrayList<>();
@@ -348,35 +375,17 @@ public class SimpleWriter
 		int best_set=so[0]; int[] cid=DeltaMapper.getChannels(best_set);
 
 		print_ranking=true;
+		System.out.println("Starting data collection...");
 		collectData(qcl,cid,nx,ny,true);
 
-		System.out.println("\n=== "+filename+" ===");
-		String[][] set_disp={
-			{"blue",  "green",         "red"},
-			{"blue",  "red",           "red   -  green"},
-			{"blue",  "red",           "blue  -  green"},
-			{"blue",  "blue  -  green","red   -  green"},
-			{"blue",  "blue  -  green","red   -  blue"},
-			{"green", "red",           "blue  -  green"},
-			{"red",   "blue  -  green","red   -  green"},
-			{"green", "blue  -  green","red   -  green"},
-			{"green", "red   -  green","red   -  blue"},
-			{"red",   "red   -  green","red   -  blue"}
-		};
 		System.out.println("Channel sets (ranked):");
-		for(int r=0;r<10;r++){
-			int idx=so[r]; int[] c=DeltaMapper.getChannels(idx);
-			System.out.println(String.format("  %2d. %-8s%-20s%-14s %10d %10d %10d %12d",
-				r+1,set_disp[idx][0],set_disp[idx][1],set_disp[idx][2],cs[c[0]],cs[c[1]],cs[c[2]],ss[idx]));
-		}
-		System.out.println();
+		printColorSetRanking(ss, cs, so);
 	}
 
 	private void collectData(ArrayList<int[]> qcl, int[] cid, int nx, int ny, boolean set_delta_type)
 	{
 		if(!print_ranking && !set_delta_type) return;
 		print_ranking=false;
-		System.out.println("Starting data collection...");
 		String[] dt_names={"H","V","Average","Med","Adaptive","Directional","Scanline 1","Scanline 2","Scanline 3","Scanline 4","Map 1","Map 2"};
 		int[] dt_cost=new int[12], map_cost=new int[12];
 		boolean[] dt_comp=new boolean[12], map_comp=new boolean[12];
@@ -439,7 +448,7 @@ public class SimpleWriter
 				System.out.println(String.format("  %2d. %-12s delta: %12d%s                              total: %12d%s",
 					r+1,dt_names[idx],dt_cost[idx],dc,total[idx],sel));
 		}
-		System.out.println("Done."); System.out.println();
+		System.out.println();
 	}
 
 	private void zoomBy(double factor)
@@ -608,6 +617,16 @@ public class SimpleWriter
 			ss[8]=channel_sum[5]+channel_sum[1]+channel_sum[4]; ss[9]=channel_sum[5]+channel_sum[4]+channel_sum[2];
 			int min_sum=Integer.MAX_VALUE,min_idx=0;
 			for(int i=0;i<10;i++)if(ss[i]<min_sum){min_sum=ss[i];min_idx=i;} min_set_id=min_idx;
+
+			if(previous_min_set_id != -1 && previous_min_set_id != min_set_id)
+			{
+				Integer[] so=new Integer[10]; for(int i=0;i<10;i++)so[i]=i;
+				java.util.Arrays.sort(so,(a,b)->ss[a]-ss[b]);
+				System.out.println("Optimal color set changed:");
+				printColorSetRanking(ss, channel_sum, so);
+			}
+			previous_min_set_id = min_set_id;
+
 			file_compression_rate=(double)file_length/(image_xdim*image_ydim*3);
 			int[] channel_id=DeltaMapper.getChannels(min_set_id);
 			table_list.clear(); string_list.clear(); map_list.clear(); delta_list.clear();
@@ -898,6 +917,7 @@ public class SimpleWriter
 				double rate=(double)new File("foo").length()/(image_xdim*image_ydim*3);
 				System.out.println("Original rate: "+String.format("%.4f",file_compression_rate));
 				System.out.println("Output rate:   "+String.format("%.4f",rate));
+				System.out.println();
 			} catch(Exception e){System.out.println("Save error: "+e); e.printStackTrace();}
 		}
 
