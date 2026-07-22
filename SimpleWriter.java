@@ -220,7 +220,8 @@ public class SimpleWriter
 					type_dlg.pack(); type_dlg.setVisible(true);
 				});
 				data_menu.add(type_mi);
-				data_menu.add(makeSlider("Threshold", 0, 10, 1, v -> StringMapper.compress_threshold = v / 10.0));
+				data_menu.add(makeSliderWithRef("Threshold", new JSlider(0,10,1),
+					v -> { StringMapper.compress_threshold = v / 10.0; print_ranking=true; apply_item.doClick(); }));
 
 				// Entropy menu
 				JMenu entropy_menu = new JMenu("Entropy");
