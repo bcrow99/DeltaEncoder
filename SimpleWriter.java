@@ -370,11 +370,11 @@ public class SimpleWriter
 		int best_set=so[0]; int[] cid=DeltaMapper.getChannels(best_set);
 
 		print_ranking=true;
-		System.out.println("Starting data collection...");
-		collectData(qcl,cid,nx,ny,true);
-
 		System.out.println("Channel sets (ranked):");
 		printColorSetRanking(ss, cs, so);
+
+		System.out.println("Starting data collection...");
+		collectData(qcl,cid,nx,ny,true);
 	}
 
 	private void collectData(ArrayList<int[]> qcl, int[] cid, int nx, int ny, boolean set_delta_type)
@@ -772,6 +772,7 @@ public class SimpleWriter
 			updateDisplayImage(); image_canvas.repaint(); initialized=true;
 			final ArrayList<int[]> fqcl=qcl; final int[] fcid=channel_id;
 			final int cdnx=new_xdim, cdny=new_ydim;
+			if(print_ranking) System.out.println("Starting to collect data...");
 			new Thread(()->SimpleWriter.this.collectData(fqcl,fcid,cdnx,cdny,false)).start();
 		}
 	}
