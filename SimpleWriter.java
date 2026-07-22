@@ -588,13 +588,30 @@ public class SimpleWriter
 			ArrayList<int[]> qcl=new ArrayList<>(), dqcl=new ArrayList<>();
 			int new_xdim=image_xdim, new_ydim=image_ydim;
 			if(pixel_quant!=0){double f=pixel_quant/10.0;new_xdim=image_xdim-(int)(f*(image_xdim/2-2));new_ydim=image_ydim-(int)(f*(image_ydim/2-2));}
+
+			// ---- Smoothing/quant/shift pass (3 threads, one per channel) --------
+			// Each thread produces its channel's fully-preprocessed int[] into a
+			// pre-allocated slot, exactly matching what the old sequential loop
+			// computed. The results are then added to qcl in order (0,1,2) so the
+			// difference channels below, which depend on qcl.get(0/1/2), see the
+			// same values they always did.
+			int[][] pre_qc = new int[3][];
+			final int fnew_xdim=new_xdim, fnew_ydim=new_ydim;
+			Thread[] pre_threads = new Thread[3];
 			for(int i=0;i<3;i++){
-				int[] ch=(int[])channel_list.get(i);
-				if(smooth_level>0)  ch=DeltaMapper.bilateralSmooth(ch,image_xdim,image_ydim,smooth_level);
-				if(smooth2_level>0) ch=DeltaMapper.anisotropicSmooth(ch,image_xdim,image_ydim,smooth2_level);
-				if(pixel_quant==0) qcl.add(pixel_shift==0?ch:DeltaMapper.shift(ch,-pixel_shift));
-				else{int[] r=ResizeMapper.resize(ch,image_xdim,new_xdim,new_ydim);qcl.add(pixel_shift==0?r:DeltaMapper.shift(r,-pixel_shift));}
+				final int fi=i;
+				pre_threads[i]=new Thread(()->{
+					int[] ch=(int[])channel_list.get(fi);
+					if(smooth_level>0)  ch=DeltaMapper.bilateralSmooth(ch,image_xdim,image_ydim,smooth_level);
+					if(smooth2_level>0) ch=DeltaMapper.anisotropicSmooth(ch,image_xdim,image_ydim,smooth2_level);
+					if(pixel_quant==0) pre_qc[fi]=(pixel_shift==0?ch:DeltaMapper.shift(ch,-pixel_shift));
+					else{int[] r=ResizeMapper.resize(ch,image_xdim,fnew_xdim,fnew_ydim);pre_qc[fi]=(pixel_shift==0?r:DeltaMapper.shift(r,-pixel_shift));}
+				});
+				pre_threads[i].start();
 			}
+			try{ for(Thread t:pre_threads) t.join(); } catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+			for(int i=0;i<3;i++) qcl.add(pre_qc[i]);
+
 			qcl.add(DeltaMapper.getDifference(qcl.get(0),qcl.get(1)));
 			qcl.add(DeltaMapper.getDifference(qcl.get(2),qcl.get(1)));
 			qcl.add(DeltaMapper.getDifference(qcl.get(2),qcl.get(0)));
@@ -693,33 +710,46 @@ public class SimpleWriter
 				}
 			}
 
-			// ---- Preview decode pass -----------------------------------------
+			// ---- Preview decode pass (3 threads, one per channel) -------------
+			// Each thread independently decompresses/unpacks/reconstructs its
+			// channel's preview image into a pre-allocated slot, then the results
+			// are added to dqcl in order (0,1,2) so RGB assembly below sees the
+			// same channel-to-index mapping it always did.
+			int[][] pre_dqc = new int[3][];
+			final int fnxd=new_xdim, fnyd=new_ydim;
+			Thread[] dec_threads = new Thread[3];
 			for(int i=0;i<3;i++){
-				int j=channel_id[i];
-				int[] delta;
-				if(data_type==0)
-				{
-					int[] tbl=(int[])table_list.get(i);
-					byte[] str=StringMapper.decompressStrings((byte[])string_list.get(i));
-					delta=StringMapper.unpackStrings(str,tbl,new_xdim*new_ydim,channel_length[j]);
-					for(int k=1;k<delta.length;k++) delta[k]+=channel_delta_min[j];
-				}
-				else
-				{
-					int width=channel_compressed_length[j];
-					byte[] db=(byte[])delta_list.get(i);
-					delta=new int[new_xdim*new_ydim]; delta[0]=0;
-					for(int k=1;k<delta.length;k++){
-						int base=k*width,v=0;
-						for(int b=0;b<width;b++) v|=(db[base+b]&0xFF)<<(8*b);
-						delta[k]=v+channel_delta_min[j];
+				final int fi=i;
+				dec_threads[i]=new Thread(()->{
+					int j=channel_id[fi];
+					int[] delta;
+					if(data_type==0)
+					{
+						int[] tbl=(int[])table_list.get(fi);
+						byte[] str=StringMapper.decompressStrings((byte[])string_list.get(fi));
+						delta=StringMapper.unpackStrings(str,tbl,fnxd*fnyd,channel_length[j]);
+						for(int k=1;k<delta.length;k++) delta[k]+=channel_delta_min[j];
 					}
-				}
-				int[] ch=reconstructChannel(delta,new_xdim,new_ydim,channel_init[j],delta_type,i);
-				if(j>2)for(int k=0;k<ch.length;k++)ch[k]+=channel_min[j];
-				if(pixel_shift==0)dqcl.add(pixel_quant==0?ch:ResizeMapper.resize(ch,new_xdim,image_xdim,image_ydim));
-				else{int[]s=DeltaMapper.shift(ch,pixel_shift);dqcl.add(pixel_quant==0?s:ResizeMapper.resize(s,new_xdim,image_xdim,image_ydim));}
+					else
+					{
+						int width=channel_compressed_length[j];
+						byte[] db=(byte[])delta_list.get(fi);
+						delta=new int[fnxd*fnyd]; delta[0]=0;
+						for(int k=1;k<delta.length;k++){
+							int base=k*width,v=0;
+							for(int b=0;b<width;b++) v|=(db[base+b]&0xFF)<<(8*b);
+							delta[k]=v+channel_delta_min[j];
+						}
+					}
+					int[] ch=reconstructChannel(delta,fnxd,fnyd,channel_init[j],delta_type,fi);
+					if(j>2)for(int k=0;k<ch.length;k++)ch[k]+=channel_min[j];
+					if(pixel_shift==0) pre_dqc[fi]=(pixel_quant==0?ch:ResizeMapper.resize(ch,fnxd,image_xdim,image_ydim));
+					else{int[]s=DeltaMapper.shift(ch,pixel_shift);pre_dqc[fi]=(pixel_quant==0?s:ResizeMapper.resize(s,fnxd,image_xdim,image_ydim));}
+				});
+				dec_threads[i].start();
 			}
+			try{ for(Thread t:dec_threads) t.join(); } catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+			for(int i=0;i<3;i++) dqcl.add(pre_dqc[i]);
 
 			// ---- RGB assembly -----------------------------------------------
 			int[] blue=new int[image_xdim*image_ydim],green=new int[image_xdim*image_ydim],red=new int[image_xdim*image_ydim];
@@ -759,181 +789,223 @@ public class SimpleWriter
 				out.writeByte(min_set_id);  out.writeByte(delta_type);
 				out.writeByte(entropy_type); out.writeByte(data_type);
 
+				// ---- Per-channel encode pass (3 threads, one per channel) ----------
+				// Each thread builds its channel's full output block (header ints, map,
+				// table, entropy payload) into its own buffer, in the exact same order
+				// those bytes were written directly to `out` before. The main thread
+				// then writes the three finished blocks to the file in order (0,1,2),
+				// so the resulting file is byte-for-byte identical to the old
+				// single-threaded version and SimpleReader needs no changes.
+				byte[][]    channel_blocks       = new byte[3][];
+				int[]       stat_entropy_bits    = new int[3];
+				int[]       stat_map_bits        = new int[3];
+				int[]       stat_compressed_bits = new int[3];
+				Exception[] thread_error         = new Exception[3];
+
+				Thread[] save_threads = new Thread[3];
+				for(int i=0;i<3;i++){
+					final int fi=i;
+					final int fj=channel_id[i];
+					save_threads[i]=new Thread(()->{
+						try {
+							java.io.ByteArrayOutputStream chan_baos = new java.io.ByteArrayOutputStream();
+							DataOutputStream cout = new DataOutputStream(chan_baos);
+
+							cout.writeInt(channel_min[fj]); cout.writeInt(channel_init[fj]); cout.writeInt(channel_delta_min[fj]);
+							cout.writeInt(channel_length[fj]); cout.writeInt(channel_compressed_length[fj]); cout.writeByte(channel_iterations[fi]);
+
+							int map_bits=0;
+							// Map (for scanline/map delta types)
+							if(delta_type>=6){
+								byte[] map=(byte[])map_list.get(fi); int[] map_int=new int[map.length];
+								for(int k=0;k<map.length;k++) map_int[k]=map[k]&0xFF;
+								int map0=map_int[0];
+								ArrayList dsl=StringMapper.getStringList(map_int,true);
+								int dmin=(int)dsl.get(0); int[] tbl=(int[])dsl.get(2);
+								byte[] mstr=(byte[])dsl.get(3); int bl=StringMapper.getBitlength(mstr);
+								map_bits=bl;
+								cout.writeInt(map0-dmin); cout.writeInt(map.length);
+								writeTable(cout,tbl); cout.writeInt(dmin); cout.writeInt(bl);
+								cout.write(mstr,0,StringMapper.getBytelength(bl));
+							}
+
+							// Table: always present (empty for Integer)
+							writeTable(cout,(int[])table_list.get(fi));
+
+							byte[] payload=(data_type==0)?(byte[])string_list.get(fi):(byte[])delta_list.get(fi);
+
+							// Wrap to count bytes written for this channel's entropy payload
+							java.io.ByteArrayOutputStream baos=new java.io.ByteArrayOutputStream();
+							DataOutputStream dout=new DataOutputStream(baos);
+
+							if(entropy_type==0)
+							{
+								// LZ77 — same for String and Integer
+								Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
+								byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
+								int zl=def.deflate(zipped); def.end();
+								dout.writeInt(payload.length); dout.writeInt(zl); dout.write(zipped,0,zl);
+							}
+							else if(entropy_type==1)
+							{
+								/* Segmentation check (tested — not worth it): with granularity turned up,
+								   the segmented Huffman estimate came in ~6% under the whole-channel cost
+								   at low granularity, shrinking to ~0% as segment count grew. The real
+								   implementation would also need a rank table + code-length table per
+								   segment, which would eat the small savings before they could pay for
+								   themselves. Left here in case finer-grained delta statistics (e.g. a
+								   very non-uniform image) make revisiting this worthwhile.
+
+								int whole_bits = CodeMapper.getHuffmanBitlength(payload);
+								int min_seg = 500 + pixel_segment*500;
+								int n_segs = (pixel_segment>=10) ? 1 : Math.max(1, payload.length/min_seg);
+								int seg_len = payload.length/n_segs, odd_len = seg_len + payload.length%n_segs;
+								int segmented_bits = 0;
+								int seg_pos = 0;
+								for(int m=0; m<n_segs; m++){
+									int len = (m<n_segs-1) ? seg_len : odd_len;
+									byte[] seg = java.util.Arrays.copyOfRange(payload, seg_pos, seg_pos+len);
+									segmented_bits += CodeMapper.getHuffmanBitlength(seg);
+									seg_pos += len;
+								}
+								System.out.println(String.format(
+									"  Huffman check: whole=%d bits, segmented(%d segs)=%d bits (%.1f%% of whole)",
+									whole_bits, n_segs, segmented_bits, 100.0*segmented_bits/whole_bits));
+								*/
+
+								// Huffman
+								if(data_type==0)
+								{
+									// String: byte symbols (0-255)
+									int[] pi=new int[payload.length];
+									for(int k=0;k<payload.length;k++) pi[k]=payload[k]&0xFF;
+									encodeHuffman(dout,pi);
+								}
+								else
+								{
+									// Integer: shifted delta values as int symbols directly
+									int width=channel_compressed_length[fj];
+									int size=channel_length[fj];
+									int[] pi=new int[size]; pi[0]=0;
+									for(int k=1;k<size;k++){
+										int base=k*width,v=0;
+										for(int b=0;b<width;b++) v|=(payload[base+b]&0xFF)<<(8*b);
+										pi[k]=v;
+									}
+									encodeHuffman(dout,pi);
+								}
+							}
+							else
+							{
+								// Arithmetic — same for String and Integer (bytes are bytes)
+								int min_seg=500+pixel_segment*500;
+								int n_segs=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
+								int seg_len=payload.length/n_segs, odd_len=seg_len+payload.length%n_segs;
+								byte[][] segs=new byte[n_segs][]; int[][] freqs=new int[n_segs][256];
+								for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
+								int pos=0;
+								for(int m=0;m<n_segs;m++) for(int nn=0;nn<segs[m].length;nn++){segs[m][nn]=payload[pos];freqs[m][payload[pos]&0xFF]++;pos++;}
+								int fmax=0; for(int[] row:freqs)for(int v:row)if(v>fmax)fmax=v;
+								int lt=(fmax<256)?0:(fmax<65536)?1:2; int bpe=(lt==0)?1:(lt==1)?2:4;
+								byte[] fb=new byte[n_segs*256*bpe];
+								for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){int v=freqs[m][k];int base=m*256*bpe+k*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
+								Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
+								byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
+								dout.writeInt(payload.length); dout.writeInt(n_segs); dout.writeInt(lt); dout.writeInt(zl); dout.write(zf,0,zl);
+								int n_procs=Math.max(1,Math.min(n_segs,Runtime.getRuntime().availableProcessors()));
+								long arith_start=System.nanoTime();
+								if(entropy_type==2)
+								{
+									// Slow arithmetic (Fenwick)
+									BigInteger[][] slow_results=new BigInteger[n_segs][2];
+									Thread[] at=new Thread[n_procs];
+									for(int p=0;p<n_procs;p++){
+										final int fp=p;
+										at[p]=new Thread(()->{
+											for(int m=fp;m<n_segs;m+=n_procs)
+												slow_results[m]=ArithmeticMapper.getIntervalValueFenwick(segs[m],freqs[m]);
+										});
+										at[p].start();
+									}
+									try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+									long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
+									System.out.println(String.format("  Slow arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
+									for(int m=0;m<n_segs;m++){
+										byte[] b0=slow_results[m][0].toByteArray(); dout.writeInt(b0.length); dout.write(b0,0,b0.length);
+										byte[] b1=slow_results[m][1].toByteArray(); dout.writeInt(b1.length); dout.write(b1,0,b1.length);
+									}
+								}
+								else
+								{
+									// Fast arithmetic (Fenwick)
+									byte[][] fast_results=new byte[n_segs][];
+									Thread[] at=new Thread[n_procs];
+									for(int p=0;p<n_procs;p++){
+										final int fp=p;
+										at[p]=new Thread(()->{
+											for(int m=fp;m<n_segs;m+=n_procs)
+												fast_results[m]=ArithmeticMapper.getIntervalValueFastFenwick(segs[m],freqs[m]);
+										});
+										at[p].start();
+									}
+									try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
+									long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
+									System.out.println(String.format("  Fast arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
+									for(int m=0;m<n_segs;m++){
+										dout.writeInt(fast_results[m].length); dout.write(fast_results[m],0,fast_results[m].length);
+									}
+								}
+							}
+							dout.flush();
+							byte[] chan_bytes=baos.toByteArray();
+							cout.write(chan_bytes);
+
+							// Compute per-channel stats
+							int entropy_bits;
+							if(data_type==0)
+							{
+								// String: channel_length is already the entropy-coded bit count
+								entropy_bits=channel_length[fj];
+							}
+							else
+							{
+								// Integer: compute Shannon entropy of the delta value distribution
+								int[] freq=new int[256];
+								for(int k=0;k<payload.length;k++) freq[payload[k]&0xFF]++;
+								entropy_bits=(int)Math.floor(CodeMapper.getShannonLimit(freq));
+							}
+							int compressed_bits=chan_bytes.length*8;
+
+							stat_entropy_bits[fi]=entropy_bits;
+							stat_map_bits[fi]=map_bits;
+							stat_compressed_bits[fi]=compressed_bits;
+
+							cout.flush();
+							channel_blocks[fi]=chan_baos.toByteArray();
+						} catch(Exception e){ thread_error[fi]=e; }
+					});
+					save_threads[i].start();
+				}
+				try{ for(Thread t:save_threads) t.join(); } catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+
+				for(int i=0;i<3;i++)
+					if(thread_error[i]!=null) throw thread_error[i];
+
+				// ---- Sequential write + stats print (preserves original ordering) --
 				for(int i=0;i<3;i++){
 					int j=channel_id[i];
-					out.writeInt(channel_min[j]); out.writeInt(channel_init[j]); out.writeInt(channel_delta_min[j]);
-					out.writeInt(channel_length[j]); out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
+					out.write(channel_blocks[i]);
 
-					int map_bits=0;
-					// Map (for scanline/map delta types)
-					if(delta_type>=6){
-						byte[] map=(byte[])map_list.get(i); int[] map_int=new int[map.length];
-						for(int k=0;k<map.length;k++) map_int[k]=map[k]&0xFF;
-						int map0=map_int[0];
-						ArrayList dsl=StringMapper.getStringList(map_int,true);
-						int dmin=(int)dsl.get(0); int[] tbl=(int[])dsl.get(2);
-						byte[] mstr=(byte[])dsl.get(3); int bl=StringMapper.getBitlength(mstr);
-						map_bits=bl;
-						out.writeInt(map0-dmin); out.writeInt(map.length);
-						writeTable(out,tbl); out.writeInt(dmin); out.writeInt(bl);
-						out.write(mstr,0,StringMapper.getBytelength(bl));
-					}
-
-					// Table: always present (empty for Integer)
-					writeTable(out,(int[])table_list.get(i));
-
-					byte[] payload=(data_type==0)?(byte[])string_list.get(i):(byte[])delta_list.get(i);
-
-					// Wrap to count bytes written for this channel's entropy payload
-					java.io.ByteArrayOutputStream baos=new java.io.ByteArrayOutputStream();
-					DataOutputStream dout=new DataOutputStream(baos);
-
-					if(entropy_type==0)
-					{
-						// LZ77 — same for String and Integer
-						Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
-						byte[] zipped=new byte[2*payload.length+64]; def.setInput(payload); def.finish();
-						int zl=def.deflate(zipped); def.end();
-						dout.writeInt(payload.length); dout.writeInt(zl); dout.write(zipped,0,zl);
-					}
-					else if(entropy_type==1)
-					{
-						/* Segmentation check (tested — not worth it): with granularity turned up,
-						   the segmented Huffman estimate came in ~6% under the whole-channel cost
-						   at low granularity, shrinking to ~0% as segment count grew. The real
-						   implementation would also need a rank table + code-length table per
-						   segment, which would eat the small savings before they could pay for
-						   themselves. Left here in case finer-grained delta statistics (e.g. a
-						   very non-uniform image) make revisiting this worthwhile.
-
-						int whole_bits = CodeMapper.getHuffmanBitlength(payload);
-						int min_seg = 500 + pixel_segment*500;
-						int n_segs = (pixel_segment>=10) ? 1 : Math.max(1, payload.length/min_seg);
-						int seg_len = payload.length/n_segs, odd_len = seg_len + payload.length%n_segs;
-						int segmented_bits = 0;
-						int seg_pos = 0;
-						for(int m=0; m<n_segs; m++){
-							int len = (m<n_segs-1) ? seg_len : odd_len;
-							byte[] seg = java.util.Arrays.copyOfRange(payload, seg_pos, seg_pos+len);
-							segmented_bits += CodeMapper.getHuffmanBitlength(seg);
-							seg_pos += len;
-						}
-						System.out.println(String.format(
-							"  Huffman check: whole=%d bits, segmented(%d segs)=%d bits (%.1f%% of whole)",
-							whole_bits, n_segs, segmented_bits, 100.0*segmented_bits/whole_bits));
-						*/
-
-						// Huffman
-						if(data_type==0)
-						{
-							// String: byte symbols (0-255)
-							int[] pi=new int[payload.length];
-							for(int k=0;k<payload.length;k++) pi[k]=payload[k]&0xFF;
-							encodeHuffman(dout,pi);
-						}
-						else
-						{
-							// Integer: shifted delta values as int symbols directly
-							int width=channel_compressed_length[j];
-							int size=channel_length[j];
-							int[] pi=new int[size]; pi[0]=0;
-							for(int k=1;k<size;k++){
-								int base=k*width,v=0;
-								for(int b=0;b<width;b++) v|=(payload[base+b]&0xFF)<<(8*b);
-								pi[k]=v;
-							}
-							encodeHuffman(dout,pi);
-						}
-					}
-					else
-					{
-						// Arithmetic — same for String and Integer (bytes are bytes)
-						int min_seg=500+pixel_segment*500;
-						int n_segs=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
-						int seg_len=payload.length/n_segs, odd_len=seg_len+payload.length%n_segs;
-						byte[][] segs=new byte[n_segs][]; int[][] freqs=new int[n_segs][256];
-						for(int m=0;m<n_segs;m++) segs[m]=new byte[m<n_segs-1?seg_len:odd_len];
-						int pos=0;
-						for(int m=0;m<n_segs;m++) for(int nn=0;nn<segs[m].length;nn++){segs[m][nn]=payload[pos];freqs[m][payload[pos]&0xFF]++;pos++;}
-						int fmax=0; for(int[] row:freqs)for(int v:row)if(v>fmax)fmax=v;
-						int lt=(fmax<256)?0:(fmax<65536)?1:2; int bpe=(lt==0)?1:(lt==1)?2:4;
-						byte[] fb=new byte[n_segs*256*bpe];
-						for(int m=0;m<n_segs;m++) for(int k=0;k<256;k++){int v=freqs[m][k];int base=m*256*bpe+k*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
-						Deflater def=new Deflater(Deflater.BEST_COMPRESSION);
-						byte[] zf=new byte[fb.length+64]; def.setInput(fb); def.finish(); int zl=def.deflate(zf); def.end();
-						dout.writeInt(payload.length); dout.writeInt(n_segs); dout.writeInt(lt); dout.writeInt(zl); dout.write(zf,0,zl);
-						int n_procs=Math.max(1,Math.min(n_segs,Runtime.getRuntime().availableProcessors()));
-						long arith_start=System.nanoTime();
-						if(entropy_type==2)
-						{
-							// Slow arithmetic (Fenwick)
-							BigInteger[][] slow_results=new BigInteger[n_segs][2];
-							Thread[] at=new Thread[n_procs];
-							for(int p=0;p<n_procs;p++){
-								final int fp=p;
-								at[p]=new Thread(()->{
-									for(int m=fp;m<n_segs;m+=n_procs)
-										slow_results[m]=ArithmeticMapper.getIntervalValueFenwick(segs[m],freqs[m]);
-								});
-								at[p].start();
-							}
-							try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
-							long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
-							System.out.println(String.format("  Slow arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
-							for(int m=0;m<n_segs;m++){
-								byte[] b0=slow_results[m][0].toByteArray(); dout.writeInt(b0.length); dout.write(b0,0,b0.length);
-								byte[] b1=slow_results[m][1].toByteArray(); dout.writeInt(b1.length); dout.write(b1,0,b1.length);
-							}
-						}
-						else
-						{
-							// Fast arithmetic (Fenwick)
-							byte[][] fast_results=new byte[n_segs][];
-							Thread[] at=new Thread[n_procs];
-							for(int p=0;p<n_procs;p++){
-								final int fp=p;
-								at[p]=new Thread(()->{
-									for(int m=fp;m<n_segs;m+=n_procs)
-										fast_results[m]=ArithmeticMapper.getIntervalValueFastFenwick(segs[m],freqs[m]);
-								});
-								at[p].start();
-							}
-							try{for(Thread t:at)t.join();}catch(InterruptedException e){Thread.currentThread().interrupt();}
-							long arith_ms=(System.nanoTime()-arith_start)/1_000_000;
-							System.out.println(String.format("  Fast arithmetic encode: %d segs, %d threads, %d ms", n_segs, n_procs, arith_ms));
-							for(int m=0;m<n_segs;m++){
-								dout.writeInt(fast_results[m].length); dout.write(fast_results[m],0,fast_results[m].length);
-							}
-						}
-					}
-					dout.flush();
-					byte[] chan_bytes=baos.toByteArray();
-					out.write(chan_bytes);
-
-					// Print per-channel stats
-					int entropy_bits;
-					if(data_type==0)
-					{
-						// String: channel_length is already the entropy-coded bit count
-						entropy_bits=channel_length[j];
-					}
-					else
-					{
-						// Integer: compute Shannon entropy of the delta value distribution
-						int[] freq=new int[256];
-						for(int k=0;k<payload.length;k++) freq[payload[k]&0xFF]++;
-						entropy_bits=(int)Math.floor(CodeMapper.getShannonLimit(freq));
-					}
-					int compressed_bits=chan_bytes.length*8;
-					String ch_name=channel_string[channel_id[i]];
+					String ch_name=channel_string[j];
 					ch_name = Character.toUpperCase(ch_name.charAt(0)) + ch_name.substring(1);
-					if(map_bits>0)
+					if(stat_map_bits[i]>0)
 						System.out.println(String.format("%-12s delta: %10d   map: %8d   actual: %10d",
-							ch_name, entropy_bits, map_bits, compressed_bits));
+							ch_name, stat_entropy_bits[i], stat_map_bits[i], stat_compressed_bits[i]));
 					else
 						System.out.println(String.format("%-12s delta: %10d                  actual: %10d",
-							ch_name, entropy_bits, compressed_bits));
+							ch_name, stat_entropy_bits[i], stat_compressed_bits[i]));
 				}
+
 				out.flush(); out.close();
 				double rate=(double)new File("foo").length()/(image_xdim*image_ydim*3);
 				System.out.println("Original rate: "+String.format("%.4f",file_compression_rate));
