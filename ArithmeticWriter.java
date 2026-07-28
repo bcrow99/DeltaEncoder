@@ -35,12 +35,27 @@ public class ArithmeticWriter
 	int pixel_segment = 0;
 	int data_type     = 0;   // 0=String, 1=byte, 2=short, 3=int
 	boolean slow_arithmetic = false;
-	int channel_order = 0;   // 0=First, 1=Last, 2=Descending, 3=Ascending, 4=None — Slow arithmetic only
+	int channel_order = 0;   // 0=Last, 1=Descending, 2=Random, 3=None, 4=Hill Climb, 5=Seed Search — Slow arithmetic only
 
 	double zoom_scale = 1.0;
 	double fit_scale  = 1.0;
 	static final double ZOOM_FACTOR = 1.25, ZOOM_MIN = 0.05, ZOOM_MAX = 32.0;
 	static int openWindowCount = 0;
+
+	// Common low-denominator ("lucky") fractions. If a segment's arithmetic-
+	// coded offset lands on one of these (to the precision printed), the
+	// simplest-fraction search found an unusually cheap point in the
+	// interval — a genuine jackpot, not just the generic ~1/width result.
+	private static final double[] LUCKY_RATIOS = {
+		1.0/2, 1.0/3, 2.0/3, 1.0/4, 3.0/4, 1.0/5, 2.0/5, 3.0/5, 4.0/5,
+		1.0/6, 5.0/6, 1.0/7, 2.0/7, 3.0/7, 4.0/7, 5.0/7, 6.0/7,
+		1.0/8, 3.0/8, 5.0/8, 7.0/8
+	};
+	private static final String[] LUCKY_LABELS = {
+		"1/2", "1/3", "2/3", "1/4", "3/4", "1/5", "2/5", "3/5", "4/5",
+		"1/6", "5/6", "1/7", "2/7", "3/7", "4/7", "5/7", "6/7",
+		"1/8", "3/8", "5/8", "7/8"
+	};
 
 	int[] set_sum, channel_sum;
 	String[] set_string, delta_type_string, channel_string;
@@ -465,32 +480,51 @@ public class ArithmeticWriter
 				// Granularity slider
 				arithmetic_menu.add(makeSliderWithRef("Granularity", new JSlider(0, 10, pixel_segment), v -> pixel_segment = v));
 
-				// Order submenu (Slow arithmetic only — controls how each segment's
-				// symbol alphabet is reordered before arithmetic coding; None is the
-				// zero-overhead baseline: no order table written, old Fenwick path used.
-				// See getOrderTable and SaveHandler's Slow branch.
+				// Order submenu (Slow arithmetic only). Last/Descending are
+				// frequency-driven orderings; Random is a control with no
+				// information about the data; None is the zero-overhead baseline
+				// — no order table written, old Fenwick path used; Hill Climb
+				// searches for an order table that minimizes the exact
+				// BigInteger denominator bit-length of the segment's encoded
+				// fraction (i.e. directly minimizes encoded bits), evaluating
+				// one full exact encode per candidate swap — slow, but correct
+				// regardless of how narrow the segment's valid interval is.
+				// Seed Search uses the same objective, but generates candidates
+				// from a 16-bit seed (65,536 values) via
+				// ArithmeticMapper.getRandomOrderTable instead of swaps, and
+				// tries all 65,536 possible seed values exhaustively rather
+				// than sampling — a far smaller reachable space than Hill
+				// Climb's, but the winning table costs only 2 bytes to
+				// transmit (the decoder regenerates it from the seed) instead
+				// of the full 256-byte table. See getOrderTable,
+				// hillClimbOrderTable, seedSearchOrderTable, and SaveHandler's
+				// Slow branch.
 				JMenu order_menu = new JMenu("Order");
-				JRadioButtonMenuItem first_r = new JRadioButtonMenuItem("First", true);
-				JRadioButtonMenuItem last_r  = new JRadioButtonMenuItem("Last", false);
+				JRadioButtonMenuItem last_r  = new JRadioButtonMenuItem("Last", true);
 				JRadioButtonMenuItem desc_r  = new JRadioButtonMenuItem("Descending", false);
-				JRadioButtonMenuItem asc_r   = new JRadioButtonMenuItem("Ascending", false);
+				JRadioButtonMenuItem rand_r  = new JRadioButtonMenuItem("Random", false);
 				JRadioButtonMenuItem none_r  = new JRadioButtonMenuItem("None", false);
+				JRadioButtonMenuItem climb_r = new JRadioButtonMenuItem("Hill Climb", false);
+				JRadioButtonMenuItem seed_r  = new JRadioButtonMenuItem("Seed Search", false);
 				ButtonGroup order_grp = new ButtonGroup();
-				order_grp.add(first_r);
 				order_grp.add(last_r);
 				order_grp.add(desc_r);
-				order_grp.add(asc_r);
+				order_grp.add(rand_r);
 				order_grp.add(none_r);
-				first_r.addActionListener(e -> channel_order = 0);
-				last_r.addActionListener(e -> channel_order = 1);
-				desc_r.addActionListener(e -> channel_order = 2);
-				asc_r.addActionListener(e -> channel_order = 3);
-				none_r.addActionListener(e -> channel_order = 4);
-				order_menu.add(first_r);
+				order_grp.add(climb_r);
+				order_grp.add(seed_r);
+				last_r.addActionListener(e -> channel_order = 0);
+				desc_r.addActionListener(e -> channel_order = 1);
+				rand_r.addActionListener(e -> channel_order = 2);
+				none_r.addActionListener(e -> channel_order = 3);
+				climb_r.addActionListener(e -> channel_order = 4);
+				seed_r.addActionListener(e -> channel_order = 5);
 				order_menu.add(last_r);
 				order_menu.add(desc_r);
-				order_menu.add(asc_r);
+				order_menu.add(rand_r);
 				order_menu.add(none_r);
+				order_menu.add(climb_r);
+				order_menu.add(seed_r);
 				arithmetic_menu.add(order_menu);
 
 				// Statistics menu
@@ -908,22 +942,37 @@ public class ArithmeticWriter
 	// Computes a symbol-to-rank order table (index = original byte value,
 	// value = new position in the reordered frequency table) for one
 	// segment, according to the currently selected Order submenu option.
-	// getDescendingTable already returns symbol->rank; the other three
-	// (getFirstTable/getLastTable/getAscendingTable) return rank->symbol,
-	// so those are inverted here to match the shape getIntervalValue/
-	// getArithmeticValues expect. Only called when channel_order != 4
-	// (None) — SaveHandler skips this entirely for the no-overhead baseline.
-	private byte[] getOrderTable(byte[] seg, int[] freq)
+	// getDescendingTable already returns symbol->rank; getLastTable and
+	// getRandomTable return rank->symbol, so those are inverted here to
+	// match the shape getIntervalValue/getArithmeticValues expect. Only
+	// called when channel_order != 3 (None) — SaveHandler skips this
+	// entirely for the no-overhead baseline.
+	//
+	// Returns a two-element Object[]: [0] is the byte[] symbol-to-rank order
+	// table, [1] is the Long seed used (non-null for channel_order == 2 /
+	// Random and channel_order == 5 / Seed Search; null otherwise) — kept
+	// together so callers running in parallel threads never have to share
+	// mutable state to recover the seed that produced a given table.
+	private Object[] getOrderTable(byte[] seg, int[] freq, String label)
 	{
 		byte[] rank_to_symbol;
+		Long seed = null;
 		if (channel_order == 0)
-			rank_to_symbol = ArithmeticMapper.getFirstTable(seg, freq);
-		else if (channel_order == 1)
 			rank_to_symbol = ArithmeticMapper.getLastTable(seg, freq);
+		else if (channel_order == 1)
+			return new Object[]{ ArithmeticMapper.getDescendingTable(freq), null };
 		else if (channel_order == 2)
-			return ArithmeticMapper.getDescendingTable(freq);
+		{
+			seed = new java.security.SecureRandom().nextLong();
+			rank_to_symbol = ArithmeticMapper.getRandomTable(freq, seed);
+		}
+		else if (channel_order == 5)
+		{
+			short found_seed = seedSearchOrderTable(seg, freq, label);
+			return new Object[]{ ArithmeticMapper.getRandomOrderTable(freq, found_seed), (long) found_seed };
+		}
 		else
-			rank_to_symbol = ArithmeticMapper.getAscendingTable(freq);
+			return new Object[]{ hillClimbOrderTable(seg, freq, 10000, label), null };
 
 		byte[] symbol_to_rank = new byte[rank_to_symbol.length];
 		for (int rank = 0; rank < rank_to_symbol.length; rank++)
@@ -931,7 +980,189 @@ public class ArithmeticWriter
 			int symbol = rank_to_symbol[rank] & 0xFF;
 			symbol_to_rank[symbol] = (byte) rank;
 		}
-		return symbol_to_rank;
+		return new Object[]{ symbol_to_rank, seed };
+	}
+
+	// Hill-climbs an order table by minimizing the bit-length of the exact
+	// simplest-fraction denominator found by ArithmeticMapper.getIntervalValue
+	// + simplestFractionInInterval — i.e. directly minimizing the actual
+	// number of bits the segment will cost to encode, rather than comparing
+	// the offset's decimal value to a fixed list of low-denominator ratios
+	// (LUCKY_RATIOS).
+	//
+	// That decimal-proximity approach — used by both the earlier fast
+	// (double-precision) scorer and the original exact-BigInteger version
+	// before it — could not detect genuine low-denominator containment for
+	// realistically sized segments: the true valid interval shrinks roughly
+	// like 2^-(segment entropy in bits), so for a segment of even a few
+	// hundred bytes the interval is far narrower than any fixed-precision
+	// representation (double or otherwise) can resolve. Decimal closeness
+	// to a target like 0.5 says nothing about whether a fraction with small
+	// denominator actually falls inside that interval. Scoring by
+	// denominator bit length sidesteps the precision problem entirely,
+	// since simplestFractionInInterval is exact by construction for any
+	// interval width — at the cost of being slow again: one full BigInteger
+	// encode of the segment per candidate swap.
+	private byte[] hillClimbOrderTable(byte[] seg, int[] freq, int max_iterations, String label)
+	{
+		byte[] rank_to_symbol = ArithmeticMapper.getLastTable(seg, freq);
+		byte[] order = new byte[rank_to_symbol.length];
+		for (int rank = 0; rank < rank_to_symbol.length; rank++)
+		{
+			int symbol = rank_to_symbol[rank] & 0xFF;
+			order[symbol] = (byte) rank;
+		}
+
+		BigInteger[] best_result = ArithmeticMapper.getIntervalValue(seg, freq, order);
+		int best_bits = best_result[1].bitLength();
+
+		long heartbeat_start = System.nanoTime();
+		System.out.println(String.format("  [%s] hill climb start: %d bytes, %d iterations, initial denominator ~%d bits",
+			label, seg.length, max_iterations, best_bits));
+
+		java.util.Random rand = new java.util.Random();
+		for (int iter = 0; iter < max_iterations; iter++)
+		{
+			int a = rand.nextInt(256);
+			int b = rand.nextInt(256);
+			if (a == b)
+				continue;
+
+			byte[] candidate = order.clone();
+			byte tmp = candidate[a];
+			candidate[a] = candidate[b];
+			candidate[b] = tmp;
+
+			BigInteger[] result = ArithmeticMapper.getIntervalValue(seg, freq, candidate);
+			int bits = result[1].bitLength();
+
+			if (bits < best_bits)
+			{
+				order = candidate;
+				best_bits = bits;
+				best_result = result;
+			}
+
+			if ((iter + 1) % 25 == 0 || iter == max_iterations - 1)
+			{
+				long elapsed_ms = (System.nanoTime() - heartbeat_start) / 1_000_000;
+				System.out.println(String.format("  [%s] iter %d/%d, best denominator ~%d bits, %d ms elapsed",
+					label, iter + 1, max_iterations, best_bits, elapsed_ms));
+			}
+		}
+		return order;
+	}
+
+	// Same denominator-bit-length objective as hillClimbOrderTable, but each
+	// candidate order table is generated from a 16-bit seed (65,536 distinct
+	// values) via ArithmeticMapper.getRandomOrderTable(freq, seed) instead
+	// of a swap on the previous best table. As with the byte-seed version
+	// this replaced, the reachable space is small enough to search
+	// exhaustively rather than randomly sample — exhaustive is strictly
+	// better here too: by the time ~2,000,000 random draws have been made,
+	// essentially every one of the 65,536 possible seeds has already been
+	// tried multiple times over, so a full sweep gets guaranteed complete
+	// coverage in a fraction of that work, with no risk of missing a seed
+	// by chance. Because every candidate is deterministically
+	// reconstructible from (freq, seed) alone, the decoder can regenerate
+	// the exact winning table from a 2-byte seed instead of the full
+	// 256-byte table.
+	//
+	// The reachable space here (65,536 tables) is still far smaller than
+	// what swap-based Hill Climb can reach (up to 256!), so a run is much
+	// less likely to find as large a reduction — but at 2 bytes of
+	// transmission cost, a fairly modest reduction is still worth using.
+	private short seedSearchOrderTable(byte[] seg, int[] freq, String label)
+	{
+		short  best_seed  = 0;
+		byte[] best_order = ArithmeticMapper.getRandomOrderTable(freq, best_seed);
+		int    best_bits  = ArithmeticMapper.getIntervalValue(seg, freq, best_order)[1].bitLength();
+
+		long heartbeat_start = System.nanoTime();
+		System.out.println(String.format("  [%s] seed search start: %d bytes, 65536 candidate seeds, initial denominator ~%d bits",
+			label, seg.length, best_bits));
+
+		int count = 0;
+		for (int s = Short.MIN_VALUE; s <= Short.MAX_VALUE; s++)
+		{
+			short  candidate_seed  = (short) s;
+			byte[] candidate_order = ArithmeticMapper.getRandomOrderTable(freq, candidate_seed);
+			int    bits            = ArithmeticMapper.getIntervalValue(seg, freq, candidate_order)[1].bitLength();
+
+			if (bits < best_bits)
+			{
+				best_seed = candidate_seed;
+				best_bits = bits;
+			}
+
+			count++;
+			if (count % 4096 == 0 || s == Short.MAX_VALUE)
+			{
+				long elapsed_ms = (System.nanoTime() - heartbeat_start) / 1_000_000;
+				System.out.println(String.format("  [%s] seed %d/65536, best denominator ~%d bits, %d ms elapsed",
+					label, count, best_bits, elapsed_ms));
+			}
+		}
+		return best_seed;
+	}
+
+	private static double offsetAsDouble(BigInteger numerator, BigInteger denominator)
+	{
+		return new java.math.BigDecimal(numerator)
+			.divide(new java.math.BigDecimal(denominator), 20, java.math.RoundingMode.HALF_UP)
+			.doubleValue();
+	}
+
+	// Returns the matched lucky-ratio label, or null if the offset doesn't
+	// match any of them within tolerance.
+	private static String matchLuckyRatio(double offset)
+	{
+		for (int r = 0; r < LUCKY_RATIOS.length; r++)
+		{
+			if (Math.abs(offset - LUCKY_RATIOS[r]) < 0.00005)
+				return LUCKY_LABELS[r];
+		}
+		return null;
+	}
+
+	// Prints a segment's final arithmetic-coded offset as a decimal, and
+	// flags whether it matches one of the common low-denominator fractions
+	// — i.e. whether the simplest-fraction search hit a genuine jackpot
+	// rather than the generic ~1/width result.
+	private static void printOffset(int channel, int segment, BigInteger numerator, BigInteger denominator)
+	{
+		double offset = offsetAsDouble(numerator, denominator);
+		String match = matchLuckyRatio(offset);
+		String lucky = (match != null) ? ("  <-- matches " + match) : "";
+		System.out.println(String.format("    ch%d seg%d offset: %.4f%s", channel, segment, offset, lucky));
+	}
+
+	// Appends a frequency table / order table pair to a training-data file
+	// whenever a Random-order segment's offset matches a lucky ratio, for
+	// later analysis of whether similar frequency tables tend to have
+	// similar winning orders. Includes the seed that produced the order
+	// table, so any hit can be regenerated deterministically later via
+	// ArithmeticMapper.getRandomTable(freq, seed).
+	private static void saveTrainingExample(int[] freq, byte[] order, String matched_ratio, double offset, long seed, String source_filename)
+	{
+		try
+		{
+			FileWriter fw = new FileWriter("training_data.txt", true);
+			PrintWriter pw = new PrintWriter(fw);
+			pw.println(matched_ratio + "\t" + String.format("%.6f", offset) + "\t" + seed + "\t" + source_filename);
+			for (int i = 0; i < freq.length; i++)
+			{
+				int order_val = order[i] & 0xFF;
+				pw.println(i + "\t" + freq[i] + "\t" + order_val);
+			}
+			pw.println();
+			pw.println();
+			pw.close();
+		}
+		catch (IOException e)
+		{
+			System.out.println("Could not write training example: " + e);
+		}
 	}
 
 	// Compute deltas for a given channel and delta type
@@ -1670,16 +1901,18 @@ public class ArithmeticWriter
 							long arith_start = System.nanoTime();
 							if (slow_arithmetic)
 							{
-								// Slow arithmetic. When channel_order == 4 (None), skip order
+								// Slow arithmetic. When channel_order == 3 (None), skip order
 								// tables entirely and fall back to the original Fenwick path —
-								// this is the zero-overhead baseline the other four options are
+								// this is the zero-overhead baseline the other options are
 								// measured against. Otherwise, compute a per-segment order table
-								// and use the order-aware (non-Fenwick) interval search, since
-								// reordering the alphabet changes the interval's offset, which
-								// only the linear-scan getIntervalValue currently supports.
-								boolean use_order = (channel_order != 4);
+								// (and, for Random, its seed) and use the order-aware
+								// (non-Fenwick) interval search, since reordering the alphabet
+								// changes the interval's offset, which only the linear-scan
+								// getIntervalValue currently supports.
+								boolean use_order = (channel_order != 3);
 								BigInteger[][] slow_results = new BigInteger[n_segs][2];
 								byte[][]       order_tables = use_order ? new byte[n_segs][] : null;
+								Long[]         order_seeds  = use_order ? new Long[n_segs] : null;
 								Thread[] at = new Thread[n_procs];
 								for (int p = 0; p < n_procs; p++)
 								{
@@ -1690,7 +1923,9 @@ public class ArithmeticWriter
 										{
 											if (use_order)
 											{
-												order_tables[m] = getOrderTable(segs[m], freqs[m]);
+												Object[] order_result = getOrderTable(segs[m], freqs[m], "ch" + fi + " seg" + m);
+												order_tables[m] = (byte[]) order_result[0];
+												order_seeds[m]  = (Long) order_result[1];
 												slow_results[m] = ArithmeticMapper.getIntervalValue(segs[m], freqs[m], order_tables[m]);
 											}
 											else
@@ -1716,11 +1951,28 @@ public class ArithmeticWriter
 								System.out.println(String.format("  Slow arithmetic encode (order=%s): %d segs, %d threads, %d ms",
 									use_order ? "yes" : "none", n_segs, n_procs, arith_ms));
 
-								dout.writeByte(use_order ? 1 : 0);
+								for (int m = 0; m < n_segs; m++)
+								{
+									printOffset(fi, m, slow_results[m][0], slow_results[m][1]);
+									if (use_order && channel_order == 2 && order_seeds[m] != null)
+									{
+										double offset = offsetAsDouble(slow_results[m][0], slow_results[m][1]);
+										String match = matchLuckyRatio(offset);
+										if (match != null)
+											saveTrainingExample(freqs[m], order_tables[m], match, offset, order_seeds[m], filename);
+									}
+								}
+
+								dout.writeByte(!use_order ? 0 : (channel_order == 5 ? 2 : 1));
 								for (int m = 0; m < n_segs; m++)
 								{
 									if (use_order)
-										dout.write(order_tables[m], 0, order_tables[m].length);
+									{
+										if (channel_order == 5)
+											dout.writeShort(order_seeds[m].intValue());
+										else
+											dout.write(order_tables[m], 0, order_tables[m].length);
+									}
 									byte[] b0 = slow_results[m][0].toByteArray();
 									dout.writeInt(b0.length);
 									dout.write(b0, 0, b0.length);

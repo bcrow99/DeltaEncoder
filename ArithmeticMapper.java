@@ -738,6 +738,93 @@ public class ArithmeticMapper
   	    return last_table;	
   	}	
 
+  	
+  	/**
+  	 * Produces a random permutation of symbol indices — a probabilistic-space
+  	 * baseline that carries no information about the data, for comparison
+  	 * against frequency-driven orderings like Last and Descending.
+  	 */
+  	public static byte[] getRandomTable(int frequency[])
+  	{
+  		int n = frequency.length;
+  		byte[] table = new byte[n];
+  		for (int i = 0; i < n; i++)
+  			table[i] = (byte) i;
+
+  		java.util.Random rand = new java.util.Random();
+  		for (int i = n - 1; i > 0; i--)
+  		{
+  			int j = rand.nextInt(i + 1);
+  			byte tmp = table[i];
+  			table[i] = table[j];
+  			table[j] = tmp;
+  		}
+  		return table;
+  	}
+  	
+  	public static byte[] getRandomTable(int frequency[], long seed)
+  	{
+  		int n = frequency.length;
+  		byte[] table = new byte[n];
+  		for (int i = 0; i < n; i++)
+  			table[i] = (byte) i;
+
+  		java.util.Random rand = new java.util.Random(seed);
+  		for (int i = n - 1; i > 0; i--)
+  		{
+  			int j = rand.nextInt(i + 1);
+  			byte tmp = table[i];
+  			table[i] = table[j];
+  			table[j] = tmp;
+  		}
+  		return table;
+  	}
+
+  	/**
+  	 * Builds the random rank->symbol table via getRandomTable(frequency, seed)
+  	 * and inverts it to the symbol->rank shape expected by the order
+  	 * parameter of getIntervalValue/getArithmeticValues. Both the encoder
+  	 * (search) and decoder (reconstruction from a stored seed) call this same
+  	 * helper rather than each inverting getRandomTable's output separately,
+  	 * so they are guaranteed to derive the identical order table from a given
+  	 * (frequency, seed) pair.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, long seed)
+  	{
+  		byte[] rank_to_symbol = getRandomTable(frequency, seed);
+  		byte[] symbol_to_rank = new byte[rank_to_symbol.length];
+  		for (int rank = 0; rank < rank_to_symbol.length; rank++)
+  		{
+  			int symbol = rank_to_symbol[rank] & 0xFF;
+  			symbol_to_rank[symbol] = (byte) rank;
+  		}
+  		return symbol_to_rank;
+  	}
+
+  	/**
+  	 * Byte-seed convenience overload. Widens the byte (interpreted as
+  	 * unsigned, 0-255) to a long before delegating, so a decoder that only
+  	 * stores this single byte reconstructs exactly the same table the
+  	 * encoder derived when searching over byte-sized seeds.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, byte seed)
+  	{
+  		return getRandomOrderTable(frequency, (long) (seed & 0xFF));
+  	}
+
+  	/**
+  	 * Short-seed convenience overload. Widens the short to a long via sign
+  	 * extension before delegating, matching how DataOutputStream.writeShort /
+  	 * DataInputStream.readShort round-trip a short's bit pattern exactly, so
+  	 * both sides reconstruct the identical table from a given seed.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, short seed)
+  	{
+  		return getRandomOrderTable(frequency, (long) seed);
+  	}
+  	
+  	
+  	
     // Method with order table.
     public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte [] order) 
     {
@@ -1831,6 +1918,141 @@ public class ArithmeticMapper
 		}
 		return lo;
 	}
+
+	// =========================================================================
+	// Cheap approximate-offset scorer for order-table search (hill climbing /
+	// annealing). New method — does not modify any existing encode/decode path.
+	// =========================================================================
+
+	/**
+	 * Cheap approximate offset for order-table search. Runs the same long-based
+	 * E1/E2/E3 renormalization as getIntervalValueFast, with an order-table
+	 * remap like getIntervalValue(..., order), but instead of packing bits into
+	 * a byte stream for storage, captures the leading ~52 bits directly and
+	 * returns them as a double in [0, 1). Not intended for round-trip
+	 * encode/decode — only as a fast scorer during hill-climbing/annealing.
+	 *
+	 * Precision note: for any segment large enough to emit more than ~52 bits
+	 * total (true of essentially all real segments), the interval has already
+	 * collapsed well past double precision, so this agrees with the exact
+	 * BigInteger offset from getIntervalValue(src, frequency, order) to full
+	 * double precision.
+	 *
+	 * @param src        bytes to encode
+	 * @param frequency  frequency[i] = count of unsigned byte value i (256 entries)
+	 * @param order      symbol-to-rank order table, same shape as used by
+	 *                   getIntervalValue(src, frequency, order)
+	 * @return           approximate offset in [0, 1)
+	 */
+	public static double getApproxOffsetFastOrdered(byte[] src, int[] frequency, byte[] order)
+	{
+		int[] f = new int[frequency.length];
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			if (j < 0) j += 256;
+			f[j] = frequency[i];
+		}
+		int n = src.length;
+
+		int[] s = new int[f.length];
+		int   m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
+
+		long low = 0L, high = TOP;
+		int  pending = 0;
+
+		LeadingBits bits = new LeadingBits();
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+			j = order[j];
+			if (j < 0) j += 256;
+
+			long range    = high - low;
+			long new_low  = low + (range * s[j]) / m;
+			long new_high = (s[j] + f[j] == m) ? high : low + (range * (long)(s[j] + f[j])) / m;
+			low  = new_low;
+			high = new_high;
+
+			for (;;)
+			{
+				if (high <= HALF)
+				{
+					bits.append(0);
+					for (int p = 0; p < pending; p++) bits.append(1);
+					pending = 0;
+					low <<= 1; high <<= 1;
+				}
+				else if (low >= HALF)
+				{
+					bits.append(1);
+					for (int p = 0; p < pending; p++) bits.append(0);
+					pending = 0;
+					low = (low - HALF) << 1; high = (high - HALF) << 1;
+				}
+				else if (low >= QTR && high <= TQTR)
+				{
+					pending++;
+					low = (low - QTR) << 1; high = (high - QTR) << 1;
+				}
+				else break;
+			}
+
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		// Flush, mirroring getIntervalValueFast's termination exactly.
+		pending++;
+		if (low < QTR)
+		{
+			bits.append(0);
+			for (int p = 0; p < pending; p++) bits.append(1);
+		}
+		else
+		{
+			bits.append(1);
+			for (int p = 0; p < pending; p++) bits.append(0);
+		}
+
+		return bits.toApproxOffset();
+	}
+
+	/**
+	 * Keeps only the leading MAX_BITS bits appended to it — enough for full
+	 * double precision — and discards the rest. Used only by
+	 * getApproxOffsetFastOrdered; not a general-purpose bit buffer.
+	 */
+	private static final class LeadingBits
+	{
+		static final int MAX_BITS = 52; // matches double's mantissa precision
+		long accum = 0L;
+		int  count = 0;
+
+		void append(int bit)
+		{
+			if (count < MAX_BITS)
+			{
+				accum = (accum << 1) | bit;
+				count++;
+			}
+		}
+
+		double toApproxOffset()
+		{
+			return (count == 0) ? 0.0 : (double) accum / (double) (1L << count);
+		}
+	}
+
 
 	// =========================================================================
 	// Fenwick-tree accelerated slow arithmetic coder.

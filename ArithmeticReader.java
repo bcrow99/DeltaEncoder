@@ -147,18 +147,30 @@ public class ArithmeticReader
 
 				if (slow_arithmetic)
 				{
-					boolean use_order = (in.readByte() != 0);
+					// order_mode: 0 = no order table (Fenwick baseline),
+					// 1 = full 256-byte symbol-to-rank table written per segment,
+					// 2 = 2-byte short seed per segment, table reconstructed here
+					// via ArithmeticMapper.getRandomOrderTable(freqs[m], seed) —
+					// must match exactly what the encoder derived from that seed,
+					// which is why both sides go through the same shared helper.
+					int order_mode = in.readByte();
+					boolean use_order = (order_mode != 0);
 					channel_use_order[i] = use_order;
 
 					java.math.BigInteger[][] offsets = new java.math.BigInteger[n_segs][2];
 					byte[][]                 orders  = use_order ? new byte[n_segs][] : null;
 					for (int m = 0; m < n_segs; m++)
 					{
-						if (use_order)
+						if (order_mode == 1)
 						{
 							byte[] order = new byte[256];
 							in.readFully(order);
 							orders[m] = order;
+						}
+						else if (order_mode == 2)
+						{
+							short seed = in.readShort();
+							orders[m] = ArithmeticMapper.getRandomOrderTable(freqs[m], seed);
 						}
 
 						int ll;
