@@ -968,7 +968,7 @@ public class ArithmeticWriter
 		}
 		else if (channel_order == 5)
 		{
-			short found_seed = seedSearchOrderTable(seg, freq, label);
+			short found_seed = seedSearchOrderTable(seg, freq, 2048, label);
 			return new Object[]{ ArithmeticMapper.getRandomOrderTable(freq, found_seed), (long) found_seed };
 		}
 		else
@@ -1054,38 +1054,34 @@ public class ArithmeticWriter
 	}
 
 	// Same denominator-bit-length objective as hillClimbOrderTable, but each
-	// candidate order table is generated from a 16-bit seed (65,536 distinct
-	// values) via ArithmeticMapper.getRandomOrderTable(freq, seed) instead
-	// of a swap on the previous best table. As with the byte-seed version
-	// this replaced, the reachable space is small enough to search
-	// exhaustively rather than randomly sample — exhaustive is strictly
-	// better here too: by the time ~2,000,000 random draws have been made,
-	// essentially every one of the 65,536 possible seeds has already been
-	// tried multiple times over, so a full sweep gets guaranteed complete
-	// coverage in a fraction of that work, with no risk of missing a seed
-	// by chance. Because every candidate is deterministically
+	// candidate order table is generated from a 16-bit seed via
+	// ArithmeticMapper.getRandomOrderTable(freq, seed) instead of a swap on
+	// the previous best table. Randomly samples max_iterations distinct
+	// seed values from the 65,536 possible shorts rather than exhausting
+	// them all — an exhaustive sweep is more thorough in principle, but at
+	// one full BigInteger encode per candidate it didn't complete within
+	// 48 hours on real data, so a bounded sample trades completeness for
+	// actually finishing. Duplicate draws are possible but not tracked;
+	// with max_iterations well under 65,536 the loss from occasional
+	// repeats is small. Because every candidate is deterministically
 	// reconstructible from (freq, seed) alone, the decoder can regenerate
 	// the exact winning table from a 2-byte seed instead of the full
 	// 256-byte table.
-	//
-	// The reachable space here (65,536 tables) is still far smaller than
-	// what swap-based Hill Climb can reach (up to 256!), so a run is much
-	// less likely to find as large a reduction — but at 2 bytes of
-	// transmission cost, a fairly modest reduction is still worth using.
-	private short seedSearchOrderTable(byte[] seg, int[] freq, String label)
+	private short seedSearchOrderTable(byte[] seg, int[] freq, int max_iterations, String label)
 	{
+		java.util.Random rand = new java.util.Random();
+
 		short  best_seed  = 0;
 		byte[] best_order = ArithmeticMapper.getRandomOrderTable(freq, best_seed);
 		int    best_bits  = ArithmeticMapper.getIntervalValue(seg, freq, best_order)[1].bitLength();
 
 		long heartbeat_start = System.nanoTime();
-		System.out.println(String.format("  [%s] seed search start: %d bytes, 65536 candidate seeds, initial denominator ~%d bits",
-			label, seg.length, best_bits));
+		System.out.println(String.format("  [%s] seed search start: %d bytes, %d candidate seeds (sampled), initial denominator ~%d bits",
+			label, seg.length, max_iterations, best_bits));
 
-		int count = 0;
-		for (int s = Short.MIN_VALUE; s <= Short.MAX_VALUE; s++)
+		for (int iter = 0; iter < max_iterations; iter++)
 		{
-			short  candidate_seed  = (short) s;
+			short  candidate_seed  = (short) rand.nextInt();
 			byte[] candidate_order = ArithmeticMapper.getRandomOrderTable(freq, candidate_seed);
 			int    bits            = ArithmeticMapper.getIntervalValue(seg, freq, candidate_order)[1].bitLength();
 
@@ -1095,12 +1091,11 @@ public class ArithmeticWriter
 				best_bits = bits;
 			}
 
-			count++;
-			if (count % 4096 == 0 || s == Short.MAX_VALUE)
+			if ((iter + 1) % 200 == 0 || iter == max_iterations - 1)
 			{
 				long elapsed_ms = (System.nanoTime() - heartbeat_start) / 1_000_000;
-				System.out.println(String.format("  [%s] seed %d/65536, best denominator ~%d bits, %d ms elapsed",
-					label, count, best_bits, elapsed_ms));
+				System.out.println(String.format("  [%s] seed %d/%d, best denominator ~%d bits, %d ms elapsed",
+					label, iter + 1, max_iterations, best_bits, elapsed_ms));
 			}
 		}
 		return best_seed;
