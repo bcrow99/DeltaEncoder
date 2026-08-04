@@ -708,7 +708,7 @@ public class ArithmeticMapper
   	// This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
   	public static byte [] getLastTable(byte[] src, int [] frequency)
   	{
-          ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
   		
   		for(int i = 0; i < frequency.length; i++)
   		{
@@ -738,6 +738,95 @@ public class ArithmeticMapper
   	    return last_table;	
   	}	
 
+  	public static ArrayList <byte []> getTableSeries(byte[] src, int [] frequency)
+  	{
+  		ArrayList <byte []> result = new ArrayList <byte[]> ();
+  		
+  		ArrayList <Double>          list  = new ArrayList <Double>();
+  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+  		int       n                       = frequency.length;
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key = frequency[i];
+  			while (table.containsKey(key))
+  				key += .001;
+  			table.put(key, i);
+  			list.add(key);
+  		}
+  		
+  		Collections.sort(list, Comparator.reverseOrder());
+  		
+  		byte [] descending_table = new byte[n];
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key          = list.get(i);
+  			int    j            = table.get(key);
+  			descending_table[j] = (byte) i;
+  		}
+  		
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+  		
+  		for(int i = 0; i < frequency.length; i++)
+  		{
+  			if(frequency[i] == 0)
+  				exhausted_list.add(i);
+  		}
+  		int [] f = frequency.clone();
+  	   
+  		for(int i = 0; i < src.length; i++)
+  	    {
+  	    	    int j = src[i];
+  	    	    if(j < 0)
+  	    	    	    j += 256;
+  	    	    f[j]--;
+  	    	    if(f[j] == 0)
+  	    	    	    exhausted_list.add(j);  
+  	    }
+  	
+  		byte [] last_table = new byte[frequency.length];
+  		int k = 0;
+  		for(int i = frequency.length - 1; i >= 0; i--)
+  		{
+  			int j = exhausted_list.get(i);
+  			last_table[k++] = (byte)j;
+  		}
+  		
+  		int  length = descending_table.length;
+  		byte least  = descending_table[length - 1];
+  		
+  		int least_place = 0;
+  		for(int i = 0; i < last_table.length; i++)
+  		{
+  		    if(last_table[i] == least)
+  		    {
+  		    	    least_place = i;
+  		    	    break;
+  		    }
+  		}
+  		
+  		result.add(last_table);
+  		
+  		boolean done = false;
+  		while(!done)
+  		{
+  		    if(least_place == 0)	
+  		    	    done = true;
+  		    else
+  		    {
+  		    	    byte down               = last_table[least_place - 1];
+  		    	    last_table[least_place] = down;
+  		    	    last_table[least_place - 1] = least;
+  		    	    least_place--;
+  		    	    
+  		    	    byte [] copy = last_table.clone();
+  		    	    result.add(copy);
+  		    }
+  		}
+  		
+  		return result;
+  	}
   	
   	/**
   	 * Produces a random permutation of symbol indices — a probabilistic-space
