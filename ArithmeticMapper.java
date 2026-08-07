@@ -808,6 +808,8 @@ public class ArithmeticMapper
   		
   		result.add(last_table);
   		
+  		//System.out.println("Added table.");
+  		
   		boolean done = false;
   		while(!done)
   		{
@@ -822,11 +824,107 @@ public class ArithmeticMapper
   		    	    
   		    	    byte [] copy = last_table.clone();
   		    	    result.add(copy);
+  		    	    //System.out.println("Added table.");
   		    }
   		}
   		
   		return result;
   	}
+  	
+  	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
+  	{
+  		ArrayList <byte []> result = new ArrayList <byte[]> ();
+  		
+  		ArrayList <Double>          list  = new ArrayList <Double>();
+  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+  		int       n                       = frequency.length;
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key = frequency[i];
+  			while (table.containsKey(key))
+  				key += .001;
+  			table.put(key, i);
+  			list.add(key);
+  		}
+  		
+  		Collections.sort(list, Comparator.reverseOrder());
+  		
+  		byte [] descending_table = new byte[n];
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key          = list.get(i);
+  			int    j            = table.get(key);
+  			descending_table[j] = (byte) i;
+  		}
+  		
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+  		
+  		for(int i = 0; i < frequency.length; i++)
+  		{
+  			if(frequency[i] == 0)
+  				exhausted_list.add(i);
+  		}
+  		int [] f = frequency.clone();
+  	   
+  		for(int i = 0; i < src.length; i++)
+  	    {
+  	    	    int j = src[i];
+  	    	    if(j < 0)
+  	    	    	    j += 256;
+  	    	    f[j]--;
+  	    	    if(f[j] == 0)
+  	    	    	    exhausted_list.add(j);  
+  	    }
+  	
+  		byte [] last_table = new byte[frequency.length];
+  		int k = 0;
+  		for(int i = frequency.length - 1; i >= 0; i--)
+  		{
+  			int j = exhausted_list.get(i);
+  			last_table[k++] = (byte)j;
+  		}
+  		
+  		int  length = descending_table.length;
+  		byte greatest  = descending_table[0];
+  		
+  		int greatest_place = 0;
+  		for(int i = 0; i < last_table.length; i++)
+  		{
+  		    if(last_table[i] == greatest)
+  		    {
+  		    	greatest_place = i;
+  		    	    break;
+  		    }
+  		}
+  		
+  		result.add(last_table);
+  		
+  		//System.out.println("Added table.");
+  		
+  		boolean done = false;
+  		while(!done)
+  		{
+  		    if(greatest_place == 0)	
+  		    	    done = true;
+  		    else
+  		    {
+  		    	    byte down               = last_table[greatest_place - 1];
+  		    	    last_table[greatest_place] = down;
+  		    	    last_table[greatest_place - 1] = greatest;
+  		    	    greatest_place--;
+  		    	    
+  		    	    byte [] copy = last_table.clone();
+  		    	    result.add(copy);
+  		    	    //System.out.println("Added table.");
+  		    }
+  		}
+  		
+  		return result;
+  	}
+  	
+  	
   	
   	/**
   	 * Produces a random permutation of symbol indices — a probabilistic-space
@@ -912,7 +1010,113 @@ public class ArithmeticMapper
   		return getRandomOrderTable(frequency, (long) seed);
   	}
   	
-  	
+    // Method with order table.
+    public static BigInteger[] getArithmeticOffsetAndRange(byte[] src, int[] frequency, byte [] order) 
+    {
+    	    int [] f = new int[frequency.length];
+		int    n = src.length;
+	   
+		// Reorder frequency table.
+		for(int i = 0; i < order.length; i++)
+		{
+			int j = (int) order[i];
+			if(j < 0)
+				j += 256;
+			f[j]  = frequency[i];
+		}
+
+        // Build cumulative-frequency table
+        int[] s = new int[f.length];
+        int   m = 0;
+        for (int i = 0; i < f.length; i++) 
+        {
+            s[i] = m;
+            m   += f[i];
+        }
+
+        System.out.println("Getting offset...");
+        // Track interval as two reduced rationals: offset and range
+        BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
+        BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
+
+        for (int i = 0; i < n; i++) 
+        {
+            int j = src[i];
+            if (j < 0) 
+            	    j += 256; 
+            // Use reordered frequency.
+    	        j = (int) order[j];
+    	        if(j < 0)
+    	    	        j += 256;
+
+            // addend = range * s[j] / m
+            BigInteger addN = rngN.multiply(BigInteger.valueOf(s[j]));
+            BigInteger addD = rngD.multiply(BigInteger.valueOf(m));
+            BigInteger g = addN.gcd(addD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                addN = addN.divide(g);
+                addD = addD.divide(g);
+            }
+
+            // offset += addend
+            offN = offN.multiply(addD).add(addN.multiply(offD));
+            offD = offD.multiply(addD);
+            g = offN.gcd(offD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                offN = offN.divide(g);
+                offD = offD.divide(g);
+            }
+
+            // range *= f[j] / m
+            rngN = rngN.multiply(BigInteger.valueOf(f[j]));
+            rngD = rngD.multiply(BigInteger.valueOf(m));
+            g = rngN.gcd(rngD);
+            if (g.compareTo(BigInteger.ONE) > 0) 
+            {
+                rngN = rngN.divide(g);
+                rngD = rngD.divide(g);
+            }
+
+            // Adaptive update
+            f[j]--;
+            m--;
+            for (int k = j + 1; k < s.length; k++) 
+            {
+                s[k]--;
+            }
+        }
+
+        // Bring offset and range to a common denominator
+        if (!offD.equals(rngD)) 
+        {
+            offN = offN.multiply(rngD);
+            rngN = rngN.multiply(offD);
+            BigInteger commonD = offD.multiply(rngD);
+            offD = commonD;
+            rngD = commonD;
+        }
+
+        /*
+        // Upper bound of the valid interval (exclusive)
+        BigInteger hiN = offN.add(rngN);
+        BigInteger hiD = offD;
+
+        return simplestFractionInInterval(offN, offD, hiN, hiD);
+        */
+        
+        BigInteger [] result = new BigInteger[4];
+        
+        result[0] = offN;
+        result[1] = offD;
+        result[2] = rngN;
+        result[3] = rngD;
+        
+        return result;
+    }
+
+
   	
     // Method with order table.
     public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte [] order) 
