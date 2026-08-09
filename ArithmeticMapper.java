@@ -894,7 +894,7 @@ public class ArithmeticMapper
   		{
   		    if(last_table[i] == greatest)
   		    {
-  		    	greatest_place = i;
+  		    	    greatest_place = i;
   		    	    break;
   		    }
   		}
@@ -924,6 +924,73 @@ public class ArithmeticMapper
   		return result;
   	}
   	
+
+  	public static ArrayList <byte []> getAdjustedTableSeries(byte[] table, int [] frequency)
+  	{
+  		ArrayList <byte []> result = new ArrayList <byte[]> ();
+  		
+  		ArrayList <Double>          list  = new ArrayList <Double>();
+  		Hashtable <Double, Integer> table_hash = new Hashtable <Double, Integer>();
+  		int       n                       = frequency.length;
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key = frequency[i];
+  			while (table_hash.containsKey(key))
+  				key += .001;
+  			table_hash.put(key, i);
+  			list.add(key);
+  		}
+  		
+  		Collections.sort(list, Comparator.reverseOrder());
+  		
+  		byte [] descending_table = new byte[n];
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key          = list.get(i);
+  			int    j            = table_hash.get(key);
+  			descending_table[j] = (byte) i;
+  		}
+  		
+        
+  		int  length = descending_table.length;
+  		byte least  = descending_table[length - 1];
+  		
+  		int least_place = 0;
+  		for(int i = 0; i < table.length; i++)
+  		{
+  		    if(table[i] == least)
+  		    {
+  		    	    least_place = i;
+  		    	    break;
+  		    }
+  		}
+  		
+  		result.add(table);
+  		
+  		//System.out.println("Added table.");
+  		
+  		boolean done = false;
+  		while(!done)
+  		{
+  		    if(least_place == 0)	
+  		    	    done = true;
+  		    else
+  		    {
+  		    	    byte down               = table[least_place - 1];
+  		    	    table[least_place] = down;
+  		    	    table[least_place - 1] = least;
+  		    	    least_place--;
+  		    	    
+  		    	    byte [] copy = table.clone();
+  		    	    result.add(copy);
+  		    	    //System.out.println("Added table.");
+  		    }
+  		}
+  		
+  		return result;
+  	}
   	
   	
   	/**
