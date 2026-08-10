@@ -12,33 +12,10 @@ import javax.swing.event.*;
 
 public class GetOffset
 {
-	private static final double[] LUCKY_RATIOS = 
-	{
-		1.0/2, 1.0/3, 2.0/3, 1.0/4, 3.0/4, 1.0/5, 2.0/5, 3.0/5, 4.0/5,
-		1.0/6, 5.0/6, 1.0/7, 2.0/7, 3.0/7, 4.0/7, 5.0/7, 6.0/7,
-		1.0/8, 3.0/8, 5.0/8, 7.0/8
-	};
-	
-	private static final String[] LUCKY_LABELS = 
-	{
-		"1/2", "1/3", "2/3", "1/4", "3/4", "1/5", "2/5", "3/5", "4/5",
-		"1/6", "5/6", "1/7", "2/7", "3/7", "4/7", "5/7", "6/7",
-		"1/8", "3/8", "5/8", "7/8"
-	};
-	
-	private static final int [] numerator = 
-	{
-		1, 1, 2, 1, 3, 1, 2, 3, 4,
-		1, 5, 1, 2, 3, 4, 5, 6,
-		1, 3, 5, 7
-	};
-	
-	private static final int [] denominator = 
-	{
-		2, 3, 3, 4, 4, 5, 5, 5, 5,
-		6, 6, 7, 7, 7, 7, 7, 7,
-		8, 8, 8, 8
-	};
+	private static final int [] numerator   = {1, 1, 1, 1, 1, 2, 1, 3, 2, 3, 1, 4, 3, 2, 5, 5, 3, 4, 5, 6, 7};
+	private static final int [] denominator = {8, 7, 6, 5, 4, 7, 3, 8, 5, 7, 2, 7, 5, 3, 8, 7, 4, 5, 6, 7, 8};
+	private static final String [] optimal  = {"1/8", "1/7", "1/6", "1/5", "1/4", "2/7", "1/3", "3/8", "2/5", "3/7", "1/2",
+			                                   "4/7", "3/5", "2/3", "5/8", "5/7", "3/4", "4/5", "5/6", "6/7", "7/8"};
 	
 	public static void main(String[] args)
 	{
@@ -82,95 +59,99 @@ public class GetOffset
 				red[i]   = pixel[i] & 0xff;
 			}
 			
-			
 			int []  frequency = new int[256];
-			byte [] blue_bytes = new byte[blue.length / 1000];
-			for(int i = 0; i < blue.length / 1000; i++)
+			byte [] blue_bytes = new byte[blue.length / 100];
+			for(int i = 0; i < blue.length / 100; i++)
 			{
-				int j = blue[i];
+				int j = red[i];
 				frequency[j]++;
 				blue_bytes[i] = (byte)j;
 			}
 			
 		    int number_of_bytes = blue_bytes.length;
 			
-			
-			ArrayList <byte []> series = ArithmeticMapper.getTableSeries2(blue_bytes, frequency);
+			ArrayList <byte []> series = ArithmeticMapper.getTableSeries4(blue_bytes, frequency);
 			
 			int series_size = series.size();
 			System.out.println("There are " + series_size + " tables.");
+			
 			BigInteger [] result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(0));
 			
-			BigDecimal offset    = new BigDecimal(result[0]);
-	        BigDecimal divisor   = new BigDecimal(result[1]);
-	        offset               = offset.divide(divisor, 100000000, RoundingMode.HALF_EVEN);
-	        //System.out.println("Offset in probabilistic space from table 0 " + offset);
-	        
-	        BigDecimal range = new BigDecimal(result[0]);
-	        range = range.divide(divisor, 100000000, RoundingMode.HALF_EVEN);
-	        
-	        
-	        BigDecimal lucky_ratio = BigDecimal.valueOf(LUCKY_RATIOS[0]);
-	        BigDecimal min_delta   = offset.subtract(lucky_ratio);
-	        min_delta = min_delta.abs();
-	        int min_index = 0;
-	        for(int i = 1; i < 21; i++)
-	        {
-	        	    lucky_ratio = BigDecimal.valueOf(LUCKY_RATIOS[i]);
-	        	    BigDecimal current_delta = offset.subtract(lucky_ratio);
-	        	    current_delta = current_delta.abs();
-	        	    if(min_delta.compareTo(current_delta) == 1)
-	        	    {
-	        	    	    min_delta = current_delta;
-	        	    	    min_index = i;
-	        	    }
-	        }
-	        
-	        System.out.println("The nearest lucky ratio is " + LUCKY_LABELS[min_index]);
-	        
-	        if(offset.compareTo(BigDecimal.valueOf(LUCKY_RATIOS[min_index])) == 1)
-	        	    min_delta = min_delta.negate();
-	        
-	        int lucky_index = min_index;
-	        lucky_ratio = BigDecimal.valueOf(LUCKY_RATIOS[lucky_index]);
-	        
-	        BigInteger [] lucky_v = {BigInteger.valueOf(numerator[lucky_index]), BigInteger.valueOf(denominator[lucky_index])};
-	        
-	        
-	        min_index = 0;
-	        for(int i = 1; i < series_size; i++)
+			BigInteger [] init_offset = {result[0], result[1]};
+			BigInteger [] init_range  = {result[2], result[3]};
+			BigInteger [] init_limit  = {result[0].add(result[2]), result[3]};
+			
+			BigDecimal a = new BigDecimal(init_offset[0]);
+	     	BigDecimal b = new BigDecimal(init_offset[1]);
+	     	    
+	     	BigDecimal fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
+			System.out.println("Inital offset is approximately " + String.format("%.8f", fraction));
+			
+     	    byte [] bytes = ArithmeticMapper.getArithmeticValues(init_offset, frequency, number_of_bytes, series.get(0));
+     	   
+     	    boolean isSame = true;
+     	    for(int j = 0; j < number_of_bytes; j++)
+     	    {
+     		   if(bytes[j] != blue_bytes[j])
+     			   isSame = false;
+     	    }
+     	   
+     	    if(isSame)
+     		    System.out.println("Decompressed bytes same as original bytes using initial offset.");
+     	    else
+     		    System.out.println("Decompressed bytes not the same as original bytes using initial offset.");
+     	   
+			for(int i = 0; i < 21; i++)
 			{
-				result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(i));
-				BigDecimal current_offset = new BigDecimal(result[0]);
-		        divisor   = new BigDecimal(result[1]);
-		        current_offset = current_offset.divide(divisor, 100000000, RoundingMode.HALF_DOWN);
-		        
-		        if((current_offset.compareTo(lucky_ratio) < 0) && (current_offset.add(range).compareTo(lucky_ratio) > 0))
-		        {
-		        	   BigInteger [] v = {result[0], result[1]};
-		        	   
-		        	   System.out.println("Offset and range generated by table " + i + " might include lucky ratio.");  
-		        	   byte [] bytes = ArithmeticMapper.getArithmeticValues(lucky_v, frequency, number_of_bytes, series.get(i));
-		        	   
-		        	   boolean isSame = true;
-		        	   for(int j = 0; j < number_of_bytes; j++)
-		        	   {
-		        		   if(bytes[j] != blue_bytes[j])
-		        			   isSame = false;
-		        	   }
-		        	   
-		        	   if(isSame)
-		        		   System.out.println("Decompressed bytes same as original bytes.");
-		        	   else
-		        		   System.out.println("Decompressed bytes not the same as original bytes.");
-		        	   
-		        }
+				BigInteger [] optimal_value = {BigInteger.valueOf(numerator[i]), BigInteger.valueOf(denominator[i])};	
+				BigInteger c = optimal_value[0].multiply(init_offset[1]);
+				BigInteger d = init_offset[0].multiply(optimal_value[1]);
+				
+				if(c.compareTo(d) >= 0)
+				{
+					BigInteger e = optimal_value[0].multiply(init_limit[1]);
+					BigInteger f = init_limit[0].multiply(optimal_value[1]);
+					
+					if(e.compareTo(f) < 0)
+					    System.out.println("Optimal value " + optimal[i] + " is more than initial offset and less than limit.");
+					else
+						System.out.println("Optimal value " + optimal[i] + " is more than initial offset and more than limit.");
+					break;
+				}
 			}
 			
+			
+			for(int i = 1; i < series_size; i++)
+			{
+				result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(i));
+				BigInteger [] current_offset = {result[0], result[1]};
+				BigInteger [] current_range  = {result[2], result[3]};
+				BigInteger [] current_limit  = {result[0].add(result[2]), result[3]};
+				
+				for(int j = 0; j < 21; j++)
+				{
+					BigInteger [] optimal_value = {BigInteger.valueOf(numerator[j]), BigInteger.valueOf(denominator[j])};	
+					BigInteger c = optimal_value[0].multiply(current_offset[1]);
+					BigInteger d = current_offset[0].multiply(optimal_value[1]);
+					
+					if(c.compareTo(d) >= 0)
+					{
+						BigInteger e = optimal_value[0].multiply(current_limit[1]);
+						BigInteger f = current_limit[0].multiply(optimal_value[1]);
+						
+						if(e.compareTo(f) < 0)
+						    System.out.println("Optimal value " + optimal[j] + " is more than current offset and less than limit.");
+						else
+							System.out.println("Optimal value " + optimal[j] + " is more than current offset and more than limit.");
+						break;
+					}
+				}
+			}
+		
 		}
 		catch(Exception e)
 		{
 			System.out.println(e.toString());
-		}   	
+		}
 	}
 }

@@ -806,9 +806,8 @@ public class ArithmeticMapper
   		    }
   		}
   		
-  		result.add(last_table);
-  		
-  		//System.out.println("Added table.");
+  		byte [] init_table = last_table.clone();
+  		result.add(init_table);
   		
   		boolean done = false;
   		while(!done)
@@ -821,17 +820,110 @@ public class ArithmeticMapper
   		    	    last_table[least_place] = down;
   		    	    last_table[least_place - 1] = least;
   		    	    least_place--;
-  		    	    
-  		    	    byte [] copy = last_table.clone();
-  		    	    result.add(copy);
-  		    	    //System.out.println("Added table.");
+  		    	    byte [] current_table = last_table.clone();
+  		    	    result.add(current_table);
+  		    	    if(least_place == 0)	
+    		    	        done = true;
+  		    }
+  		}
+  	    
+  		return result;
+  	}
+  	
+  	
+  	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
+  	{
+  		ArrayList <byte []> result = new ArrayList <byte[]> ();
+  		
+  		ArrayList <Double>          list  = new ArrayList <Double>();
+  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+  		int       n                       = frequency.length;
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key = frequency[i];
+  			while (table.containsKey(key))
+  				key += .001;
+  			table.put(key, i);
+  			list.add(key);
+  		}
+  		
+  		Collections.sort(list, Comparator.reverseOrder());
+  		
+  		byte [] descending_table = new byte[n];
+  		
+  		for(int i = 0; i < n; i++)
+  		{
+  			double key          = list.get(i);
+  			int    j            = table.get(key);
+  			descending_table[j] = (byte) i;
+  		}
+  		
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+  		
+  		for(int i = 0; i < frequency.length; i++)
+  		{
+  			if(frequency[i] == 0)
+  				exhausted_list.add(i);
+  		}
+  		int [] f = frequency.clone();
+  	   
+  		for(int i = 0; i < src.length; i++)
+  	    {
+  	    	    int j = src[i];
+  	    	    if(j < 0)
+  	    	    	    j += 256;
+  	    	    f[j]--;
+  	    	    if(f[j] == 0)
+  	    	    	    exhausted_list.add(j);  
+  	    }
+  	
+  		byte [] last_table = new byte[frequency.length];
+  		int k = 0;
+  		for(int i = frequency.length - 1; i >= 0; i--)
+  		{
+  			int j = exhausted_list.get(i);
+  			last_table[k++] = (byte)j;
+  		}
+  		
+  		int  length = descending_table.length;
+  		byte least  = descending_table[length - 1];
+  		
+  		int least_place = 0;
+  		for(int i = 0; i < last_table.length; i++)
+  		{
+  		    if(last_table[i] == least)
+  		    {
+  		    	    least_place = i;
+  		    	    break;
+  		    }
+  		}
+  		
+  		byte [] init_table = last_table.clone();
+  		result.add(init_table);
+  		
+  		boolean done = false;
+  		while(!done)
+  		{
+  		    if(least_place == last_table.length - 1)	
+  		    	    done = true;
+  		    else
+  		    {
+  		    	    byte up = last_table[least_place + 1];
+  		    	    last_table[least_place] = up;
+  		    	    last_table[least_place + 1] = least;
+  		    	    least_place++;
+  		    	    byte [] current_table = last_table.clone();
+  		    	    result.add(current_table);
+  		    	    if(least_place == last_table.length - 1)	
+    		    	        done = true;
   		    }
   		}
   		
   		return result;
   	}
   	
-  	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
+  	public static ArrayList <byte []> getTableSeries3(byte[] src, int [] frequency)
   	{
   		ArrayList <byte []> result = new ArrayList <byte[]> ();
   		
@@ -899,7 +991,8 @@ public class ArithmeticMapper
   		    }
   		}
   		
-  		result.add(last_table);
+  		byte [] init_table = last_table.clone();
+  		result.add(init_table);
   		
   		//System.out.println("Added table.");
   		
@@ -914,31 +1007,30 @@ public class ArithmeticMapper
   		    	    last_table[greatest_place] = down;
   		    	    last_table[greatest_place - 1] = greatest;
   		    	    greatest_place--;
-  		    	    
-  		    	    byte [] copy = last_table.clone();
-  		    	    result.add(copy);
-  		    	    //System.out.println("Added table.");
+  		    	    byte [] current_table = last_table.clone();
+  		    	    result.add(current_table);
+  		    	    if(greatest_place == 0)	
+    		    	        done = true;
   		    }
   		}
   		
   		return result;
   	}
   	
-
-  	public static ArrayList <byte []> getAdjustedTableSeries(byte[] table, int [] frequency)
+  	public static ArrayList <byte []> getTableSeries4(byte[] src, int [] frequency)
   	{
   		ArrayList <byte []> result = new ArrayList <byte[]> ();
   		
   		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table_hash = new Hashtable <Double, Integer>();
+  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
   		int       n                       = frequency.length;
   		
   		for(int i = 0; i < n; i++)
   		{
   			double key = frequency[i];
-  			while (table_hash.containsKey(key))
+  			while (table.containsKey(key))
   				key += .001;
-  			table_hash.put(key, i);
+  			table.put(key, i);
   			list.add(key);
   		}
   		
@@ -949,50 +1041,78 @@ public class ArithmeticMapper
   		for(int i = 0; i < n; i++)
   		{
   			double key          = list.get(i);
-  			int    j            = table_hash.get(key);
+  			int    j            = table.get(key);
   			descending_table[j] = (byte) i;
   		}
   		
-        
-  		int  length = descending_table.length;
-  		byte least  = descending_table[length - 1];
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
   		
-  		int least_place = 0;
-  		for(int i = 0; i < table.length; i++)
+  		for(int i = 0; i < frequency.length; i++)
   		{
-  		    if(table[i] == least)
+  			if(frequency[i] == 0)
+  				exhausted_list.add(i);
+  		}
+  		int [] f = frequency.clone();
+  	   
+  		for(int i = 0; i < src.length; i++)
+  	    {
+  	    	    int j = src[i];
+  	    	    if(j < 0)
+  	    	    	    j += 256;
+  	    	    f[j]--;
+  	    	    if(f[j] == 0)
+  	    	    	    exhausted_list.add(j);  
+  	    }
+  	
+  		byte [] last_table = new byte[frequency.length];
+  		int k = 0;
+  		for(int i = frequency.length - 1; i >= 0; i--)
+  		{
+  			int j = exhausted_list.get(i);
+  			last_table[k++] = (byte)j;
+  		}
+  		
+  		int  length = descending_table.length;
+  		byte greatest  = descending_table[0];
+  		
+  		int greatest_place = 0;
+  		for(int i = 0; i < last_table.length; i++)
+  		{
+  		    if(last_table[i] == greatest)
   		    {
-  		    	    least_place = i;
+  		    	    greatest_place = i;
   		    	    break;
   		    }
   		}
   		
-  		result.add(table);
+  		byte [] init_table = last_table.clone();
+  		result.add(init_table);
   		
   		//System.out.println("Added table.");
   		
   		boolean done = false;
   		while(!done)
   		{
-  		    if(least_place == 0)	
+  		    if(greatest_place == last_table.length - 1)	
   		    	    done = true;
   		    else
   		    {
-  		    	    byte down               = table[least_place - 1];
-  		    	    table[least_place] = down;
-  		    	    table[least_place - 1] = least;
-  		    	    least_place--;
+  		    	    byte up               = last_table[greatest_place + 1];
+  		    	    last_table[greatest_place] = up;
+  		    	    last_table[greatest_place + 1] = greatest;
+  		    	    greatest_place++;
   		    	    
-  		    	    byte [] copy = table.clone();
-  		    	    result.add(copy);
-  		    	    //System.out.println("Added table.");
+  		    	    byte [] current_table = last_table.clone();
+  		    	    result.add(current_table);
+  		    	    if(greatest_place == last_table.length - 1)	
+    		    	       done = true;
   		    }
   		}
   		
   		return result;
   	}
   	
-  	
+
   	/**
   	 * Produces a random permutation of symbol indices — a probabilistic-space
   	 * baseline that carries no information about the data, for comparison
@@ -1101,7 +1221,7 @@ public class ArithmeticMapper
             m   += f[i];
         }
 
-        System.out.println("Getting offset...");
+        //System.out.println("Getting offset...");
         // Track interval as two reduced rationals: offset and range
         BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
         BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
