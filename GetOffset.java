@@ -72,6 +72,8 @@ public class GetOffset
 			
 			ArrayList <byte []> series = ArithmeticMapper.getTableSeries3(blue_bytes, frequency);
 			
+			ArrayList delta_list = new ArrayList();
+			
 			int number_of_tables = series.size();
 			System.out.println("There are " + number_of_tables + " tables.");
 			
@@ -87,6 +89,7 @@ public class GetOffset
 	     	BigDecimal fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
 			System.out.println("Inital offset is approximately " + String.format("%.8f", fraction));
 			
+	     	
      	    byte [] bytes = ArithmeticMapper.getArithmeticValues(init_offset, frequency, number_of_bytes, series.get(0));
      	   
      	    boolean isSame = true;
@@ -96,18 +99,18 @@ public class GetOffset
      			   isSame = false;
      	    }
      	   
+     	    /*
      	    if(isSame)
      		    System.out.println("Decompressed bytes same as original bytes using initial offset.");
      	    else
      		    System.out.println("Decompressed bytes not the same as original bytes using initial offset.");
-     	   
-     	    ArrayList delta_list = new ArrayList();
+     	    */
      	    
 			for(int i = 0; i < 21; i++)
 			{
 				BigInteger [] optimal_value = {BigInteger.valueOf(numerator[i]), BigInteger.valueOf(denominator[i])};	
-				BigInteger c = optimal_value[0].multiply(init_offset[1]);
-				BigInteger d = init_offset[0].multiply(optimal_value[1]);
+				BigInteger c              = optimal_value[0].multiply(init_offset[1]);
+				BigInteger d              = init_offset[0].multiply(optimal_value[1]);
 				
 				if(c.compareTo(d) >= 0)
 				{
@@ -124,26 +127,30 @@ public class GetOffset
 					    BigInteger [] previous_value = {BigInteger.valueOf(numerator[i - 1]), BigInteger.valueOf(denominator[i - 1])};	
 					    c = previous_value[0].multiply(init_offset[1]);
 						d = init_offset[0].multiply(previous_value[1]);
-						BigInteger [] previous_delta  = {d.subtract(c), init_offset[1].multiply(previous_value[0])};
+						BigInteger [] previous_delta  = {c.subtract(d), init_offset[1].multiply(previous_value[0])};
 						
 						
 						e = previous_delta[0].multiply(current_delta[1]);
+						e = e.negate();
 						f = current_delta[0].multiply(previous_delta[1]);
 						
 						if(e.compareTo(f) < 0)
 						{
 						    System.out.println("Previous optimal value " + optimal[i - 1] + " is closer to initial offset.");
+						    delta_list.add(previous_delta);
+						    delta_list.add(i - 1);
 						}
 						else
 						{
-							
-						}
-						
-					    
+							delta_list.add(current_delta);
+						    delta_list.add(i);	
+						} 
 					}
 					else
 					{
-					    BigInteger [] delta = {d.subtract(c), init_offset[1].multiply(optimal_value[0])};	
+					    BigInteger [] delta = {c.subtract(d), init_offset[1].multiply(optimal_value[0])};	
+					    delta_list.add(delta);
+					    delta_list.add(i);
 					}
 					
 					break;
@@ -151,15 +158,24 @@ public class GetOffset
 				if(i == 20)
 				{
 					System.out.println("No optimal value is more than initial offset.");
+					BigInteger [] delta = {d.subtract(c), init_offset[1].multiply(optimal_value[i])};	
+				    delta_list.add(delta);
+				    delta_list.add(i);
 				}
 			}
-			
+			System.out.println();
 			for(int i = 1; i < number_of_tables; i++)
 			{
 				result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(i));
 				BigInteger [] current_offset = {result[0], result[1]};
 				BigInteger [] current_range  = {result[2], result[3]};
 				BigInteger [] current_limit  = {result[0].add(result[2]), result[3]};
+				
+				a = new BigDecimal(current_offset[0]);
+		     	b = new BigDecimal(current_offset[1]);
+		     	    
+		     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
+				System.out.println("Current offset is approximately " + String.format("%.8f", fraction));
 				
 				for(int j = 0; j < 21; j++)
 				{
@@ -171,16 +187,104 @@ public class GetOffset
 					{
 						BigInteger e = optimal_value[0].multiply(current_limit[1]);
 						BigInteger f = current_limit[0].multiply(optimal_value[1]);
-						
 						if(e.compareTo(f) < 0)
 						    System.out.println("Optimal value " + optimal[j] + " is more than current offset and less than limit.");
 						else
 							System.out.println("Optimal value " + optimal[j] + " is more than current offset and more than limit.");
+						
+						if(j > 0)
+						{
+							BigInteger [] current_delta  = {c.subtract(d), current_offset[1].multiply(optimal_value[0])};	
+						    BigInteger [] previous_value = {BigInteger.valueOf(numerator[j - 1]), BigInteger.valueOf(denominator[j - 1])};	
+						    c = previous_value[0].multiply(current_offset[1]);
+							d = current_offset[0].multiply(previous_value[1]);
+							BigInteger [] previous_delta  = {c.subtract(d), current_offset[1].multiply(previous_value[0])};
+							
+							
+							e = previous_delta[0].multiply(current_delta[1]);
+							e = e.negate();
+							f = current_delta[0].multiply(previous_delta[1]);
+							
+							if(e.compareTo(f) < 0)
+							{
+							    System.out.println("Previous optimal value " + optimal[j - 1] + " is closer to current offset.");
+							    delta_list.add(previous_delta);
+							    delta_list.add(j - 1);
+							}
+							else
+							{
+								delta_list.add(current_delta);
+							    delta_list.add(j);	
+							} 
+						}
+						else
+						{
+						    BigInteger [] delta = {c.subtract(d), current_offset[1].multiply(optimal_value[0])};	
+						    delta_list.add(delta);
+						    delta_list.add(j);
+						}
+						
 						break;
 					}
+					
+					if(j == 20)
+					{
+						System.out.println("No optimal value is more than current offset.");
+						BigInteger [] delta = {d.subtract(c), init_offset[1].multiply(optimal_value[j])};	
+					    delta_list.add(delta);
+					    delta_list.add(j);
+					}	
 				}
+				
+				System.out.println();
 			}
 		
+			//System.out.println("Length of delta list is " + delta_list.size());
+			
+			BigInteger [] init_delta = (BigInteger[])delta_list.get(0);
+			BigInteger [] delta_min  = init_delta;
+			int value_index = (int)delta_list.get(1);
+			int table_index = 0;
+			
+			for(int i = 1; i < number_of_tables; i++)
+			{
+				int j = i * 2;
+				
+				BigInteger [] current_delta = (BigInteger[])delta_list.get(j);
+				int           current_index = (int)delta_list.get(j + 1);
+				
+				if(current_delta[0].compareTo(BigInteger.ZERO) == - 1)
+					current_delta[0] = current_delta[0].negate();
+				BigInteger c              = delta_min[0].multiply(current_delta[1]);
+				BigInteger d              = current_delta[0].multiply(delta_min[1]);
+				
+				if(c.compareTo(d) > 0)
+				{
+					delta_min   = (BigInteger[])delta_list.get(j);
+					value_index = current_index;
+					table_index = i;
+				}
+			}
+			
+			System.out.println("The table " + table_index + " produces an offset closet to an optimal value (" + value_index + ")");
+			
+			result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(table_index));
+			BigInteger [] current_offset = {result[0], result[1]};
+			BigInteger [] current_range  = {result[2], result[3]};
+			BigInteger [] current_limit  = {result[0].add(result[2]), result[3]};
+			
+			a = new BigDecimal(current_offset[0]);
+	     	b = new BigDecimal(current_offset[1]);
+	     	    
+	     	
+	     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
+			System.out.println("The offset is approximately " + String.format("%.8f", fraction));
+			
+			a = new BigDecimal(delta_min[0]);
+	     	b = new BigDecimal(delta_min[1]);
+	     	    
+	     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
+			System.out.println("The delta is approximately " + String.format("%.8f", fraction));
 		}
 		catch(Exception e)
 		{
