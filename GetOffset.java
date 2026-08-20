@@ -12,10 +12,18 @@ import javax.swing.event.*;
 
 public class GetOffset
 {
+	/*
 	private static final int [] numerator   = {1, 1, 1, 1, 1, 2, 1, 3, 2, 3, 1, 4, 3, 2, 5, 5, 3, 4, 5, 6, 7};
-	private static final int [] denominator = {8, 7, 6, 5, 4, 7, 3, 8, 5, 7, 2, 7, 5, 3, 8, 7, 4, 5, 6, 7, 8};
+	
 	private static final String [] optimal  = {"1/8", "1/7", "1/6", "1/5", "1/4", "2/7", "1/3", "3/8", "2/5", "3/7", "1/2",
-			                                   "4/7", "3/5", "2/3", "5/8", "5/7", "3/4", "4/5", "5/6", "6/7", "7/8"};
+	"4/7", "3/5", "2/3", "5/8", "5/7", "3/4", "4/5", "5/6", "6/7", "7/8"};
+	*/
+	
+	private static final int [] numerator   = {0,  1,  1,  3, 1, 1,  3,  7, 2,  9, 1, 11, 3, 13,  7, 3, 4, 17,  9, 19};
+	private static final int [] denominator = {1, 20, 10, 20, 5, 4, 10, 20, 5, 20, 2, 20, 5, 20, 10, 4, 5, 20, 10, 20};
+	private static final String [] optimal  = {".0", ".05", ".1", ".15", ".2", ".25", ".3", ".35", ".4", ".45", ".5",
+	".55", ".6", ".65", ".7", ".75", ".8", ".85", ".9", ".95"};		
+	
 	
 	public static void main(String[] args)
 	{
@@ -112,6 +120,16 @@ public class GetOffset
 				BigInteger c              = optimal_value[0].multiply(init_offset[1]);
 				BigInteger d              = init_offset[0].multiply(optimal_value[1]);
 				
+				if(c.compareTo(d) < 0)
+				{
+					BigInteger e = optimal_value[0].multiply(init_limit[1]);
+					BigInteger f = init_limit[0].multiply(optimal_value[1]);
+					
+					if(f.compareTo(e) < 0)
+					    System.out.println("Optimal value " + optimal[i] + " is less than initial offset and initial offset plus limit is more than optimal value.");
+					else
+						System.out.println("Optimal value " + optimal[i] + " is less than initial offset and initial offset plus limit is less than optimal value.");	
+				}
 				if(c.compareTo(d) >= 0)
 				{
 					BigInteger e = optimal_value[0].multiply(init_limit[1]);
@@ -268,7 +286,9 @@ public class GetOffset
 			
 			System.out.println("The table " + table_index + " produces an offset closet to an optimal value (" + value_index + ")");
 			
-			result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, series.get(table_index));
+			byte [] closest_table = series.get(table_index);
+			
+			result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, closest_table);
 			BigInteger [] current_offset = {result[0], result[1]};
 			BigInteger [] current_range  = {result[2], result[3]};
 			BigInteger [] current_limit  = {result[0].add(result[2]), result[3]};
@@ -276,7 +296,6 @@ public class GetOffset
 			a = new BigDecimal(current_offset[0]);
 	     	b = new BigDecimal(current_offset[1]);
 	     	    
-	     	
 	     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
 			System.out.println("The offset is approximately " + String.format("%.8f", fraction));
 			
@@ -285,6 +304,22 @@ public class GetOffset
 	     	    
 	     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
 			System.out.println("The delta is approximately " + String.format("%.8f", fraction));
+			System.out.println();
+			
+			/*
+			for(int i = 1; i < closest_table.length; i++)
+			{
+				byte [] rotated_table = ArithmeticMapper.rotateTable(closest_table, i);
+				result = ArithmeticMapper.getArithmeticOffsetAndRange(blue_bytes, frequency, rotated_table);
+				BigInteger [] rotated_offset = {result[0], result[1]};
+				a = new BigDecimal(current_offset[0]);
+		     	b = new BigDecimal(current_offset[1]);
+		     	    
+		     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
+				System.out.println("The offset from rotated table " + i + " is approximately " + String.format("%.8f", fraction));
+			}
+			*/
+			
 		}
 		catch(Exception e)
 		{
