@@ -114,7 +114,7 @@ public class GetOffset
      		    System.out.println("Decompressed bytes not the same as original bytes using initial offset.");
      	    */
      	    
-			for(int i = 0; i < 21; i++)
+			for(int i = 0; i < 20; i++)
 			{
 				BigInteger [] optimal_value = {BigInteger.valueOf(numerator[i]), BigInteger.valueOf(denominator[i])};	
 				BigInteger c              = optimal_value[0].multiply(init_offset[1]);
@@ -193,9 +193,9 @@ public class GetOffset
 		     	b = new BigDecimal(current_offset[1]);
 		     	    
 		     	fraction = a.divide(b, 100, RoundingMode.HALF_EVEN);
-				System.out.println("Current offset is approximately " + String.format("%.8f", fraction));
+				System.out.println("Current offset is approximately " + String.format("%.8f", fraction) + " from table " + i);
 				
-				for(int j = 0; j < 21; j++)
+				for(int j = 0; j < 20; j++)
 				{
 					BigInteger [] optimal_value = {BigInteger.valueOf(numerator[j]), BigInteger.valueOf(denominator[j])};	
 					BigInteger c = optimal_value[0].multiply(current_offset[1]);
@@ -245,25 +245,27 @@ public class GetOffset
 						break;
 					}
 					
-					if(j == 20)
+					if(j == 19)
 					{
 						System.out.println("No optimal value is more than current offset.");
-						BigInteger [] delta = {d.subtract(c), init_offset[1].multiply(optimal_value[j])};	
+						BigInteger [] delta = {d.subtract(c), init_offset[1].multiply(optimal_value[0])};	
 					    delta_list.add(delta);
 					    delta_list.add(j);
+					    System.out.println("Got here.");
 					}	
 				}
 				
 				System.out.println();
 			}
 		
-			//System.out.println("Length of delta list is " + delta_list.size());
+			System.out.println("Length of delta list is " + delta_list.size());
 			
 			BigInteger [] init_delta = (BigInteger[])delta_list.get(0);
 			BigInteger [] delta_min  = init_delta;
 			int value_index = (int)delta_list.get(1);
 			int table_index = 0;
 			
+			System.out.println("Got here.");
 			for(int i = 1; i < number_of_tables; i++)
 			{
 				int j = i * 2;
