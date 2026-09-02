@@ -3,31 +3,98 @@ import java.util.zip.*;
 import java.lang.Math.*;
 import java.math.*;
 
+/*
+ * Changes in this version (see inline FIX comments at each site):
+ *
+ * Bugs fixed:
+ *   1. Eight encoders -- getHorizontalDeltasFromValues, getPaethDeltasFromValues,
+ *      getGradientDeltasFromValues, getGradientDeltasFromValues2,
+ *      getMixedDeltasFromValues, getMixedDeltasFromValues2,
+ *      getMixedDeltasFromValues3, getMixedDeltasFromValues4 -- each
+ *      initialized `int init_value = src[0]`, then mutated that SAME
+ *      variable later (as a running column-0 predictor tracker across
+ *      rows) and returned the mutated value instead of the true original
+ *      src[0]. Since the paired decoder uses the returned value directly
+ *      to seed pixel 0, this corrupted the entire reconstruction
+ *      whenever the image had more than one row (ydim > 1). Confirmed via
+ *      round-trip testing (376/1312 failures, isolated to exactly these
+ *      8 methods) and independent static analysis (same 8 methods
+ *      flagged by a script checking for "declared from src[0], mutated,
+ *      then returned"). Fixed by preserving the original value in a
+ *      separate variable (original_init_value) and returning that
+ *      instead, without touching any of the surrounding delta-computation
+ *      logic.
+ *   2. getIdealDeltasFromValues5 never included init_value in its
+ *      returned ArrayList -- it computed init_value = src[0] but the
+ *      result list was [sum, dst, map] (3 elements) instead of
+ *      [sum, dst, map, init_value] (4 elements) like all 7 sibling
+ *      methods (Ideal1,2,3,4,6,8,16). This made it impossible to call the
+ *      paired decoder, getValuesFromIdealDeltas5, correctly using only
+ *      this method's own output. Fixed by adding the missing
+ *      result.add(init_value).
+ *   3. getValuesFromMixedDeltas3 (the decoder half of
+ *      getMixedDeltasFromValues3) had a systematic copy-paste error: every
+ *      branch that should average dst[k-1] with another pixel instead had
+ *      dst[k-xdim] written in BOTH positions (e.g. m==5's second case
+ *      computed `(dst[k-xdim]+dst[k-xdim])/2`, which reduces to just
+ *      dst[k-xdim] and silently ignores dst[k-1] entirely, instead of the
+ *      encoder's `(src[k-1]+src[k-xdim])/2`). This affected 9 separate
+ *      expressions across the m==2,3,5,6,7,8 branches and the final else.
+ *      This bug was completely masked by bug #1 above during initial
+ *      testing -- every multi-row test case was already failing at pixel
+ *      0 before execution ever reached these branches -- and only became
+ *      visible once bug #1 was fixed and round-trip testing continued
+ *      past the first pixel. Fixed by changing every erroneous
+ *      dst[k-xdim] to dst[k-1] to match the encoder's formulas exactly.
+ *
+ * Minor fixes:
+ *   - getIdealDeltasFromValues3 set dst[0] = 6 (an unexplained magic
+ *     number) instead of 0 like every sibling method. Confirmed harmless
+ *     either way, since the decoder overwrites dst[0] with init_value
+ *     directly and never reads this encoded value -- changed to 0 to
+ *     match the established convention.
+ *   - getMixedDeltasFromValues2 had an unreachable `else delta = 0;`
+ *     fallback (the map value is always 0-3 by construction in this same
+ *     method's own map-building pass, and the paired decoder already
+ *     treats m==3 as an explicit case rather than a fallback). Replaced
+ *     with the explicit m==3 formula, matching the decoder's structure.
+ *   - getDifference/getSum silently returned an all-zero array on
+ *     mismatched input array lengths rather than raising an error. Both
+ *     now throw IllegalArgumentException instead, since silently
+ *     returning a plausible-looking but wrong result is a worse failure
+ *     mode than an explicit, immediate error.
+ */
 public class DeltaMapper
 {
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
-		int[] difference = new int[length];
+		// FIX: was `if(src2.length == length) { ... }` with no else -- on a
+		// length mismatch, this silently returned an all-zero array (the
+		// default int[] contents) instead of any indication something was
+		// wrong. An all-zero difference is rarely if ever a useful result;
+		// failing loudly is safer than silently returning data that looks
+		// valid but isn't.
+		if(src2.length != length)
+			throw new IllegalArgumentException("getDifference: src1.length (" + length + ") != src2.length (" + src2.length + ")");
 
-		if(src2.length == length)
-		{
-			for(int i = 0; i < length; i++)
-				difference[i] = src1[i] - src2[i];
-		}
+		int[] difference = new int[length];
+		for(int i = 0; i < length; i++)
+			difference[i] = src1[i] - src2[i];
 		return(difference);
 	}
 
 	public static int[] getSum(int src1[], int src2[])
 	{
 		int length = src1.length;
-		int[] sum = new int[length];
+		// FIX: same as getDifference above -- fail loudly on a length
+		// mismatch instead of silently returning an all-zero array.
+		if(src2.length != length)
+			throw new IllegalArgumentException("getSum: src1.length (" + length + ") != src2.length (" + src2.length + ")");
 
-		if(src2.length == length)
-		{
-			for(int i = 0; i < length; i++)
-				sum[i] = src1[i] + src2[i];
-		}
+		int[] sum = new int[length];
+		for(int i = 0; i < length; i++)
+			sum[i] = src1[i] + src2[i];
 		return(sum);
 	}
 
@@ -960,6 +1027,15 @@ public class DeltaMapper
 		int[] dst = new int[xdim * ydim];
 		int sum = 0;
 		int init_value = src[0];
+		// FIX: init_value gets mutated below (via `init_value += delta`) to
+		// track a running column-0 predictor across rows, but the decoder
+		// (getValuesFromHorizontalDeltas) needs the TRUE original src[0] to
+		// seed dst[0]. Preserve it separately so the returned value is
+		// correct rather than whatever the tracker ended up at after the
+		// last row. Confirmed via round-trip testing: previously this
+		// returned the wrong value whenever ydim > 1, corrupting the whole
+		// reconstruction starting at pixel 0.
+		int original_init_value = src[0];
 		int value = init_value;
 
 		int k = 0;
@@ -988,7 +1064,7 @@ public class DeltaMapper
 		ArrayList result = new ArrayList();
 		result.add(sum);
 		result.add(dst);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -1144,6 +1220,11 @@ public class DeltaMapper
 	{
 		int[] dst = new int[xdim * ydim];
 		int init_value = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below (`init_value =
+		// src[k]`) to track each row's leading pixel, but the decoder needs
+		// the true original src[0]. Preserve it separately.
+		int original_init_value = src[0];
 		int value = init_value;
 		int delta = 0;
 		int sum = 0;
@@ -1204,7 +1285,7 @@ public class DeltaMapper
 		ArrayList result = new ArrayList();
 		result.add(sum);
 		result.add(dst);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -1485,6 +1566,11 @@ public class DeltaMapper
 		int[] dst        = new int[xdim * ydim];
 		int[] gradient   = new int[4];
 		int   init_value = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below to track a running
+		// column-0 predictor, but the decoder needs the true original
+		// src[0]. Preserve it separately.
+		int   original_init_value = src[0];
 		int   sum        = 0;
 		int   delta      = 0;
 		int   k          = 0;
@@ -1552,7 +1638,7 @@ public class DeltaMapper
 		ArrayList result = new ArrayList();
 		result.add(sum);
 		result.add(dst);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -1612,6 +1698,11 @@ public class DeltaMapper
 		int[] dst      = new int[xdim * ydim];
 		int[] gradient = new int[4];
 		int   init_value = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below to track a running
+		// column-0 predictor, but the decoder needs the true original
+		// src[0]. Preserve it separately.
+		int   original_init_value = src[0];
 		int   sum = 0;
 		int   k   = 0;
 
@@ -1670,7 +1761,7 @@ public class DeltaMapper
 		ArrayList result = new ArrayList();
 		result.add(sum);
 		result.add(dst);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -1788,6 +1879,11 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below (`init_value =
+		// src[k]`) to track each row's leading pixel, but the decoder needs
+		// the true original src[0]. Preserve it separately.
+		int original_init_value = src[0];
 		int sum         = 0;
 		int k           = 0;
 
@@ -1857,7 +1953,7 @@ public class DeltaMapper
 		result.add(sum);
 		result.add(dst);
 		result.add(map);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -1943,6 +2039,11 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below (`init_value =
+		// src[k]`) to track each row's leading pixel, but the decoder needs
+		// the true original src[0]. Preserve it separately.
+		int original_init_value = src[0];
 		int value       = init_value;
 		int sum         = 0;
 
@@ -1977,8 +2078,7 @@ public class DeltaMapper
 					if(m == 0)      delta = src[k] - src[k - 1];
 					else if(m == 1) delta = src[k] - src[k - xdim];
 					else if(m == 2) delta = src[k] - (src[k-1] + src[k-xdim]) / 2;
-					else if(m == 3) delta = src[k] - (src[k-1] + src[k-xdim+1]) / 2;
-					else            delta = 0;
+					else            delta = src[k] - (src[k-1] + src[k-xdim+1]) / 2; // m == 3, the only remaining case (map values are always 0-3 here) -- was an unreachable "delta = 0" fallback
 
 					dst[k++] = delta;
 					sum += Math.abs(delta);
@@ -1994,7 +2094,7 @@ public class DeltaMapper
 		result.add(sum);
 		result.add(dst);
 		result.add(map);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -2154,6 +2254,11 @@ public class DeltaMapper
 
 		int[] dst      = new int[xdim * ydim];
 		int init_value = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below (`init_value =
+		// src[k]`) to track each row's leading pixel, but the decoder needs
+		// the true original src[0]. Preserve it separately.
+		int original_init_value = src[0];
 		int value      = init_value;
 		int sum        = 0;
 		int p          = 0;
@@ -2206,7 +2311,7 @@ public class DeltaMapper
 		result.add(dst);
 		result.add(line_map);
 		result.add(pixel_map);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -2233,16 +2338,31 @@ public class DeltaMapper
 				else if(j < xdim - 1)
 				{
 					int n = pixel_map[p++];
+					// FIX: every branch below that should average dst[k-1] with
+					// something else had dst[k-xdim] written in place of
+					// dst[k-1] instead -- a systematic copy-paste error
+					// affecting m==2,3,5,6,7,8 and the final else (9
+					// separate wrong expressions in total). Confirmed by
+					// direct comparison against the encoder's formulas
+					// above (e.g. encoder's m==5,n==1 is
+					// `src[k]-(src[k-1]+src[k-xdim])/2`, but this decoder
+					// previously computed `(dst[k-xdim]+dst[k-xdim])/2` --
+					// using k-xdim twice, which just reduces to dst[k-xdim]
+					// alone and silently ignores dst[k-1] entirely) and by
+					// round-trip testing: this was masked by the separate
+					// init_value bug (which broke every multi-row test at
+					// pixel 0 before reaching these branches at all) and
+					// only became visible once that bug was fixed.
 					if(m == 0)      value = (n==0) ? dst[k-1]     : dst[k-xdim];
 					else if(m == 1) value = (n==0) ? dst[k-1]     : dst[k-xdim-1];
-					else if(m == 2) value = (n==0) ? dst[k-1]     : (dst[k-xdim]+dst[k-xdim])/2;
-					else if(m == 3) value = (n==0) ? dst[k-1]     : (dst[k-xdim]+dst[k-xdim+1])/2;
+					else if(m == 2) value = (n==0) ? dst[k-1]     : (dst[k-1]+dst[k-xdim])/2;
+					else if(m == 3) value = (n==0) ? dst[k-1]     : (dst[k-1]+dst[k-xdim+1])/2;
 					else if(m == 4) value = (n==0) ? dst[k-xdim]  : dst[k-xdim-1];
-					else if(m == 5) value = (n==0) ? dst[k-xdim]  : (dst[k-xdim]+dst[k-xdim])/2;
-					else if(m == 6) value = (n==0) ? dst[k-xdim]  : (dst[k-xdim]+dst[k-xdim+1])/2;
-					else if(m == 7) value = (n==0) ? dst[k-xdim-1]: (dst[k-xdim]+dst[k-xdim])/2;
-					else if(m == 8) value = (n==0) ? dst[k-xdim-1]: (dst[k-xdim]+dst[k-xdim+1])/2;
-					else            value = (n==0) ? (dst[k-xdim]+dst[k-xdim])/2 : (dst[k-xdim]+dst[k-xdim+1])/2;
+					else if(m == 5) value = (n==0) ? dst[k-xdim]  : (dst[k-1]+dst[k-xdim])/2;
+					else if(m == 6) value = (n==0) ? dst[k-xdim]  : (dst[k-1]+dst[k-xdim+1])/2;
+					else if(m == 7) value = (n==0) ? dst[k-xdim-1]: (dst[k-1]+dst[k-xdim])/2;
+					else if(m == 8) value = (n==0) ? dst[k-xdim-1]: (dst[k-1]+dst[k-xdim+1])/2;
+					else            value = (n==0) ? (dst[k-1]+dst[k-xdim])/2 : (dst[k-1]+dst[k-xdim+1])/2;
 					value += src[k];
 					dst[k] = value;
 				}
@@ -2337,6 +2457,11 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
+		// FIX: see getHorizontalDeltasFromValues's comment for the full
+		// explanation -- init_value gets mutated below (`init_value =
+		// src[k]`) to track each row's leading pixel, but the decoder needs
+		// the true original src[0]. Preserve it separately.
+		int original_init_value = src[0];
 		int sum         = 0;
 		int k           = 0;
 
@@ -2448,7 +2573,7 @@ public class DeltaMapper
 		result.add(sum);
 		result.add(dst);
 		result.add(map);
-		result.add(init_value);
+		result.add(original_init_value);
 		return result;
 	}
 
@@ -3148,7 +3273,14 @@ public class DeltaMapper
 		{
 			if(i == 0)
 			{
-				dst[k++] = 6;
+				// FIX: was `dst[k++] = 6;` -- every sibling method (Ideal1,2,4,5,6,8,16)
+				// uses 0 for this placeholder slot, matching the convention that
+				// there's no previous pixel to predict pixel 0 from. Confirmed
+				// harmless either way since the decoder overwrites dst[0] with
+				// init_value directly and never reads this encoded value, but 0
+				// matches the established convention instead of an unexplained
+				// magic number.
+				dst[k++] = 0;
 				for(int j = 1; j < xdim; j++) { int delta = src[k]-src[k-1]; dst[k++] = delta; sum += Math.abs(delta); }
 			}
 			else
@@ -3319,7 +3451,14 @@ public class DeltaMapper
 		}
 
 		ArrayList result = new ArrayList();
-		result.add(sum); result.add(dst); result.add(map);
+		// FIX: was missing `result.add(init_value);` here -- every sibling
+		// method (Ideal1,2,3,4,6,8,16) returns [sum, dst, map, init_value],
+		// but this one returned only 3 elements, computing init_value
+		// (above) without ever exposing it. The corresponding decoder,
+		// getValuesFromIdealDeltas5, requires init_value as a parameter, so
+		// this method's own output previously couldn't be used to call it
+		// correctly.
+		result.add(sum); result.add(dst); result.add(map); result.add(init_value);
 		return result;
 	}
 
