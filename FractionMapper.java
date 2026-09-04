@@ -2,6 +2,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 
+// verson 1.0
+
 public class FractionMapper
 {
 	public static boolean isProbablePrime(int n)
