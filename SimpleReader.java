@@ -1,4 +1,7 @@
 import java.awt.*;
+
+// version 1.0
+
 import java.awt.image.*;
 import java.io.*;
 import java.awt.event.*;
