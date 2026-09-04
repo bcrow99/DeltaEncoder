@@ -8,8 +8,6 @@ import java.util.zip.*;
 import java.math.*;
 import javax.swing.*;
 
-//version 1.0
-
 public class DeltaReader
 {
 	// ---- Image dimensions ---------------------------------------------------
@@ -97,11 +95,89 @@ public class DeltaReader
 	static final double ZOOM_MIN    = 0.05;
 	static final double ZOOM_MAX    = 32.0;
 
+	// See DeltaWriter.java's matching field for the full explanation.
+	static double hidpi_scale = 1.0;
+
 	// =========================================================================
 	public static void main(String[] args)
 	{
+		applyHiDpiFontScaleIfNeeded();
 		if (args.length != 1) { System.out.println("Usage: java DeltaReader <filename>"); System.exit(0); }
 		new DeltaReader(args[0]);
+	}
+
+	// =========================================================================
+	// HiDPI font-scale fallback -- see DeltaWriter.java's matching methods
+	// for the full explanation. Windows already detects and applies
+	// per-monitor HiDPI scaling reliably since JDK 9 (JEP 263), so
+	// detectMissingUiScale() returns 1.0 there and this is a no-op; it only
+	// activates on Linux/X11 sessions where Java's automatic scaling missed
+	// a genuinely HiDPI display.
+	// =========================================================================
+
+	private static double detectMissingUiScale()
+	{
+		try
+		{
+			GraphicsConfiguration gc = GraphicsEnvironment.getLocalGraphicsEnvironment()
+				.getDefaultScreenDevice().getDefaultConfiguration();
+			double current_scale = gc.getDefaultTransform().getScaleX();
+
+			if (current_scale > 1.01) return 1.0;
+
+			// See DeltaWriter.java's matching method for the full
+			// explanation of why this checks multiple independent
+			// signals rather than trusting any single one.
+			String gdk_scale_str = System.getenv("GDK_SCALE");
+			if (gdk_scale_str != null)
+			{
+				try
+				{
+					double gdk_scale = Double.parseDouble(gdk_scale_str.trim());
+					if (gdk_scale >= 1.25) return gdk_scale;
+				}
+				catch (NumberFormatException nfe) { /* fall through to next signal */ }
+			}
+
+			Object xft_dpi_prop = Toolkit.getDefaultToolkit().getDesktopProperty("gnome.Xft/DPI");
+			if (xft_dpi_prop instanceof Integer)
+			{
+				double xft_dpi           = ((Integer) xft_dpi_prop) / 1024.0;
+				double xft_implied_scale = xft_dpi / 96.0;
+				if (xft_implied_scale >= 1.25) return xft_implied_scale;
+			}
+
+			int    dpi           = Toolkit.getDefaultToolkit().getScreenResolution();
+			double implied_scale = dpi / 96.0;
+			if (implied_scale >= 1.25) return implied_scale;
+
+			return 1.0;
+		}
+		catch (Exception e)
+		{
+			return 1.0;
+		}
+	}
+
+	private static void applyHiDpiFontScaleIfNeeded()
+	{
+		double scale = detectMissingUiScale();
+		hidpi_scale  = scale;
+		if (scale <= 1.01) return;
+
+		UIDefaults defaults = UIManager.getLookAndFeelDefaults();
+		for (Object key : new java.util.Vector<Object>(defaults.keySet()))
+		{
+			Object value = defaults.get(key);
+			if (value instanceof Font)
+			{
+				Font  font     = (Font) value;
+				float new_size = (float) (font.getSize() * scale);
+				Font  scaled   = font.deriveFont(new_size);
+				defaults.put(key, scaled);
+				UIManager.put(key, scaled);
+			}
+		}
 	}
 
 	// =========================================================================
@@ -157,49 +233,7 @@ public class DeltaReader
 						map_raw[q] = (byte) ((pm[q >> 2] >> ((q & 3) << 1)) & 0x3);
 					map_list.add(map_raw);
 				}
-				else if (delta_type == 9)
-				{
-					int    ml   = in.readInt();
-					int[]  tbl  = readTable(in);
-					int    dmin = in.readInt();
-					int    bl   = in.readInt();
-					byte[] str  = new byte[StringMapper.getBytelength(bl)];
-					in.readFully(str);
-					byte[] decomp = StringMapper.decompressStrings(str);
-					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
-					byte[] map  = new byte[ml];
-					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
-					map_list.add(map);
-				}
-				else if (delta_type == 11)
-				{
-					int    ml   = in.readInt();
-					int[]  tbl  = readTable(in);
-					int    dmin = in.readInt();
-					int    bl   = in.readInt();
-					byte[] str  = new byte[StringMapper.getBytelength(bl)];
-					in.readFully(str);
-					byte[] decomp = StringMapper.decompressStrings(str);
-					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
-					byte[] map  = new byte[ml];
-					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
-					map_list.add(map);
-				}
-				else if (delta_type == 12)
-				{
-					int    ml   = in.readInt();
-					int[]  tbl  = readTable(in);
-					int    dmin = in.readInt();
-					int    bl   = in.readInt();
-					byte[] str  = new byte[StringMapper.getBytelength(bl)];
-					in.readFully(str);
-					byte[] decomp = StringMapper.decompressStrings(str);
-					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
-					byte[] map  = new byte[ml];
-					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
-					map_list.add(map);
-				}
-				else if (delta_type == 10)
+				else if (delta_type == 9 || delta_type == 10 || delta_type == 11 || delta_type == 12)
 				{
 					int    ml   = in.readInt();
 					int[]  tbl  = readTable(in);
@@ -443,7 +477,7 @@ public class DeltaReader
 	{
 		Dimension sc  = Toolkit.getDefaultToolkit().getScreenSize();
 		int sw = (int)sc.getWidth(), sh = (int)sc.getHeight();
-		fit_scale  = Math.min(1.0, Math.min((double)(sw*70/100-40)/xdim, (double)(sh*70/100-80)/ydim));
+		fit_scale  = Math.min(hidpi_scale, Math.min((double)(sw*70/100-(int)(40*hidpi_scale))/xdim, (double)(sh*70/100-(int)(80*hidpi_scale))/ydim));
 		zoom_scale = fit_scale;
 
 		image_canvas = new ImageCanvas();
@@ -499,21 +533,22 @@ public class DeltaReader
 		za.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
 		za.addActionListener(e ->
 		{
-			zoom_scale = 1.0; updateDisplayImage();
-			image_canvas.setPreferredSize(new Dimension(xdim,ydim));
+			zoom_scale = hidpi_scale; updateDisplayImage();
+			image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
 			image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
 		}); vm.add(za);
 		mb.add(vm);
 		frame.setJMenuBar(mb);
 		frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
-		frame.setSize(Math.min(xdim+40,(int)(sw*0.70)), Math.min(ydim+80,(int)(sh*0.70)));
-		frame.setLocation(5,5); frame.setVisible(true);
+		frame.setSize(Math.min((int)(xdim*fit_scale)+(int)(40*hidpi_scale),(int)(sw*0.70)), Math.min((int)(ydim*fit_scale)+(int)(80*hidpi_scale),(int)(sh*0.70)));
+		frame.setLocation(5,5);
+		frame.setVisible(true);
 	}
 
 	private void showImage()
 	{
 		Dimension vps = scroll_pane.getViewport().getSize();
-		fit_scale  = Math.min(1.0, Math.min(vps.width>0?(double)vps.width/xdim:1.0, vps.height>0?(double)vps.height/ydim:1.0));
+		fit_scale  = Math.min(hidpi_scale, Math.min(vps.width>0?(double)vps.width/xdim:hidpi_scale, vps.height>0?(double)vps.height/ydim:hidpi_scale));
 		zoom_scale = fit_scale;
 		updateDisplayImage();
 		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
@@ -581,7 +616,7 @@ public class DeltaReader
 	}
 
 	// =========================================================================
-	// Decompressor — one per channel; handles all entropy types
+	// Decompressor â€” one per channel; handles all entropy types
 	// =========================================================================
 	class Decompressor implements Runnable
 	{
@@ -609,7 +644,7 @@ public class DeltaReader
 				}
 				size = cur_xdim * cur_ydim;
 
-				// ---- Entropy decode → payload bytes ----
+				// ---- Entropy decode â†’ payload bytes ----
 				byte[] payload;
 
 				if (entropy_type == 0)
@@ -708,7 +743,7 @@ public class DeltaReader
 					payload = buf;
 				}
 
-				// ---- Payload → delta values ----
+				// ---- Payload â†’ delta values ----
 				int[] delta;
 
 				if (compress_type == 0)
@@ -729,7 +764,7 @@ public class DeltaReader
 					for (int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 				}
 
-				// ---- Delta → channel values ----
+				// ---- Delta â†’ channel values ----
 				int[] cur_ch;
 				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
 				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, cur_xdim, cur_ydim, init[i]);

@@ -10,8 +10,6 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
-//version 1.0
-
 public class DeltaWriter
 {
 	// ---- Image state --------------------------------------------------------
@@ -47,6 +45,16 @@ public class DeltaWriter
 	static final double ZOOM_MIN    = 0.05;
 	static final double ZOOM_MAX    = 32.0;
 
+	// Detected once at startup by applyHiDpiFontScaleIfNeeded(), before any
+	// window is created. 1.0 when no override was applied (the expected
+	// case on Windows and correctly-configured Linux sessions). Used both
+	// to scale the fixed pixel allowances that budget space for window
+	// chrome (menu bar, borders), and to raise the "100%"/native zoom
+	// ceiling so image content displays at the same physical size it
+	// would on a standard-DPI display, rather than shrunk to raw source
+	// pixels.
+	static double hidpi_scale = 1.0;
+
 	int[]  set_sum, channel_sum;
 	int[]  channel_init, channel_min, channel_delta_min;
 	int[]  channel_length, channel_compressed_length;
@@ -69,6 +77,7 @@ public class DeltaWriter
 
 	public static void main(String[] args)
 	{
+		applyHiDpiFontScaleIfNeeded();
 		if (args.length == 1) { new DeltaWriter(args[0]); }
 		else
 		{
@@ -76,6 +85,146 @@ public class DeltaWriter
 			fd.setVisible(true);
 			if (fd.getFile() != null) new DeltaWriter(new File(fd.getDirectory(), fd.getFile()).getPath());
 			else System.exit(0);
+		}
+	}
+
+	// =========================================================================
+	// HiDPI font-scale fallback.
+	//
+	// Windows has reliably detected and applied per-monitor HiDPI scaling
+	// since JDK 9 (JEP 263) -- GraphicsConfiguration's own transform already
+	// reflects the OS scale factor there, so detectMissingUiScale() below
+	// returns 1.0 immediately and applyHiDpiFontScaleIfNeeded() is a no-op:
+	// this code path is never active on Windows, and normal platform
+	// behavior is completely undisturbed. The problem this exists for is
+	// Linux/X11 specifically, where DPI reporting through the display
+	// server is much less consistent and Swing/AWT frequently fails to
+	// notice a HiDPI display at all, rendering everything at a fixed
+	// assumed ~96 DPI regardless of the desktop's actual configured scale
+	// (the same class of issue as unpatched Notepad++ on a HiDPI Windows
+	// display, just the Linux-side equivalent).
+	// =========================================================================
+
+	/**
+	 * Returns the UI scale factor that should be applied on top of Swing's
+	 * own automatic scaling, or 1.0 if no override is needed.
+	 *
+	 * Deliberately conservative: only returns a scale factor when there is
+	 * clear evidence Java's own automatic detection missed a genuinely
+	 * HiDPI display, checking several independent signals in order of
+	 * reliability rather than trusting any single one -- Toolkit.
+	 * getScreenResolution() in particular is not trustworthy on its own:
+	 * on at least one real Linux system it simply returns the JVM's
+	 * hardcoded 96 DPI default rather than anything reflecting the actual
+	 * desktop scale, so it's kept only as a last resort behind two more
+	 * reliable, independent signals.
+	 */
+	private static double detectMissingUiScale()
+	{
+		try
+		{
+			GraphicsConfiguration gc = GraphicsEnvironment.getLocalGraphicsEnvironment()
+				.getDefaultScreenDevice().getDefaultConfiguration();
+			double current_scale = gc.getDefaultTransform().getScaleX();
+
+			// If Java already reports a scale above 1.0, it has already
+			// detected and is applying HiDPI scaling correctly (the
+			// normal, reliable case on Windows, and on properly
+			// configured Linux/X11 or Wayland sessions too) -- nothing
+			// to do.
+			if (current_scale > 1.01) return 1.0;
+
+			// current_scale == 1.0 is ambiguous by itself: either this
+			// genuinely is a standard ~96 DPI display, or (the Linux/X11
+			// failure mode this method exists to catch) it's a HiDPI
+			// display that Java's automatic per-monitor scaling never
+			// picked up.
+
+			// 1. GDK_SCALE: a direct integer scale factor GTK3+ itself
+			// reads, set by GNOME and other GTK-based desktops when
+			// integer HiDPI scaling is configured. When present this is
+			// about as authoritative a signal as exists, short of Java's
+			// own (already-checked) detection.
+			String gdk_scale_str = System.getenv("GDK_SCALE");
+			if (gdk_scale_str != null)
+			{
+				try
+				{
+					double gdk_scale = Double.parseDouble(gdk_scale_str.trim());
+					if (gdk_scale >= 1.25) return gdk_scale;
+				}
+				catch (NumberFormatException nfe) { /* fall through to next signal */ }
+			}
+
+			// 2. Xft.dpi via XSettings, queried through AWT's desktop
+			// property mechanism -- independent of, and often more
+			// reliable than, Toolkit.getScreenResolution() (which
+			// derives DPI from the X server's reported physical monitor
+			// dimensions in millimetres, a value that's frequently wrong
+			// or defaulted on real hardware). By convention this
+			// property's value is DPI*1024, not DPI directly.
+			Object xft_dpi_prop = Toolkit.getDefaultToolkit().getDesktopProperty("gnome.Xft/DPI");
+			if (xft_dpi_prop instanceof Integer)
+			{
+				double xft_dpi           = ((Integer) xft_dpi_prop) / 1024.0;
+				double xft_implied_scale = xft_dpi / 96.0;
+				if (xft_implied_scale >= 1.25) return xft_implied_scale;
+			}
+
+			// 3. Toolkit.getScreenResolution(): kept as a last-resort
+			// signal, since it can still be correct on systems other than
+			// the one this fallback chain was extended for.
+			int    dpi           = Toolkit.getDefaultToolkit().getScreenResolution();
+			double implied_scale = dpi / 96.0;
+			if (implied_scale >= 1.25) return implied_scale;
+
+			return 1.0;
+		}
+		catch (Exception e)
+		{
+			// Fail safe: never let a detection problem break startup or
+			// force an unwanted scale change.
+			return 1.0;
+		}
+	}
+
+	/**
+	 * Scales every default Swing font by whatever detectMissingUiScale()
+	 * determines is needed, or does nothing at all if it returns 1.0 (the
+	 * expected outcome on Windows and on correctly-configured Linux
+	 * sessions). Must run before any Swing component is constructed, since
+	 * components read their fonts from these defaults at creation time.
+	 *
+	 * Also sets the static hidpi_scale field, used elsewhere to scale the
+	 * fixed pixel allowances that budget space for window chrome (menu
+	 * bar, borders) and to raise the "100%"/native zoom ceiling so image
+	 * content is displayed at the same physical size it would be on a
+	 * standard-DPI display, not shrunk to match raw source pixels.
+	 *
+	 * Writes through both UIManager.getLookAndFeelDefaults() (the current
+	 * look-and-feel's own defaults table) and UIManager.put() (the
+	 * top-level developer-override table, checked before the L&F's own
+	 * defaults by every standard component) for robustness across JDK
+	 * builds and look-and-feel implementations.
+	 */
+	private static void applyHiDpiFontScaleIfNeeded()
+	{
+		double scale = detectMissingUiScale();
+		hidpi_scale  = scale;
+		if (scale <= 1.01) return;
+
+		UIDefaults defaults = UIManager.getLookAndFeelDefaults();
+		for (Object key : new java.util.Vector<Object>(defaults.keySet()))
+		{
+			Object value = defaults.get(key);
+			if (value instanceof Font)
+			{
+				Font  font     = (Font) value;
+				float new_size = (float) (font.getSize() * scale);
+				Font  scaled   = font.deriveFont(new_size);
+				defaults.put(key, scaled);
+				UIManager.put(key, scaled);
+			}
 		}
 	}
 
@@ -232,8 +381,8 @@ public class DeltaWriter
 
 				Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
 				screen_xdim = (int)screen.getWidth(); screen_ydim = (int)screen.getHeight();
-				int mw=(int)(screen_xdim*0.70)-40, mh=(int)(screen_ydim*0.70)-80;
-				fit_scale = Math.min(1.0, Math.min((double)mw/image_xdim, (double)mh/image_ydim));
+				int mw=(int)(screen_xdim*0.70)-(int)(40*hidpi_scale), mh=(int)(screen_ydim*0.70)-(int)(80*hidpi_scale);
+				fit_scale = Math.min(hidpi_scale, Math.min((double)mw/image_xdim, (double)mh/image_ydim));
 				zoom_scale = fit_scale;
 
 				image_canvas = new ImageCanvas();
@@ -272,7 +421,7 @@ public class DeltaWriter
 				JMenuItem zi=new JMenuItem("Zoom In"); zi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS,InputEvent.CTRL_DOWN_MASK)); zi.addActionListener(e->zoomBy(ZOOM_FACTOR)); view_menu.add(zi);
 				JMenuItem zo=new JMenuItem("Zoom Out"); zo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS,InputEvent.CTRL_DOWN_MASK)); zo.addActionListener(e->zoomBy(1.0/ZOOM_FACTOR)); view_menu.add(zo);
 				JMenuItem zf=new JMenuItem("Fit"); zf.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0,InputEvent.CTRL_DOWN_MASK)); zf.addActionListener(e->{ Dimension vps=scroll_pane.getViewport().getSize(); zoom_scale=Math.min((double)vps.width/image_xdim,(double)vps.height/image_ydim); updateDisplayImage(); image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale))); image_canvas.revalidate(); image_canvas.repaint(); updateTitle(); }); view_menu.add(zf);
-				JMenuItem za=new JMenuItem("100%"); za.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1,InputEvent.CTRL_DOWN_MASK)); za.addActionListener(e->{ zoom_scale=1.0; updateDisplayImage(); image_canvas.setPreferredSize(new Dimension(image_xdim,image_ydim)); image_canvas.revalidate(); image_canvas.repaint(); updateTitle(); }); view_menu.add(za);
+				JMenuItem za=new JMenuItem("100%"); za.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1,InputEvent.CTRL_DOWN_MASK)); za.addActionListener(e->{ zoom_scale=hidpi_scale; updateDisplayImage(); image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale))); image_canvas.revalidate(); image_canvas.repaint(); updateTitle(); }); view_menu.add(za);
 
 				JMenu quant_menu = new JMenu("Quantization");
 				JSlider[] ss = new JSlider[1];
@@ -330,11 +479,19 @@ public class DeltaWriter
 				display_image=original_image;
 				image_canvas.setPreferredSize(new Dimension((int)(image_xdim*zoom_scale),(int)(image_ydim*zoom_scale)));
 				updateTitle();
-				frame.setSize(Math.min(image_xdim+40,(int)(screen_xdim*0.70)),Math.min(image_ydim+80,(int)(screen_ydim*0.70)));
+				frame.setSize(Math.min((int)(image_xdim*fit_scale)+(int)(40*hidpi_scale),(int)(screen_xdim*0.70)),Math.min((int)(image_ydim*fit_scale)+(int)(80*hidpi_scale),(int)(screen_ydim*0.70)));
 				int _off=nextWindowOffset; nextWindowOffset=(_off+30)%270;
 				frame.setLocation((screen_xdim-frame.getWidth())/2+_off,(screen_ydim-frame.getHeight())/2+_off);
 				frame.setVisible(true);
 				SwingUtilities.invokeLater(()->showInitialImage());
+			}
+			else
+			{
+				// Previously, if raster_type didn't match, the
+				// constructor silently did nothing at all -- no window,
+				// no error, no message. Fail loudly instead.
+				System.out.println("Unsupported image color model (raster_type=" + raster_type
+					+ ", expected TYPE_3BYTE_BGR=" + BufferedImage.TYPE_3BYTE_BGR + "). No window was created.");
 			}
 		}
 		catch(Exception e){e.printStackTrace();System.exit(1);}
