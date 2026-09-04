@@ -10,6 +10,9 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
+
+// version 1.0
+
 public class SimpleWriter
 {
 	BufferedImage original_image, working_image, display_image;
