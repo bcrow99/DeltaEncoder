@@ -8,6 +8,8 @@ import java.util.zip.*;
 import java.math.*;
 import javax.swing.*;
 
+//version 1.0
+
 public class DeltaReader
 {
 	// ---- Image dimensions ---------------------------------------------------

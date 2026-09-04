@@ -1,12 +1,8 @@
 import java.util.ArrayList;
 
-/**
- * This is a class that segments data, and then merges it back depending on how
- * it affect the compression rate.
- * 
- * @author Brian Crowley
- * @version 1.0
- */
+// version 1.0
+
+
 public class SegmentMapper
 {
 	public static ArrayList segment(byte[] string, int bitlength, double bin)

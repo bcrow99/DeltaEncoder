@@ -3,6 +3,8 @@ import java.util.zip.*;
 import java.lang.Math.*;
 import java.math.*;
 
+//version 1.0
+
 /*
  * Changes in this version (see inline FIX comments at each site):
  *

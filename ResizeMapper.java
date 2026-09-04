@@ -5,6 +5,8 @@
 * @version 1.0
 */
 
+// version 1.0
+
 /*
  * Three bugs fixed in this version (see inline FIX comments at each site):
  *   1. resizeX2, new_xdim>xdim, remainder==0 branch: loop bound was

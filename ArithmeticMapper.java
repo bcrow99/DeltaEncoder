@@ -1,6 +1,8 @@
 import java.util.*;
 import java.math.*;
 
+//version 1.0
+
 /*
  * Changes in this version (see inline FIX/NOTE comments at each site):
  *
@@ -1162,7 +1164,7 @@ public class ArithmeticMapper
   	
 
   	/**
-  	 * Produces a random permutation of symbol indices â€” a probabilistic-space
+  	 * Produces a random permutation of symbol indices — a probabilistic-space
   	 * baseline that carries no information about the data, for comparison
   	 * against frequency-driven orderings like Last and Descending.
   	 */
@@ -2247,7 +2249,7 @@ public class ArithmeticMapper
 			{
 				if (high <= HALF)
 				{
-					// E1: both in lower half â€” emit 0, flush pending 1s.
+					// E1: both in lower half — emit 0, flush pending 1s.
 					fastWriteBit(buf, bit_pos++, 0);
 					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
 					pending = 0;
@@ -2256,7 +2258,7 @@ public class ArithmeticMapper
 				}
 				else if (low >= HALF)
 				{
-					// E2: both in upper half â€” emit 1, flush pending 0s.
+					// E2: both in upper half — emit 1, flush pending 0s.
 					fastWriteBit(buf, bit_pos++, 1);
 					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
 					pending = 0;
@@ -2265,7 +2267,7 @@ public class ArithmeticMapper
 				}
 				else if (low >= QTR && high <= TQTR)
 				{
-					// E3: straddles midpoint â€” scale around centre, defer one bit.
+					// E3: straddles midpoint — scale around centre, defer one bit.
 					pending++;
 					low  = (low  - QTR) << 1;
 					high = (high - QTR) << 1;
@@ -2483,7 +2485,7 @@ public class ArithmeticMapper
 
 	// =========================================================================
 	// Cheap approximate-offset scorer for order-table search (hill climbing /
-	// annealing). New method â€” does not modify any existing encode/decode path.
+	// annealing). New method — does not modify any existing encode/decode path.
 	// =========================================================================
 
 	/**
@@ -2492,7 +2494,7 @@ public class ArithmeticMapper
 	 * remap like getIntervalValue(..., order), but instead of packing bits into
 	 * a byte stream for storage, captures the leading ~52 bits directly and
 	 * returns them as a double in [0, 1). Not intended for round-trip
-	 * encode/decode â€” only as a fast scorer during hill-climbing/annealing.
+	 * encode/decode — only as a fast scorer during hill-climbing/annealing.
 	 *
 	 * Precision note: for any segment large enough to emit more than ~52 bits
 	 * total (true of essentially all real segments), the interval has already
@@ -2590,8 +2592,8 @@ public class ArithmeticMapper
 	}
 
 	/**
-	 * Keeps only the leading MAX_BITS bits appended to it â€” enough for full
-	 * double precision â€” and discards the rest. Used only by
+	 * Keeps only the leading MAX_BITS bits appended to it — enough for full
+	 * double precision — and discards the rest. Used only by
 	 * getApproxOffsetFastOrdered; not a general-purpose bit buffer.
 	 */
 	private static final class LeadingBits

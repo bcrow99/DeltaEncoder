@@ -5,6 +5,8 @@ import java.math.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 
+//version 1.0
+
 /*
  * Changes in this version (see inline FIX/NOTE comments at each site):
  *
