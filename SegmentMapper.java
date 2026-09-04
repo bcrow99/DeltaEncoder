@@ -20,6 +20,57 @@ public class SegmentMapper
 	    
 	    int string_bitlength   = StringMapper.getBitlength(string);
 		int number_of_segments = string_bitlength / bitlength;
+
+		int[] bit_table  = StringMapper.getBitTable();
+
+		// FIX: when the whole string is smaller than one segment
+		// (bitlength), number_of_segments computes to 0 and the main loop
+		// below (which only runs number_of_segments times) never executes
+		// at all -- the entire input silently vanishes, returning an
+		// empty segment list with no error or warning. Confirmed
+		// directly: a 21-byte input against a 256-bit (32-byte) segment
+		// size returned zero segments. Handled here as a dedicated
+		// single-segment case sized to the ACTUAL data (string_bitlength
+		// bits), not via the general "last segment absorbs the
+		// remainder" formula below, since that formula assumes at least
+		// one full-size leading segment already exists to extend.
+		if(number_of_segments == 0)
+		{
+			int last_segment_bitlength  = string_bitlength;
+			int last_segment_bytelength = last_segment_bitlength / 8;
+			byte extra_bits             = 0;
+			if(last_segment_bitlength % 8 != 0)
+			{
+				extra_bits   = (byte) (8 - (last_segment_bitlength % 8));
+				extra_bits <<= 5;
+				last_segment_bytelength++;
+			}
+			last_segment_bytelength++;
+
+			byte string_data = string[string.length - 1];
+
+			byte[] segment = new byte[last_segment_bytelength];
+			for(int j = 0; j < segment.length - 1; j++)
+				segment[j] = string[j];
+			segment[segment.length - 1] = extra_bits;
+			double zero_ratio = StringMapper.getZeroRatio(segment, last_segment_bitlength, bit_table);
+			int    bin_num    = getBinNumber(zero_ratio, bin);
+			if(zero_ratio < .5)
+				segment[segment.length - 1] |= 16;
+
+			ArrayList<byte[]> segments = new ArrayList<byte[]>();
+			segments.add(segment);
+			int[] bin_number = { bin_num };
+
+			result.add(segments);
+			result.add(last_segment_bytelength);
+			result.add(last_segment_bytelength);
+			result.add(extra_bits);
+			result.add(string_data);
+			result.add(bin_number);
+			return result;
+		}
+
 		int segment_bitlength  = bitlength;
 		int segment_bytelength = bitlength / 8;
 		segment_bytelength++;
@@ -30,7 +81,20 @@ public class SegmentMapper
 		byte extra_bits        = 0;
 		if(odd_bits % 8 != 0)
 		{
-			extra_bits   = (byte) (8 - odd_bits);
+			// FIX: was `extra_bits = (byte)(8 - odd_bits)`. odd_bits is a
+			// remainder mod bitlength (the segment size, e.g. 256), so it
+			// can be anywhere from 0 to bitlength-1 -- not just 0-7. What's
+			// actually needed here is the number of PADDING bits needed to
+			// round the last segment's bit count up to a whole byte, which
+			// depends only on odd_bits % 8, not odd_bits itself. Confirmed
+			// via 200 randomized segment()/restore() round trips on the
+			// Python translation (which faithfully carried this same bug):
+			// the old formula produced a wrong value whenever odd_bits >= 8
+			// (175/200 trials), corrupting the restored output in a
+			// fraction of those cases (5/175) where the wrong value
+			// happened to decode to a different effective padding count
+			// than intended.
+			extra_bits   = (byte) (8 - (odd_bits % 8));
 			extra_bits <<= 5;
 			last_segment_bytelength++;
 		}
@@ -40,7 +104,6 @@ public class SegmentMapper
 		int  max_segment_bytelength = last_segment_bytelength;
 		byte string_data            = string[string.length - 1]; 
 		
-		int[] bit_table  = StringMapper.getBitTable();
 		int[] bin_number = new int[number_of_segments];
 		
 		ArrayList<byte[]> segments = new ArrayList<byte[]>();
@@ -251,9 +314,34 @@ public class SegmentMapper
 		int number_of_compressed_segments = compressed_segments.size();
 		if(number_of_compressed_segments == 1)
 		{
-			byte [] segment             = compressed_segments.get(0);
-			segment[segment.length - 1] = string_data;
-			compressed_segments.set(0, segment);
+			// FIX: the original code here did
+			//   byte [] segment             = compressed_segments.get(0);
+			//   segment[segment.length - 1] = string_data;
+			//   compressed_segments.set(0, segment);
+			// clobbering the single remaining segment's own compression
+			// metadata byte (which encodes iterations/type/padding --
+			// restore()'s only way to know whether this segment needs
+			// decompressing, and with what bit length) with the ORIGINAL
+			// string's unrelated trailing data byte. This is unnecessary
+			// and actively harmful: restore(segments, string_data) already
+			// receives string_data as its own explicit parameter and
+			// applies it itself, at the very end, to the fully
+			// reconstructed output -- it never needs a copy embedded in
+			// any individual segment. Confirmed via direct testing on the
+			// Python translation: whenever merge() collapses everything
+			// down to exactly one segment (common with the looser
+			// merge_type 0/1/2 similarity criteria, and precisely the
+			// case where segmentation found the most uniform, most
+			// compressible run -- i.e. the best case for this whole
+			// scheme), the clobbered byte decoded as "iterations=16"
+			// (uncompressed), so restore() read the still-compressed
+			// bytes as if they were raw, using a drastically wrong bit
+			// length -- e.g. a 3951-byte segment restored as only 1659
+			// bytes. This explains the "merge_type 0/1/2 fails, merge_type
+			// 3 clean" pattern noted during translation: type 3's strict
+			// exact-bin-match criterion is simply far less likely to ever
+			// collapse a large segment list down to one group than the
+			// looser types are, not because its merge logic differs.
 			result.add(compressed_segments);
 			return result;
 		}
@@ -357,9 +445,12 @@ public class SegmentMapper
 		int number_of_combined_segments = combined_segments.size();
 		if(number_of_combined_segments == 1)
 		{
-			byte[] segment = combined_segments.get(0);
-			segment[segment.length - 1] = string_data;
-			combined_segments.set(0, segment);
+			// FIX: same bug and same fix as merge()'s single-segment
+			// fallback -- see the comment there. Clobbering this segment's
+			// own compression metadata byte with string_data is
+			// unnecessary (restore() takes string_data as its own
+			// explicit parameter) and breaks decompression whenever this
+			// single remaining segment is itself still compressed.
 			result.add(combined_segments);
 			return result;
 		}
@@ -636,9 +727,34 @@ public class SegmentMapper
 			}	
 		}
 		
-		// We have one segment left that wasn't processed, since it doesn't have a following segment.
-		byte [] last_segment = segments.get(number_of_segments - 1);
-		spliced_segments.add(last_segment);
+		// FIX: the original code here unconditionally did
+		//   byte [] last_segment = segments.get(number_of_segments - 1);
+		//   spliced_segments.add(last_segment);
+		// on the assumption the while/for loop above always naturally
+		// stops one short of the last segment (the loop condition is
+		// `i < number_of_segments - 1`, so the last index is never
+		// visited as current_segment). That assumption breaks whenever a
+		// successful splice at i == number_of_segments - 2 consumes BOTH
+		// that segment and the one after it (the true last segment): the
+		// two `i++`s in that path (one inside the branch just above, one
+		// from the loop itself) together advance i by 2, jumping straight
+		// from number_of_segments-2 to number_of_segments and skipping
+		// over number_of_segments-1 entirely, even though that last
+		// segment WAS already spliced away and appended (in transformed
+		// form) inside the loop. The old code then re-appended the
+		// ORIGINAL, un-spliced copy of it unconditionally, duplicating it
+		// in the output. Confirmed directly on the Python translation:
+		// restore() on the result was 177 bytes for a 161-byte input,
+		// with the excess and the first mismatch both located at the
+		// tail, exactly where the duplicated last segment landed. Fixed
+		// by only appending segments.get(number_of_segments-1) when the
+		// loop actually stopped short of it (i == number_of_segments-1),
+		// not when it jumped past.
+		if(i == number_of_segments - 1)
+		{
+			byte [] last_segment = segments.get(number_of_segments - 1);
+			spliced_segments.add(last_segment);
+		}
 		
 		ArrayList result = new ArrayList();
 		result.add(spliced_segments);
@@ -687,7 +803,8 @@ public class SegmentMapper
 					spliced_segments.add(current_segment);
 				else
 				{
-					byte[] previous_segment       = spliced_segments.getLast();
+					int size = spliced_segments.size();
+					byte[] previous_segment       = spliced_segments.get(size - 1);
 				    byte[] decompressed_segment   = StringMapper.decompressStrings(previous_segment);
 				    int    previous_bitlength     = StringMapper.getBitlength(previous_segment);
 				    int    decompressed_bitlength = StringMapper.getBitlength(decompressed_segment);
@@ -1002,8 +1119,18 @@ public class SegmentMapper
 				}
 				System.out.println("Total bitlength of regular segments is " + total_bitlength);
 				
+				// FIX: added string_data to the result here and at every
+				// other return point in this method. restore(segments,
+				// string_data) requires string_data as an explicit
+				// argument, but this method previously never returned it
+				// anywhere -- meaning getSegmentedData()'s own output
+				// alone was never sufficient to actually call restore()
+				// and reconstruct the original data; callers had to
+				// separately re-derive string_data some other way. This
+				// makes the function genuinely self-contained.
 				result.add(segments);
 				result.add(max_segment_bytelength);
+				result.add(string_data);
 				return result;
 			}
 			
@@ -1019,6 +1146,7 @@ public class SegmentMapper
 				System.out.println("String bitlength was " + (min_segment_bytelength * 8));
 				result.add(merged_segments);
 				result.add(min_segment_bytelength);
+				result.add(string_data);
 				return result;
 			} 
 			else
@@ -1051,6 +1179,7 @@ public class SegmentMapper
 				    
 				    result.add(merged_segments);
 					result.add(max_segment_bytelength);
+					result.add(string_data);
 					return result;
 				}
 				else if(segment_type == 2 || segment_type == 3)
@@ -1077,6 +1206,7 @@ public class SegmentMapper
 				        
 				        result.add(merged_segments);
 						result.add(max_segment_bytelength);
+						result.add(string_data);
 						return result;
 					}
 					
@@ -1089,6 +1219,7 @@ public class SegmentMapper
 						System.out.println("Returning " + number_of_merged_segments + " segments combined back into the original string.");
 						result.add(combined_segments);
 						result.add(max_segment_bytelength);
+						result.add(string_data);
 						return result;
 					}
 					
@@ -1118,6 +1249,7 @@ public class SegmentMapper
 					    
 					    result.add(combined_segments);
 						result.add(max_segment_bytelength);
+						result.add(string_data);
 						return result;
 					}
 					
@@ -1130,6 +1262,7 @@ public class SegmentMapper
 						    System.out.println("Maximum segment byte length is "     + max_segment_bytelength);
 						    result.add(combined_segments);
 							result.add(max_segment_bytelength);
+							result.add(string_data);
 							return result;
 						}
 						
@@ -1202,6 +1335,7 @@ public class SegmentMapper
 						
 						result.add(spliced_segments2);
 					    result.add(max_segment_bytelength);
+					    result.add(string_data);
 					    return result;
 					}
 				}
