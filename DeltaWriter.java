@@ -10,8 +10,6 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
-// version 1.01
-
 public class DeltaWriter
 {
 	// ---- Image state --------------------------------------------------------
@@ -272,54 +270,94 @@ public class DeltaWriter
 		printChannelSetRanking();
 		int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
-		// Select best delta type
+		// Select best delta type. Parallelized across the 3 channels (each
+		// channel's full 13-delta-type analysis is completely independent
+		// of the others), matching the same per-channel-thread pattern
+		// already used elsewhere in this file (ApplyHandler's smoothing/
+		// encode/decode passes, the segmented arithmetic-encoding threads).
+		// Each thread writes into its own slot of a per-channel results
+		// array to avoid any shared mutable state between threads; the
+		// three channels' contributions are summed after all three join.
 		int[]     delta_bits        = new int[13];
 		int[]     map_bits          = new int[13];
 		boolean[] delta_compressed  = new boolean[13];
 		boolean[] map_compressed    = new boolean[13];
+
+		int[][]     per_channel_delta_bits       = new int[3][13];
+		int[][]     per_channel_map_bits         = new int[3][13];
+		boolean[][] per_channel_delta_compressed = new boolean[3][13];
+		boolean[][] per_channel_map_compressed   = new boolean[3][13];
+
+		final int f_new_xdim = new_xdim;
+		final int f_new_ydim = new_ydim;
+
+		Thread[] delta_type_threads = new Thread[3];
 		for (int i = 0; i < 3; i++)
 		{
-			int[] qc = quantized_channel_list.get(channel_id[i]);
-			ArrayList[] encs = {
-				DeltaMapper.getHorizontalDeltasFromValues(qc, new_xdim, new_ydim),
-				DeltaMapper.getVerticalDeltasFromValues(qc, new_xdim, new_ydim),
-				DeltaMapper.getAverageDeltasFromValues(qc, new_xdim, new_ydim),
-				DeltaMapper.getMedDeltasFromValues(qc, new_xdim, new_ydim),
-				DeltaMapper.getDirectionalDeltasFromValues(qc, new_xdim, new_ydim),
-				DeltaMapper.getAdaptiveDeltasFromValues(qc, new_xdim, new_ydim),
-			};
-			for (int t = 0; t < 6; t++)
+			final int fi = i;
+			delta_type_threads[i] = new Thread(() ->
 			{
-				byte[] compressed = packAndCompress((int[]) encs[t].get(1));
-				delta_bits[t] += StringMapper.getBitlength(compressed);
-				if ((StringMapper.getIterations(compressed) & 15) > 0) delta_compressed[t] = true;
-			}
-			ArrayList[] encs2 = {
-				DeltaMapper.getMixedDeltasFromValues(qc, new_xdim, new_ydim),                              // type 6  (scanline 1)
-				DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim),                             // type 7  (scanline 2)
-				DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim),                             // type 8  (scanline 3)
-				DeltaMapper.getMixedDeltasFromValues16Rows(qc, new_xdim, new_ydim),                        // type 9  (scanline 4)
-				DeltaMapper.getMixedDeltasFromValues8Rows(qc, new_xdim, new_ydim, scanline5_variant),      // type 10 (scanline 5)
-				DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim),                             // type 11 (frame map 1)
-				DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim),                            // type 12 (frame map 2)
-			};
-			for (int t = 0; t < 7; t++)
+				int[] qc = quantized_channel_list.get(channel_id[fi]);
+				int[]     ch_delta_bits       = per_channel_delta_bits[fi];
+				int[]     ch_map_bits         = per_channel_map_bits[fi];
+				boolean[] ch_delta_compressed = per_channel_delta_compressed[fi];
+				boolean[] ch_map_compressed   = per_channel_map_compressed[fi];
+
+				ArrayList[] encs = {
+					DeltaMapper.getHorizontalDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+					DeltaMapper.getVerticalDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+					DeltaMapper.getAverageDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+					DeltaMapper.getMedDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+					DeltaMapper.getDirectionalDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+					DeltaMapper.getAdaptiveDeltasFromValues(qc, f_new_xdim, f_new_ydim),
+				};
+				for (int t = 0; t < 6; t++)
+				{
+					byte[] compressed = packAndCompress((int[]) encs[t].get(1));
+					ch_delta_bits[t] += StringMapper.getBitlength(compressed);
+					if ((StringMapper.getIterations(compressed) & 15) > 0) ch_delta_compressed[t] = true;
+				}
+				ArrayList[] encs2 = {
+					DeltaMapper.getMixedDeltasFromValues(qc, f_new_xdim, f_new_ydim),                              // type 6  (scanline 1)
+					DeltaMapper.getMixedDeltasFromValues2(qc, f_new_xdim, f_new_ydim),                             // type 7  (scanline 2)
+					DeltaMapper.getMixedDeltasFromValues4(qc, f_new_xdim, f_new_ydim),                             // type 8  (scanline 3)
+					DeltaMapper.getMixedDeltasFromValues16Rows(qc, f_new_xdim, f_new_ydim),                        // type 9  (scanline 4)
+					DeltaMapper.getMixedDeltasFromValues8Rows(qc, f_new_xdim, f_new_ydim, scanline5_variant),      // type 10 (scanline 5)
+					DeltaMapper.getIdealDeltasFromValues8(qc, f_new_xdim, f_new_ydim),                             // type 11 (frame map 1)
+					DeltaMapper.getIdealDeltasFromValues16(qc, f_new_xdim, f_new_ydim),                            // type 12 (frame map 2)
+				};
+				for (int t = 0; t < 7; t++)
+				{
+					int    type_idx = t + 6;
+					int[]  delta     = (int[])  encs2[t].get(1);
+					byte[] map       = (byte[]) encs2[t].get(2);
+
+					byte[] delta_compressed_bytes = packAndCompress(delta);
+					ch_delta_bits[type_idx] += StringMapper.getBitlength(delta_compressed_bytes);
+					if ((StringMapper.getIterations(delta_compressed_bytes) & 15) > 0) ch_delta_compressed[type_idx] = true;
+
+					int[] map_int = new int[map.length];
+					for (int k = 0; k < map.length; k++) map_int[k] = map[k] & 0xFF;
+					byte[] map_compressed_bytes = packAndCompress(map_int);
+					ch_map_bits[type_idx] += StringMapper.getBitlength(map_compressed_bytes);
+					if ((StringMapper.getIterations(map_compressed_bytes) & 15) > 0) ch_map_compressed[type_idx] = true;
+				}
+			});
+			delta_type_threads[i].start();
+		}
+		try { for (Thread t : delta_type_threads) t.join(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+		for (int i = 0; i < 3; i++)
+		{
+			for (int t = 0; t < 13; t++)
 			{
-				int    type_idx = t + 6;
-				int[]  delta     = (int[])  encs2[t].get(1);
-				byte[] map       = (byte[]) encs2[t].get(2);
-
-				byte[] delta_compressed_bytes = packAndCompress(delta);
-				delta_bits[type_idx] += StringMapper.getBitlength(delta_compressed_bytes);
-				if ((StringMapper.getIterations(delta_compressed_bytes) & 15) > 0) delta_compressed[type_idx] = true;
-
-				int[] map_int = new int[map.length];
-				for (int k = 0; k < map.length; k++) map_int[k] = map[k] & 0xFF;
-				byte[] map_compressed_bytes = packAndCompress(map_int);
-				map_bits[type_idx] += StringMapper.getBitlength(map_compressed_bytes);
-				if ((StringMapper.getIterations(map_compressed_bytes) & 15) > 0) map_compressed[type_idx] = true;
+				delta_bits[t]       += per_channel_delta_bits[i][t];
+				map_bits[t]         += per_channel_map_bits[i][t];
+				delta_compressed[t] |= per_channel_delta_compressed[i][t];
+				map_compressed[t]   |= per_channel_map_compressed[i][t];
 			}
 		}
+
 		int[] total_delta_sum = new int[13];
 		for (int t = 0; t < 13; t++) total_delta_sum[t] = delta_bits[t] + map_bits[t];
 		min_sum = total_delta_sum[0]; min_idx = 0;
