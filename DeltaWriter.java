@@ -10,6 +10,8 @@ import javax.imageio.*;
 import javax.swing.*;
 import javax.swing.event.*;
 
+// version 1.01
+
 public class DeltaWriter
 {
 	// ---- Image state --------------------------------------------------------
@@ -267,10 +269,14 @@ public class DeltaWriter
 		int min_sum = Integer.MAX_VALUE, min_idx = 0;
 		for (int i = 0; i < 10; i++) if (set_sum[i] < min_sum) { min_sum = set_sum[i]; min_idx = i; }
 		min_set_id = min_idx;
+		printChannelSetRanking();
 		int[] channel_id = DeltaMapper.getChannels(min_set_id);
 
 		// Select best delta type
-		int[] total_delta_sum = new int[13];
+		int[]     delta_bits        = new int[13];
+		int[]     map_bits          = new int[13];
+		boolean[] delta_compressed  = new boolean[13];
+		boolean[] map_compressed    = new boolean[13];
 		for (int i = 0; i < 3; i++)
 		{
 			int[] qc = quantized_channel_list.get(channel_id[i]);
@@ -284,27 +290,42 @@ public class DeltaWriter
 			};
 			for (int t = 0; t < 6; t++)
 			{
-				byte[] packed = (byte[]) StringMapper.getStringList((int[]) encs[t].get(1), false).get(3);
-				total_delta_sum[t] += StringMapper.getBitlength(StringMapper.compressStrings(packed));
+				byte[] compressed = packAndCompress((int[]) encs[t].get(1));
+				delta_bits[t] += StringMapper.getBitlength(compressed);
+				if ((StringMapper.getIterations(compressed) & 15) > 0) delta_compressed[t] = true;
 			}
-			ArrayList<int[]> res10 = DeltaMapper.getMixedDeltas8Frequency(qc, new_xdim, new_ydim, scanline5_variant);
-			total_delta_sum[10] += (int)Math.floor(CodeMapper.getShannonLimit(res10.get(0))) + StringMapper.getBitlength((byte[])StringMapper.getStringList(res10.get(1),false).get(3));
-			ArrayList<int[]> r8  = DeltaMapper.getIdealFrequency8(qc, new_xdim, new_ydim);
-			ArrayList<int[]> r16 = DeltaMapper.getIdealFrequency16(qc, new_xdim, new_ydim);
-			total_delta_sum[11] += (int) Math.floor(CodeMapper.getShannonLimit(r8.get(0))  + CodeMapper.getShannonLimit(r8.get(1)));
-			total_delta_sum[12] += (int) Math.floor(CodeMapper.getShannonLimit(r16.get(0)) + CodeMapper.getShannonLimit(r16.get(1)));
-			ArrayList<int[]> res6 = DeltaMapper.getMedScanlineFrequency(qc, new_xdim, new_ydim);
-			total_delta_sum[6] += (int)Math.floor(CodeMapper.getShannonLimit(res6.get(0))) + StringMapper.getBitlength((byte[])StringMapper.getStringList(res6.get(1),false).get(3));
-			ArrayList<int[]> res7 = DeltaMapper.getScanline2Frequency(qc, new_xdim, new_ydim);
-			total_delta_sum[7] += (int)Math.floor(CodeMapper.getShannonLimit(res7.get(0))) + StringMapper.getBitlength((byte[])StringMapper.getStringList(res7.get(1),false).get(3));
-			ArrayList<int[]> res8 = DeltaMapper.getMixedDeltas4Frequency(qc, new_xdim, new_ydim);
-			total_delta_sum[8] += (int)Math.floor(CodeMapper.getShannonLimit(res8.get(0))) + StringMapper.getBitlength((byte[])StringMapper.getStringList(res8.get(1),false).get(3));
-			ArrayList<int[]> res9 = DeltaMapper.getMixedDeltas16Frequency(qc, new_xdim, new_ydim);
-			total_delta_sum[9] += (int)Math.floor(CodeMapper.getShannonLimit(res9.get(0))) + StringMapper.getBitlength((byte[])StringMapper.getStringList(res9.get(1),false).get(3));
+			ArrayList[] encs2 = {
+				DeltaMapper.getMixedDeltasFromValues(qc, new_xdim, new_ydim),                              // type 6  (scanline 1)
+				DeltaMapper.getMixedDeltasFromValues2(qc, new_xdim, new_ydim),                             // type 7  (scanline 2)
+				DeltaMapper.getMixedDeltasFromValues4(qc, new_xdim, new_ydim),                             // type 8  (scanline 3)
+				DeltaMapper.getMixedDeltasFromValues16Rows(qc, new_xdim, new_ydim),                        // type 9  (scanline 4)
+				DeltaMapper.getMixedDeltasFromValues8Rows(qc, new_xdim, new_ydim, scanline5_variant),      // type 10 (scanline 5)
+				DeltaMapper.getIdealDeltasFromValues8(qc, new_xdim, new_ydim),                             // type 11 (frame map 1)
+				DeltaMapper.getIdealDeltasFromValues16(qc, new_xdim, new_ydim),                            // type 12 (frame map 2)
+			};
+			for (int t = 0; t < 7; t++)
+			{
+				int    type_idx = t + 6;
+				int[]  delta     = (int[])  encs2[t].get(1);
+				byte[] map       = (byte[]) encs2[t].get(2);
+
+				byte[] delta_compressed_bytes = packAndCompress(delta);
+				delta_bits[type_idx] += StringMapper.getBitlength(delta_compressed_bytes);
+				if ((StringMapper.getIterations(delta_compressed_bytes) & 15) > 0) delta_compressed[type_idx] = true;
+
+				int[] map_int = new int[map.length];
+				for (int k = 0; k < map.length; k++) map_int[k] = map[k] & 0xFF;
+				byte[] map_compressed_bytes = packAndCompress(map_int);
+				map_bits[type_idx] += StringMapper.getBitlength(map_compressed_bytes);
+				if ((StringMapper.getIterations(map_compressed_bytes) & 15) > 0) map_compressed[type_idx] = true;
+			}
 		}
+		int[] total_delta_sum = new int[13];
+		for (int t = 0; t < 13; t++) total_delta_sum[t] = delta_bits[t] + map_bits[t];
 		min_sum = total_delta_sum[0]; min_idx = 0;
 		for (int i = 1; i < 13; i++) if (total_delta_sum[i] < min_sum) { min_sum = total_delta_sum[i]; min_idx = i; }
 		delta_type = min_idx;
+		printDeltaTypeRanking(delta_bits, map_bits, delta_compressed, map_compressed, total_delta_sum);
 
 		// Select compress_type
 		{
@@ -596,6 +617,17 @@ public class DeltaWriter
 		return DeltaMapper.shift(rounded, -pixel_shift);
 	}
 
+	// Packs and compresses an int[] array (delta values, or a map array
+	// widened from byte to int), returning the compressed StringMapper
+	// bit string. Callers pull both the bitlength and the "did it really
+	// compress" answer (via getIterations) from the same compressed
+	// result, so packing/compressing only has to happen once per array.
+	private byte[] packAndCompress(int[] values)
+	{
+		byte[] packed = (byte[]) StringMapper.getStringList(values, false).get(3);
+		return StringMapper.compressStrings(packed);
+	}
+
 	private void computeSetSums()
 	{
 		set_sum[0]=channel_sum[0]+channel_sum[1]+channel_sum[2]; set_sum[1]=channel_sum[0]+channel_sum[4]+channel_sum[2];
@@ -603,6 +635,70 @@ public class DeltaWriter
 		set_sum[4]=channel_sum[0]+channel_sum[3]+channel_sum[5]; set_sum[5]=channel_sum[3]+channel_sum[1]+channel_sum[2];
 		set_sum[6]=channel_sum[3]+channel_sum[4]+channel_sum[2]; set_sum[7]=channel_sum[3]+channel_sum[1]+channel_sum[4];
 		set_sum[8]=channel_sum[5]+channel_sum[1]+channel_sum[4]; set_sum[9]=channel_sum[5]+channel_sum[4]+channel_sum[2];
+	}
+
+	// Prints the ranked channel-set table (rank, channel composition, per-
+	// channel entropy estimate, total), marking the one init() selected.
+	private void printChannelSetRanking()
+	{
+		Integer[] order = new Integer[10];
+		for (int i = 0; i < 10; i++) order[i] = i;
+		java.util.Arrays.sort(order, (a, b) -> set_sum[a] - set_sum[b]);
+		System.out.println("Channel sets (ranked):");
+		for (int r = 0; r < 10; r++)
+		{
+			int idx = order[r];
+			int[] c = DeltaMapper.getChannels(idx);
+			String sel = (idx == min_set_id) ? " **" : "";
+			System.out.println(String.format("  %2d. %-32s %10d %10d %10d %12d%s",
+				r + 1, set_string[idx], channel_sum[c[0]], channel_sum[c[1]], channel_sum[c[2]], set_sum[idx], sel));
+		}
+		System.out.println();
+	}
+
+	// Prints the ranked delta-type table: rank, name, delta bits (with its
+	// own compression marker), map bits for the types that have one (with
+	// its own marker), and the combined total used for selection -- marking
+	// the type init() actually selected. Mirrors SimpleWriter's format:
+	// types without a map (0-5) print with the map column blank rather than
+	// a misleading "0", so the delta/total columns stay aligned either way.
+	//
+	// A compression marker (*) means StringMapper's compressStrings() ran
+	// on that specific bit string (delta or map) and its iterations count
+	// indicated real compression, not just a pass-through. All 13 types
+	// build a real delta bit string and compress it for real (types 6-12
+	// previously used a Shannon-limit estimate from a frequency histogram
+	// instead -- faster, but with no actual bit string to check
+	// compression on). The map-using types (6-12) also now compress their
+	// actual per-pixel map array the same way, rather than the older
+	// approximation of feeding the map's frequency counts through the same
+	// pipeline as a stand-in for the real data.
+	private void printDeltaTypeRanking(int[] delta_bits, int[] map_bits,
+	                                    boolean[] delta_compressed, boolean[] map_compressed,
+	                                    int[] total_delta_sum)
+	{
+		Integer[] order = new Integer[13];
+		for (int i = 0; i < 13; i++) order[i] = i;
+		java.util.Arrays.sort(order, (a, b) -> total_delta_sum[a] - total_delta_sum[b]);
+		System.out.println("Delta types (ranked):");
+		for (int r = 0; r < 13; r++)
+		{
+			int idx = order[r];
+			String dc  = delta_compressed[idx] ? "*" : " ";
+			String sel = (idx == delta_type) ? " **" : "";
+			if (idx >= 6)
+			{
+				String mc = map_compressed[idx] ? "*" : " ";
+				System.out.println(String.format("  %2d. %-16s delta: %12d%s      map: %12d%s      total: %12d%s",
+					r + 1, delta_type_string[idx], delta_bits[idx], dc, map_bits[idx], mc, total_delta_sum[idx], sel));
+			}
+			else
+			{
+				System.out.println(String.format("  %2d. %-16s delta: %12d%s                              total: %12d%s",
+					r + 1, delta_type_string[idx], delta_bits[idx], dc, total_delta_sum[idx], sel));
+			}
+		}
+		System.out.println();
 	}
 
 	// FIX (bug #5): DeltaReader.java expects two DIFFERENT on-disk map
