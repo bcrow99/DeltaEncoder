@@ -174,6 +174,11 @@ public class SteeredArithmeticMapper
 	 *  exists, e.g. counts=[5,4,3] targeting 7: greedy takes 5 first and
 	 *  gets stuck, even though {4,3} works). The subset found is placed
 	 *  before realSymbol; the rest placed after. */
+	public static int[] orderingForChoicePublic(int realSymbol, int[] otherSyms, int[] f, int sJ)
+	{
+		return orderingForChoice(realSymbol, otherSyms, f, sJ);
+	}
+
 	private static int[] orderingForChoice(int realSymbol, int[] otherSyms, int[] f, int sJ)
 	{
 		int k = otherSyms.length;
