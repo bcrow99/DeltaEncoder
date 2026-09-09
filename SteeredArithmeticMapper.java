@@ -46,47 +46,128 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class SteeredArithmeticMapper
 {
 	// =========================================================================
-	// Exact fraction arithmetic (BigInteger numerator/denominator, reduced
-	// via GCD at every operation to keep numbers as small as possible --
-	// these grow multiplicatively with sequence length, so this matters).
+	// Exact fraction arithmetic reduced via GCD at every operation to keep numbers 
+	// as small as possible.  
 	// =========================================================================
 	public static final class Frac
 	{
-		public final BigInteger n, d; // invariant: d > 0, gcd(|n|,d) == 1 (or n==0, d==1)
+		public final BigInteger n, d; 
 
-		public Frac(BigInteger n, BigInteger d)
+		public Frac(BigInteger numerator, BigInteger denominator)
 		{
-			if (d.signum() < 0) { n = n.negate(); d = d.negate(); }
-			if (n.signum() == 0) { d = BigInteger.ONE; }
+			// We might want to check if the denominator is zero and
+			// throw an exception, but it also might be useful as an 
+			// equivalence for infinity.
+			
+			if(denominator.signum() < 0) 
+			{ 
+				// This moves the negative sign to the numerator if the numerator was positive,
+				// and makes it a simple positive fraction if the numerator was negative.
+				numerator   = numerator.negate(); 
+				denominator = denominator.negate(); 
+			}
+			
+			if(numerator.signum() == 0) 
+			{ 
+				// No matter what denominator was passed to the constructor,
+				// we turn it into a one if the numerator was zero.
+				denominator = BigInteger.ONE; 
+			}
 			else
 			{
-				BigInteger g = n.gcd(d);
-				if (!g.equals(BigInteger.ONE)) { n = n.divide(g); d = d.divide(g); }
+				// We'll assume this is a proper fraction and use the denominator
+				// to get the greatest common divisor, but it will still work if
+				// the numerator is actually larger since java will check which
+				// is greater when it does the operation.
+				BigInteger divisor = denominator.gcd(numerator);
+				if(!divisor.equals(BigInteger.ONE)) 
+				{ 
+					numerator   = numerator.divide(divisor); 
+					denominator = denominator.divide(divisor); 
+				}
 			}
-			this.n = n; this.d = d;
+			
+			this.n   = numerator; 
+			this.d = denominator;
 		}
 
-		public static Frac of(long n, long d) { return new Frac(BigInteger.valueOf(n), BigInteger.valueOf(d)); }
+		public static Frac of(long n, long d) 
+		{ 
+			return new Frac(BigInteger.valueOf(n), BigInteger.valueOf(d)); 
+		}
+		
 		public static final Frac ZERO = Frac.of(0, 1);
 		public static final Frac ONE  = Frac.of(1, 1);
 		public static final Frac HALF = Frac.of(1, 2);
 
-		public Frac add(Frac o) { return new Frac(n.multiply(o.d).add(o.n.multiply(d)), d.multiply(o.d)); }
-		public Frac sub(Frac o) { return new Frac(n.multiply(o.d).subtract(o.n.multiply(d)), d.multiply(o.d)); }
-		public Frac mul(Frac o) { return new Frac(n.multiply(o.n), d.multiply(o.d)); }
-		public Frac div(Frac o) { return new Frac(n.multiply(o.d), d.multiply(o.n)); }
-		public Frac mul(long k)  { return new Frac(n.multiply(BigInteger.valueOf(k)), d); }
-		public Frac negate()     { return new Frac(n.negate(), d); }
-		public Frac abs()        { return n.signum() < 0 ? negate() : this; }
+		public Frac add(Frac frac) 
+		{ 
+			return new Frac(n.multiply(frac.d).add(frac.n.multiply(d)), d.multiply(frac.d)); 
+		}
+		
+		public Frac sub(Frac frac) 
+		{ 
+			return new Frac(n.multiply(frac.d).subtract(frac.n.multiply(d)), d.multiply(frac.d)); 
+		}
+		
+		public Frac mul(Frac frac) 
+		{ 
+			return new Frac(n.multiply(frac.n), d.multiply(frac.d)); 
+		}
+		
+		public Frac div(Frac frac) 
+		{ 
+			return new Frac(n.multiply(frac.d), d.multiply(frac.n)); 
+		}
+		
+		public Frac mul(long k)  
+		{ 
+			return new Frac(n.multiply(BigInteger.valueOf(k)), d); 
+		}
+		
+		public Frac negate()     
+		{ 
+			return new Frac(n.negate(), d); 
+		}
+		
+		public Frac abs()        
+		{ 
+			return n.signum() < 0 ? negate() : this; 
+		}
 
-		public int compareTo(Frac o) { return n.multiply(o.d).compareTo(o.n.multiply(d)); }
-		public boolean lt(Frac o)  { return compareTo(o) < 0; }
-		public boolean le(Frac o)  { return compareTo(o) <= 0; }
-		public boolean gt(Frac o)  { return compareTo(o) > 0; }
-		public boolean eq(Frac o)  { return n.equals(o.n) && d.equals(o.d); }
+		public int compareTo(Frac frac) 
+		{ 
+			return n.multiply(frac.d).compareTo(frac.n.multiply(d)); 
+		}
+		
+		public boolean lt(Frac frac)  
+		{ 
+			return compareTo(frac) < 0; 
+		}
+		
+		public boolean le(Frac frac)  
+		{
+			return compareTo(frac) <= 0; 
+		}
+		
+		public boolean gt(Frac frac)  
+		{ 
+			return compareTo(frac) > 0; 
+		}
+		
+		public boolean eq(Frac frac)  
+		{ 
+			return n.equals(frac.n) && d.equals(frac.d); 
+		}
 
-		@Override public String toString() { return n + "/" + d; }
-		public double toDouble() { return new java.math.BigDecimal(n).divide(new java.math.BigDecimal(d), 40, java.math.RoundingMode.HALF_EVEN).doubleValue(); }
+		@Override public String toString() 
+		{ return n + "/" + d; 
+		}
+		
+		public double toDouble() 
+		{ 
+			return new java.math.BigDecimal(n).divide(new java.math.BigDecimal(d), 40, java.math.RoundingMode.HALF_EVEN).doubleValue(); 
+		}
 	}
 
 	// =========================================================================
@@ -95,6 +176,7 @@ public class SteeredArithmeticMapper
 	// O(K * S) where K = counts.length, S = sum(counts) -- fast even for
 	// S up to a few thousand.
 	// =========================================================================
+	/*
 	public static BitSet achievableSubsetSums(int[] counts)
 	{
 		int total = 0;
@@ -111,17 +193,52 @@ public class SteeredArithmeticMapper
 		}
 		return reachable;
 	}
+    */
 
+	// This returns a boolean map of the possible sums that can be produced
+	// by a frequency table, using all or none of those frequencies. 
+	// Bitset works better than an array of booleans because it saves memory 
+	// (1 bit instead of 1 byte per value) and speeds up processing by allowing 
+	// the use of bitwise operations.
+	public static BitSet achievableSubsetSums(int[] frequency)
+	{
+		int sum = 0;
+		for(int i = 0; i < frequency.length; i++)
+			sum += frequency[i];
+
+		BitSet reachable = new BitSet(sum + 1);
+		reachable.set(0);
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			int k = frequency[i];
+			if(k == 0) 
+				continue;
+			BitSet shifted = new BitSet(sum + 1);
+			for(int j = reachable.nextSetBit(0); j >= 0; j = reachable.nextSetBit(j + 1))
+				if (j + k <= sum)
+					shifted.set(j + k);
+			reachable.or(shifted);
+		}
+
+		return reachable;
+	}
+    
 	// =========================================================================
 	// Candidate s_j values (cumulative count before the real next symbol)
 	// consistent with the target's residual falling inside its slice,
 	// ordered closest-to-centered first (keeps future steps more flexible).
+	// The residual is defined as (target - offset) / range.
 	// =========================================================================
 	private static final class Candidates
 	{
 		final int[] values;      // candidate s_j values, best first
 		final int[] otherSyms;   // the OTHER remaining distinct symbol values (excluding realSymbol)
-		Candidates(int[] values, int[] otherSyms) { this.values = values; this.otherSyms = otherSyms; }
+		Candidates(int[] values, int[] otherSyms) 
+		{ 
+			this.values = values; 
+			this.otherSyms = otherSyms; 
+		}
 	}
 
 	private static Candidates getCandidates(int realSymbol, int[] f, int m, Frac residual)
