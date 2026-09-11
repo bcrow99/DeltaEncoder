@@ -123,27 +123,35 @@ public class RenormalizingSteerCoder
 		}
 	}
 
-	private static final class Candidates
+	private static final class Candidate
 	{
 		final long[] values;
 		final int[] otherSyms;
-		Candidates(long[] values, int[] otherSyms) { this.values = values; this.otherSyms = otherSyms; }
+		Candidate(long[] values, int[] otherSyms) { this.values = values; this.otherSyms = otherSyms; }
 	}
 
-	private static Candidates getCandidates(int realSymbol, int[] f, long m, State st)
+	/** Candidate search: same window/subset-sum logic as before, but
+	 *  ordered by encoding cost (cheapest first) via
+	 *  SteeredArithmeticMapper.reconstructBeforeCount/log2BinomialCoeff,
+	 *  rather than by closeness to the center of the resulting window --
+	 *  mirroring the fix already made to the exact-fraction version,
+	 *  where the cost-based ordering measured consistently better (fewer
+	 *  backtracks, smaller output) than centering, never a tradeoff. */
+	private static Candidate getCandidate(int realSymbol, int[] f, long m, State st)
 	{
 		ArrayList<Integer> otherList = new ArrayList<>();
 		for (int s = 0; s < f.length; s++) if (f[s] > 0 && s != realSymbol) otherList.add(s);
 		int[] otherSyms = new int[otherList.size()];
 		int[] otherCounts = new int[otherList.size()];
 		for (int i = 0; i < otherSyms.length; i++) { otherSyms[i] = otherList.get(i); otherCounts[i] = f[otherList.get(i)]; }
+		int kMinus1 = otherSyms.length;
 
-		BitSet sums = SteeredArithmeticMapper.achievableSubsetSums(otherCounts);
+		BitSet sums = SteeredArithmeticMapper.possibleSubsetSum(otherCounts);
 		long fJ = f[realSymbol];
 		long range = st.high - st.low + 1;
 		long value = st.code - st.low; // target's position within the current window, in [0, range)
 		if (value < 0 || value >= range)
-			return new Candidates(new long[0], otherSyms); // code has drifted outside the window: no valid choice here
+			return new Candidate(new long[0], otherSyms); // code has drifted outside the window: no valid choice here
 
 		// s_j must satisfy: low + floor(range*s_j/m) <= code <= low + floor(range*(s_j+f_j)/m) - 1
 		long sHi = (value * m) / range;               // loose upper bound
@@ -157,15 +165,15 @@ public class RenormalizingSteerCoder
 			if (lo <= st.code && st.code <= hi) cand.add(s);
 		}
 		cand.sort((a, b) -> {
-			long loA = st.low + (range * a) / m, hiA = st.low + (range * (a + fJ)) / m - 1;
-			double posA = (st.code - loA) / (double) Math.max(1, hiA - loA);
-			long loB = st.low + (range * b) / m, hiB = st.low + (range * (b + fJ)) / m - 1;
-			double posB = (st.code - loB) / (double) Math.max(1, hiB - loB);
-			return Double.compare(Math.abs(posA - 0.5), Math.abs(posB - 0.5));
+			int posA = SteeredArithmeticMapper.reconstructBeforeCount(otherCounts, (int)(long) a);
+			int posB = SteeredArithmeticMapper.reconstructBeforeCount(otherCounts, (int)(long) b);
+			double costA = SteeredArithmeticMapper.log2BinomialCoeff(kMinus1, posA);
+			double costB = SteeredArithmeticMapper.log2BinomialCoeff(kMinus1, posB);
+			return Double.compare(costA, costB);
 		});
 		long[] values = new long[cand.size()];
 		for (int i = 0; i < values.length; i++) values[i] = cand.get(i);
-		return new Candidates(values, otherSyms);
+		return new Candidate(values, otherSyms);
 	}
 
 	public static final class SteerResult
@@ -187,8 +195,8 @@ public class RenormalizingSteerCoder
 
 		final class Frame
 		{
-			int[] f; long m; State st; Candidates cand; int idx;
-			Frame(int[] f, long m, State st, Candidates cand) { this.f = f; this.m = m; this.st = st; this.cand = cand; this.idx = 0; }
+			int[] f; long m; State st; Candidate cand; int idx;
+			Frame(int[] f, long m, State st, Candidate cand) { this.f = f; this.m = m; this.st = st; this.cand = cand; this.idx = 0; }
 		}
 
 		ArrayDeque<Frame> stack = new ArrayDeque<>();
@@ -196,7 +204,7 @@ public class RenormalizingSteerCoder
 		long m0 = 0; for (int c : f0) m0 += c;
 		State st0 = new State(tBits);
 		int i = 0;
-		Candidates cand0 = getCandidates(src[0], f0, m0, st0);
+		Candidate cand0 = getCandidate(src[0], f0, m0, st0);
 		stack.push(new Frame(f0, m0, st0, cand0));
 		long backtracks = 0;
 
@@ -229,7 +237,7 @@ public class RenormalizingSteerCoder
 			i++;
 			if (i == n) return new SteerResult(orderings, backtracks);
 			if (tBits.length - newSt.bitPos < 4) return null; // ran out of precomputed target bits; caller should retry with more
-			Candidates newCand = getCandidates(src[i], f2, top.m - 1, newSt);
+			Candidate newCand = getCandidate(src[i], f2, top.m - 1, newSt);
 			stack.push(new Frame(f2, top.m - 1, newSt, newCand));
 		}
 		return new SteerResult(orderings, backtracks);

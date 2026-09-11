@@ -240,16 +240,18 @@ public class SteeredArithmeticMapper
 	// =========================================================================
 	private static double log2(double x) { return Math.log(x) / Math.log(2); }
 	private static double log2Factorial(int n) { double b = 0; for (int k = 2; k <= n; k++) b += log2(k); return b; }
-	private static double log2BinomialCoeff(int n, int k)
+	public static double log2BinomialCoeff(int n, int k)
 	{
 		if (k < 0 || k > n) return 0;
 		return log2Factorial(n) - log2Factorial(k) - log2Factorial(n - k);
 	}
 
 	/** Same subset-sum DP as orderingForChoice, but only reports HOW MANY
-	 *  items end up in the "before" group -- used to score candidates by
-	 *  encoding cost during the cheap-biased search. */
-	private static int reconstructBeforeCount(int[] counts, int sJ)
+	 *  items end up in the "before" group -- used, together with
+	 *  log2BinomialCoeff, to score candidates by encoding cost. Public
+	 *  since RenormalizingSteerCoder's fixed-precision search reuses this
+	 *  same cost function rather than duplicating it. */
+	public static int reconstructBeforeCount(int[] counts, int sJ)
 	{
 		int k = counts.length;
 		boolean[][] reachable = new boolean[k + 1][sJ + 1];
