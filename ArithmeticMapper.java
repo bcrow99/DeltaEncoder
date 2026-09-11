@@ -1,1170 +1,557 @@
 import java.util.*;
 import java.math.*;
 
-//version 1.0
+//version 3.0
 
 /*
- * Changes in this version (see inline FIX/NOTE comments at each site):
+ * Changes in this version:
  *
- * Bugs fixed:
- *   1. simplestFractionInInterval() (and its cfExpand/cfToFraction helpers)
- *      replaced entirely. The prior implementation expanded lo/hi as
- *      continued fractions and padded whichever expansion was shorter with
- *      literal zeros before comparing term-by-term -- not mathematically
- *      valid whenever hi's continued fraction terminates before lo's (e.g.
- *      hi = 1/4), since a padding zero got compared against lo's genuine
- *      next term as if it were real. Confirmed: for the interval
- *      [5/24, 6/24), the old code returned 1/5 = 0.2, which falls below
- *      the interval entirely, not just imprecisely near it. Replaced with
- *      an iterative floor/reciprocal (Stern-Brocot) descent, validated
- *      against a brute-force reference across thousands of randomized
- *      cases (including lo=0, hi landing on "nice" fractions at various
- *      depths, and a pathological Fibonacci-ratio interval). This is the
- *      encoder-side bug: it affects getIntervalValue(), the order-table
- *      overload, and getIntervalValueFenwick() -- everything that calls
- *      simplestFractionInInterval -- but not getIntervalValueFast/
- *      getIntervalValueFastFenwick, which use a different (bit-stream
- *      renormalization) encoding with no continued fractions at all.
- *   2. getArithmeticValuesFast() and getArithmeticValuesFastFenwick() both
- *      had a decoder-side symbol-selection bug: the initial candidate
- *      symbol, found via `scaled = (code - low) * m / range`, is meant to
- *      invert the encoder's `new_low = low + (range * s[j]) / m`, but both
- *      use truncating integer division and the two truncations don't
- *      perfectly cancel right at a symbol boundary. Confirmed by direct
- *      reproduction (minimized via delta-debugging from a ~2900-symbol
- *      case down to 205 symbols): `code` landed exactly on the boundary
- *      between two symbols (one of them zero-width), and the initial
- *      guess undershot by exactly one position, selecting the wrong
- *      symbol entirely. Fixed by verifying, after the initial guess, that
- *      `code` actually falls within [new_low, new_high) using the same
- *      exact formula the encoder used, and nudging the candidate forward
- *      or backward (skipping zero-frequency symbols) until it does.
- *      Verified against a 20,000-trial stress run targeting the trigger
- *      regime (long streams, large alphabets): 0 failures, down from
- *      ~1-in-4000 before the fix.
+ *   1. getSerialOffset/getSerialValues removed: this was a "sample-once,
+ *      re-use one 256-entry frequency table across the whole stream"
+ *      encoding scheme, as an alternative to segmenting the data into
+ *      pieces and giving each its own table. Simple segmentation turned
+ *      out to work better in practice, so this pairing (and the raw-
+ *      ArrayList usage that came with it -- removing it also eliminated
+ *      every rawtypes compiler warning in this file) is no longer needed.
  *
- * Inert code removed (verified to have zero effect on behavior):
- *   - getNormalRangeQuotient(): two instances of an `int position = ...`
- *     local variable that was computed but never subsequently read.
- *   - getIntervalValue2(): a `BigInteger delimiter` variable assigned
- *     three times but never read afterward, and an initial throwaway
- *     `BigInteger.ZERO` value on `largest_index` that gets unconditionally
- *     overwritten before its only use, so the initial value was dead.
+ *   2. getArithmeticOffsetAndRange removed: returned a 4-element
+ *      {offN,offD,rngN,rngD} array (raw offset AND range, unsimplified),
+ *      a different shape from every decoder in this file, which all
+ *      expect the simplified 2-element {numerator,denominator} pairing
+ *      that getIntervalValue/getIntervalValueFenwick produce. Nothing
+ *      remaining in this file consumed its output.
+ *
+ *   3. getArithmeticValues2 removed: the linear-search decoder variant.
+ *
+ *   4. gcd(long,long) removed: this was ONLY ever called from inside the
+ *      Fenwick methods' now-superseded manual pre-reduction step (compute
+ *      gcd(sj,m) via plain longs before ever constructing a BigInteger,
+ *      to keep the numbers involved smaller going in) -- once those
+ *      methods were refactored to build a FractionMapper.BigFraction
+ *      directly instead, and its constructor handles reduction on its
+ *      own, this became dead code: called nowhere except recursively by
+ *      itself. Found by tracing call sites directly, not by a compiler
+ *      warning -- javac has no built-in "unused method" diagnostic, so
+ *      this is exactly the kind of thing that can go unnoticed after a
+ *      refactor unless someone goes looking for it specifically. Note
+ *      this was NOT present in the pre-refactor (version 1.0) code --
+ *      it became dead as a side effect of the version 2.0 BigFraction
+ *      refactor, not something inherited from before it.
+ *
+ * (Prior versions' fixes/changes -- simplestFractionInInterval's Stern-
+ * Brocot rewrite, the getArithmeticValuesFast/getArithmeticValuesFastFenwick
+ * boundary nudge fix, and the version 2.0 BigFraction refactor of the
+ * remaining slow/exact methods -- remain in place, unmodified by this
+ * version.)
  */
 public class ArithmeticMapper
 {
-	// The following methods re-use one frequency table to reduce overhead,
-	// but that decreases overall compression.
-	public static ArrayList getSerialOffset(byte[] src, int [] frequency, int n)
+
+	// =========================================================================
+	// Ordering the probabilistic space does not seem to significantly affect
+	// the computational efficiency or compression rate. Would need to do an
+	// exhaustive search through all the possible tables before drawing a
+	// definite conclusion. (Restored verbatim from the pre-refactor version --
+	// unrelated to the BigFraction change, not touched by it.)
+	// =========================================================================
+
+	// This method returns a table of the indices of a frequency table in ascending order, greatest last.
+	public static byte [] getAscendingTable(int frequency[])
 	{
-		int [] f = frequency.clone();
-		
-	    int [] s = new int[256];
-	    int m = 0;
-		for(int i = 0; i < 256; i++)
-		{
-			s[i]  = m;
-			m   += f[i];
-		}
-		
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE}; 
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int                         n     = frequency.length;
+
 		for(int i = 0; i < n; i++)
-	    {
-	    	    int j = src[i];
-	    	    if(j < 0)
-	    	    	    j += 256;
-	    	    
-	    	    BigInteger [] addend = {range[0], range[1]};
-	    	    addend[0] = addend[0].multiply(BigInteger.valueOf(s[j]));
-	    	    addend[1] = addend[1].multiply(BigInteger.valueOf(m));
-	    	    
-	    	    BigInteger gcd = addend[0].gcd(addend[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    addend[0] = addend[0].divide(gcd);
-			    addend[1] = addend[1].divide(gcd);
-	    	    }
-	    	    
-	    	    
-	    	    offset[0] = offset[0].multiply(addend[1]);
-	    	    addend[0] = addend[0].multiply(offset[1]);
-	    	    offset[1] = offset[1].multiply(addend[1]);
-	    	    offset[0] = offset[0].add(addend[0]);
-	    	    
-	    	    
-	    	    gcd = offset[0].gcd(offset[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    offset[0] = offset[0].divide(gcd);
-			    	offset[1] = offset[1].divide(gcd);
-	    	    }
-			
-	    	    
-	    	    range[0] = range[0].multiply(BigInteger.valueOf(f[j]));
-	    	    range[1] = range[1].multiply(BigInteger.valueOf(m));
-	    	    
-           
-	    	    gcd = range[0].gcd(range[1]);
-	    	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	    {
-	    	    	    range[0] = range[0].divide(gcd);
-			    	range[1] = range[1].divide(gcd);
-	    	    }
-	    	    
-	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	        s[k]--;
-	    }
-	
-		ArrayList result = new ArrayList();
-		result.add(offset);
-		result.add(f);
-        return result;	
-	}	
-	
-	public static ArrayList getSerialValues(BigInteger [] v, int [] frequency, int n)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list);
+
+		byte [] ascending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key         = list.get(i);
+			int    j           = table.get(key);
+			ascending_table[i] = (byte)j;
+		}
+		return ascending_table;
+	}
+
+	//This method returns a table of the indices of a frequency table in descending order, greatest first.
+	public static byte [] getDescendingTable(int frequency[])
 	{
-	    byte [] value = new byte[n];
-	   
-        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
-		
-		int m = 0;
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+		return descending_table;
+	}
+
+	//This method returns a table of the indices of a frequency table in the order that a value is exhausted first.
+	public static byte [] getFirstTable(byte[] src, int [] frequency)
+	{
+		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
 		for(int i = 0; i < frequency.length; i++)
 		{
-		    ArrayList <Integer> list = new ArrayList <Integer> ();
-		    
-		    if(frequency[i] != 0)
-		    {
-		        list.add(i);
-		        list.add(frequency[i]);
-		        list.add(m);
-		    
-		        arithmetic_list.add(list);
-		    
-		        m += frequency[i];
-		    }
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
 		}
-		
-		int [] frequency2 = frequency.clone();
-	    
-		BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-		BigInteger [] w      = {v[0], v[1]};
-		
-		for(int i = 0; i < n; i++)
-		{
-			if(offset[0].compareTo(BigInteger.ZERO) != 0)
-			{
-				w[0] = v[0];
-				w[1] = v[1];
-			    w[0] = w[0].multiply(offset[1]);
-			    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-			    w[1] = w[1].multiply(offset[1]);
-			    
-			    BigInteger gcd = w[0].gcd(w[1]);
-	    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-	    	        {
-	    	    	        w[0] = w[0].divide(gcd);
-			       	w[1] = w[1].divide(gcd);
-	    	        }
-			}
-			
-			int j = arithmetic_list.size() / 2;
-		    ArrayList <Integer> list = arithmetic_list.get(j);
-			
-		    int f = list.get(1);
-		    int s = list.get(2);
-				
-			BigInteger a = range[0].multiply(BigInteger.valueOf(s));
-		    	BigInteger b = w[0];
-		    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
-		    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-		    	    
-		    	a = a.multiply(w[1]);
-		    	b = b.multiply(d);
-		    	c = c.multiply(w[1]);
-		    	    	
-			if(a.compareTo(b) > 0)
-            {
-			    int k = j / 2;
-                while(a.compareTo(b) > 0) 
-                	{
-                	    j -= k;
-                	    
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    a    = range[0].multiply(BigInteger.valueOf(s));
-                	    a    = a.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                
-                // Check if we passed value.
-                c = range[0].multiply(BigInteger.valueOf(s + f));
-       	        c = c.multiply(w[1]);
-       	        if(c.compareTo(b) <= 0)
-                {
-                    while(c.compareTo(b) <= 0)
-                    {
-                	    	    j++;
-                	    	    list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-                	    	    
-                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
-	                	    c = c.multiply(w[1]);
-                	    }
-                } 
-             }
-			 else if(c.compareTo(b) <= 0)
-             {
-				int size = arithmetic_list.size();
-			    int k = (size - j) / 2;
-                	
-			    while(c.compareTo(b) <= 0) 
-                	{
-                	    j += k;
-                	     
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
-                	    c    = c.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                	
-			    // Check if we passed value.
-			    a = range[0].multiply(BigInteger.valueOf(s));
-        	        a = a.multiply(w[1]);
-        	        if(a.compareTo(b) > 0)
-            	    {
-            	        while(a.compareTo(b) > 0)
-            	        {
-            	    	        j--; 
-            	    	        list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-            	    	        a    = range[0].multiply(BigInteger.valueOf(s));
-            	    	        a = a.multiply(w[1]);
-            	        }
-            	    }
-            }
-			
-			BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-				
-			offset[0] = offset[0].multiply(addend[1]);
-			offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-		    offset[1] = offset[1].multiply(addend[1]);
-		        
-		    BigInteger gcd = offset[0].gcd(offset[1]);
-			if(gcd.compareTo(BigInteger.ONE) == 1)
-			{
-				offset[0] = offset[0].divide(gcd);
-				offset[1] = offset[1].divide(gcd);;
-			}
-		   
-		    range[0] = range[0].multiply(BigInteger.valueOf(f));
-		    range[1] = range[1].multiply(BigInteger.valueOf(m));
-		       
-		    gcd = range[0].gcd(range[1]);
-    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-    	        {
-    	    	        range[0] = range[0].divide(gcd);
-		    	    range[1] = range[1].divide(gcd);
-    	        }
-		   
-    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
-	    	    {
-	    	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
-	    	        	s = list2.get(2);
-	    	        	s--;
-	    	        	list2.set(2, s);
-	    	        	arithmetic_list.set(p, list2);	
-	    	    }
-    	          
-    	        f--;
-	    	    m--;   
-	    	    if(f != 0)
-	    	    {
-	    	        list.set(1, f);
-	    	        arithmetic_list.set(j,  list);
-	    	    }
-	    	    else
-	    	        	arithmetic_list.remove(j);
-	    	     
-	    	    int k    = list.get(0);
-	    	    frequency2[k]--;
-		    value[i] = (byte)k;	
-		}
-		
-		ArrayList result = new ArrayList();
-		result.add(value);
-		result.add(frequency2);
-	    return result;
-	}
-	
-	// Requires a < b.
-	public static long gcd(long a, long b) 
-	{
-		if (b == 0) 
-			return a;
-		return gcd(b, a % b);
-	}
-	
-	// This method uses a renormalization technique suggested by Moffet to produce an approximation of the offset/range.
-	// It produces a bit string that can be divided by the smallest power of two larger than the bit string value to get the approximation.
-	// We think the problem with this is it doesn't appear to produce a set of start bits and then repeating bits that resolve to a pair of integers.
-	// The reduction in precision means there is a limit on how many values can be produced from a single frequency table.
-	public static ArrayList getNormalRangeQuotient(byte[] src, Hashtable <Integer, Integer> table, int [] frequency)
-	{
+
 		int [] f = frequency.clone();
-		
-	    int [] s = new int[f.length];
-		
-	    int    m = 0;
-		for(int i = 0; i < f.length; i++)
-		{
-			s[i] = m;
-			m    += f[i];
-		}
-		
-		byte [] bit_buffer = new byte[src.length * 2];
-		
-		int     bit_offset       = 0;
-		int     byte_offset      = 0;
-		int     bits_outstanding = 0;
-	
-		long [] offset = {1L, 4L};
-		long [] range  = {1L, 2L};
-		
-		int n = src.length;
-		
-		for(int i = 0; i < n; i++)
+
+		for(int i = 0; i < src.length; i++)
 	    {
 	    	    int j = src[i];
 	    	    if(j < 0)
 	    	    	    j += 256;
-	    	    j = table.get(j);
-	    	   
-	    	    long [] addend = {range[0], range[1]};
-	    	    addend[0] *= s[j];
-	    	    addend[1] *= m;
-	    	    
-	    	   
-	    	    long gcd = gcd(addend[0], addend[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	    	    addend[0] /= gcd;
-	    	    	    addend[1] /= gcd;
-	    	    }
-	    	   
-	    	    
-	    	    offset[0] *= addend[1];
-	    	    addend[0] *= offset[1];
-	    	    offset[1] *= addend[1];
-	    	    offset[0] += addend[0];
-	    	     
-	    	    
-	    	    gcd = gcd(offset[0], offset[1]);
-	    	    if(gcd > 1)
-	    	    {
-	    	        offset[0] /= gcd;
-    	    	        offset[1] /= gcd;
-	    	    }
-	    	   
-	    	    
-			range[0] *= f[j];
-			range[1] *= m;
-			
-			
-			gcd = gcd(range[0], range[1]);
-    	        if(gcd > 1)
-    	        {
-    	            range[0] /= gcd;
-	    	        range[1] /= gcd;
-    	        }
-    	      
-    	        double p = offset[0];
-    	        p       /= offset[1];
-    	        double r = range[0];
-    	        r       /= range[1];
-    	        while(r <= .25)
-    	        {
-    	        	    if(p + r <= .5) 
-    	        	    {
-    	        	        bit_offset++;
-    	        	        if(bit_offset == 8)
-    	        	        {
-    	        	    	        byte_offset++;
-    	        	    	        bit_offset = 0;
-    	        	        }
-    	        	        int value = 1;
-    	        	        while(bits_outstanding > 0)
-    	        	        {
-    	        	        	    bit_buffer[byte_offset] |= (byte)(value << bit_offset);
-    	        	        	    bit_offset++;
-    	    	        	        if(bit_offset == 8)
-    	    	        	        {
-    	    	        	    	        byte_offset++;
-    	    	        	    	        bit_offset = 0;
-    	    	        	        } 
-    	    	        	        bits_outstanding--;
-    	        	        }
-    	        	    }
-    	        	    else if(p >= .5)
-    	        	    {
-    	        	    	    int value = 1;
-    	        	    	    bit_buffer[byte_offset] |= (byte)(value << bit_offset);
-    	        	    	    while(bits_outstanding > 0)
-    	        	    	    {
-    	        	    	        bit_offset++;
-        	        	        if(bit_offset == 8)
-        	        	        {
-        	        	    	        byte_offset++;
-        	        	    	        bit_offset = 0;
-        	        	        }
-        	        	        bits_outstanding--;
-    	        	    	    }
-    	        	    	    p = p - .5;   
-    	        	    }
-    	        	    else
-    	        	    {
-    	        	    	    bits_outstanding++;
-    	        	    	    p = p - .25;
-    	        	    }
-    	        	    p *= 2;
-    	        	    r *= 2;  
-    	        }
-            
 	    	    f[j]--;
-	    	    m--;
-	    	    for(int k = j + 1; k < s.length; k++)
-	    	        s[k]--;
-	    	    
-	    	    offset[0] = 1;
-	    	    offset[1] = 4;
-	    	    range[0]  = 1;
-	    	    range[1]  = 2;
-	    	   
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
 	    }
-	
-	    byte [] bits = new byte[byte_offset + 1];
-	    for(int i = 0; i < bits.length; i++)
-	    	    bits[i] = bit_buffer[i];
-	    int extra_bits = 0;
-	    if(bit_offset != 0)
-	    	    extra_bits = 8 - bit_offset;
-	    int bitlength = bits.length * 8 - extra_bits;
-		
-	    ArrayList result = new ArrayList();
-	    result.add(bits);
-	    result.add(bitlength);
-	    
-	    return result;
+
+		byte [] first_table = new byte[frequency.length];
+		for(int i = 0; i < frequency.length; i++)
+		{
+			int j = exhausted_list.get(i);
+			first_table[i] = (byte)j;
+		}
+
+        return first_table;
 	}
 
-    // Continued-fraction-style helpers for the optimal method for getting interval values.
-    //
-    // FIX: this replaces a prior implementation that expanded lo and hi as
-    // continued fractions and padded the SHORTER expansion with literal
-    // zeros before comparing term-by-term. That padding is not
-    // mathematically valid whenever hi's continued fraction terminates
-    // before lo's (which happens whenever hi is a "nice" fraction, e.g.
-    // hi = 1/4) -- a padding zero was compared against lo's genuine next
-    // term as if it were a real coefficient, which could select the wrong
-    // diverging term entirely. Confirmed against real execution: for the
-    // interval [5/24, 6/24), the old code returned 1/5 = 0.2, which isn't
-    // merely imprecise -- it falls below the interval entirely.
-    //
-    // This replacement performs an iterative floor/reciprocal (Stern-Brocot
-    // tree) descent instead, which has no padding step and handles
-    // termination naturally via the floor comparison at each level. It is
-    // written iteratively (accumulating a stack of floor terms and combining
-    // them afterward) rather than recursively, since the recursive form can
-    // require depth proportional to the number of continued-fraction terms
-    // -- unbounded in principle for adversarial inputs (e.g. consecutive
-    // Fibonacci-ratio bounds) -- and an iterative loop has no such limit.
-    //
-    // Validated against a brute-force reference (enumerate candidate
-    // denominators in increasing order) across thousands of randomized
-    // cases, including lo=0 exactly, hi landing on exact "nice" fractions
-    // at various depths (the scenario that broke the old implementation),
-    // very large close-together denominators, and a deliberately
-    // pathological Fibonacci-ratio interval forcing maximal continued-
-    // fraction depth.
-
-    /**
-     * Return the fraction p/q with the smallest denominator strictly inside
-     * the open interval (loN/loD, hiN/hiD). Requires loD &gt; 0, hiD &gt; 0,
-     * and loN/loD &lt; hiN/hiD.
-     */
-    public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD, BigInteger hiN, BigInteger hiD)
-    {
-        ArrayList<BigInteger> floors = new ArrayList<BigInteger>();
-
-        BigInteger p, q;
-        while (true)
-        {
-            BigInteger flo = floorDiv(loN, loD);
-            BigInteger candidate = flo.add(BigInteger.ONE);
-
-            // Is candidate < hi?  i.e. candidate * hiD < hiN
-            if (candidate.multiply(hiD).compareTo(hiN) < 0)
-            {
-                // An integer strictly inside (lo, hi); automatically > lo
-                // since flo = floor(lo).
-                p = candidate;
-                q = BigInteger.ONE;
-                break;
-            }
-
-            BigInteger loFracN = loN.subtract(flo.multiply(loD));   // (lo - flo), denominator loD, in [0,1)
-            BigInteger hiFracN = hiN.subtract(flo.multiply(hiD));   // (hi - flo), denominator hiD, in (0,1]
-
-            if (loFracN.equals(BigInteger.ZERO))
-            {
-                // lo is exactly the integer flo. The simplest fraction with a
-                // strictly positive fractional part less than hiFrac is 1/k
-                // for the smallest k with 1/k < hiFrac, i.e. k = floor(hiD/hiFracN) + 1.
-                BigInteger k = hiD.divide(hiFracN).add(BigInteger.ONE);
-                p = flo.multiply(k).add(BigInteger.ONE);
-                q = k;
-                break;
-            }
-
-            // No integer strictly between lo and hi. Peel off the shared
-            // integer part `flo` and continue on the reciprocals of the
-            // fractional remainders: simplest fraction in (loFrac, hiFrac)
-            // corresponds to descending with (lo, hi) := (1/hiFrac, 1/loFrac).
-            floors.add(flo);
-            BigInteger newLoN = hiD,  newLoD = hiFracN;
-            BigInteger newHiN = loD,  newHiD = loFracN;
-            loN = newLoN; loD = newLoD; hiN = newHiN; hiD = newHiD;
-        }
-
-        // Unwind: for each stored floor term (most recently pushed first),
-        // answer := floor + q/p  =  (floor*p + q) / p.
-        for (int i = floors.size() - 1; i >= 0; i--)
-        {
-            BigInteger flo = floors.get(i);
-            BigInteger newP = flo.multiply(p).add(q);
-            q = p;
-            p = newP;
-        }
-
-        BigInteger g = p.gcd(q);
-        return new BigInteger[]{ p.divide(g), q.divide(g) };
-    }
-
-    /** Floor division n/d for d &gt; 0 (BigInteger.divide() truncates toward zero, not floor). */
-    private static BigInteger floorDiv(BigInteger n, BigInteger d)
-    {
-        BigInteger[] qr = n.divideAndRemainder(d);
-        if (qr[1].signum() != 0 && n.signum() < 0)
-            return qr[0].subtract(BigInteger.ONE);
-        return qr[0];
-    }
-
-    /**
-     * Arithmetic encode {@code src} using adaptive frequencies and return the
-     * simplest fraction (smallest denominator) within the valid encoding interval.
-     *
-     * @param src       Raw bytes to encode.
-     * @param frequency frequency[i] = count of byte value i (256 entries).
-     * @return          Two-element array {numerator, denominator}.
-     */
-    public static BigInteger[] getIntervalValue(byte[] src, int[] frequency) 
-    {
-        int[] f = frequency.clone();
-        int   n = src.length;
-
-        // Build cumulative-frequency table
-        int[] s = new int[f.length];
-        int   m = 0;
-        for (int i = 0; i < f.length; i++) {
-            s[i] = m;
-            m   += f[i];
-        }
-
-        // Track interval as two reduced rationals: offset and range
-        BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
-        BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
-
-        for (int i = 0; i < n; i++) 
-        {
-            int j = src[i];
-            if (j < 0) j += 256;   // treat byte as unsigned
-
-            // addend = range * s[j] / m
-            BigInteger addN = rngN.multiply(BigInteger.valueOf(s[j]));
-            BigInteger addD = rngD.multiply(BigInteger.valueOf(m));
-            BigInteger g = addN.gcd(addD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                addN = addN.divide(g);
-                addD = addD.divide(g);
-            }
-
-            // offset += addend
-            offN = offN.multiply(addD).add(addN.multiply(offD));
-            offD = offD.multiply(addD);
-            g = offN.gcd(offD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                offN = offN.divide(g);
-                offD = offD.divide(g);
-            }
-
-            // range *= f[j] / m
-            rngN = rngN.multiply(BigInteger.valueOf(f[j]));
-            rngD = rngD.multiply(BigInteger.valueOf(m));
-            g = rngN.gcd(rngD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                rngN = rngN.divide(g);
-                rngD = rngD.divide(g);
-            }
-
-            // Adaptive update
-            f[j]--;
-            m--;
-            for (int k = j + 1; k < s.length; k++) 
-            {
-                s[k]--;
-            }
-        }
-
-        // Bring offset and range to a common denominator
-        if (!offD.equals(rngD)) 
-        {
-            offN = offN.multiply(rngD);
-            rngN = rngN.multiply(offD);
-            BigInteger commonD = offD.multiply(rngD);
-            offD = commonD;
-            rngD = commonD;
-        }
-
-        // Upper bound of the valid interval (exclusive)
-        BigInteger hiN = offN.add(rngN);
-        BigInteger hiD = offD;
-
-        return simplestFractionInInterval(offN, offD, hiN, hiD);
-    }
-    
-    
-    // Ordering the probabilistic space does not seem to significantly affect the computational efficiency or compression rate.
-    // Would need to do an exhaustive search through all the possible tables before drawing a definite conclusion.
-    
-    // This method returns a table of the indices of a frequency table in ascending order, greatest last.
-  	public static byte [] getAscendingTable(int frequency[])
-  	{
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int                         n     = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list);
-  		
-  		byte [] ascending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key         = list.get(i);
-  			int    j           = table.get(key);
-  			ascending_table[i] = (byte)j;
-  		}
-  		return ascending_table;
-  	}
-  	
-  	//This method returns a table of the indices of a frequency table in descending order, greatest first.
-  	public static byte [] getDescendingTable(int frequency[])
-  	{
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int       n                       = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list, Comparator.reverseOrder());
-  		
-  		byte [] descending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key          = list.get(i);
-  			int    j            = table.get(key);
-  			descending_table[j] = (byte) i;
-  		}
-  		return descending_table;
-  	}	
-  		
-  	//This method returns a table of the indices of a frequency table in the order that a value is exhausted first.
-  	public static byte [] getFirstTable(byte[] src, int [] frequency)
-  	{
-  		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		
-  		int [] f = frequency.clone();
-  		
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] first_table = new byte[frequency.length];
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			int j = exhausted_list.get(i);
-  			first_table[i] = (byte)j;
-  		}
-  		
-          return first_table;	
-  	}	
-  	
-  	// This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
-  	public static byte [] getLastTable(byte[] src, int [] frequency)
-  	{
+	// This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
+	public static byte [] getLastTable(byte[] src, int [] frequency)
+	{
         ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		int [] f = frequency.clone();
-  	   
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] last_table = new byte[frequency.length];
-  		int k = 0;
-  		for(int i = frequency.length - 1; i >= 0; i--)
-  		{
-  			int j = exhausted_list.get(i);
-  			last_table[k++] = (byte)j;
-  		}
-  			
-  	    return last_table;	
-  	}	
 
-  	public static ArrayList <byte []> getTableSeries(byte[] src, int [] frequency)
-  	{
-  		ArrayList <byte []> result = new ArrayList <byte[]> ();
-  		
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int       n                       = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list, Comparator.reverseOrder());
-  		
-  		byte [] descending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key          = list.get(i);
-  			int    j            = table.get(key);
-  			descending_table[j] = (byte) i;
-  		}
-  		
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+	    return last_table;
+	}
+
+	public static ArrayList <byte []> getTableSeries(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
         ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		int [] f = frequency.clone();
-  	   
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] last_table = new byte[frequency.length];
-  		int k = 0;
-  		for(int i = frequency.length - 1; i >= 0; i--)
-  		{
-  			int j = exhausted_list.get(i);
-  			last_table[k++] = (byte)j;
-  		}
-  		
-  		int  length = descending_table.length;
-  		byte least  = descending_table[length - 1];
-  		
-  		int least_place = 0;
-  		for(int i = 0; i < last_table.length; i++)
-  		{
-  		    if(last_table[i] == least)
-  		    {
-  		    	    least_place = i;
-  		    	    break;
-  		    }
-  		}
-  		
-  		byte [] init_table = last_table.clone();
-  		result.add(init_table);
-  		
-  		boolean done = false;
-  		while(!done)
-  		{
-  		    if(least_place == 0)	
-  		    	    done = true;
-  		    else
-  		    {
-  		    	    byte down               = last_table[least_place - 1];
-  		    	    last_table[least_place] = down;
-  		    	    last_table[least_place - 1] = least;
-  		    	    least_place--;
-  		    	    byte [] current_table = last_table.clone();
-  		    	    result.add(current_table);
-  		    	    if(least_place == 0)	
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte least  = descending_table[length - 1];
+
+		int least_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == least)
+		    {
+		    	    least_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(least_place == 0)
+		    	    done = true;
+		    else
+		    {
+		    	    byte down               = last_table[least_place - 1];
+		    	    last_table[least_place] = down;
+		    	    last_table[least_place - 1] = least;
+		    	    least_place--;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(least_place == 0)
     		    	        done = true;
-  		    }
-  		}
-  	    
-  		return result;
-  	}
-  	
-  	
-  	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
-  	{
-  		ArrayList <byte []> result = new ArrayList <byte[]> ();
-  		
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int       n                       = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list, Comparator.reverseOrder());
-  		
-  		byte [] descending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key          = list.get(i);
-  			int    j            = table.get(key);
-  			descending_table[j] = (byte) i;
-  		}
-  		
+		    }
+		}
+
+		return result;
+	}
+
+
+	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
         ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		int [] f = frequency.clone();
-  	   
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] last_table = new byte[frequency.length];
-  		int k = 0;
-  		for(int i = frequency.length - 1; i >= 0; i--)
-  		{
-  			int j = exhausted_list.get(i);
-  			last_table[k++] = (byte)j;
-  		}
-  		
-  		int  length = descending_table.length;
-  		byte least  = descending_table[length - 1];
-  		
-  		int least_place = 0;
-  		for(int i = 0; i < last_table.length; i++)
-  		{
-  		    if(last_table[i] == least)
-  		    {
-  		    	    least_place = i;
-  		    	    break;
-  		    }
-  		}
-  		
-  		byte [] init_table = last_table.clone();
-  		result.add(init_table);
-  		
-  		boolean done = false;
-  		while(!done)
-  		{
-  		    if(least_place == last_table.length - 1)	
-  		    	    done = true;
-  		    else
-  		    {
-  		    	    byte up = last_table[least_place + 1];
-  		    	    last_table[least_place] = up;
-  		    	    last_table[least_place + 1] = least;
-  		    	    least_place++;
-  		    	    byte [] current_table = last_table.clone();
-  		    	    result.add(current_table);
-  		    	    if(least_place == last_table.length - 1)	
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte least  = descending_table[length - 1];
+
+		int least_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == least)
+		    {
+		    	    least_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(least_place == last_table.length - 1)
+		    	    done = true;
+		    else
+		    {
+		    	    byte up = last_table[least_place + 1];
+		    	    last_table[least_place] = up;
+		    	    last_table[least_place + 1] = least;
+		    	    least_place++;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(least_place == last_table.length - 1)
     		    	        done = true;
-  		    }
-  		}
-  		
-  		return result;
-  	}
-  	
-  	public static ArrayList <byte []> getTableSeries3(byte[] src, int [] frequency)
-  	{
-  		ArrayList <byte []> result = new ArrayList <byte[]> ();
-  		
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int       n                       = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list, Comparator.reverseOrder());
-  		
-  		byte [] descending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key          = list.get(i);
-  			int    j            = table.get(key);
-  			descending_table[j] = (byte) i;
-  		}
-  		
+		    }
+		}
+
+		return result;
+	}
+
+	public static ArrayList <byte []> getTableSeries3(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
         ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		int [] f = frequency.clone();
-  	   
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] last_table = new byte[frequency.length];
-  		int k = 0;
-  		for(int i = frequency.length - 1; i >= 0; i--)
-  		{
-  			int j = exhausted_list.get(i);
-  			last_table[k++] = (byte)j;
-  		}
-  		
-  		int  length = descending_table.length;
-  		byte greatest  = descending_table[0];
-  		
-  		int greatest_place = 0;
-  		for(int i = 0; i < last_table.length; i++)
-  		{
-  		    if(last_table[i] == greatest)
-  		    {
-  		    	    greatest_place = i;
-  		    	    break;
-  		    }
-  		}
-  		
-  		byte [] init_table = last_table.clone();
-  		result.add(init_table);
-  		
-  		//System.out.println("Added table.");
-  		
-  		boolean done = false;
-  		while(!done)
-  		{
-  		    if(greatest_place == 0)	
-  		    	    done = true;
-  		    else
-  		    {
-  		    	    byte down               = last_table[greatest_place - 1];
-  		    	    last_table[greatest_place] = down;
-  		    	    last_table[greatest_place - 1] = greatest;
-  		    	    greatest_place--;
-  		    	    byte [] current_table = last_table.clone();
-  		    	    result.add(current_table);
-  		    	    if(greatest_place == 0)	
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte greatest  = descending_table[0];
+
+		int greatest_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == greatest)
+		    {
+		    	    greatest_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(greatest_place == 0)
+		    	    done = true;
+		    else
+		    {
+		    	    byte down               = last_table[greatest_place - 1];
+		    	    last_table[greatest_place] = down;
+		    	    last_table[greatest_place - 1] = greatest;
+		    	    greatest_place--;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(greatest_place == 0)
     		    	        done = true;
-  		    }
-  		}
-  		
-  		return result;
-  	}
-  	
-  	public static ArrayList <byte []> getTableSeries4(byte[] src, int [] frequency)
-  	{
-  		ArrayList <byte []> result = new ArrayList <byte[]> ();
-  		
-  		ArrayList <Double>          list  = new ArrayList <Double>();
-  		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
-  		int       n                       = frequency.length;
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key = frequency[i];
-  			while (table.containsKey(key))
-  				key += .001;
-  			table.put(key, i);
-  			list.add(key);
-  		}
-  		
-  		Collections.sort(list, Comparator.reverseOrder());
-  		
-  		byte [] descending_table = new byte[n];
-  		
-  		for(int i = 0; i < n; i++)
-  		{
-  			double key          = list.get(i);
-  			int    j            = table.get(key);
-  			descending_table[j] = (byte) i;
-  		}
-  		
+		    }
+		}
+
+		return result;
+	}
+
+	public static ArrayList <byte []> getTableSeries4(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
         ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
-  		
-  		for(int i = 0; i < frequency.length; i++)
-  		{
-  			if(frequency[i] == 0)
-  				exhausted_list.add(i);
-  		}
-  		int [] f = frequency.clone();
-  	   
-  		for(int i = 0; i < src.length; i++)
-  	    {
-  	    	    int j = src[i];
-  	    	    if(j < 0)
-  	    	    	    j += 256;
-  	    	    f[j]--;
-  	    	    if(f[j] == 0)
-  	    	    	    exhausted_list.add(j);  
-  	    }
-  	
-  		byte [] last_table = new byte[frequency.length];
-  		int k = 0;
-  		for(int i = frequency.length - 1; i >= 0; i--)
-  		{
-  			int j = exhausted_list.get(i);
-  			last_table[k++] = (byte)j;
-  		}
-  		
-  		int  length = descending_table.length;
-  		byte greatest  = descending_table[0];
-  		
-  		int greatest_place = 0;
-  		for(int i = 0; i < last_table.length; i++)
-  		{
-  		    if(last_table[i] == greatest)
-  		    {
-  		    	    greatest_place = i;
-  		    	    break;
-  		    }
-  		}
-  		
-  		byte [] init_table = last_table.clone();
-  		result.add(init_table);
-  		
-  		//System.out.println("Added table.");
-  		
-  		boolean done = false;
-  		while(!done)
-  		{
-  		    if(greatest_place == last_table.length - 1)	
-  		    	    done = true;
-  		    else
-  		    {
-  		    	    byte up               = last_table[greatest_place + 1];
-  		    	    last_table[greatest_place] = up;
-  		    	    last_table[greatest_place + 1] = greatest;
-  		    	    greatest_place++;
-  		    	    
-  		    	    byte [] current_table = last_table.clone();
-  		    	    result.add(current_table);
-  		    	    if(greatest_place == last_table.length - 1)	
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte greatest  = descending_table[0];
+
+		int greatest_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == greatest)
+		    {
+		    	    greatest_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(greatest_place == last_table.length - 1)
+		    	    done = true;
+		    else
+		    {
+		    	    byte up               = last_table[greatest_place + 1];
+		    	    last_table[greatest_place] = up;
+		    	    last_table[greatest_place + 1] = greatest;
+		    	    greatest_place++;
+
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(greatest_place == last_table.length - 1)
     		    	       done = true;
-  		    }
-  		}
-  		
-  		return result;
-  	}
-  	
+		    }
+		}
+
+		return result;
+	}
+
 
   	/**
-  	 * Produces a random permutation of symbol indices — a probabilistic-space
+  	 * Produces a random permutation of symbol indices -- a probabilistic-space
   	 * baseline that carries no information about the data, for comparison
   	 * against frequency-driven orderings like Last and Descending.
   	 */
@@ -1185,7 +572,7 @@ public class ArithmeticMapper
   		}
   		return table;
   	}
-  	
+
   	public static byte[] getRandomTable(int frequency[], long seed)
   	{
   		int n = frequency.length;
@@ -1246,987 +633,515 @@ public class ArithmeticMapper
   	{
   		return getRandomOrderTable(frequency, (long) seed);
   	}
-  	
-    // Method with order table.
-    public static BigInteger[] getArithmeticOffsetAndRange(byte[] src, int[] frequency, byte [] order) 
-    {
-    	    int [] f = new int[frequency.length];
-		int    n = src.length;
-	   
-		// Reorder frequency table.
-		for(int i = 0; i < order.length; i++)
-		{
-			int j = (int) order[i];
-			if(j < 0)
-				j += 256;
-			f[j]  = frequency[i];
-		}
-
-        // Build cumulative-frequency table
-        int[] s = new int[f.length];
-        int   m = 0;
-        for (int i = 0; i < f.length; i++) 
-        {
-            s[i] = m;
-            m   += f[i];
-        }
-
-        //System.out.println("Getting offset...");
-        // Track interval as two reduced rationals: offset and range
-        BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
-        BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
-
-        for (int i = 0; i < n; i++) 
-        {
-            int j = src[i];
-            if (j < 0) 
-            	    j += 256; 
-            // Use reordered frequency.
-    	        j = (int) order[j];
-    	        if(j < 0)
-    	    	        j += 256;
-
-            // addend = range * s[j] / m
-            BigInteger addN = rngN.multiply(BigInteger.valueOf(s[j]));
-            BigInteger addD = rngD.multiply(BigInteger.valueOf(m));
-            BigInteger g = addN.gcd(addD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                addN = addN.divide(g);
-                addD = addD.divide(g);
-            }
-
-            // offset += addend
-            offN = offN.multiply(addD).add(addN.multiply(offD));
-            offD = offD.multiply(addD);
-            g = offN.gcd(offD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                offN = offN.divide(g);
-                offD = offD.divide(g);
-            }
-
-            // range *= f[j] / m
-            rngN = rngN.multiply(BigInteger.valueOf(f[j]));
-            rngD = rngD.multiply(BigInteger.valueOf(m));
-            g = rngN.gcd(rngD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                rngN = rngN.divide(g);
-                rngD = rngD.divide(g);
-            }
-
-            // Adaptive update
-            f[j]--;
-            m--;
-            for (int k = j + 1; k < s.length; k++) 
-            {
-                s[k]--;
-            }
-        }
-
-        // Bring offset and range to a common denominator
-        if (!offD.equals(rngD)) 
-        {
-            offN = offN.multiply(rngD);
-            rngN = rngN.multiply(offD);
-            BigInteger commonD = offD.multiply(rngD);
-            offD = commonD;
-            rngD = commonD;
-        }
-
-        /*
-        // Upper bound of the valid interval (exclusive)
-        BigInteger hiN = offN.add(rngN);
-        BigInteger hiD = offD;
-
-        return simplestFractionInInterval(offN, offD, hiN, hiD);
-        */
-        
-        BigInteger [] result = new BigInteger[4];
-        
-        result[0] = offN;
-        result[1] = offD;
-        result[2] = rngN;
-        result[3] = rngD;
-        
-        return result;
-    }
 
 
-  	
-    // Method with order table.
-    public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte [] order) 
-    {
-    	int [] f = new int[frequency.length];
-		int    n = src.length;
-	   
-		// Reorder frequency table.
-		for(int i = 0; i < order.length; i++)
-		{
-			int j = (int) order[i];
-			if(j < 0)
-				j += 256;
-			f[j]  = frequency[i];
-		}
-
-        // Build cumulative-frequency table
-        int[] s = new int[f.length];
-        int   m = 0;
-        for (int i = 0; i < f.length; i++) 
-        {
-            s[i] = m;
-            m   += f[i];
-        }
-
-        // Track interval as two reduced rationals: offset and range
-        BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;  // 0/1
-        BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;  // 1/1
-
-        for (int i = 0; i < n; i++) 
-        {
-            int j = src[i];
-            if (j < 0) 
-            	    j += 256; 
-            // Use reordered frequency.
-    	        j = (int) order[j];
-    	        if(j < 0)
-    	    	        j += 256;
-
-            // addend = range * s[j] / m
-            BigInteger addN = rngN.multiply(BigInteger.valueOf(s[j]));
-            BigInteger addD = rngD.multiply(BigInteger.valueOf(m));
-            BigInteger g = addN.gcd(addD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                addN = addN.divide(g);
-                addD = addD.divide(g);
-            }
-
-            // offset += addend
-            offN = offN.multiply(addD).add(addN.multiply(offD));
-            offD = offD.multiply(addD);
-            g = offN.gcd(offD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                offN = offN.divide(g);
-                offD = offD.divide(g);
-            }
-
-            // range *= f[j] / m
-            rngN = rngN.multiply(BigInteger.valueOf(f[j]));
-            rngD = rngD.multiply(BigInteger.valueOf(m));
-            g = rngN.gcd(rngD);
-            if (g.compareTo(BigInteger.ONE) > 0) 
-            {
-                rngN = rngN.divide(g);
-                rngD = rngD.divide(g);
-            }
-
-            // Adaptive update
-            f[j]--;
-            m--;
-            for (int k = j + 1; k < s.length; k++) 
-            {
-                s[k]--;
-            }
-        }
-
-        // Bring offset and range to a common denominator
-        if (!offD.equals(rngD)) 
-        {
-            offN = offN.multiply(rngD);
-            rngN = rngN.multiply(offD);
-            BigInteger commonD = offD.multiply(rngD);
-            offD = commonD;
-            rngD = commonD;
-        }
-
-        // Upper bound of the valid interval (exclusive)
-        BigInteger hiN = offN.add(rngN);
-        BigInteger hiD = offD;
-
-        return simplestFractionInInterval(offN, offD, hiN, hiD);
-    }
+	// =========================================================================
+	// Encoder/decoder pair re-using one frequency table across the full
+	// byte-value range (0-255) to reduce overhead, at some cost to overall
+	// compression. Refactored to use BigFraction internally; return/param
+	// shapes unchanged (still BigInteger[2] at the ArrayList/parameter
+	// boundary) for compatibility with existing callers.
+	// =========================================================================
 
 
-    // Used by an alternative method for getting an interval value below.
-    public static ArrayList <BigInteger> getPrimeFactors(BigInteger n)
+	// Requires a < b.
+
+	// =========================================================================
+	// simplestFractionInInterval: UNCHANGED from the prior version. This
+	// method already takes separate (loN,loD) / (hiN,hiD) pairs and cross-
+	// multiplies correctly regardless of whether they share a denominator
+	// -- it does not have the "assumed same denominator" bug class the
+	// other methods in this file had, so there's nothing for a BigFraction
+	// refactor to fix here.
+	// =========================================================================
+	public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD, BigInteger hiN, BigInteger hiD)
 	{
-	    ArrayList <BigInteger> factors = new ArrayList<BigInteger>();
-	    
-	    if(n.equals(BigInteger.ONE))
-	    	    return factors;
-	    else if(n.isProbablePrime(100))
-	    {
-	    	    factors.add(n);
-	    	    return factors;
-	    }
-	    else
-	    {
-	        BigInteger divisor = BigInteger.TWO;
-	        while(n.mod(divisor).equals(BigInteger.ZERO))
-	        {
-	    	        factors.add(divisor);
-                n = n.divide(divisor);    
-	        }
-	    
-	        divisor = BigInteger.valueOf(3);
-	        while(divisor.multiply(divisor).compareTo(n) <= 0) 
-	        {
-                if(n.mod(divisor).equals(BigInteger.ZERO)) 
-                {
-                    factors.add(divisor);
-                    n = n.divide(divisor);
-                } 
-                else 
-                    divisor = divisor.nextProbablePrime();
-            }
-	    
-            if(n.compareTo(BigInteger.ONE) == 1) 
-                factors.add(n);
-	    
-	        return factors;
-	    }
+		ArrayList<BigInteger> floors = new ArrayList<BigInteger>();
+
+		BigInteger p, q;
+		while (true)
+		{
+			BigInteger flo = floorDiv(loN, loD);
+			BigInteger candidate = flo.add(BigInteger.ONE);
+
+			if (candidate.multiply(hiD).compareTo(hiN) < 0)
+			{
+				p = candidate;
+				q = BigInteger.ONE;
+				break;
+			}
+
+			BigInteger loFracN = loN.subtract(flo.multiply(loD));
+			BigInteger hiFracN = hiN.subtract(flo.multiply(hiD));
+
+			if (loFracN.equals(BigInteger.ZERO))
+			{
+				BigInteger k = hiD.divide(hiFracN).add(BigInteger.ONE);
+				p = flo.multiply(k).add(BigInteger.ONE);
+				q = k;
+				break;
+			}
+
+			floors.add(flo);
+			BigInteger newLoN = hiD, newLoD = hiFracN;
+			BigInteger newHiN = loD, newHiD = loFracN;
+			loN = newLoN; loD = newLoD; hiN = newHiN; hiD = newHiD;
+		}
+
+		for (int i = floors.size() - 1; i >= 0; i--)
+		{
+			BigInteger flo = floors.get(i);
+			BigInteger newP = flo.multiply(p).add(q);
+			q = p;
+			p = newP;
+		}
+
+		BigInteger g = p.gcd(q);
+		return new BigInteger[]{ p.divide(g), q.divide(g) };
 	}
-    
-    
-    // This is a slower version that produces sub-optimal results,
-    // but is easier to understand.  It uses a search mechanism instead
-    // of continued fraction expansion to find a simpler fraction than
-    // the offset.
-    public static BigInteger [] getIntervalValue2(byte[] src, int [] frequency)
-    {
-    	int [] f = frequency.clone();
-    	
-        int [] s = new int[f.length];
-    	
-    	int m = 0;
-    	for(int i = 0; i < f.length; i++)
-    	{
-    		s[i] = m;
-    		m    += f[i];
-    	}
-    	
-    	BigInteger [] offset = new BigInteger[2];
-    	offset[0]            = BigInteger.ZERO;
-    	offset[1]            = BigInteger.ONE;
-    	
-    	BigInteger [] range  = new BigInteger[2];
-    	range[0]             = BigInteger.ONE;
-    	range[1]             = BigInteger.ONE;
-    	
-    	int    n       = src.length;
-        
-    	for(int i = 0; i < n; i++)
-        {
-        	    int j = src[i];
-        	    if(j < 0)
-        	    	    j += 256;
-        	   
-        	    BigInteger [] addend = new BigInteger[] {range[0], range[1]};
-        	    
-        	    BigInteger factor = BigInteger.ONE;
-        	    factor            = factor.valueOf(s[j]);
-        	    addend[0]         = addend[0].multiply(factor);
-        	    factor            = factor.valueOf(m);
-        	    addend[1]         = addend[1].multiply(factor);
-        	    
-        	    BigInteger gcd = addend[0].gcd(addend[1]);
-        	    if(gcd.compareTo(BigInteger.ONE) == 1)
-        	    {
-        	    	    addend[0] = addend[0].divide(gcd);
-    		    addend[1] = addend[1].divide(gcd);
-        	    }
-        	   
-        	    offset[0] = offset[0].multiply(addend[1]);
-        	    addend[0] = addend[0].multiply(offset[1]);
-        	    offset[1] = offset[1].multiply(addend[1]);
-        	    offset[0] = offset[0].add(addend[0]);
-        	    
-        	   
-        	    gcd = offset[0].gcd(offset[1]);
-        	    if(gcd.compareTo(BigInteger.ONE) == 1)
-        	    {
-        	    	    offset[0] = offset[0].divide(gcd);
-    		    	offset[1] = offset[1].divide(gcd);
-        	    }
-    		
-            factor   = factor.valueOf(f[j]);
-        	    range[0] = range[0].multiply(factor);
-        	    factor   = factor.valueOf(m);
-        	    range[1] = range[1].multiply(factor);
-        	    
-        	   
-        	    gcd = range[0].gcd(range[1]);
-        	    if(gcd.compareTo(BigInteger.ONE) == 1)
-        	    {
-        	    	    range[0] = range[0].divide(gcd);
-    		    	range[1] = range[1].divide(gcd);
-        	    }
-        	   
-        	    
-        	    f[j]--;
-        	    m--;
-        	    for(int k = j + 1; k < s.length; k++)
-        	    {
-        	    	    s[k]--;
-        	    }
-        }
-    	
-    	
-    	if(offset[1].compareTo(range[1]) != 0)
-    	{	
-    	    BigInteger range_factor  = offset[1];
-    	    BigInteger offset_factor = range[1];	
-    		offset[0] = offset[0].multiply(offset_factor);
-    		offset[1] = offset[1].multiply(offset_factor);
-    				
-    		range[0] = range[0].multiply(range_factor);
-    		range[1] = range[1].multiply(range_factor);	
-    	}
 
-    	
-    	BigInteger gcd       = offset[1].gcd(offset[0]);
-    	
-    	ArrayList <BigInteger> factor_list = getPrimeFactors(gcd);
-    	
-    	
-    	BigInteger factor = BigInteger.ONE;
-    	
-    	BigInteger maximum_range = BigInteger.valueOf(10000 * 1);
-    	BigInteger minimum_range = BigInteger.valueOf(512);
-    	int j = factor_list.size() - 1;
-    	while(range[0].divide(factor).compareTo(maximum_range) == 1 && j >= 0)
-    	{
-    		BigInteger next_factor = factor_list.get(j);
-    		factor = factor.multiply(next_factor);
-    		j--;
-    	}
-    	
-    	if(factor.compareTo(BigInteger.ONE) != 0)
-    	{
-    		offset[0] = offset[0].divide(factor);
-    	    offset[1] = offset[1].divide(factor);
-    	    range[0]  = range[0].divide(factor);
-    	    range[1]  = offset[1];
-    	}
-         
-    	// If the offset pair had no common divisor,
-    	// the range numerator is 1.
-    	if(range[0].compareTo(minimum_range) == -1)
-    	{
-    		factor = BigInteger.TWO;
-    		while(range[0].multiply(factor).compareTo(minimum_range) == - 1)
-    			factor = factor.multiply(BigInteger.TWO);
-    		
-    		offset[0] = offset[0].multiply(factor);
-    	    offset[1] = offset[1].multiply(factor);
-    	    range[0]  = range[0].multiply(factor);
-    	    range[1]  = offset[1];
-    	}
-    	
-    	gcd                      = offset[0].gcd(offset[1]);
-    	BigInteger    max_gcd    = gcd;  
-        BigInteger largest_index;
-        
-        BigInteger [] value = new BigInteger[] {offset[0], offset[1]};
-        
-        // NOTE: range[0] is coerced to a plain int here (and the loop below
-        // is O(range[0]), a linear scan) -- the maximum_range/minimum_range
-        // adjustment above is what keeps range[0] in a manageable few-
-        // thousand ballpark before reaching this point. BigInteger.intValue()
-        // truncates silently (no exception) rather than throwing if range[0]
-        // ever exceeded Integer.MAX_VALUE; not observed in testing, but worth
-        // knowing if this method is ever used with very different inputs
-        // than it was tuned for.
-     	j = range[0].intValue();
-     	int k = 0;
-     	for(int i = 1; i < j; i++)
-     	{
-     		value[0]  = value[0].add(BigInteger.ONE);
-         	gcd = value[0].gcd(value[1]);
-            if(gcd.compareTo(max_gcd) == 1)
-            {
-         	    max_gcd = gcd;
-         	    k = i;
-            }	
-     	}
-     		
-     	largest_index = BigInteger.valueOf(k);
-     		
-        value[0] = offset[0].add(largest_index);
-        value[0] = value[0].divide(max_gcd);
-        value[1] = value[1].divide(max_gcd);
-             
-        return value;
-        
-    }
-
-    // This version uses a binary search to find the value that fits in the current interval. 
-    public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n)
-    {
-        byte [] value = new byte[n];
-       
-        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
-    	
-    	int m = 0;
-    	for(int i = 0; i < frequency.length; i++)
-    	{
-    	    ArrayList <Integer> list = new ArrayList <Integer> ();
-    	    
-    	    if(frequency[i] != 0)
-    	    {
-    	        list.add(i);
-    	        list.add(frequency[i]);
-    	        list.add(m);
-    	    
-    	        arithmetic_list.add(list);
-    	    
-    	        m += frequency[i];
-    	    }
-    	}
-        
-    	BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-    	BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-    	BigInteger [] w      = {v[0], v[1]};
-    	
-    	for(int i = 0; i < n; i++)
-    	{
-    		if(offset[0].compareTo(BigInteger.ZERO) != 0)
-    		{
-    			w[0] = v[0];
-    			w[1] = v[1];
-    		    w[0] = w[0].multiply(offset[1]);
-    		    w[0] = w[0].subtract(offset[0].multiply(w[1]));
-    		    w[1] = w[1].multiply(offset[1]);
-    		    
-    		    BigInteger gcd = w[0].gcd(w[1]);
-        	        if(gcd.compareTo(BigInteger.ONE) == 1)
-        	        {
-        	    	        w[0] = w[0].divide(gcd);
-    		       	w[1] = w[1].divide(gcd);
-        	        }
-    		}
-    		
-    		int j = arithmetic_list.size() / 2;
-    	    ArrayList <Integer> list = arithmetic_list.get(j);
-    		
-    	    int f = list.get(1);
-    	    int s = list.get(2);
-    			
-    		BigInteger a = range[0].multiply(BigInteger.valueOf(s));
-    	    	BigInteger b = w[0];
-    	    	BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
-    	    	BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-    	    	    
-    	    	a = a.multiply(w[1]);
-    	    	b = b.multiply(d);
-    	    	c = c.multiply(w[1]);
-    	    	    	
-    		if(a.compareTo(b) > 0)
-            {
-    		    int k = j / 2;
-                while(a.compareTo(b) > 0) 
-                	{
-                	    j -= k;
-                	    
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    a    = range[0].multiply(BigInteger.valueOf(s));
-                	    a    = a.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                
-                // Check if we passed value.
-                c = range[0].multiply(BigInteger.valueOf(s + f));
-       	        c = c.multiply(w[1]);
-       	        if(c.compareTo(b) <= 0)
-                {
-                    while(c.compareTo(b) <= 0)
-                    {
-                	    	    j++;
-                	    	    list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-                	    	    
-                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
-                    	    c = c.multiply(w[1]);
-                	    }
-                } 
-             }
-    		     else if(c.compareTo(b) <= 0)
-             {
-    			    int size = arithmetic_list.size();
-    		        int k = (size - j) / 2;
-                	
-    		        while(c.compareTo(b) <= 0) 
-                	{
-                	    j += k;
-                	     
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
-                	    c    = c.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                	
-    		        // Check if we passed value.
-    		        a = range[0].multiply(BigInteger.valueOf(s));
-        	        a = a.multiply(w[1]);
-        	        if(a.compareTo(b) > 0)
-            	    {
-            	        while(a.compareTo(b) > 0)
-            	        {
-            	    	        j--; 
-            	    	        list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-            	    	        a    = range[0].multiply(BigInteger.valueOf(s));
-            	    	        a = a.multiply(w[1]);
-            	        }
-            	    }
-            }
-    		
-    		    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-    			
-    		    offset[0] = offset[0].multiply(addend[1]);
-    		    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-    	        offset[1] = offset[1].multiply(addend[1]);
-    	        
-    	        BigInteger gcd = offset[0].gcd(offset[1]);
-    		    if(gcd.compareTo(BigInteger.ONE) == 1)
-    		    {
-    			    offset[0] = offset[0].divide(gcd);
-    			    offset[1] = offset[1].divide(gcd);;
-    		    }
-    	   
-    	        range[0] = range[0].multiply(BigInteger.valueOf(f));
-    	        range[1] = range[1].multiply(BigInteger.valueOf(m));
-    	       
-    	        gcd = range[0].gcd(range[1]);
-    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-    	        {
-    	    	        range[0] = range[0].divide(gcd);
-    	    	    range[1] = range[1].divide(gcd);
-    	        }
-    	   
-    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
-        	    {
-        	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
-        	        	s = list2.get(2);
-        	        	s--;
-        	        	list2.set(2, s);
-        	        	arithmetic_list.set(p, list2);	
-        	    }
-    	          
-    	        f--;
-        	    m--;   
-        	    if(f != 0)
-        	    {
-        	        list.set(1, f);
-        	        arithmetic_list.set(j,  list);
-        	    }
-        	    else
-        	        	arithmetic_list.remove(j);
-        	    int k    = list.get(0);
-    	        value[i] = (byte)k;	
-    	    }
-    	
-        return value;
-    }
-    
-    // A version of the method that uses an order table.
-    public static byte [] getArithmeticValues(BigInteger [] v, int [] frequency, int n, byte [] order)
-    {
-    	    // Reorder frequency table.
-    		int [] frequency2 = new int[frequency.length];
-    		byte[] inverse_order = new byte[order.length];
-    		for(int i = 0; i < order.length; i++)
-    		{
-    			int j = order[i];
-    			if(j < 0)
-    				j += 256;
-    						
-    			frequency2[j]    = frequency[i];
-    			inverse_order[j] = (byte) i;
-    		}
-    		    
-    	
-        byte [] value = new byte[n];
-       
-        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
-    	
-      	int m = 0;
-    	    for(int i = 0; i < frequency.length; i++)
-    	    {
-    	        ArrayList <Integer> list = new ArrayList <Integer> ();
-    	    
-    	        if(frequency2[i] != 0)
-    	        {
-    	            list.add(i);
-    	            list.add(frequency2[i]);
-    	            list.add(m);
-    	    
-    	            arithmetic_list.add(list);
-    	    
-    	            m += frequency2[i];
-    	        }
-    	    }
-        
-      	BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
-      	BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
-      	BigInteger [] w      = {v[0], v[1]};
-    	
-    	    for(int i = 0; i < n; i++)
-    	    {
-    		    if(offset[0].compareTo(BigInteger.ZERO) != 0)
-    		    {
-    			    w[0] = v[0];
-    			    w[1] = v[1];
-    		        w[0] = w[0].multiply(offset[1]);
-    		        w[0] = w[0].subtract(offset[0].multiply(w[1]));
-    		        w[1] = w[1].multiply(offset[1]);
-    		    
-    		        BigInteger gcd = w[0].gcd(w[1]);
-        	        if(gcd.compareTo(BigInteger.ONE) == 1)
-        	        {
-        	    	        w[0] = w[0].divide(gcd);
-    		       	    w[1] = w[1].divide(gcd);
-        	        }
-    		    }
-    		
-    		    int j = arithmetic_list.size() / 2;
-    	        ArrayList <Integer> list = arithmetic_list.get(j);
-    		
-    	        int f = list.get(1);
-    	        int s = list.get(2);
-    			
-    		    BigInteger a = range[0].multiply(BigInteger.valueOf(s));
-    	      	BigInteger b = w[0];
-    	    	    BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
-    	    	    BigInteger d = range[1].multiply(BigInteger.valueOf(m));
-    	    	    
-    	    	    a = a.multiply(w[1]);
-    	       	b = b.multiply(d);
-    	      	c = c.multiply(w[1]);
-    	    	    	
-    		    if(a.compareTo(b) > 0)
-            {
-    		        int k = j / 2;
-                while(a.compareTo(b) > 0) 
-                	{
-                	    j -= k;
-                	    
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    a    = range[0].multiply(BigInteger.valueOf(s));
-                	    a    = a.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                
-                // Check if we passed value.
-                c = range[0].multiply(BigInteger.valueOf(s + f));
-       	        c = c.multiply(w[1]);
-       	        if(c.compareTo(b) <= 0)
-                {
-                    while(c.compareTo(b) <= 0)
-                    {
-                	    	    j++;
-                	    	    list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-                	    	    
-                	    	    c = range[0].multiply(BigInteger.valueOf(s + f));
-                    	    c = c.multiply(w[1]);
-                	    }
-                } 
-             }
-    		     else if(c.compareTo(b) <= 0)
-             {
-    			    int size = arithmetic_list.size();
-    		        int k = (size - j) / 2;
-                	
-    		        while(c.compareTo(b) <= 0) 
-                	{
-                	    j += k;
-                	     
-                	    list = arithmetic_list.get(j);
-                	    f    = list.get(1);
-                	    s    = list.get(2);
-                	    c    = range[0].multiply(BigInteger.valueOf(s + f));
-                	    c    = c.multiply(w[1]);
-                	    
-                	    k /= 2;
-                	    if(k == 0)
-                	    	    k = 1;
-                	}
-                	
-    		        // Check if we passed value.
-    		        a = range[0].multiply(BigInteger.valueOf(s));
-        	        a = a.multiply(w[1]);
-        	        if(a.compareTo(b) > 0)
-            	    {
-            	        while(a.compareTo(b) > 0)
-            	        {
-            	    	        j--; 
-            	    	        list = arithmetic_list.get(j);
-                        	f    = list.get(1);
-                        	s    = list.get(2);
-            	    	        a    = range[0].multiply(BigInteger.valueOf(s));
-            	    	        a = a.multiply(w[1]);
-            	        }
-            	    }
-            }
-    		
-    		    BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-    			
-    		    offset[0] = offset[0].multiply(addend[1]);
-    		    offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-    	        offset[1] = offset[1].multiply(addend[1]);
-    	        
-    	        BigInteger gcd = offset[0].gcd(offset[1]);
-    		    if(gcd.compareTo(BigInteger.ONE) == 1)
-    		    {
-    			    offset[0] = offset[0].divide(gcd);
-    			    offset[1] = offset[1].divide(gcd);;
-    		    }
-    	   
-    	        range[0] = range[0].multiply(BigInteger.valueOf(f));
-    	        range[1] = range[1].multiply(BigInteger.valueOf(m));
-    	       
-    	        gcd = range[0].gcd(range[1]);
-    	        if(gcd.compareTo(BigInteger.ONE) == 1)
-    	        {
-    	    	        range[0] = range[0].divide(gcd);
-    	    	    range[1] = range[1].divide(gcd);
-    	        }
-    	   
-    	        for(int p = j + 1; p < arithmetic_list.size(); p++)
-        	    {
-        	        	ArrayList <Integer> list2 = arithmetic_list.get(p);
-        	        	s = list2.get(2);
-        	        	s--;
-        	        	list2.set(2, s);
-        	        	arithmetic_list.set(p, list2);	
-        	    }
-    	          
-    	        f--;
-        	    m--;   
-        	    if(f != 0)
-        	    {
-        	        list.set(1, f);
-        	        arithmetic_list.set(j,  list);
-        	    }
-        	    else
-        	        	arithmetic_list.remove(j);
-        	    int k    = list.get(0);
-        	    // Get original order.
-	    	    k = inverse_order[k];
-	        if(k < 0)
-	            k += 256;
-            
-		    value[i] = (byte)k;		
-    	    }
-    	
-        return value;
-    }
-
-
-    // Slower version that uses a linear search.
-    public static byte [] getArithmeticValues2(BigInteger [] v, int [] frequency, int n)
-    {
-        byte [] value = new byte[n];
-    
-        ArrayList <ArrayList <Integer>> arithmetic_list = new ArrayList <ArrayList <Integer>> ();
- 	
- 	   int m = 0;
- 	   for(int i = 0; i < frequency.length; i++)
- 	   {
- 		   if(frequency[i] != 0)
- 		   {
- 	           ArrayList <Integer> list = new ArrayList <Integer> ();
- 	           list.add(i);
- 	           list.add(frequency[i]);
- 	           list.add(m);
- 	           arithmetic_list.add(list);
- 	           m += frequency[i];
- 		   }
- 	   }
-     
- 	   BigInteger [] offset = {BigInteger.ZERO, BigInteger.ONE};
- 	   BigInteger [] range  = {BigInteger.ONE, BigInteger.ONE};
- 	   BigInteger [] w      = {v[0], v[1]};
- 	
- 	   for(int i = 0; i < n; i++)
- 	   {
- 		   if(offset[0].compareTo(BigInteger.ZERO) != 0)
- 		   {
- 			   w[0] = v[0];
- 			   w[1] = v[1];
- 		       w[0] = w[0].multiply(offset[1]);
- 		       w[0] = w[0].subtract(offset[0].multiply(w[1]));
- 		       w[1] = w[1].multiply(offset[1]);
- 		    
- 		       BigInteger gcd = w[0].gcd(w[1]);
-     	       if(gcd.compareTo(BigInteger.ONE) == 1)
-     	       {
-     	    	        w[0] = w[0].divide(gcd);
- 		       	    w[1] = w[1].divide(gcd);
-     	       }
- 		   }
- 		
- 		   // Start j at middle of list.
- 		   int j = arithmetic_list.size() / 2;
- 	       ArrayList <Integer> list = arithmetic_list.get(j);
- 		
- 	       int f = list.get(1);
- 	       int s = list.get(2);
- 			
- 		   BigInteger a = range[0].multiply(BigInteger.valueOf(s));
- 	    	   BigInteger b = w[0];
- 	       BigInteger c = range[0].multiply(BigInteger.valueOf(s + f));
- 	    	   BigInteger d = range[1].multiply(BigInteger.valueOf(m));
- 	    	    
- 	    	   a = a.multiply(w[1]);
- 	       b = b.multiply(d);
- 	    	   c = c.multiply(w[1]);
- 	    	    	
- 		   if(a.compareTo(b) > 0)
-           {
-               while(a.compareTo(b) > 0) 
-               {
-             	   j--;
-             	   list = arithmetic_list.get(j);
-             	   f    = list.get(1);
-             	   s    = list.get(2);
-             	   a    = range[0].multiply(BigInteger.valueOf(s));
-             	   a    = a.multiply(w[1]);
-               }
-          }
- 		  else if(c.compareTo(b) <= 0)
-          {
-             	while(c.compareTo(b) <= 0) 
-             	{
-             	    j++;
-             	    list = arithmetic_list.get(j);
-             	    f    = list.get(1);
-             	    s    = list.get(2);
-             	    c    = range[0].multiply(BigInteger.valueOf(s + f));
-             	    c    = c.multiply(w[1]);
-             	}
-         }
- 		
- 	     // Reset offset and range.
- 		BigInteger [] addend = {range[0].multiply(BigInteger.valueOf(s)), range[1].multiply(BigInteger.valueOf(m))};
-			
-	 	offset[0] = offset[0].multiply(addend[1]);
-	 	offset[0] = offset[0].add(addend[0].multiply(offset[1]));
-	 	offset[1] = offset[1].multiply(addend[1]);
-	 	        
-	 	BigInteger gcd = offset[0].gcd(offset[1]);
-	    if(gcd.compareTo(BigInteger.ONE) == 1)
-	 	{
-	 		offset[0] = offset[0].divide(gcd);
-	 		offset[1] = offset[1].divide(gcd);;
-	 	}
-	 	   
-	 	range[0] = range[0].multiply(BigInteger.valueOf(f));
-	 	range[1] = range[1].multiply(BigInteger.valueOf(m));
-	 	       
-	 	gcd = range[0].gcd(range[1]);
-	 	if(gcd.compareTo(BigInteger.ONE) == 1)
-	 	{
-	 	    	range[0] = range[0].divide(gcd);
-	 	    	range[1] = range[1].divide(gcd);
-	 	}
-	 	   
-	 	// Reset sums.
-	 	for(int p = j + 1; p < arithmetic_list.size(); p++)
-	    {
-	     	 ArrayList <Integer> list2 = arithmetic_list.get(p);
-	     	 s = list2.get(2);
-	         s--;
-	     	 list2.set(2, s);
-	     	 arithmetic_list.set(p, list2);	
-	     }
-	 	          
-	 	 f--;
-	     m--;   
-	     if(f != 0)
-	     {
-	     	list.set(1, f);
-	     	arithmetic_list.set(j,  list);
-	     }
-	     else
-	     	 arithmetic_list.remove(j);
-	     	     
-	     int k    = list.get(0);
-	 	 value[i] = (byte)k;		
- 	  }
-      return value;
-   }
-
-
-	// =========================================================================
-	// Fast renormalization-based arithmetic coder (no BigInteger).
-	//
-	// Uses standard E1/E2/E3 (Witten-Neal-Cleary) interval rescaling with a
-	// 32-bit fixed-point interval stored in longs to avoid sign issues.
-	// After renormalization the range is always >= 2^30, so every symbol with
-	// frequency >= 1 gets a non-zero interval: no precision loss for the
-	// segment sizes used in DeltaWriter.
-	//
-	// Output format (getIntervalValueFast):
-	//   bytes [0..3] : bit-stream length in bits, big-endian int
-	//   bytes [4..]  : compressed bit stream, LSB-first within each byte
-	//
-	// Input format (getArithmeticValuesFast):
-	//   same byte array produced by getIntervalValueFast
-	// =========================================================================
+	private static BigInteger floorDiv(BigInteger n, BigInteger d)
+	{
+		BigInteger[] qr = n.divideAndRemainder(d);
+		if (qr[1].signum() != 0 && n.signum() < 0)
+			return qr[0].subtract(BigInteger.ONE);
+		return qr[0];
+	}
 
 	/**
-	 * Fast arithmetic encoder using long-integer E1/E2/E3 renormalization.
-	 * Drop-in replacement for the encode half of getIntervalValue / getArithmeticValues,
-	 * but ~10-50x faster because it avoids BigInteger.
-	 *
-	 * @param src        bytes to encode
-	 * @param frequency  frequency[i] = count of unsigned byte value i (256 entries)
-	 * @return           self-contained byte array: 4-byte bit-length header + bit stream
+	 * Arithmetic encode {@code src} using adaptive frequencies and return the
+	 * simplest fraction (smallest denominator) within the valid encoding interval.
 	 */
+	public static BigInteger[] getIntervalValue(byte[] src, int[] frequency)
+	{
+		int[] f = frequency.clone();
+		int n = src.length;
+
+		int[] s = new int[f.length];
+		int m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+
+			off = off.add(rng.multiply(FractionMapper.BigFraction.of(s[j], m)));
+			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		FractionMapper.BigFraction hi = off.add(rng);
+		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
+	}
+
+	// =========================================================================
+	// Order-table variants: same core arithmetic as above, plus a reordered
+	// frequency table so a different symbol occupies each rank position.
+	// =========================================================================
+
+	public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte[] order)
+	{
+		int[] f = new int[frequency.length];
+		int n = src.length;
+
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = (int) order[i];
+			if (j < 0) j += 256;
+			f[j] = frequency[i];
+		}
+
+		int[] s = new int[f.length];
+		int m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+			j = (int) order[j];
+			if (j < 0) j += 256;
+
+			off = off.add(rng.multiply(FractionMapper.BigFraction.of(s[j], m)));
+			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		FractionMapper.BigFraction hi = off.add(rng);
+		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
+	}
+
+	// This version uses a binary search to find the value that fits in the current interval.
+	public static byte[] getArithmeticValues(BigInteger[] v, int[] frequency, int n)
+	{
+		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
+		byte[] value = new byte[n];
+
+		ArrayList<ArrayList<Integer>> arithmetic_list = new ArrayList<>();
+		int m = 0;
+		for (int i = 0; i < frequency.length; i++)
+		{
+			if (frequency[i] != 0)
+			{
+				ArrayList<Integer> list = new ArrayList<>();
+				list.add(i); list.add(frequency[i]); list.add(m);
+				arithmetic_list.add(list);
+				m += frequency[i];
+			}
+		}
+
+		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			FractionMapper.BigFraction w = target.subtract(offset);
+
+			int j = arithmetic_list.size() / 2;
+			ArrayList<Integer> list = arithmetic_list.get(j);
+			int f = list.get(1);
+			int s = list.get(2);
+
+			FractionMapper.BigFraction a = range.multiply(FractionMapper.BigFraction.of(s, m));
+			FractionMapper.BigFraction c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+
+			if (a.gt(w))
+			{
+				int k = j / 2;
+				while (a.gt(w))
+				{
+					j -= k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+				if (c.le(w))
+				{
+					while (c.le(w))
+					{
+						j++;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					}
+				}
+			}
+			else if (c.le(w))
+			{
+				int size = arithmetic_list.size();
+				int k = (size - j) / 2;
+				while (c.le(w))
+				{
+					j += k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				a = range.multiply(FractionMapper.BigFraction.of(s, m));
+				if (a.gt(w))
+				{
+					while (a.gt(w))
+					{
+						j--;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					}
+				}
+			}
+
+			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(s, m)));
+			range = range.multiply(FractionMapper.BigFraction.of(f, m));
+
+			for (int p = j + 1; p < arithmetic_list.size(); p++)
+			{
+				ArrayList<Integer> list2 = arithmetic_list.get(p);
+				int s2 = list2.get(2);
+				s2--;
+				list2.set(2, s2);
+				arithmetic_list.set(p, list2);
+			}
+
+			f--;
+			m--;
+			if (f != 0)
+			{
+				list.set(1, f);
+				arithmetic_list.set(j, list);
+			}
+			else
+				arithmetic_list.remove(j);
+
+			int k = list.get(0);
+			value[i] = (byte) k;
+		}
+		return value;
+	}
+
+	// A version of the method that uses an order table.
+	public static byte[] getArithmeticValues(BigInteger[] v, int[] frequency, int n, byte[] order)
+	{
+		int[] frequency2 = new int[frequency.length];
+		byte[] inverse_order = new byte[order.length];
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			if (j < 0) j += 256;
+			frequency2[j] = frequency[i];
+			inverse_order[j] = (byte) i;
+		}
+
+		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
+		byte[] value = new byte[n];
+
+		ArrayList<ArrayList<Integer>> arithmetic_list = new ArrayList<>();
+		int m = 0;
+		for (int i = 0; i < frequency.length; i++)
+		{
+			if (frequency2[i] != 0)
+			{
+				ArrayList<Integer> list = new ArrayList<>();
+				list.add(i); list.add(frequency2[i]); list.add(m);
+				arithmetic_list.add(list);
+				m += frequency2[i];
+			}
+		}
+
+		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			FractionMapper.BigFraction w = target.subtract(offset);
+
+			int j = arithmetic_list.size() / 2;
+			ArrayList<Integer> list = arithmetic_list.get(j);
+			int f = list.get(1);
+			int s = list.get(2);
+
+			FractionMapper.BigFraction a = range.multiply(FractionMapper.BigFraction.of(s, m));
+			FractionMapper.BigFraction c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+
+			if (a.gt(w))
+			{
+				int k = j / 2;
+				while (a.gt(w))
+				{
+					j -= k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+				if (c.le(w))
+				{
+					while (c.le(w))
+					{
+						j++;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					}
+				}
+			}
+			else if (c.le(w))
+			{
+				int size = arithmetic_list.size();
+				int k = (size - j) / 2;
+				while (c.le(w))
+				{
+					j += k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				a = range.multiply(FractionMapper.BigFraction.of(s, m));
+				if (a.gt(w))
+				{
+					while (a.gt(w))
+					{
+						j--;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					}
+				}
+			}
+
+			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(s, m)));
+			range = range.multiply(FractionMapper.BigFraction.of(f, m));
+
+			for (int p = j + 1; p < arithmetic_list.size(); p++)
+			{
+				ArrayList<Integer> list2 = arithmetic_list.get(p);
+				int s2 = list2.get(2);
+				s2--;
+				list2.set(2, s2);
+				arithmetic_list.set(p, list2);
+			}
+
+			f--;
+			m--;
+			if (f != 0)
+			{
+				list.set(1, f);
+				arithmetic_list.set(j, list);
+			}
+			else
+				arithmetic_list.remove(j);
+
+			int k = list.get(0);
+			k = inverse_order[k];
+			if (k < 0) k += 256;
+			value[i] = (byte) k;
+		}
+		return value;
+	}
+
+	// Slower version that uses a linear search.
+
+	private static int[] fenwickBuild(int[] frequency)
+	{
+		int[] bit = new int[257];
+		for (int i = 0; i < 256; i++)
+			if (frequency[i] > 0) fenwickUpdate(bit, i, frequency[i]);
+		return bit;
+	}
+
+	private static void fenwickUpdate(int[] bit, int i, int delta)
+	{
+		for (i += 1; i <= 256; i += i & -i) bit[i] += delta;
+	}
+
+	private static int fenwickQuery(int[] bit, int i)
+	{
+		int sum = 0;
+		for (i += 1; i > 0; i -= i & -i) sum += bit[i];
+		return sum;
+	}
+
+	private static int fenwickFind(int[] bit, int target)
+	{
+		int pos = 0;
+		for (int b = 8; b >= 0; b--)
+		{
+			int nxt = pos + (1 << b);
+			if (nxt <= 256 && bit[nxt] <= target) { target -= bit[nxt]; pos = nxt; }
+		}
+		return pos;
+	}
+
+	/** Encoder: same as getIntervalValue but O(log 256) adaptive updates via Fenwick tree. */
+	public static BigInteger[] getIntervalValueFenwick(byte[] src, int[] frequency)
+	{
+		int[] f = frequency.clone();
+		int n = src.length;
+		int[] bit = fenwickBuild(f);
+		int m = 0; for (int v : f) m += v;
+
+		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i]; if (j < 0) j += 256;
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+
+			off = off.add(rng.multiply(FractionMapper.BigFraction.of(sj, m)));
+			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		FractionMapper.BigFraction hi = off.add(rng);
+		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
+	}
+
+	/** Decoder: same as getArithmeticValues but O(log 256) symbol search and updates via Fenwick tree. */
+	public static byte[] getArithmeticValuesFenwick(BigInteger[] v, int[] frequency, int n)
+	{
+		int[] f = frequency.clone();
+		int[] bit = fenwickBuild(f);
+		int m = 0; for (int fv : f) m += fv;
+
+		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
+		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+
+		byte[] value = new byte[n];
+
+		for (int i = 0; i < n; i++)
+		{
+			FractionMapper.BigFraction w = target.subtract(offset);
+
+			// target = w / range, scaled by m -- find which symbol's
+			// cumulative range contains this position via Fenwick search
+			FractionMapper.BigFraction scaledFrac = w.divide(range).multiply(m);
+			long scaledLong = scaledFrac.n.divide(scaledFrac.d).longValue();
+			int targetIdx = (int) Math.min(Math.max(scaledLong, 0L), (long) (m - 1));
+			int j = fenwickFind(bit, targetIdx);
+			while (j < 255 && f[j] == 0) j++;
+
+			value[i] = (byte) j;
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+
+			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(sj, m)));
+			range = range.multiply(FractionMapper.BigFraction.of(f[j], m));
+
+			fenwickUpdate(bit, j, -1);
+			f[j]--; m--;
+		}
+
+		return value;
+	}
+
+	// =========================================================================
+	// Fast renormalization-based arithmetic coder (no BigInteger). Untouched
+	// by the BigFraction refactor above -- uses plain longs throughout, no
+	// fractions at all.
+	// =========================================================================
+
 	public static byte[] getIntervalValueFast(byte[] src, int[] frequency)
 	{
 		int[] f = frequency.clone();
 		int   n = src.length;
 
-		// Build cumulative-frequency table
 		int[] s = new int[f.length];
 		int   m = 0;
 		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
 
-		// 32-bit interval in [0, 2^32), stored in longs to avoid sign issues.
-		final long TOP  = 0x100000000L;  // 2^32  exclusive upper sentinel
-		final long HALF = 0x80000000L;   // 2^31
-		final long QTR  = 0x40000000L;   // 2^30
-		final long TQTR = 0xC0000000L;   // 3 * 2^30
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
 
 		long low     = 0L;
 		long high    = TOP;
 		int  pending = 0;
 
-		// Output buffer: worst case is ~n*8 bits + 64 bits flush/padding.
 		byte[] buf     = new byte[n * 2 + 16];
 		int    bit_pos = 0;
 
@@ -2235,21 +1150,18 @@ public class ArithmeticMapper
 			int j = src[i];
 			if (j < 0) j += 256;
 
-			// Narrow the interval to symbol j's sub-interval.
 			long range    = high - low;
 			long new_low  = low + (range * s[j]) / m;
 			long new_high = (s[j] + f[j] == m)
-			                ? high   // avoid rounding error at the top
+			                ? high
 			                : low + (range * (long)(s[j] + f[j])) / m;
 			low  = new_low;
 			high = new_high;
 
-			// E1 / E2 / E3 renormalization: rescale until interval >= HALF.
 			for (;;)
 			{
 				if (high <= HALF)
 				{
-					// E1: both in lower half — emit 0, flush pending 1s.
 					fastWriteBit(buf, bit_pos++, 0);
 					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
 					pending = 0;
@@ -2258,7 +1170,6 @@ public class ArithmeticMapper
 				}
 				else if (low >= HALF)
 				{
-					// E2: both in upper half — emit 1, flush pending 0s.
 					fastWriteBit(buf, bit_pos++, 1);
 					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
 					pending = 0;
@@ -2267,7 +1178,6 @@ public class ArithmeticMapper
 				}
 				else if (low >= QTR && high <= TQTR)
 				{
-					// E3: straddles midpoint — scale around centre, defer one bit.
 					pending++;
 					low  = (low  - QTR) << 1;
 					high = (high - QTR) << 1;
@@ -2275,17 +1185,11 @@ public class ArithmeticMapper
 				else break;
 			}
 
-			// Adaptive update: same sequence as BigInteger version.
 			f[j]--;
 			m--;
 			for (int k = j + 1; k < s.length; k++) s[k]--;
 		}
 
-		// Flush: emit enough bits so the decoder can identify the final interval.
-		// After the main loop: high > HALF (E1 didn't fire), low < HALF (E2 didn't fire),
-		// and either low < QTR or high > TQTR (E3 didn't fire).
-		// Increment pending so the flush bit and its complements collectively
-		// identify a unique point inside [low, high).
 		pending++;
 		if (low < QTR)
 		{
@@ -2298,7 +1202,6 @@ public class ArithmeticMapper
 			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
 		}
 
-		// Pack: 4-byte big-endian bit-length header + bit stream.
 		int    bit_length  = bit_pos;
 		int    byte_length = (bit_length + 7) / 8;
 		byte[] result      = new byte[4 + byte_length];
@@ -2310,20 +1213,8 @@ public class ArithmeticMapper
 		return result;
 	}
 
-	/**
-	 * Fast arithmetic decoder, exact inverse of getIntervalValueFast.
-	 * Mirrors the encoder's E1/E2/E3 renormalization step-for-step, reading
-	 * bits from the stream to refill the 32-bit code register as the interval
-	 * is rescaled.
-	 *
-	 * @param encoded    byte array produced by getIntervalValueFast
-	 * @param frequency  original frequency table (256 entries, unmodified)
-	 * @param n          number of symbols to decode
-	 * @return           decoded byte array of length n
-	 */
 	public static byte[] getArithmeticValuesFast(byte[] encoded, int[] frequency, int n)
 	{
-		// Extract 4-byte big-endian bit-length header.
 		int bit_length = ((encoded[0] & 0xFF) << 24)
 		               | ((encoded[1] & 0xFF) << 16)
 		               | ((encoded[2] & 0xFF) <<  8)
@@ -2331,7 +1222,6 @@ public class ArithmeticMapper
 
 		int[] f = frequency.clone();
 
-		// Build cumulative-frequency table.
 		int[] s = new int[f.length];
 		int   m = 0;
 		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
@@ -2340,15 +1230,12 @@ public class ArithmeticMapper
 		final long HALF = 0x80000000L;
 		final long QTR  = 0x40000000L;
 		final long TQTR = 0xC0000000L;
-		final long MASK = 0xFFFFFFFFL;   // keep values in [0, 2^32)
+		final long MASK = 0xFFFFFFFFL;
 
 		long low     = 0L;
 		long high    = TOP;
-		int  bit_ptr = 0;   // next bit index in the stream (data starts at byte 4)
+		int  bit_ptr = 0;
 
-		// Prime the 32-bit code register with the first 32 bits (MSB-first).
-		// The encoder wrote the most-significant decision first, so bit 0 of the
-		// stream becomes the MSB of the code register.
 		long code = 0L;
 		for (int b = 0; b < 32; b++)
 		{
@@ -2360,38 +1247,19 @@ public class ArithmeticMapper
 
 		for (int i = 0; i < n; i++)
 		{
-			// Map code to a cumulative-frequency index in [0, m).
-			// After renormalization range >= QTR = 2^30 >> m, so integer
-			// division is accurate and no symbol interval can collapse to zero.
 			long range  = high - low;
 			long scaled = (code - low) * m / range;
 			if (scaled < 0)  scaled = 0;
 			if (scaled >= m) scaled = m - 1;
 
-			// Binary search: find the largest j with s[j] <= scaled.
-			// If f[j] == 0 (exhausted symbol, zero-width interval), advance.
 			int j = findFastSymbol(s, (int) scaled);
 			while (j < f.length - 1 && f[j] == 0) j++;
 
-			// Mirror the encoder's interval update exactly.
 			long new_low  = low + (range * s[j]) / m;
 			long new_high = (s[j] + f[j] == m)
 			                ? high
 			                : low + (range * (long)(s[j] + f[j])) / m;
 
-			// FIX: the `scaled`-based guess above can land one symbol short
-			// of (or, in principle, past) the true one when `code` sits
-			// exactly at -- or extremely close to -- a symbol boundary. This
-			// happens because `scaled` is computed by truncating-division
-			// inverting a value (new_low) that the encoder itself produced
-			// via its own truncating division; those two truncations don't
-			// perfectly cancel right at a boundary. Confirmed by direct
-			// reproduction: code landed exactly on a boundary between two
-			// symbols (one of them zero-width), and `scaled` undershot by
-			// exactly one position, selecting the wrong symbol entirely.
-			// Verify code actually falls in [new_low, new_high) against the
-			// same exact formula the encoder used, and nudge j (skipping
-			// zero-frequency symbols) until it does.
 			while (code >= new_high && j < f.length - 1)
 			{
 				j++;
@@ -2412,13 +1280,10 @@ public class ArithmeticMapper
 			low  = new_low;
 			high = new_high;
 
-			// Mirror the encoder's renormalization, sliding in new bits.
-			// The invariant low <= code < high is preserved at each step.
 			for (;;)
 			{
 				if (high <= HALF)
 				{
-					// E1 mirror
 					low  <<= 1;
 					high <<= 1;
 					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
@@ -2426,7 +1291,6 @@ public class ArithmeticMapper
 				}
 				else if (low >= HALF)
 				{
-					// E2 mirror
 					low  = (low  - HALF) << 1;
 					high = (high - HALF) << 1;
 					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
@@ -2434,7 +1298,6 @@ public class ArithmeticMapper
 				}
 				else if (low >= QTR && high <= TQTR)
 				{
-					// E3 mirror
 					low  = (low  - QTR) << 1;
 					high = (high - QTR) << 1;
 					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
@@ -2443,7 +1306,6 @@ public class ArithmeticMapper
 				else break;
 			}
 
-			// Adaptive update: must mirror the encoder exactly.
 			f[j]--;
 			m--;
 			for (int k = j + 1; k < s.length; k++) s[k]--;
@@ -2452,25 +1314,18 @@ public class ArithmeticMapper
 		return value;
 	}
 
-	// Write bit at position pos into buf (LSB-first within each byte).
 	private static void fastWriteBit(byte[] buf, int pos, int bit)
 	{
 		if (bit != 0)
 			buf[pos >> 3] |= (byte)(1 << (pos & 7));
 	}
 
-	// Read bit at position pos from buf, with data_byte_offset bytes of header.
 	private static int fastReadBit(byte[] buf, int data_byte_offset, int pos)
 	{
 		int abs = data_byte_offset * 8 + pos;
 		return (buf[abs >> 3] >> (abs & 7)) & 1;
 	}
 
-	/**
-	 * Binary search on cumulative-frequency table s[].
-	 * Returns the largest index j such that s[j] <= target.
-	 * s[] is non-decreasing (it is the cumulative sum of frequencies).
-	 */
 	private static int findFastSymbol(int[] s, int target)
 	{
 		int lo = 0, hi = s.length - 1;
@@ -2485,7 +1340,7 @@ public class ArithmeticMapper
 
 	// =========================================================================
 	// Cheap approximate-offset scorer for order-table search (hill climbing /
-	// annealing). New method — does not modify any existing encode/decode path.
+	// annealing). Does not modify any existing encode/decode path.
 	// =========================================================================
 
 	/**
@@ -2494,19 +1349,13 @@ public class ArithmeticMapper
 	 * remap like getIntervalValue(..., order), but instead of packing bits into
 	 * a byte stream for storage, captures the leading ~52 bits directly and
 	 * returns them as a double in [0, 1). Not intended for round-trip
-	 * encode/decode — only as a fast scorer during hill-climbing/annealing.
+	 * encode/decode -- only as a fast scorer during hill-climbing/annealing.
 	 *
 	 * Precision note: for any segment large enough to emit more than ~52 bits
 	 * total (true of essentially all real segments), the interval has already
 	 * collapsed well past double precision, so this agrees with the exact
 	 * BigInteger offset from getIntervalValue(src, frequency, order) to full
 	 * double precision.
-	 *
-	 * @param src        bytes to encode
-	 * @param frequency  frequency[i] = count of unsigned byte value i (256 entries)
-	 * @param order      symbol-to-rank order table, same shape as used by
-	 *                   getIntervalValue(src, frequency, order)
-	 * @return           approximate offset in [0, 1)
 	 */
 	public static double getApproxOffsetFastOrdered(byte[] src, int[] frequency, byte[] order)
 	{
@@ -2575,7 +1424,6 @@ public class ArithmeticMapper
 			for (int k = j + 1; k < s.length; k++) s[k]--;
 		}
 
-		// Flush, mirroring getIntervalValueFast's termination exactly.
 		pending++;
 		if (low < QTR)
 		{
@@ -2592,8 +1440,8 @@ public class ArithmeticMapper
 	}
 
 	/**
-	 * Keeps only the leading MAX_BITS bits appended to it — enough for full
-	 * double precision — and discards the rest. Used only by
+	 * Keeps only the leading MAX_BITS bits appended to it -- enough for full
+	 * double precision -- and discards the rest. Used only by
 	 * getApproxOffsetFastOrdered; not a general-purpose bit buffer.
 	 */
 	private static final class LeadingBits
@@ -2616,155 +1464,6 @@ public class ArithmeticMapper
 			return (count == 0) ? 0.0 : (double) accum / (double) (1L << count);
 		}
 	}
-
-
-	// =========================================================================
-	// Fenwick-tree accelerated slow arithmetic coder.
-	//
-	// Same exact BigInteger interval arithmetic as getIntervalValue /
-	// getArithmeticValues, but replaces the O(256) cumulative-frequency
-	// update loop with a Fenwick (Binary Indexed) tree giving O(log 256) = 8
-	// operations per symbol for both prefix-sum queries and updates.
-	// =========================================================================
-
-	private static int[] fenwickBuild(int[] frequency)
-	{
-		int[] bit = new int[257];
-		for (int i = 0; i < 256; i++)
-			if (frequency[i] > 0) fenwickUpdate(bit, i, frequency[i]);
-		return bit;
-	}
-
-	private static void fenwickUpdate(int[] bit, int i, int delta)
-	{
-		for (i += 1; i <= 256; i += i & -i) bit[i] += delta;
-	}
-
-	private static int fenwickQuery(int[] bit, int i)
-	{
-		int sum = 0;
-		for (i += 1; i > 0; i -= i & -i) sum += bit[i];
-		return sum;
-	}
-
-	// Find 0-indexed symbol j: prefix_sum[0..j-1] <= target < prefix_sum[0..j]
-	private static int fenwickFind(int[] bit, int target)
-	{
-		int pos = 0;
-		for (int b = 8; b >= 0; b--)
-		{
-			int nxt = pos + (1 << b);
-			if (nxt <= 256 && bit[nxt] <= target) { target -= bit[nxt]; pos = nxt; }
-		}
-		return pos;
-	}
-
-	/**
-	 * Encoder: same as getIntervalValue but O(log 256) adaptive updates via Fenwick tree.
-	 */
-	public static BigInteger[] getIntervalValueFenwick(byte[] src, int[] frequency)
-	{
-		int[] f = frequency.clone();
-		int   n = src.length;
-		int[] bit = fenwickBuild(f);
-		int   m = 0; for (int v : f) m += v;
-
-		BigInteger offN = BigInteger.ZERO, offD = BigInteger.ONE;
-		BigInteger rngN = BigInteger.ONE,  rngD = BigInteger.ONE;
-
-		for (int i = 0; i < n; i++)
-		{
-			int j = src[i]; if (j < 0) j += 256;
-			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-
-			// Reduce sj/m by integer GCD before BigInteger multiply
-			long ig = (sj > 0) ? gcd(sj, m) : 1;
-			BigInteger addN = rngN.multiply(BigInteger.valueOf(sj / ig));
-			BigInteger addD = rngD.multiply(BigInteger.valueOf(m  / ig));
-
-			offN = offN.multiply(addD).add(addN.multiply(offD));
-			offD = offD.multiply(addD);
-			BigInteger g = offN.gcd(offD);
-			if (g.compareTo(BigInteger.ONE) > 0) { offN = offN.divide(g); offD = offD.divide(g); }
-
-			// Reduce f[j]/m by integer GCD before BigInteger multiply
-			ig = gcd(f[j], m);
-			rngN = rngN.multiply(BigInteger.valueOf(f[j] / ig));
-			rngD = rngD.multiply(BigInteger.valueOf(m   / ig));
-			g = rngN.gcd(rngD);
-			if (g.compareTo(BigInteger.ONE) > 0) { rngN = rngN.divide(g); rngD = rngD.divide(g); }
-
-			fenwickUpdate(bit, j, -1);
-			f[j]--; m--;
-		}
-
-		if (!offD.equals(rngD))
-		{
-			offN = offN.multiply(rngD); rngN = rngN.multiply(offD);
-			BigInteger commonD = offD.multiply(rngD); offD = commonD; rngD = commonD;
-		}
-		BigInteger hiN = offN.add(rngN), hiD = offD;
-		return simplestFractionInInterval(offN, offD, hiN, hiD);
-	}
-
-	/**
-	 * Decoder: same as getArithmeticValues but O(log 256) symbol search and updates via Fenwick tree.
-	 */
-	public static byte[] getArithmeticValuesFenwick(BigInteger[] v, int[] frequency, int n)
-	{
-		int[] f = frequency.clone();
-		int[] bit = fenwickBuild(f);
-		int   m = 0; for (int fv : f) m += fv;
-
-		BigInteger[] offset = {BigInteger.ZERO, BigInteger.ONE};
-		BigInteger[] range  = {BigInteger.ONE,  BigInteger.ONE};
-		BigInteger[] w      = {v[0], v[1]};
-
-		byte[] value = new byte[n];
-
-		for (int i = 0; i < n; i++)
-		{
-			if (offset[0].compareTo(BigInteger.ZERO) != 0)
-			{
-				w[0] = v[0].multiply(offset[1]).subtract(offset[0].multiply(v[1]));
-				w[1] = v[1].multiply(offset[1]);
-				BigInteger g2 = w[0].gcd(w[1]);
-				if (g2.compareTo(BigInteger.ONE) > 0) { w[0]=w[0].divide(g2); w[1]=w[1].divide(g2); }
-			}
-
-			// Find symbol via Fenwick: target = floor(w[0] * range[1] * m / (w[1] * range[0]))
-			BigInteger scaled = w[0].multiply(range[1]).multiply(BigInteger.valueOf(m))
-			                        .divide(range[0].multiply(w[1]));
-			int target = (int) Math.min(Math.max(scaled.longValue(), 0L), (long)(m - 1));
-			int j = fenwickFind(bit, target);
-			while (j < 255 && f[j] == 0) j++;
-
-			value[i] = (byte) j;
-			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-
-			// Reduce sj/m by integer GCD before BigInteger multiply
-			long ig = (sj > 0) ? gcd(sj, m) : 1;
-			BigInteger addN = range[0].multiply(BigInteger.valueOf(sj / ig));
-			BigInteger addD = range[1].multiply(BigInteger.valueOf(m  / ig));
-			offset[0] = offset[0].multiply(addD).add(addN.multiply(offset[1]));
-			offset[1] = offset[1].multiply(addD);
-			BigInteger g = offset[0].gcd(offset[1]);
-			if (g.compareTo(BigInteger.ONE) > 0) { offset[0]=offset[0].divide(g); offset[1]=offset[1].divide(g); }
-
-			// Reduce f[j]/m by integer GCD before BigInteger multiply
-			ig = gcd(f[j], m);
-			range[0] = range[0].multiply(BigInteger.valueOf(f[j] / ig));
-			range[1] = range[1].multiply(BigInteger.valueOf(m   / ig));
-			g = range[0].gcd(range[1]);
-			if (g.compareTo(BigInteger.ONE) > 0) { range[0]=range[0].divide(g); range[1]=range[1].divide(g); }
-
-			fenwickUpdate(bit, j, -1);
-			f[j]--; m--;
-		}
-
-		return value;
-	}
-
 
 	// =========================================================================
 	// Fenwick-tree accelerated fast arithmetic coder.
@@ -2879,8 +1578,8 @@ public class ArithmeticMapper
 			long new_low  = low + (range * sj) / m;
 			long new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
 
-			// FIX: same boundary issue as getArithmeticValuesFast -- see that
-			// method's comment for the full explanation. Verify and nudge j
+			// Same boundary-nudge fix as getArithmeticValuesFast -- see that
+			// method's history for the full explanation. Verify and nudge j
 			// using Fenwick queries instead of direct array access.
 			while (code >= new_high && j < f.length - 1)
 			{
@@ -2928,5 +1627,4 @@ public class ArithmeticMapper
 
 		return value;
 	}
-
 }
