@@ -656,6 +656,16 @@ public class ArithmeticMapper
 	// =========================================================================
 	public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD, BigInteger hiN, BigInteger hiD)
 	{
+		// The interval is half-open [lo, hi): lo itself is always a valid,
+		// includable point (matching how off/off+rng are used everywhere
+		// in this codebase -- any point in [off, off+rng) decodes
+		// correctly, including off itself). The search below only looks
+		// STRICTLY inside (lo, hi), so it must be compared against lo
+		// itself (reduced to lowest terms) at the end -- without this, a
+		// lo that's already simple gets needlessly passed over in favor
+		// of a far more complex fraction found strictly between lo and hi.
+		BigInteger origLoN = loN, origLoD = loD;
+
 		ArrayList<BigInteger> floors = new ArrayList<BigInteger>();
 
 		BigInteger p, q;
@@ -697,7 +707,13 @@ public class ArithmeticMapper
 		}
 
 		BigInteger g = p.gcd(q);
-		return new BigInteger[]{ p.divide(g), q.divide(g) };
+		p = p.divide(g); q = q.divide(g);
+
+		BigInteger loG = origLoN.gcd(origLoD);
+		BigInteger loReducedN = origLoN.divide(loG), loReducedD = origLoD.divide(loG);
+		if (loReducedD.compareTo(q) <= 0)
+			return new BigInteger[]{ loReducedN, loReducedD };
+		return new BigInteger[]{ p, q };
 	}
 
 	private static BigInteger floorDiv(BigInteger n, BigInteger d)
