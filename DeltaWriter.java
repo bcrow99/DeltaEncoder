@@ -616,6 +616,35 @@ public class DeltaWriter
 		if(table.length<=max)for(int v:table)out.writeByte(v);else for(int v:table)out.writeShort(v);
 	}
 
+	// Formats a duration (from System.nanoTime() differences) with at most
+	// three whole digits and exactly three fraction digits, picking the
+	// smallest unit (ns/usecs/ms/secs/min) that still keeps the whole part
+	// under 1000 -- e.g. "543.210 usecs" rather than "0.543 ms". Guards
+	// against %.3f's own rounding pushing a borderline value (e.g.
+	// 999.9996 ms) over the 3-digit limit by bumping to the next unit up
+	// in that case.
+	private static String formatDuration(long nanos)
+	{
+		String[] units = { "ns", "usecs", "ms", "secs", "min" };
+		double[] divisors = { 1.0, 1e3, 1e6, 1e9, 60e9 };
+
+		int idx = units.length - 1;
+		for (int i = 0; i < units.length; i++)
+		{
+			double v = nanos / divisors[i];
+			if (v < 1000.0) { idx = i; break; }
+		}
+
+		double value = nanos / divisors[idx];
+		if (value >= 999.9995 && idx < units.length - 1)
+		{
+			idx++;
+			value = nanos / divisors[idx];
+		}
+
+		return String.format("%.3f %s", value, units[idx]);
+	}
+
 	// FIX (bugs #1 and #3): right-shifts channel by pixel_shift with
 	// rounding to nearest (adding half a quantization step before
 	// truncating, then clamping so the chosen quantization index can
@@ -942,6 +971,7 @@ public class DeltaWriter
 				out.writeByte(min_set_id);out.writeByte(delta_type);out.writeByte(compress_type);out.writeByte(entropy_type);out.writeByte(scanline5_variant);
 				if(entropy_type==0||entropy_type==1)
 				{
+					long entropy_nanos=0;
 					for(int i=0;i<3;i++)
 					{
 						int j=channel_id[i];
@@ -952,12 +982,15 @@ public class DeltaWriter
 						byte[] payload=getPayload(i);
 						if(entropy_type==0)
 						{
+							long t0=System.nanoTime();
 							Deflater def=new Deflater(Deflater.BEST_COMPRESSION);byte[] zipped=new byte[2*payload.length];
 							def.setInput(payload);def.finish();int zl=def.deflate(zipped);def.end();
+							entropy_nanos+=System.nanoTime()-t0;
 							out.writeInt(payload.length);out.writeInt(zl);out.write(zipped,0,zl);
 						}
 						else
 						{
+							long t0=System.nanoTime();
 							int[] pi=new int[payload.length];for(int k=0;k<payload.length;k++){pi[k]=payload[k];if(pi[k]<0)pi[k]+=256;}
 							ArrayList hl=StringMapper.getHistogram(pi);int pmin=(int)hl.get(0);int[] hist=(int[])hl.get(1);int[] rt=StringMapper.getRankTable(hist);
 							for(int k=0;k<pi.length;k++)pi[k]-=pmin;int n=hist.length;
@@ -965,11 +998,13 @@ public class DeltaWriter
 							int[] freq=new int[n];for(int k=0;k<n;k++)freq[k]=fl.get(k);
 							byte[] hl2=CodeMapper.getHuffmanLength2(freq);int[] hc=CodeMapper.getCanonicalCode(hl2);
 							ArrayList pl=CodeMapper.packCode(pi,rt,hc,hl2);byte[] pb=(byte[])pl.get(0);int bl=(int)pl.get(1);
+							entropy_nanos+=System.nanoTime()-t0;
 							writeTable(out,rt);out.writeInt(pmin);
 							ArrayList ltl=CodeMapper.packLengthTable(hl2);int ltn=(int)ltl.get(0);byte ltinit=(byte)ltl.get(1);byte ltmax=(byte)ltl.get(2);byte[] ltdelta=(byte[])ltl.get(3);
 							out.writeInt(ltn);out.writeByte(ltinit);out.writeByte(ltmax);out.writeByte(ltdelta.length);out.write(ltdelta,0,ltdelta.length);out.writeInt(bl);out.writeInt(pb.length);out.write(pb,0,pb.length);
 						}
 					}
+					System.out.println("Entropy coding ["+(entropy_type==0?"LZ77":"Huffman")+"] took "+formatDuration(entropy_nanos));
 				}
 				else if(entropy_type==2)
 				{
@@ -977,8 +1012,10 @@ public class DeltaWriter
 					for(int i=0;i<3;i++){payloads[i]=getPayload(i);int min_seg=500+pixel_segment*500;n_segs[i]=(pixel_segment>=10)?1:Math.max(1,payloads[i].length/min_seg);int seg_len=payloads[i].length/n_segs[i];int odd_len=seg_len+payloads[i].length%n_segs[i];segs[i]=new byte[n_segs[i]][];freqs[i]=new int[n_segs[i]][256];for(int m=0;m<n_segs[i];m++)segs[i][m]=new byte[m<n_segs[i]-1?seg_len:odd_len];int pos=0;for(int m=0;m<n_segs[i];m++)for(int nn=0;nn<segs[i][m].length;nn++){segs[i][m][nn]=payloads[i][pos];int p=payloads[i][pos];if(p<0)p+=256;freqs[i][m][p]++;pos++;}}
 					BigInteger[][][] offsets=new BigInteger[3][][];for(int i=0;i<3;i++)offsets[i]=new BigInteger[n_segs[i]][2];
 					Thread[][][] enc_threads=new Thread[3][][];
+					long slow_arithmetic_t0=System.nanoTime();
 					for(int i=0;i<3;i++){enc_threads[i]=new Thread[1][n_segs[i]];for(int m=0;m<n_segs[i];m++){final BigInteger[] so=offsets[i][m];final byte[] sd=segs[i][m];final int[] sf=freqs[i][m];enc_threads[i][0][m]=new Thread(()->{BigInteger[] r=ArithmeticMapper.getIntervalValue(sd,sf);so[0]=r[0];so[1]=r[1];});enc_threads[i][0][m].start();}}
 					for(int i=0;i<3;i++)for(Thread t:enc_threads[i][0])t.join();
+					System.out.println("Entropy coding [Slow Arithmetic] took "+formatDuration(System.nanoTime()-slow_arithmetic_t0));
 					int[] len_types=new int[3];byte[][] zip_freqs=new byte[3][];int[] zip_lens=new int[3];deflateFrequencies(n_segs,freqs,len_types,zip_freqs,zip_lens);
 					for(int i=0;i<3;i++){int j=channel_id[i];out.writeInt(channel_min[j]);out.writeInt(channel_init[j]);out.writeInt(channel_delta_min[j]);out.writeInt(channel_length[j]);out.writeInt(channel_compressed_length[j]);out.writeByte(channel_iterations[i]);if(delta_type>=6)writeMap(out,i);if(compress_type>0)writeTable(out,(int[])table_list.get(i));out.writeInt(n_segs[i]);out.writeInt(len_types[i]);out.writeInt(zip_lens[i]);out.write(zip_freqs[i],0,zip_lens[i]);for(int k=0;k<n_segs[i];k++){byte[] b0=offsets[i][k][0].toByteArray();out.writeInt(b0.length);out.write(b0,0,b0.length);byte[] b1=offsets[i][k][1].toByteArray();out.writeInt(b1.length);out.write(b1,0,b1.length);}}
 				}
@@ -988,8 +1025,10 @@ public class DeltaWriter
 					for(int i=0;i<3;i++){payloads[i]=getPayload(i);int min_seg=500+pixel_segment*500;n_segs[i]=(pixel_segment>=10)?1:Math.max(1,payloads[i].length/min_seg);int seg_len=payloads[i].length/n_segs[i];int odd_len=seg_len+payloads[i].length%n_segs[i];segs[i]=new byte[n_segs[i]][];freqs[i]=new int[n_segs[i]][256];for(int m=0;m<n_segs[i];m++)segs[i][m]=new byte[m<n_segs[i]-1?seg_len:odd_len];int pos=0;for(int m=0;m<n_segs[i];m++)for(int nn=0;nn<segs[i][m].length;nn++){segs[i][m][nn]=payloads[i][pos];int p=payloads[i][pos];if(p<0)p+=256;freqs[i][m][p]++;pos++;}}
 					byte[][][] fast_enc=new byte[3][][];for(int i=0;i<3;i++)fast_enc[i]=new byte[n_segs[i]][];
 					Thread[][][] fast_threads=new Thread[3][][];
+					long fast_arithmetic_t0=System.nanoTime();
 					for(int i=0;i<3;i++){fast_threads[i]=new Thread[1][n_segs[i]];for(int m=0;m<n_segs[i];m++){final byte[][] fe=fast_enc[i];final int fm=m;final byte[] sd=segs[i][m];final int[] sf=freqs[i][m];fast_threads[i][0][m]=new Thread(()->fe[fm]=ArithmeticMapper.getIntervalValueFast(sd,sf));fast_threads[i][0][m].start();}}
 					for(int i=0;i<3;i++)for(Thread t:fast_threads[i][0])t.join();
+					System.out.println("Entropy coding [Arithmetic] took "+formatDuration(System.nanoTime()-fast_arithmetic_t0));
 					int[] len_types=new int[3];byte[][] zip_freqs=new byte[3][];int[] zip_lens=new int[3];deflateFrequencies(n_segs,freqs,len_types,zip_freqs,zip_lens);
 					for(int i=0;i<3;i++){int j=channel_id[i];out.writeInt(channel_min[j]);out.writeInt(channel_init[j]);out.writeInt(channel_delta_min[j]);out.writeInt(channel_length[j]);out.writeInt(channel_compressed_length[j]);out.writeByte(channel_iterations[i]);if(delta_type>=6)writeMap(out,i);if(compress_type>0)writeTable(out,(int[])table_list.get(i));out.writeInt(n_segs[i]);out.writeInt(len_types[i]);out.writeInt(zip_lens[i]);out.write(zip_freqs[i],0,zip_lens[i]);for(int k=0;k<n_segs[i];k++){byte[] enc=fast_enc[i][k];out.writeInt(enc.length);out.write(enc,0,enc.length);}}
 				}
