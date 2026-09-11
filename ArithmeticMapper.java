@@ -37,6 +37,80 @@ import java.math.*;
  */
 public class ArithmeticMapper
 {
+	/**
+	 * Exact rational arithmetic, local to this file so ArithmeticMapper
+	 * doesn't depend on FractionMapper.java for now. A minimal copy of
+	 * BigFraction, carrying only what this file actually
+	 * uses (add/subtract/multiply/divide/compareTo/gt/le, plus the
+	 * ZERO/ONE constants and the parallelMultiply threshold logic) --
+	 * matching the "keep this file simple" preference this reorganization
+	 * is already following, rather than pulling in the full feature set
+	 * (negate/abs/isInfinite/equals/hashCode/lt/eq/toDouble) that this
+	 * file has no use for.
+	 */
+	public static final class BigFraction
+	{
+		public final BigInteger n, d; // invariant: d > 0, gcd(|n|,d) == 1 (or n==0, d==1)
+
+		public BigFraction(BigInteger numerator, BigInteger denominator)
+		{
+			if (numerator.signum() == 0 && denominator.signum() == 0)
+				throw new ArithmeticException("0/0 is an indeterminate form");
+
+			if (denominator.signum() < 0)
+			{
+				numerator   = numerator.negate();
+				denominator = denominator.negate();
+			}
+
+			if (numerator.signum() == 0)
+			{
+				denominator = BigInteger.ONE;
+			}
+			else
+			{
+				BigInteger divisor = denominator.gcd(numerator);
+				if (!divisor.equals(BigInteger.ONE))
+				{
+					numerator   = numerator.divide(divisor);
+					denominator = denominator.divide(divisor);
+				}
+			}
+
+			this.n = numerator;
+			this.d = denominator;
+		}
+
+		public static BigFraction of(long n, long d) { return new BigFraction(BigInteger.valueOf(n), BigInteger.valueOf(d)); }
+		public static final BigFraction ZERO = BigFraction.of(0, 1);
+		public static final BigFraction ONE  = BigFraction.of(1, 1);
+
+		// Threshold (in bits) above which we ask the JDK to attempt a
+		// parallelMultiply instead of a plain sequential multiply. Only
+		// benefits machines with more than one core; see FractionMapper's
+		// own copy of this same logic for the fuller discussion of why.
+		private static final int PARALLEL_MULTIPLY_THRESHOLD_BITS = 4000;
+
+		private static BigInteger smartMultiply(BigInteger a, BigInteger b)
+		{
+			if (a.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS && b.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS)
+				return a.parallelMultiply(b);
+			return a.multiply(b);
+		}
+
+		public BigFraction add(BigFraction fraction)      { return new BigFraction(smartMultiply(n, fraction.d).add(smartMultiply(fraction.n, d)), smartMultiply(d, fraction.d)); }
+		public BigFraction subtract(BigFraction fraction) { return new BigFraction(smartMultiply(n, fraction.d).subtract(smartMultiply(fraction.n, d)), smartMultiply(d, fraction.d)); }
+		public BigFraction multiply(BigFraction fraction) { return new BigFraction(smartMultiply(n, fraction.n), smartMultiply(d, fraction.d)); }
+		public BigFraction divide(BigFraction fraction)   { return new BigFraction(smartMultiply(n, fraction.d), smartMultiply(d, fraction.n)); }
+		public BigFraction multiply(long k)               { return new BigFraction(smartMultiply(n, BigInteger.valueOf(k)), d); }
+
+		public int compareTo(BigFraction fraction) { return smartMultiply(n, fraction.d).compareTo(smartMultiply(fraction.n, d)); }
+		public boolean le(BigFraction fraction) { return compareTo(fraction) <= 0; }
+		public boolean gt(BigFraction fraction) { return compareTo(fraction) > 0; }
+
+		@Override public String toString() { return n + "/" + d; }
+	}
+
 
 	// =========================================================================
 	// simplestFractionInInterval: UNCHANGED from the prior version. This
@@ -129,30 +203,30 @@ public class ArithmeticMapper
 		int m = 0;
 		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
 
-		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
-		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+		BigFraction off = BigFraction.ZERO;
+		BigFraction rng = BigFraction.ONE;
 
 		for (int i = 0; i < n; i++)
 		{
 			int j = src[i];
 			if (j < 0) j += 256;
 
-			off = off.add(rng.multiply(FractionMapper.BigFraction.of(s[j], m)));
-			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+			off = off.add(rng.multiply(BigFraction.of(s[j], m)));
+			rng = rng.multiply(BigFraction.of(f[j], m));
 
 			f[j]--;
 			m--;
 			for (int k = j + 1; k < s.length; k++) s[k]--;
 		}
 
-		FractionMapper.BigFraction hi = off.add(rng);
+		BigFraction hi = off.add(rng);
 		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
 	}
 
 	// This version uses a binary search to find the value that fits in the current interval.
 	public static byte[] getArithmeticValues(BigInteger[] v, int[] frequency, int n)
 	{
-		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
+		BigFraction target = new BigFraction(v[0], v[1]);
 		byte[] value = new byte[n];
 
 		ArrayList<ArrayList<Integer>> arithmetic_list = new ArrayList<>();
@@ -168,20 +242,20 @@ public class ArithmeticMapper
 			}
 		}
 
-		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
-		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+		BigFraction offset = BigFraction.ZERO;
+		BigFraction range = BigFraction.ONE;
 
 		for (int i = 0; i < n; i++)
 		{
-			FractionMapper.BigFraction w = target.subtract(offset);
+			BigFraction w = target.subtract(offset);
 
 			int j = arithmetic_list.size() / 2;
 			ArrayList<Integer> list = arithmetic_list.get(j);
 			int f = list.get(1);
 			int s = list.get(2);
 
-			FractionMapper.BigFraction a = range.multiply(FractionMapper.BigFraction.of(s, m));
-			FractionMapper.BigFraction c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+			BigFraction a = range.multiply(BigFraction.of(s, m));
+			BigFraction c = range.multiply(BigFraction.of(s + f, m));
 
 			if (a.gt(w))
 			{
@@ -191,11 +265,11 @@ public class ArithmeticMapper
 					j -= k;
 					list = arithmetic_list.get(j);
 					f = list.get(1); s = list.get(2);
-					a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					a = range.multiply(BigFraction.of(s, m));
 					k /= 2;
 					if (k == 0) k = 1;
 				}
-				c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+				c = range.multiply(BigFraction.of(s + f, m));
 				if (c.le(w))
 				{
 					while (c.le(w))
@@ -203,7 +277,7 @@ public class ArithmeticMapper
 						j++;
 						list = arithmetic_list.get(j);
 						f = list.get(1); s = list.get(2);
-						c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+						c = range.multiply(BigFraction.of(s + f, m));
 					}
 				}
 			}
@@ -216,11 +290,11 @@ public class ArithmeticMapper
 					j += k;
 					list = arithmetic_list.get(j);
 					f = list.get(1); s = list.get(2);
-					c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					c = range.multiply(BigFraction.of(s + f, m));
 					k /= 2;
 					if (k == 0) k = 1;
 				}
-				a = range.multiply(FractionMapper.BigFraction.of(s, m));
+				a = range.multiply(BigFraction.of(s, m));
 				if (a.gt(w))
 				{
 					while (a.gt(w))
@@ -228,13 +302,13 @@ public class ArithmeticMapper
 						j--;
 						list = arithmetic_list.get(j);
 						f = list.get(1); s = list.get(2);
-						a = range.multiply(FractionMapper.BigFraction.of(s, m));
+						a = range.multiply(BigFraction.of(s, m));
 					}
 				}
 			}
 
-			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(s, m)));
-			range = range.multiply(FractionMapper.BigFraction.of(f, m));
+			offset = offset.add(range.multiply(BigFraction.of(s, m)));
+			range = range.multiply(BigFraction.of(f, m));
 
 			for (int p = j + 1; p < arithmetic_list.size(); p++)
 			{
@@ -300,22 +374,22 @@ public class ArithmeticMapper
 		int[] bit = fenwickBuild(f);
 		int m = 0; for (int v : f) m += v;
 
-		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
-		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+		BigFraction off = BigFraction.ZERO;
+		BigFraction rng = BigFraction.ONE;
 
 		for (int i = 0; i < n; i++)
 		{
 			int j = src[i]; if (j < 0) j += 256;
 			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
 
-			off = off.add(rng.multiply(FractionMapper.BigFraction.of(sj, m)));
-			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+			off = off.add(rng.multiply(BigFraction.of(sj, m)));
+			rng = rng.multiply(BigFraction.of(f[j], m));
 
 			fenwickUpdate(bit, j, -1);
 			f[j]--; m--;
 		}
 
-		FractionMapper.BigFraction hi = off.add(rng);
+		BigFraction hi = off.add(rng);
 		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
 	}
 
@@ -326,19 +400,19 @@ public class ArithmeticMapper
 		int[] bit = fenwickBuild(f);
 		int m = 0; for (int fv : f) m += fv;
 
-		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
-		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
-		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+		BigFraction target = new BigFraction(v[0], v[1]);
+		BigFraction offset = BigFraction.ZERO;
+		BigFraction range = BigFraction.ONE;
 
 		byte[] value = new byte[n];
 
 		for (int i = 0; i < n; i++)
 		{
-			FractionMapper.BigFraction w = target.subtract(offset);
+			BigFraction w = target.subtract(offset);
 
 			// target = w / range, scaled by m -- find which symbol's
 			// cumulative range contains this position via Fenwick search
-			FractionMapper.BigFraction scaledFrac = w.divide(range).multiply(m);
+			BigFraction scaledFrac = w.divide(range).multiply(m);
 			long scaledLong = scaledFrac.n.divide(scaledFrac.d).longValue();
 			int targetIdx = (int) Math.min(Math.max(scaledLong, 0L), (long) (m - 1));
 			int j = fenwickFind(bit, targetIdx);
@@ -347,8 +421,8 @@ public class ArithmeticMapper
 			value[i] = (byte) j;
 			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
 
-			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(sj, m)));
-			range = range.multiply(FractionMapper.BigFraction.of(f[j], m));
+			offset = offset.add(range.multiply(BigFraction.of(sj, m)));
+			range = range.multiply(BigFraction.of(f[j], m));
 
 			fenwickUpdate(bit, j, -1);
 			f[j]--; m--;
