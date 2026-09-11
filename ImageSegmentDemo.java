@@ -22,10 +22,10 @@ public class ImageSegmentDemo
 		System.out.println("Distinct values in this segment: " + seg.rankToValue.length);
 		System.out.println("Raw pixel values (first 20): " + Arrays.toString(Arrays.copyOf(seg.rawValues, Math.min(20, seg.rawValues.length))));
 
-		List<SteeredArithmeticMapper.Frac> candidates = new ArrayList<>();
+		List<FractionMapper.BigFraction> candidates = new ArrayList<>();
 		int[] numer = {1, 3, 1, 2, 1, 3, 2, 3, 4, 1};
 		int[] denom = {20, 20, 5, 5, 2, 5, 3, 4, 5, 4};
-		for (int k = 0; k < numer.length; k++) candidates.add(SteeredArithmeticMapper.Frac.of(numer[k], denom[k]));
+		for (int k = 0; k < numer.length; k++) candidates.add(FractionMapper.BigFraction.of(numer[k], denom[k]));
 
 		System.out.println("\nCompressing (racing " + candidates.size() + " candidate targets across up to "
 			+ Math.min(maxThreads, candidates.size()) + " threads, budget " + budgetSeconds + "s)...");
