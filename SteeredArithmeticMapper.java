@@ -102,8 +102,13 @@ public class SteeredArithmeticMapper
 		// Candidate values for s_j: the achievable sums (of some subset of
 		// other_symbol's remaining counts) that place the target's current
 		// position (the residual) inside the resulting interval for `symbol`.
-		// Order is determined by whichever search constructed this object --
-		// see getCandidate/getCandidateCheapBiased for their specific policies.
+		// Ordered by encoding cost, cheapest first: for each candidate, the
+		// number of other_symbol values it implies come before `symbol` is
+		// reconstructed, and candidates are ranked by log2(C(k-1, that count))
+		// -- smallest when that count is near 0 or near k-1, largest near
+		// the midpoint. This favors choices that are cheap to store later
+		// (a near-empty or near-full "before" group needs few bits to
+		// specify), not any property of where the resulting interval sits.
 		final int[] sum;
 
 		Candidate(int symbol, int[] sum, int[] other_symbol)
@@ -112,49 +117,6 @@ public class SteeredArithmeticMapper
 			this.sum          = sum;
 			this.other_symbol = other_symbol;
 		}
-	}
-
-	private static Candidate getCandidate(int realSymbol, int[] f, int m, FractionMapper.BigFraction residual)
-	{
-		ArrayList<Integer> otherList = new ArrayList<>();
-		for (int s = 0; s < f.length; s++)
-			if (f[s] > 0 && s != realSymbol) otherList.add(s);
-		int[] otherSyms = new int[otherList.size()];
-		int[] otherCounts = new int[otherList.size()];
-		for (int i = 0; i < otherSyms.length; i++) { otherSyms[i] = otherList.get(i); otherCounts[i] = f[otherList.get(i)]; }
-
-		BitSet sums = possibleSubsetSum(otherCounts);
-		int fJ = f[realSymbol];
-		// required range for s_j: residual*m - f_j < s_j <= residual*m
-		FractionMapper.BigFraction targetPos = residual.multiply(m);
-		// s_j must be an integer in (targetPos - f_j, targetPos]; scan the
-		// achievable-sum bitset over the (small) integer window that could
-		// possibly satisfy this, rather than every reachable sum overall.
-		BigInteger tpFloorBI = targetPos.n.divide(targetPos.d); // floor-ish; refine with exact compare below
-		int hi = tpFloorBI.intValue() + 1;
-		int lo = hi - fJ - 1;
-		ArrayList<Integer> cand = new ArrayList<>();
-		for (int s = Math.max(0, lo); s <= hi && s <= sums.length(); s++)
-		{
-			if (!sums.get(s)) continue;
-			FractionMapper.BigFraction sFrac = FractionMapper.BigFraction.of(s, 1);
-			// condition: targetPos - f_j < s <= targetPos
-			if (sFrac.gt(targetPos.subtract(FractionMapper.BigFraction.of(fJ, 1))) && sFrac.le(targetPos))
-				cand.add(s);
-		}
-		// order by closeness of resulting position-within-slice to center (1/2)
-		cand.sort((a, b) -> {
-			FractionMapper.BigFraction loA = FractionMapper.BigFraction.of(a, m), hiA = FractionMapper.BigFraction.of(a + fJ, m);
-			FractionMapper.BigFraction posA = residual.subtract(loA).divide(hiA.subtract(loA));
-			FractionMapper.BigFraction scoreA = posA.subtract(FractionMapper.BigFraction.HALF).abs();
-			FractionMapper.BigFraction loB = FractionMapper.BigFraction.of(b, m), hiB = FractionMapper.BigFraction.of(b + fJ, m);
-			FractionMapper.BigFraction posB = residual.subtract(loB).divide(hiB.subtract(loB));
-			FractionMapper.BigFraction scoreB = posB.subtract(FractionMapper.BigFraction.HALF).abs();
-			return scoreA.compareTo(scoreB);
-		});
-		int[] values = new int[cand.size()];
-		for (int i = 0; i < values.length; i++) values[i] = cand.get(i);
-		return new Candidate(realSymbol, values, otherSyms);
 	}
 
 	/** Reconstructs one concrete ordering (permutation) consistent with a
@@ -220,73 +182,6 @@ public class SteeredArithmeticMapper
 		{ this.orderings = orderings; this.off = off; this.rng = rng; this.backtracks = backtracks; }
 	}
 
-	/** Backtracking search: finds a sequence of per-step orderings steering
-	 *  the final interval to contain `target` exactly. Returns null if no
-	 *  path is found within maxBacktracks or deadlineNanos (whichever
-	 *  comes first) -- callers running several attempts in parallel should
-	 *  treat null as "this attempt didn't succeed in budget," not
-	 *  necessarily "impossible." */
-	public static SteerResult steerEncode(int[] src, int[] freq, FractionMapper.BigFraction target, long maxBacktracks, long deadlineNanos)
-	{
-		int n = src.length;
-		int[][] orderings = new int[n][];
-
-		// explicit stack frames
-		final class Frame
-		{
-			int[] f; int m; FractionMapper.BigFraction off, rng, residual; Candidate cand; int idx;
-			Frame(int[] f, int m, FractionMapper.BigFraction off, FractionMapper.BigFraction rng, FractionMapper.BigFraction residual, Candidate cand)
-			{ this.f=f; this.m=m; this.off=off; this.rng=rng; this.residual=residual; this.cand=cand; this.idx=0; }
-		}
-
-		ArrayDeque<Frame> stack = new ArrayDeque<>();
-		int[] f0 = Arrays.copyOf(freq, freq.length);
-		int m0 = 0; for (int c : f0) m0 += c;
-		int i = 0;
-		Candidate cand0 = getCandidate(src[0], f0, m0, target);
-		stack.push(new Frame(f0, m0, FractionMapper.BigFraction.ZERO, FractionMapper.BigFraction.ONE, target, cand0));
-		long backtracks = 0;
-
-		while (true)
-		{
-			if (i == n)
-			{
-				Frame last = null; // shouldn't reach here with empty handling below
-				break;
-			}
-			if (stack.isEmpty() || backtracks > maxBacktracks || System.nanoTime() > deadlineNanos)
-				return null;
-
-			Frame top = stack.peek();
-			if (top.idx >= top.cand.sum.length)
-			{
-				stack.pop();
-				i--;
-				backtracks++;
-				if (stack.isEmpty()) return null;
-				continue;
-			}
-
-			int sJ = top.cand.sum[top.idx];
-			top.idx++;
-			int j = src[i];
-			int fJ = top.f[j];
-			orderings[i] = orderingForChoice(j, top.cand.other_symbol, top.f, sJ);
-
-			FractionMapper.BigFraction newOff = top.off.add(top.rng.multiply(FractionMapper.BigFraction.of(sJ, top.m)));
-			FractionMapper.BigFraction newRng = top.rng.multiply(FractionMapper.BigFraction.of(fJ, top.m));
-			FractionMapper.BigFraction lo = FractionMapper.BigFraction.of(sJ, top.m), hi = FractionMapper.BigFraction.of(sJ + fJ, top.m);
-			FractionMapper.BigFraction newResidual = top.residual.subtract(lo).divide(hi.subtract(lo));
-			int[] f2 = Arrays.copyOf(top.f, top.f.length);
-			f2[j]--;
-			i++;
-			if (i == n) return new SteerResult(orderings, newOff, newRng, backtracks);
-			Candidate newCand = getCandidate(src[i], f2, top.m - 1, newResidual);
-			stack.push(new Frame(f2, top.m - 1, newOff, newRng, newResidual, newCand));
-		}
-		return null; // unreachable
-	}
-
 	/** Cheap, direct replay decode -- no search needed, since the stored
 	 *  orderings fully determine which symbol's slice the (already-known)
 	 *  target falls into at each step. */
@@ -333,14 +228,15 @@ public class SteeredArithmeticMapper
 	}
 
 	// =========================================================================
-	// CHEAP-BIASED SEARCH (added; original getCandidate/steerEncode above
-	// are left untouched). Same backtracking mechanics as steerEncode, but
-	// candidates are tried in order of CHEAPEST-TO-ENCODE first (before-
-	// group size closest to 0 or k-1, where log2(C(k-1,pos)) is smallest)
-	// instead of "closest to centered". Verified on real test data to be
-	// BOTH cheaper AND more reliable (fewer backtracks) than the original
-	// centering heuristic, consistently across multiple random seeds --
-	// not a tradeoff, a straightforward improvement.
+	// Candidate search: tries s_j values in order of CHEAPEST-TO-ENCODE
+	// first (before-group size closest to 0 or k-1, where
+	// log2(C(k-1,pos)) is smallest), rather than "closest to centered"
+	// within the resulting slice. An earlier centering-based heuristic
+	// was tried and measured directly against this one across multiple
+	// random seeds and segment sizes: this cost-based ordering was BOTH
+	// cheaper AND more reliable (fewer backtracks) every time, never a
+	// tradeoff either way, so the centering version was removed rather
+	// than kept as an alternative.
 	// =========================================================================
 	private static double log2(double x) { return Math.log(x) / Math.log(2); }
 	private static double log2Factorial(int n) { double b = 0; for (int k = 2; k <= n; k++) b += log2(k); return b; }
@@ -379,7 +275,7 @@ public class SteeredArithmeticMapper
 		return count;
 	}
 
-	private static Candidate getCandidateCheapBiased(int realSymbol, int[] f, long m, FractionMapper.BigFraction residual)
+	private static Candidate getCandidate(int realSymbol, int[] f, long m, FractionMapper.BigFraction residual)
 	{
 		ArrayList<Integer> otherList = new ArrayList<>();
 		for (int s = 0; s < f.length; s++) if (f[s] > 0 && s != realSymbol) otherList.add(s);
@@ -411,9 +307,13 @@ public class SteeredArithmeticMapper
 		return new Candidate(realSymbol, values, otherSyms);
 	}
 
-	/** Cheap-biased variant of steerEncode. Same signature and same
-	 *  backtracking structure; only the candidate ordering differs. */
-	public static SteerResult steerEncodeCheapBiased(int[] src, int[] freq, FractionMapper.BigFraction target, long maxBacktracks, long deadlineNanos)
+	/** Backtracking search: finds a sequence of per-step orderings steering
+	 *  the final interval to contain `target` exactly. Returns null if no
+	 *  path is found within maxBacktracks or deadlineNanos (whichever
+	 *  comes first) -- callers running several attempts in parallel should
+	 *  treat null as "this attempt didn't succeed in budget," not
+	 *  necessarily "impossible." */
+	public static SteerResult steerEncode(int[] src, int[] freq, FractionMapper.BigFraction target, long maxBacktracks, long deadlineNanos)
 	{
 		int n = src.length;
 		int[][] orderings = new int[n][];
@@ -429,7 +329,7 @@ public class SteeredArithmeticMapper
 		int[] f0 = Arrays.copyOf(freq, freq.length);
 		int m0 = 0; for (int c : f0) m0 += c;
 		int i = 0;
-		Candidate cand0 = getCandidateCheapBiased(src[0], f0, m0, target);
+		Candidate cand0 = getCandidate(src[0], f0, m0, target);
 		stack.push(new Frame(f0, m0, FractionMapper.BigFraction.ZERO, FractionMapper.BigFraction.ONE, target, cand0));
 		long backtracks = 0;
 
@@ -463,7 +363,7 @@ public class SteeredArithmeticMapper
 			f2[j]--;
 			i++;
 			if (i == n) return new SteerResult(orderings, newOff, newRng, backtracks);
-			Candidate newCand = getCandidateCheapBiased(src[i], f2, top.m - 1, newResidual);
+			Candidate newCand = getCandidate(src[i], f2, top.m - 1, newResidual);
 			stack.push(new Frame(f2, top.m - 1, newOff, newRng, newResidual, newCand));
 		}
 		return new SteerResult(orderings, FractionMapper.BigFraction.ZERO, FractionMapper.BigFraction.ONE, backtracks);
@@ -736,8 +636,7 @@ public class SteeredArithmeticMapper
 		}
 	}
 
-	/** Compresses orderings (from steerEncode OR steerEncodeCheapBiased --
-	 *  both produce the same int[][] shape) plus the original data into a
+	/** Compresses orderings (from steerEncode) plus the original data into a
 	 *  compact Compressed object. */
 	public static Compressed compress(int[][] orderings, int[] src, int[] freq)
 	{

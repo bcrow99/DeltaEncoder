@@ -67,7 +67,7 @@ public class SegmentSteerDemo
 		{
 			futures.add(pool.submit(() -> {
 				SteeredArithmeticMapper.SteerResult r =
-					SteeredArithmeticMapper.steerEncodeCheapBiased(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
+					SteeredArithmeticMapper.steerEncode(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
 				return new Object[]{ target, r };
 			}));
 		}
