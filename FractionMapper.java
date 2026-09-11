@@ -61,11 +61,35 @@ public class FractionMapper
 		public static final BigFraction ONE  = BigFraction.of(1, 1);
 		public static final BigFraction HALF = BigFraction.of(1, 2);
 
-		public BigFraction add(BigFraction fraction)      { return new BigFraction(n.multiply(fraction.d).add(fraction.n.multiply(d)), d.multiply(fraction.d)); }
-		public BigFraction subtract(BigFraction fraction) { return new BigFraction(n.multiply(fraction.d).subtract(fraction.n.multiply(d)), d.multiply(fraction.d)); }
-		public BigFraction multiply(BigFraction fraction) { return new BigFraction(n.multiply(fraction.n), d.multiply(fraction.d)); }
-		public BigFraction divide(BigFraction fraction)   { return new BigFraction(n.multiply(fraction.d), d.multiply(fraction.n)); }
-		public BigFraction multiply(long k)               { return new BigFraction(n.multiply(BigInteger.valueOf(k)), d); }
+		// Threshold (in bits) above which we ask the JDK to attempt a
+		// parallelMultiply instead of a plain sequential multiply.
+		// parallelMultiply itself already has its own internal fallback
+		// to plain multiply for small operands (see its javadoc: "For
+		// smaller integers parallelMultiply computes the result in the
+		// calling thread as if by calling multiply") -- this is a
+		// coarser, cheaper pre-check in front of that, so clearly-small
+		// operands (the overwhelming majority of calls in this codebase)
+		// skip even the cost of asking parallelMultiply to make that
+		// determination itself. Only benefits machines with more than
+		// one core -- on a single-core machine parallelMultiply has
+		// nothing to parallelize onto and this threshold is moot. The
+		// right value is hardware- and workload-dependent; this default
+		// is a starting point, not a measured optimum -- tune it against
+		// real multi-core hardware if this path matters for performance.
+		private static final int PARALLEL_MULTIPLY_THRESHOLD_BITS = 4000;
+
+		private static BigInteger smartMultiply(BigInteger a, BigInteger b)
+		{
+			if (a.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS && b.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS)
+				return a.parallelMultiply(b);
+			return a.multiply(b);
+		}
+
+		public BigFraction add(BigFraction fraction)      { return new BigFraction(smartMultiply(n, fraction.d).add(smartMultiply(fraction.n, d)), smartMultiply(d, fraction.d)); }
+		public BigFraction subtract(BigFraction fraction) { return new BigFraction(smartMultiply(n, fraction.d).subtract(smartMultiply(fraction.n, d)), smartMultiply(d, fraction.d)); }
+		public BigFraction multiply(BigFraction fraction) { return new BigFraction(smartMultiply(n, fraction.n), smartMultiply(d, fraction.d)); }
+		public BigFraction divide(BigFraction fraction)   { return new BigFraction(smartMultiply(n, fraction.d), smartMultiply(d, fraction.n)); }
+		public BigFraction multiply(long k)               { return new BigFraction(smartMultiply(n, BigInteger.valueOf(k)), d); }
 		public BigFraction negate()                       { return new BigFraction(n.negate(), d); }
 		public BigFraction abs()                          { return n.signum() < 0 ? negate() : this; }
 
@@ -87,7 +111,7 @@ public class FractionMapper
 				if (thisInfinite) return n.signum();          // +infinity > any finite, -infinity < any finite
 				return -fraction.n.signum();
 			}
-			return n.multiply(fraction.d).compareTo(fraction.n.multiply(d));
+			return smartMultiply(n, fraction.d).compareTo(smartMultiply(fraction.n, d));
 		}
 
 		public boolean lt(BigFraction fraction) { return compareTo(fraction) < 0; }
