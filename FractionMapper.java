@@ -1,769 +1,357 @@
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.BitSet;
 
-// verson 1.0
-
+/**
+ * Exact rational arithmetic (BigFraction) plus conversion to and from
+ * repeating-decimal digit strings.
+ */
 public class FractionMapper
 {
-	public static boolean isProbablePrime(int n)
+	public static final class BigFraction implements Comparable<BigFraction>
 	{
-		return BigInteger.valueOf(n).isProbablePrime(100);
-	}
-	
-	public static boolean isProbablePrime(long n)
-	{
-		return BigInteger.valueOf(n).isProbablePrime(100);
-	}
-	
-	public static ArrayList <Integer> getPrimeFactors(int n)
-	{
-	    ArrayList <Integer> factors = new ArrayList <Integer> ();
-	    
-	    if(n == 1)
-	    	    return factors;
-	    else if(isProbablePrime(n))
-	    {
-	    	    factors.add(n);
-	    	    return factors;
-	    }
-	    else
-	    {
-	        int divisor = 2;
-	    
-	        while(n % divisor == 0)
-	        {
-	    	        factors.add(divisor);
-	    	        n /= divisor;
-	        }
-	  
-	        divisor = 3;
-	        while(divisor * divisor <= n) 
-	        {
-                if(n % divisor == 0) 
-                {
-                    factors.add(divisor);
-                    n /= divisor;
-                } 
-                else 
-                {
-                    divisor += 2;
-                }
-            }
-	    
-            if (n > 1) 
-                factors.add(n);
-            
-            return factors;
-        }
-	}
-	
-	public static ArrayList <Long> getPrimeFactors(long n)
-	{
-	    ArrayList <Long> factors = new ArrayList<Long>();
-	    if(n == 1)
-	    	    return factors;
-	    else if(isProbablePrime(n))
-	    {
-	    	    factors.add(n);
-	    	    return factors;
-	    }
-	    else
-	    {
-	        long divisor = 2;
-	    
-	        while(n % divisor == 0)
-	        {
-	    	        factors.add(divisor);
-	    	        n /= divisor;
-	        }
-	    
-	        divisor = 3;
-	        while(divisor * divisor <= n) 
-	        {
-                if(n % divisor == 0) 
-                {
-                    factors.add(divisor);
-                    n /= divisor;
-                } 
-                else 
-                    divisor += 2;
-            }
-        
-	        if (n > 1) 
-                factors.add(n);
-        
-	        return factors;
-	    }
-	}
-	
-	public static ArrayList <BigInteger> getPrimeFactors(BigInteger n)
-	{
-	    ArrayList <BigInteger> factors = new ArrayList<BigInteger>();
-	    
-	    if(n.equals(BigInteger.ONE))
-	    	    return factors;
-	    else if(n.isProbablePrime(100))
-	    {
-	    	    factors.add(n);
-	    	    return factors;
-	    }
-	    else
-	    {
-	        BigInteger divisor = BigInteger.TWO;
-	        while(n.mod(divisor).equals(BigInteger.ZERO))
-	        {
-	    	        factors.add(divisor);
-                n = n.divide(divisor);    
-	        }
-	    
-	        divisor = BigInteger.valueOf(3);
-	        while(divisor.multiply(divisor).compareTo(n) <= 0) 
-	        {
-                if(n.mod(divisor).equals(BigInteger.ZERO)) 
-                {
-                    factors.add(divisor);
-                    n = n.divide(divisor);
-                } 
-                else 
-                    divisor = divisor.nextProbablePrime();
-            }
-	    
-            if(n.compareTo(BigInteger.ONE) == 1) 
-                factors.add(n);
-	    
-	        return factors;
-	    }
-	}
-	
-	public static ArrayList <BigInteger> getPrimes(BigInteger limit)
-	{
-		ArrayList <BigInteger> primes = new ArrayList <BigInteger> ();
-		
-		BigInteger prime = BigInteger.TWO;
-		while(prime.compareTo(limit) == -1)
+		public final BigInteger n, d; // invariant: d > 0, gcd(|n|,d) == 1 (or n==0, d==1)
+
+		public BigFraction(BigInteger numerator, BigInteger denominator)
 		{
-			primes.add(prime);
-			BigInteger next_prime = prime.nextProbablePrime();
-			prime = next_prime;
-		}
-		
-		return primes;
-	}
-	
-	public static ArrayList <BigInteger> getPrimes(BigInteger init, BigInteger limit)
-	{
-		ArrayList <BigInteger> primes = new ArrayList <BigInteger> ();
-		
-		BigInteger prime = init;
-		while(prime.compareTo(limit) == -1)
-		{
-			primes.add(prime);
-			BigInteger next_prime = prime.nextProbablePrime();
-			prime = next_prime;
-		}
-		
-		return primes;
-	}
-	
-	// Requires a < b.
-	public static int gcd(int a, int b) 
-	{
-		if (b == 0) 
-			return a;
-		return gcd(b, a % b);
-	}
-	
-	public static long gcd(long a, long b) 
-	{
-		if (b == 0) 
-			return a;
-		return gcd(b, a % b);
-	}
-		
-    public static int [] getDigits(long a, long b)
-	{
-		ArrayList <Long> prime_factors = getPrimeFactors(b);
-		
-		long gcd = gcd(a, b);
-		if(gcd > 1)
-			b /= gcd;
-		
-		int c = 0;
-		
-		long q = 1;
-		for(int i = 0; i < prime_factors.size(); i++)
-		{
-			long factor = prime_factors.get(i);
-			if(factor == 2 || factor == 5)
-				c++;
-			else
-				q *= factor;
-		}
-		
-		int        d = 1;
-		BigInteger k = BigInteger.TEN;
-		BigInteger m = BigInteger.valueOf(q);
-		
-		while(k.compareTo(m) == -1)
-		{
-			d++;
-			k = k.multiply(BigInteger.TEN);
-		}
-		k = k.subtract(BigInteger.ONE);
-		
-		while(k.mod(m).compareTo(BigInteger.ZERO) != 0)
-		{
-			d++;
-			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
-		}
-		
-		int [] digits = {c, d};
-		return digits;
-	}
-	
-	public static int [] getDigits(BigInteger a, BigInteger b)
-	{
-		BigInteger gcd = a.gcd(b);
-		
-		if(gcd.compareTo(BigInteger.ONE) == 1)	
-		    b = b.divide(gcd);
-		
-		ArrayList <BigInteger> prime_factors = getPrimeFactors(b);
-		
-		int c = 0;
-		
-		int two_multiple = 0;
-		int five_multiple = 0;
-		BigInteger q = BigInteger.ONE;
-		for(int i = 0; i < prime_factors.size(); i++)
-		{
-			BigInteger factor = prime_factors.get(i);
-			
-			if(factor.compareTo(BigInteger.TWO) == 0)
-				two_multiple++;
-			else if(factor.compareTo(BigInteger.valueOf(5)) == 0)
-				five_multiple++;
-			else
-				q = q.multiply(factor);
-		}
-		
-		if(two_multiple > five_multiple)
-			c = two_multiple;
-		else
-			c = five_multiple;
-		
-		int        d = 1;
-		BigInteger k = BigInteger.TEN;
-		
-		
-		while(k.compareTo(q) < 1)
-		{
-			d++;
-			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
-		}
-		
-		while(k.mod(q).compareTo(BigInteger.ZERO) != 0)
-		{
-			d++;
-			k = BigInteger.TEN.pow(d).subtract(BigInteger.ONE);
-		}
-		
-		int [] digits = {c, d};
-		return digits;
-	}
-	
-	public static ArrayList long_divide(BigInteger a, BigInteger b)
-	{
-		ArrayList result = new ArrayList();	
-		
-		StringBuffer fraction = new StringBuffer();
-		fraction.append('0');
-		fraction.append('.');
-		
-		ArrayList <BigInteger> quotient_list = new ArrayList <BigInteger>();
-		ArrayList <BigInteger> remainder_list = new ArrayList <BigInteger>();
-		
-		quotient_list.add(BigInteger.ZERO);
-		remainder_list.add(a);
-		
-		a = a.multiply(BigInteger.TEN);
-		while(a.compareTo(b) == -1)
-		{
-			fraction.append('0');
-			quotient_list.add(BigInteger.ZERO);
-			remainder_list.add(a);
-			a = a.multiply(BigInteger.TEN);	
-		}
-		
-		BigInteger c = a.divide(b);
-		BigInteger d = a.mod(b);
-		String c_string = String.valueOf(c);
-		fraction.append(c_string);
-		
-		if(d.compareTo(BigInteger.ZERO) == 0)
-		{
-			int number_of_start_digits     = c_string.length();
-			int number_of_repeating_digits = 0;
-			
-			result.add(fraction.toString());
-			result.add(number_of_start_digits);
-			result.add(number_of_repeating_digits);
-			return result;	
-		}
-		
-		if(remainder_list.contains(d))
-		{
-		    int index            = remainder_list.indexOf(d);	
-		    int number_of_digits = fraction.length() - 2;
-		    
-		    if(!quotient_list.contains(c))
-		    {
-		    	    int number_of_start_digits = index; 
-		    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-		    	    result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
-		    else
-		    {
-		    	    int number_of_repeating_digits = number_of_digits - index;
-				int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
-		}
-		
-		quotient_list.add(c);
-		remainder_list.add(d);
-		
-		while(d.compareTo(BigInteger.ZERO) != 0)
-		{
-			a = d.multiply(BigInteger.TEN);
-			c = a.divide(b);
-			d = a.mod(b);
-			
-			c_string = String.valueOf(c);
-			fraction.append(c_string);
-			
-			if(d.compareTo(BigInteger.ZERO) == 0)
+			// 0/0 is indeterminate, not just "zero with an unusual
+			// denominator" -- and this single check also catches
+			// infinity-infinity, 0*infinity, and infinity/infinity for
+			// free, since add/subtract/multiply/divide all reduce those
+			// three forms to this exact same raw (0,0) pair before this
+			// constructor ever sees it (verified directly: e.g.
+			// (1/0).subtract(1/0) computes n = 1*0 - 1*0 = 0, d = 0*0 = 0).
+			if (numerator.signum() == 0 && denominator.signum() == 0)
+				throw new ArithmeticException("0/0 is an indeterminate form");
+
+			if (denominator.signum() < 0)
 			{
-				int number_of_start_digits = fraction.length() - 2;
-				int number_of_repeating_digits = 0;
-				
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;
+				// This moves the negative sign to the numerator if the numerator was positive,
+				// and makes it a simple positive fraction if the numerator was negative.
+				numerator   = numerator.negate();
+				denominator = denominator.negate();
 			}
-			if(remainder_list.contains(d))
+
+			if (numerator.signum() == 0)
 			{
-			    int index            = remainder_list.indexOf(d);	
-			    int number_of_digits = fraction.length() - 2;
-			    
-			    if(!quotient_list.contains(c))
-			    {
-			    	    int number_of_start_digits = index; 
-			    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-			    	    result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
-			    else
-			    {
-			    	    int number_of_repeating_digits = number_of_digits - index;
-					int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-					result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
+				// No matter what denominator was passed to the constructor,
+				// we turn it into a one if the numerator was zero.
+				denominator = BigInteger.ONE;
 			}
-			quotient_list.add(c);
-			remainder_list.add(d);	
+			else
+			{
+				// gcd() is order-independent regardless of which argument
+				// is bigger, so this works whether or not this is a
+				// "proper" fraction (numerator < denominator).
+				BigInteger divisor = denominator.gcd(numerator);
+				if (!divisor.equals(BigInteger.ONE))
+				{
+					numerator   = numerator.divide(divisor);
+					denominator = denominator.divide(divisor);
+				}
+			}
+
+			this.n = numerator;
+			this.d = denominator;
 		}
-		
-		return result;
+
+		public static BigFraction of(long n, long d) { return new BigFraction(BigInteger.valueOf(n), BigInteger.valueOf(d)); }
+		public static final BigFraction ZERO = BigFraction.of(0, 1);
+		public static final BigFraction ONE  = BigFraction.of(1, 1);
+		public static final BigFraction HALF = BigFraction.of(1, 2);
+
+		public BigFraction add(BigFraction fraction)      { return new BigFraction(n.multiply(fraction.d).add(fraction.n.multiply(d)), d.multiply(fraction.d)); }
+		public BigFraction subtract(BigFraction fraction) { return new BigFraction(n.multiply(fraction.d).subtract(fraction.n.multiply(d)), d.multiply(fraction.d)); }
+		public BigFraction multiply(BigFraction fraction) { return new BigFraction(n.multiply(fraction.n), d.multiply(fraction.d)); }
+		public BigFraction divide(BigFraction fraction)   { return new BigFraction(n.multiply(fraction.d), d.multiply(fraction.n)); }
+		public BigFraction multiply(long k)               { return new BigFraction(n.multiply(BigInteger.valueOf(k)), d); }
+		public BigFraction negate()                       { return new BigFraction(n.negate(), d); }
+		public BigFraction abs()                          { return n.signum() < 0 ? negate() : this; }
+
+		/** True for both +infinity (1/0) and -infinity (-1/0). */
+		public boolean isInfinite() { return d.signum() == 0; }
+
+		@Override
+		public int compareTo(BigFraction fraction)
+		{
+			// Plain cross-multiplication (n*fraction.d vs fraction.n*d) breaks
+			// once either side is infinite, since anything times a zero
+			// denominator is 0 -- e.g. comparing 1/0 to -1/0 would compute
+			// 1*0=0 vs -1*0=0 and wrongly call them equal. Handle infinite
+			// operands explicitly first.
+			boolean thisInfinite = isInfinite(), otherInfinite = fraction.isInfinite();
+			if (thisInfinite || otherInfinite)
+			{
+				if (thisInfinite && otherInfinite) return Integer.compare(n.signum(), fraction.n.signum());
+				if (thisInfinite) return n.signum();          // +infinity > any finite, -infinity < any finite
+				return -fraction.n.signum();
+			}
+			return n.multiply(fraction.d).compareTo(fraction.n.multiply(d));
+		}
+
+		public boolean lt(BigFraction fraction) { return compareTo(fraction) < 0; }
+		public boolean le(BigFraction fraction) { return compareTo(fraction) <= 0; }
+		public boolean gt(BigFraction fraction) { return compareTo(fraction) > 0; }
+		public boolean eq(BigFraction fraction) { return this.equals(fraction); }
+
+		@Override
+		public boolean equals(Object other)
+		{
+			// A plain field comparison is correct here (rather than the usual
+			// cross-multiplication needed for fraction equality, e.g. checking
+			// n1*d2 == n2*d1) because the constructor already normalizes every
+			// instance to one canonical (n, d) pair per value -- reduced via
+			// GCD, denominator always positive, zero and the 1/0, -1/0
+			// "infinities" each collapsing to a single fixed representation.
+			// Since no value has more than one valid field-pair, matching
+			// fields is equivalent to matching value. This depends on that
+			// normalization invariant staying intact if the constructor ever
+			// changes.
+			if (this == other) return true;
+			if (!(other instanceof BigFraction)) return false;
+			BigFraction fraction = (BigFraction) other;
+			return n.equals(fraction.n) && d.equals(fraction.d);
+		}
+
+		@Override
+		public int hashCode() { return java.util.Objects.hash(n, d); }
+
+		@Override public String toString() { return n + "/" + d; }
+		public double toDouble() { return new java.math.BigDecimal(n).divide(new java.math.BigDecimal(d), 40, java.math.RoundingMode.HALF_EVEN).doubleValue(); }
 	}
-	
-	public static ArrayList long_divide(int a, int b)
+
+	/**
+	 * Computes the decimal expansion of a/b's FRACTIONAL PART -- any
+	 * integer part is dropped (via a % b up front), so an improper
+	 * fraction like 5/4 correctly reduces to generating the digits of
+	 * 1/4's remainder, rather than corrupting a multi-digit intermediate
+	 * quotient into a single decimal-digit slot. Sign is discarded (both
+	 * a and b are treated as magnitudes) -- callers wanting a signed
+	 * result should track the sign themselves.
+	 *
+	 * @return a 2-element ArrayList: [0] = static (non-repeating) digits,
+	 *         [1] = repeating digits. Either or both may be "" -- both
+	 *         empty means a/b is a whole number: no fractional part at
+	 *         all (e.g. 3/1 or 8/4). Only [1] empty means the decimal
+	 *         terminates (e.g. "125", "" for 1/8 = 0.125). Neither empty
+	 *         means a mixed case (e.g. "1", "6" for 1/6 = 0.1(6)).
+	 * @throws ArithmeticException if b == 0
+	 */
+	public static ArrayList<String> getDecimalDigits(int a, int b)
 	{
-		
-		ArrayList result = new ArrayList();
-		
-		StringBuffer fraction = new StringBuffer();
-		fraction.append('0');
-		fraction.append('.');
-		
-		ArrayList <Integer> quotient_list = new ArrayList <Integer>();
-		ArrayList <Integer> remainder_list = new ArrayList <Integer>();
-		
-		
-		quotient_list.add(0);
-		remainder_list.add(a);
-		
-		a *= 10;
-		while(a < b)
+		if (b == 0)
+			throw new ArithmeticException("division by zero");
+
+		a = Math.abs(a);
+		b = Math.abs(b);
+
+		int remainder = a % b;
+
+		ArrayList<String> result = new ArrayList<>();
+		if (remainder == 0)
 		{
-			fraction.append('0');
-			quotient_list.add(0);
-			remainder_list.add(a);	
-			a *= 10;
-		}
-		
-		int c = a / b;
-		int d = a % b;
-		String c_string = String.valueOf(c);
-		fraction.append(c_string);
-		
-		if(d == 0)
-		{
-			int number_of_start_digits = c_string.length();
-			int number_of_repeating_digits = 0;
-			
-			result.add(fraction.toString());
-			result.add(number_of_start_digits);
-			result.add(number_of_repeating_digits);
+			result.add("");
+			result.add("");
 			return result;
 		}
-		
-		if(remainder_list.contains(d))
+
+		StringBuilder digits = new StringBuilder();
+		// maps a remainder value to the digit-position at which it was
+		// first seen, so we can find exactly where the cycle starts
+		// once (if) a remainder repeats.
+		HashMap<Integer, Integer> seenAt = new HashMap<>();
+
+		while (remainder != 0 && !seenAt.containsKey(remainder))
 		{
-		    int index            = remainder_list.indexOf(d);	
-		    int number_of_digits = fraction.length() - 2;
-		    
-		    if(!quotient_list.contains(c))
-		    {
-		    	    int number_of_start_digits = index; 
-		    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-		    	    result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
-		    else
-		    {
-		    	    int number_of_repeating_digits = number_of_digits - index;
-				int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
+			seenAt.put(remainder, digits.length());
+			remainder *= 10;
+			int digit = remainder / b;
+			digits.append((char) ('0' + digit));
+			remainder = remainder % b;
 		}
-		
-		quotient_list.add(c);
-		remainder_list.add(d);
-		
-		while(d != 0)
+
+		String staticDigits, repeatingDigits;
+		if (remainder == 0)
 		{
-			a = d * 10;
-			c = a / b;
-			d = a % b;
-			
-			c_string = String.valueOf(c);
-			fraction.append(c_string);
-			
-			if(d == 0)
-			{
-				int number_of_start_digits = fraction.length() - 2;
-				int number_of_repeating_digits = 0;
-				
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;
-			}
-			if(remainder_list.contains(d))
-			{
-			    int index            = remainder_list.indexOf(d);	
-			    int number_of_digits = fraction.length() - 2;
-			    
-			    if(!quotient_list.contains(c))
-			    {
-			    	    int number_of_start_digits = index; 
-			    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-			    	    result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
-			    else
-			    {
-			    	    int number_of_repeating_digits = number_of_digits - index;
-					int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-					result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
-			    
-			   
-			}
-			quotient_list.add(c);
-			remainder_list.add(d);
-		}
-		
-		return result;
-	}
-	
-	public static ArrayList long_divide(long a, long b)
-	{
-		
-		ArrayList result = new ArrayList();
-		
-		StringBuffer fraction = new StringBuffer();
-		fraction.append('0');
-		fraction.append('.');
-		
-		ArrayList <Long> quotient_list = new ArrayList <Long>();
-		ArrayList <Long> remainder_list = new ArrayList <Long>();
-		
-		
-		quotient_list.add(0L);
-		remainder_list.add(a);
-		
-		a *= 10;
-		while(a < b)
-		{
-			fraction.append('0');
-			quotient_list.add(0L);
-			remainder_list.add(a);	
-			a *= 10;
-		}
-		
-		long c = a / b;
-		long d = a % b;
-		String c_string = String.valueOf(c);
-		fraction.append(c_string);
-		
-		if(d == 0L)
-		{
-			int number_of_start_digits = c_string.length();
-			int number_of_repeating_digits = 0;
-			
-			result.add(fraction.toString());
-			result.add(number_of_start_digits);
-			result.add(number_of_repeating_digits);
-			return result;
-		}
-		
-		if(remainder_list.contains(d))
-		{
-		    int index            = remainder_list.indexOf(d);	
-		    int number_of_digits = fraction.length() - 2;
-		    
-		    if(!quotient_list.contains(c))
-		    {
-		    	    int number_of_start_digits = index; 
-		    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-		    	    result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
-		    else
-		    {
-		    	    int number_of_repeating_digits = number_of_digits - index;
-				int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;	
-		    }
-		}
-		
-		quotient_list.add(c);
-		remainder_list.add(d);
-		
-		while(d != 0)
-		{
-			a = d * 10;
-			c = a / b;
-			d = a % b;
-			
-			c_string = String.valueOf(c);
-			fraction.append(c_string);
-			
-			if(d == 0)
-			{
-				int number_of_start_digits = fraction.length() - 2;
-				int number_of_repeating_digits = 0;
-				
-				result.add(fraction.toString());
-				result.add(number_of_start_digits);
-				result.add(number_of_repeating_digits);
-				return result;
-			}
-			if(remainder_list.contains(d))
-			{
-			    int index            = remainder_list.indexOf(d);	
-			    int number_of_digits = fraction.length() - 2;
-			    
-			    if(!quotient_list.contains(c))
-			    {
-			    	    int number_of_start_digits = index; 
-			    	    int number_of_repeating_digits = number_of_digits - number_of_start_digits;
-			    	    result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
-			    else
-			    {
-			    	    int number_of_repeating_digits = number_of_digits - index;
-					int number_of_start_digits     = number_of_digits - number_of_repeating_digits;    
-					result.add(fraction.toString());
-					result.add(number_of_start_digits);
-					result.add(number_of_repeating_digits);
-					return result;	
-			    }
-			    
-			   
-			}
-			quotient_list.add(c);
-			remainder_list.add(d);
-		}
-		
-		return result;
-	}
-	
-	
-	public static int [] getRatio(String decimal, int start_digits, int repeating_digits)
-	{
-		if(repeating_digits == 0)
-		{
-			double a = Double.parseDouble(decimal);
-			double b = Math.pow(10, start_digits);
-			double c = a * b;
-			
-			int numerator   = (int)c;
-			int denominator = (int)b;
-		    
-			int gcd      = gcd(numerator, denominator);
-		    numerator   /= gcd;
-		    denominator /= gcd;
-		    int [] ratio = {numerator, denominator};
-		    
-		    return ratio;
-		}
-		else if(start_digits == 0)
-		{
-			double a = Double.parseDouble(decimal);
-			double b = Math.pow(10, repeating_digits);
-			double c = a * b;
-			
-			int numerator  = (int)c;
-			int denominator = (int)(b - 1);
-			
-			int gcd      = gcd(numerator, denominator);
-		    numerator   /= gcd;
-		    denominator /= gcd;
-			
-		    int [] ratio = {numerator, denominator};
-		    return ratio;	
+			staticDigits = digits.toString();
+			repeatingDigits = "";
 		}
 		else
 		{
-			double a = Double.parseDouble(decimal);
-			double b = Math.pow(10, start_digits);
-			double c = Math.pow(10, start_digits + repeating_digits);
-			
-			double d = Math.floor(a * b);
-			double e = a * c;
-			
-			double f = e - d;
-			double g = c - b;
-			
-			int numerator   = (int)f;
-			int denominator = (int)g;
-		
-			int gcd      = gcd(numerator, denominator);
-			numerator   /= gcd;
-			denominator /= gcd;
-			int [] ratio = {numerator, denominator};
-			
-		    return ratio;	
+			int cycleStart = seenAt.get(remainder);
+			staticDigits = digits.substring(0, cycleStart);
+			repeatingDigits = digits.substring(cycleStart);
 		}
+
+		result.add(staticDigits);
+		result.add(repeatingDigits);
+		return result;
 	}
-	
-	public static BigInteger [] getRatio2(String decimal, int start_digits, int repeating_digits)
+
+	/**
+	 * Inverse of getDecimalDigits: reconstructs the fractional-part value
+	 * 0.staticDigits(repeatingDigits repeating) as an exact BigFraction.
+	 *
+	 * Two genuinely different formulas depending on whether there's a
+	 * repeating part at all -- these don't unify into one, since setting
+	 * r=0 in the repeating-case formula would divide by (10^0 - 1) = 0:
+	 *
+	 *   No repeating part (r=0): value = S / 10^s
+	 *     (s=0 too means both empty -- a whole number, value 0)
+	 *
+	 *   Has a repeating part (r>0): value = (S*(10^r - 1) + R) / (10^s * (10^r - 1))
+	 *     derived from: 0.S(R) = S/10^s + R/(10^s*(10^r-1))
+	 *     e.g. 1/6 = 0.1(6): S=1,s=1,R=6,r=1 -> (1*9+6)/(10*9) = 15/90 = 1/6.
+	 *
+	 * Leading zeros in either string are preserved correctly since length
+	 * comes from String.length(), not from the parsed integer value (so
+	 * "05" correctly contributes length 2, not 1).
+	 */
+	public static BigFraction getRationalNumber(String staticDigits, String repeatingDigits)
 	{
-		BigInteger [] ratio = new BigInteger[2];
-		ratio[0] = BigInteger.ONE;
-		ratio[1] = BigInteger.TWO;
-		if(repeating_digits == 0)
+		int s = staticDigits.length();
+		int r = repeatingDigits.length();
+		BigInteger S = staticDigits.isEmpty() ? BigInteger.ZERO : new BigInteger(staticDigits);
+
+		if (r == 0)
 		{
-			BigDecimal a = new BigDecimal(decimal);
-			BigDecimal b = new BigDecimal(Math.pow(10, start_digits));
-			a            = a.multiply(b);
-		    
-		    BigInteger numerator   = a.toBigInteger();
-		    BigInteger denominator = b.toBigInteger();
-		    
-		    BigInteger gcd = numerator.gcd(denominator);
-		    numerator      = numerator.divide(gcd);
-		    denominator    = denominator.divide(gcd);
-		    
-		    ratio[0] = numerator;
-		    ratio[1] = denominator;
-		    
-		    return ratio;
-		}
-		else if(start_digits == 0)
-		{
-			BigDecimal a = new BigDecimal(decimal);
-			
-			BigDecimal b = new BigDecimal(Math.pow(10, repeating_digits));
-			a            = a.multiply(b);
-			
-		    BigInteger numerator   = a.toBigInteger();
-		    BigInteger denominator = b.toBigInteger();
-		    denominator            = denominator.subtract(BigInteger.ONE);
-		    
-		    BigInteger gcd = numerator.gcd(denominator);
-		    numerator      = numerator.divide(gcd);
-		    denominator    = denominator.divide(gcd);
-			
-		    ratio[0] = numerator;
-		    ratio[1] = denominator;
-			
-		    return ratio;	
+			BigInteger denominator = BigInteger.TEN.pow(s);
+			return new BigFraction(S, denominator);
 		}
 		else
 		{
-		    BigDecimal a = new BigDecimal(decimal);
-		    BigDecimal b = BigDecimal.TEN;
-		    for(int i = 1; i < start_digits; i++)
-		    	    b = b.multiply(BigDecimal.TEN);
-		    BigDecimal c = BigDecimal.TEN;
-		    for(int i = 1; i < start_digits + repeating_digits; i++)
-	    	        c = c.multiply(BigDecimal.TEN);
-		  
-		    BigDecimal d = a.multiply(b);
-		    BigDecimal e = a.multiply(c);
-		    
-		    BigInteger f = d.toBigInteger();
-		    BigInteger g = e.toBigInteger();
-		    BigInteger numerator = g.subtract(f);
-		    
-		    BigDecimal h = c.subtract(b);
-		    BigInteger denominator = h.toBigInteger();
-			
-		    BigInteger gcd = numerator.gcd(denominator);
-		    numerator      = numerator.divide(gcd);
-	        denominator    = denominator.divide(gcd);
-		    
-			ratio[0] = numerator;
-			ratio[1] = denominator;
-			
-		    return ratio;	
+			BigInteger R = new BigInteger(repeatingDigits);
+			BigInteger nines = BigInteger.TEN.pow(r).subtract(BigInteger.ONE);
+			BigInteger numerator = S.multiply(nines).add(R);
+			BigInteger denominator = BigInteger.TEN.pow(s).multiply(nines);
+			return new BigFraction(numerator, denominator);
+		}
+	}
+
+	/** A digit block paired with its explicit length -- needed because a
+	 *  plain BitSet can't distinguish "100" from "1" (both have the same
+	 *  highest set bit), silently losing trailing zeros otherwise. */
+	public static final class BinaryDigits
+	{
+		public final BitSet bits;
+		public final int length;
+		public BinaryDigits(BitSet bits, int length) { this.bits = bits; this.length = length; }
+	}
+
+	/** Binary analogue of getDecimalDigits: computes the binary expansion
+	 *  of a/b's FRACTIONAL PART (integer part and sign dropped, same as
+	 *  the decimal version) as a static block and, if the expansion
+	 *  doesn't terminate, a repeating block. Bit 0 of each BitSet is the
+	 *  FIRST (most significant) digit of that block, working left to
+	 *  right -- the reverse of BigInteger's own bit numbering.
+	 *
+	 *  @return a 2-element array: [0] = static digits, [1] = repeating
+	 *          digits (length 0 for either means that block is empty,
+	 *          exactly as with getDecimalDigits's empty strings).
+	 *  @throws ArithmeticException if b == 0
+	 */
+	public static BinaryDigits[] getBinaryDigits(BigInteger a, BigInteger b)
+	{
+		if (b.signum() == 0)
+			throw new ArithmeticException("division by zero");
+
+		a = a.abs(); b = b.abs();
+		BigInteger remainder = a.mod(b);
+
+		if (remainder.signum() == 0)
+			return new BinaryDigits[]{ new BinaryDigits(new BitSet(), 0), new BinaryDigits(new BitSet(), 0) };
+
+		BitSet digits = new BitSet();
+		HashMap<BigInteger, Integer> seenAt = new HashMap<>();
+		int pos = 0;
+		while (remainder.signum() != 0 && !seenAt.containsKey(remainder))
+		{
+			seenAt.put(remainder, pos);
+			remainder = remainder.multiply(BigInteger.TWO);
+			if (remainder.compareTo(b) >= 0) { digits.set(pos); remainder = remainder.subtract(b); }
+			pos++;
+		}
+
+		if (remainder.signum() == 0)
+			return new BinaryDigits[]{ new BinaryDigits(digits, pos), new BinaryDigits(new BitSet(), 0) };
+		else
+		{
+			int cycleStart = seenAt.get(remainder);
+			// BitSet.get(from, to) conveniently returns a NEW, re-indexed-to-0
+			// BitSet for that range -- exactly what the repeating block needs.
+			BitSet staticBits = digits.get(0, cycleStart);
+			BitSet repeatingBits = digits.get(cycleStart, pos);
+			return new BinaryDigits[]{ new BinaryDigits(staticBits, cycleStart), new BinaryDigits(repeatingBits, pos - cycleStart) };
+		}
+	}
+
+	/** long overload of getBinaryDigits -- identical algorithm, long arithmetic. */
+	public static BinaryDigits[] getBinaryDigits(long a, long b)
+	{
+		if (b == 0)
+			throw new ArithmeticException("division by zero");
+
+		a = Math.abs(a); b = Math.abs(b);
+		long remainder = a % b;
+
+		if (remainder == 0)
+			return new BinaryDigits[]{ new BinaryDigits(new BitSet(), 0), new BinaryDigits(new BitSet(), 0) };
+
+		BitSet digits = new BitSet();
+		HashMap<Long, Integer> seenAt = new HashMap<>();
+		int pos = 0;
+		while (remainder != 0 && !seenAt.containsKey(remainder))
+		{
+			seenAt.put(remainder, pos);
+			remainder *= 2;
+			if (remainder >= b) { digits.set(pos); remainder -= b; }
+			pos++;
+		}
+
+		if (remainder == 0)
+			return new BinaryDigits[]{ new BinaryDigits(digits, pos), new BinaryDigits(new BitSet(), 0) };
+		else
+		{
+			int cycleStart = seenAt.get(remainder);
+			BitSet staticBits = digits.get(0, cycleStart);
+			BitSet repeatingBits = digits.get(cycleStart, pos);
+			return new BinaryDigits[]{ new BinaryDigits(staticBits, cycleStart), new BinaryDigits(repeatingBits, pos - cycleStart) };
+		}
+	}
+
+	/** Bit i of `bits` is the i-th digit of the block, most significant
+	 *  first -- the reverse of BigInteger's own bit numbering, so the
+	 *  conversion flips the index. */
+	private static BigInteger bitsToValue(BitSet bits, int length)
+	{
+		BigInteger value = BigInteger.ZERO;
+		for (int i = 0; i < length; i++)
+			if (bits.get(i)) value = value.setBit(length - 1 - i);
+		return value;
+	}
+
+	/** Inverse of getBinaryDigits (either overload -- a BinaryDigits object
+	 *  doesn't remember whether it came from long or BigInteger division,
+	 *  so one method serves both). Same two-formula structure as the
+	 *  decimal getRationalNumber, with 2 in place of 10. */
+	public static BigFraction getRationalNumber(BinaryDigits staticDigits, BinaryDigits repeatingDigits)
+	{
+		int s = staticDigits.length;
+		int r = repeatingDigits.length;
+		BigInteger S = bitsToValue(staticDigits.bits, s);
+
+		if (r == 0)
+		{
+			return new BigFraction(S, BigInteger.ONE.shiftLeft(s));
+		}
+		else
+		{
+			BigInteger R = bitsToValue(repeatingDigits.bits, r);
+			BigInteger ones = BigInteger.ONE.shiftLeft(r).subtract(BigInteger.ONE); // 2^r - 1
+			BigInteger numerator = S.multiply(ones).add(R);
+			BigInteger denominator = BigInteger.ONE.shiftLeft(s).multiply(ones);
+			return new BigFraction(numerator, denominator);
 		}
 	}
 }
-	
-	
