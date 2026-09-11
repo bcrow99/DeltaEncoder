@@ -23,12 +23,12 @@ public class SegmentSteerDemo
 	public static final class CompressResult
 	{
 		public final boolean success;
-		public final SteeredArithmeticMapper.Frac target;
+		public final FractionMapper.BigFraction target;
 		public final int[][] orderings;
 		public final long backtracks;
 		public final long elapsedMillis;
 		public final double costBits;
-		CompressResult(boolean success, SteeredArithmeticMapper.Frac target, int[][] orderings,
+		CompressResult(boolean success, FractionMapper.BigFraction target, int[][] orderings,
 		               long backtracks, long elapsedMillis, double costBits)
 		{
 			this.success = success; this.target = target; this.orderings = orderings;
@@ -51,7 +51,7 @@ public class SegmentSteerDemo
 	 * @param maxBacktracksPerAttempt  per-attempt backtrack ceiling
 	 */
 	public static CompressResult compressSegment(int[] segment, int[] freq,
-	                                              List<SteeredArithmeticMapper.Frac> candidateTargets,
+	                                              List<FractionMapper.BigFraction> candidateTargets,
 	                                              int maxThreads, double budgetSeconds,
 	                                              long maxBacktracksPerAttempt) throws InterruptedException
 	{
@@ -63,11 +63,11 @@ public class SegmentSteerDemo
 		long deadlineNanos = startNanos + (long) (budgetSeconds * 1_000_000_000L);
 
 		List<Future<Object[]>> futures = new ArrayList<>();
-		for (SteeredArithmeticMapper.Frac target : candidateTargets)
+		for (FractionMapper.BigFraction target : candidateTargets)
 		{
 			futures.add(pool.submit(() -> {
 				SteeredArithmeticMapper.SteerResult r =
-					SteeredArithmeticMapper.steerEncode(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
+					SteeredArithmeticMapper.steerEncodeCheapBiased(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
 				return new Object[]{ target, r };
 			}));
 		}
@@ -107,13 +107,13 @@ public class SegmentSteerDemo
 		if (winner == null)
 			return new CompressResult(false, null, null, -1, elapsedMillis, -1);
 
-		SteeredArithmeticMapper.Frac target = (SteeredArithmeticMapper.Frac) winner[0];
+		FractionMapper.BigFraction target = (FractionMapper.BigFraction) winner[0];
 		SteeredArithmeticMapper.SteerResult r = (SteeredArithmeticMapper.SteerResult) winner[1];
 		double bits = SteeredArithmeticMapper.serializedOrderingBits(r.orderings);
 		return new CompressResult(true, target, r.orderings, r.backtracks, elapsedMillis, bits);
 	}
 
-	public static int[] decompressSegment(int[][] orderings, int[] freq, SteeredArithmeticMapper.Frac target, int n)
+	public static int[] decompressSegment(int[][] orderings, int[] freq, FractionMapper.BigFraction target, int n)
 	{
 		return SteeredArithmeticMapper.steerDecode(orderings, freq, target, n);
 	}
@@ -163,10 +163,10 @@ public class SegmentSteerDemo
 		// Candidate targets: a family of simple fractions (denominators up
 		// to 20), mirroring the table used in the original GetOffset.java
 		// exploration this grew out of.
-		List<SteeredArithmeticMapper.Frac> candidates = new ArrayList<>();
+		List<FractionMapper.BigFraction> candidates = new ArrayList<>();
 		int[] numer = {1, 3, 1, 2, 1, 3, 2, 3, 4, 1};
 		int[] denom = {20, 20, 5, 5, 2, 5, 3, 4, 5, 4};
-		for (int k = 0; k < numer.length; k++) candidates.add(SteeredArithmeticMapper.Frac.of(numer[k], denom[k]));
+		for (int k = 0; k < numer.length; k++) candidates.add(FractionMapper.BigFraction.of(numer[k], denom[k]));
 
 		System.out.println("\nTrying " + candidates.size() + " candidate targets across up to "
 			+ Math.min(maxThreads, candidates.size()) + " threads...");
