@@ -749,4 +749,897 @@ public class SteeredArithmeticMapper
 		return orderings;
 	}
 
+
+	// =========================================================================
+	// Order-table-related methods, moved here from ArithmeticMapper (which
+	// keeps only the core, canonical-order codec) to keep them available
+	// without adding weight to that simpler file. None of this is in
+	// active use by the rest of this project currently -- kept for
+	// possible future use rather than deleted. simplestFractionInInterval
+	// calls within the moved order-table encode/decode methods below now
+	// resolve to THIS file's own existing copy (used elsewhere by
+	// encodeCSequence), since they're in the same class -- no cross-file
+	// dependency was introduced by this move.
+	// =========================================================================
+
+	// =========================================================================
+	// Ordering the probabilistic space does not seem to significantly affect
+	// the computational efficiency or compression rate. Would need to do an
+	// exhaustive search through all the possible tables before drawing a
+	// definite conclusion. (Restored verbatim from the pre-refactor version --
+	// unrelated to the BigFraction change, not touched by it.)
+	// =========================================================================
+
+	// This method returns a table of the indices of a frequency table in ascending order, greatest last.
+	public static byte [] getAscendingTable(int frequency[])
+	{
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int                         n     = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list);
+
+		byte [] ascending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key         = list.get(i);
+			int    j           = table.get(key);
+			ascending_table[i] = (byte)j;
+		}
+		return ascending_table;
+	}
+
+	//This method returns a table of the indices of a frequency table in descending order, greatest first.
+	public static byte [] getDescendingTable(int frequency[])
+	{
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+		return descending_table;
+	}
+
+	//This method returns a table of the indices of a frequency table in the order that a value is exhausted first.
+	public static byte [] getFirstTable(byte[] src, int [] frequency)
+	{
+		ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] first_table = new byte[frequency.length];
+		for(int i = 0; i < frequency.length; i++)
+		{
+			int j = exhausted_list.get(i);
+			first_table[i] = (byte)j;
+		}
+
+        return first_table;
+	}
+
+	// This method returns a table of the indices of a frequency table in the order that a value is exhausted last.
+	public static byte [] getLastTable(byte[] src, int [] frequency)
+	{
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+	    return last_table;
+	}
+
+	public static ArrayList <byte []> getTableSeries(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte least  = descending_table[length - 1];
+
+		int least_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == least)
+		    {
+		    	    least_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(least_place == 0)
+		    	    done = true;
+		    else
+		    {
+		    	    byte down               = last_table[least_place - 1];
+		    	    last_table[least_place] = down;
+		    	    last_table[least_place - 1] = least;
+		    	    least_place--;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(least_place == 0)
+    		    	        done = true;
+		    }
+		}
+
+		return result;
+	}
+
+
+	public static ArrayList <byte []> getTableSeries2(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte least  = descending_table[length - 1];
+
+		int least_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == least)
+		    {
+		    	    least_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(least_place == last_table.length - 1)
+		    	    done = true;
+		    else
+		    {
+		    	    byte up = last_table[least_place + 1];
+		    	    last_table[least_place] = up;
+		    	    last_table[least_place + 1] = least;
+		    	    least_place++;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(least_place == last_table.length - 1)
+    		    	        done = true;
+		    }
+		}
+
+		return result;
+	}
+
+	public static ArrayList <byte []> getTableSeries3(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte greatest  = descending_table[0];
+
+		int greatest_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == greatest)
+		    {
+		    	    greatest_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(greatest_place == 0)
+		    	    done = true;
+		    else
+		    {
+		    	    byte down               = last_table[greatest_place - 1];
+		    	    last_table[greatest_place] = down;
+		    	    last_table[greatest_place - 1] = greatest;
+		    	    greatest_place--;
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(greatest_place == 0)
+    		    	        done = true;
+		    }
+		}
+
+		return result;
+	}
+
+	public static ArrayList <byte []> getTableSeries4(byte[] src, int [] frequency)
+	{
+		ArrayList <byte []> result = new ArrayList <byte[]> ();
+
+		ArrayList <Double>          list  = new ArrayList <Double>();
+		Hashtable <Double, Integer> table = new Hashtable <Double, Integer>();
+		int       n                       = frequency.length;
+
+		for(int i = 0; i < n; i++)
+		{
+			double key = frequency[i];
+			while (table.containsKey(key))
+				key += .001;
+			table.put(key, i);
+			list.add(key);
+		}
+
+		Collections.sort(list, Comparator.reverseOrder());
+
+		byte [] descending_table = new byte[n];
+
+		for(int i = 0; i < n; i++)
+		{
+			double key          = list.get(i);
+			int    j            = table.get(key);
+			descending_table[j] = (byte) i;
+		}
+
+        ArrayList <Integer> exhausted_list = new ArrayList <Integer>();
+
+		for(int i = 0; i < frequency.length; i++)
+		{
+			if(frequency[i] == 0)
+				exhausted_list.add(i);
+		}
+		int [] f = frequency.clone();
+
+		for(int i = 0; i < src.length; i++)
+	    {
+	    	    int j = src[i];
+	    	    if(j < 0)
+	    	    	    j += 256;
+	    	    f[j]--;
+	    	    if(f[j] == 0)
+	    	    	    exhausted_list.add(j);
+	    }
+
+		byte [] last_table = new byte[frequency.length];
+		int k = 0;
+		for(int i = frequency.length - 1; i >= 0; i--)
+		{
+			int j = exhausted_list.get(i);
+			last_table[k++] = (byte)j;
+		}
+
+		int  length = descending_table.length;
+		byte greatest  = descending_table[0];
+
+		int greatest_place = 0;
+		for(int i = 0; i < last_table.length; i++)
+		{
+		    if(last_table[i] == greatest)
+		    {
+		    	    greatest_place = i;
+		    	    break;
+		    }
+		}
+
+		byte [] init_table = last_table.clone();
+		result.add(init_table);
+
+		boolean done = false;
+		while(!done)
+		{
+		    if(greatest_place == last_table.length - 1)
+		    	    done = true;
+		    else
+		    {
+		    	    byte up               = last_table[greatest_place + 1];
+		    	    last_table[greatest_place] = up;
+		    	    last_table[greatest_place + 1] = greatest;
+		    	    greatest_place++;
+
+		    	    byte [] current_table = last_table.clone();
+		    	    result.add(current_table);
+		    	    if(greatest_place == last_table.length - 1)
+    		    	       done = true;
+		    }
+		}
+
+		return result;
+	}
+
+
+  	/**
+  	 * Produces a random permutation of symbol indices -- a probabilistic-space
+  	 * baseline that carries no information about the data, for comparison
+  	 * against frequency-driven orderings like Last and Descending.
+  	 */
+  	public static byte[] getRandomTable(int frequency[])
+  	{
+  		int n = frequency.length;
+  		byte[] table = new byte[n];
+  		for (int i = 0; i < n; i++)
+  			table[i] = (byte) i;
+
+  		java.util.Random rand = new java.util.Random();
+  		for (int i = n - 1; i > 0; i--)
+  		{
+  			int j = rand.nextInt(i + 1);
+  			byte tmp = table[i];
+  			table[i] = table[j];
+  			table[j] = tmp;
+  		}
+  		return table;
+  	}
+
+  	public static byte[] getRandomTable(int frequency[], long seed)
+  	{
+  		int n = frequency.length;
+  		byte[] table = new byte[n];
+  		for (int i = 0; i < n; i++)
+  			table[i] = (byte) i;
+
+  		java.util.Random rand = new java.util.Random(seed);
+  		for (int i = n - 1; i > 0; i--)
+  		{
+  			int j = rand.nextInt(i + 1);
+  			byte tmp = table[i];
+  			table[i] = table[j];
+  			table[j] = tmp;
+  		}
+  		return table;
+  	}
+
+  	/**
+  	 * Builds the random rank->symbol table via getRandomTable(frequency, seed)
+  	 * and inverts it to the symbol->rank shape expected by the order
+  	 * parameter of getIntervalValue/getArithmeticValues. Both the encoder
+  	 * (search) and decoder (reconstruction from a stored seed) call this same
+  	 * helper rather than each inverting getRandomTable's output separately,
+  	 * so they are guaranteed to derive the identical order table from a given
+  	 * (frequency, seed) pair.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, long seed)
+  	{
+  		byte[] rank_to_symbol = getRandomTable(frequency, seed);
+  		byte[] symbol_to_rank = new byte[rank_to_symbol.length];
+  		for (int rank = 0; rank < rank_to_symbol.length; rank++)
+  		{
+  			int symbol = rank_to_symbol[rank] & 0xFF;
+  			symbol_to_rank[symbol] = (byte) rank;
+  		}
+  		return symbol_to_rank;
+  	}
+
+  	/**
+  	 * Byte-seed convenience overload. Widens the byte (interpreted as
+  	 * unsigned, 0-255) to a long before delegating, so a decoder that only
+  	 * stores this single byte reconstructs exactly the same table the
+  	 * encoder derived when searching over byte-sized seeds.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, byte seed)
+  	{
+  		return getRandomOrderTable(frequency, (long) (seed & 0xFF));
+  	}
+
+  	/**
+  	 * Short-seed convenience overload. Widens the short to a long via sign
+  	 * extension before delegating, matching how DataOutputStream.writeShort /
+  	 * DataInputStream.readShort round-trip a short's bit pattern exactly, so
+  	 * both sides reconstruct the identical table from a given seed.
+  	 */
+  	public static byte[] getRandomOrderTable(int[] frequency, short seed)
+  	{
+  		return getRandomOrderTable(frequency, (long) seed);
+  	}
+
+	// =========================================================================
+	// Order-table variants: same core arithmetic as above, plus a reordered
+	// frequency table so a different symbol occupies each rank position.
+	// =========================================================================
+
+	public static BigInteger[] getIntervalValue(byte[] src, int[] frequency, byte[] order)
+	{
+		int[] f = new int[frequency.length];
+		int n = src.length;
+
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = (int) order[i];
+			if (j < 0) j += 256;
+			f[j] = frequency[i];
+		}
+
+		int[] s = new int[f.length];
+		int m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		FractionMapper.BigFraction off = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction rng = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+			j = (int) order[j];
+			if (j < 0) j += 256;
+
+			off = off.add(rng.multiply(FractionMapper.BigFraction.of(s[j], m)));
+			rng = rng.multiply(FractionMapper.BigFraction.of(f[j], m));
+
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		FractionMapper.BigFraction hi = off.add(rng);
+		return simplestFractionInInterval(off.n, off.d, hi.n, hi.d);
+	}
+
+	// A version of the method that uses an order table.
+	public static byte[] getArithmeticValues(BigInteger[] v, int[] frequency, int n, byte[] order)
+	{
+		int[] frequency2 = new int[frequency.length];
+		byte[] inverse_order = new byte[order.length];
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			if (j < 0) j += 256;
+			frequency2[j] = frequency[i];
+			inverse_order[j] = (byte) i;
+		}
+
+		FractionMapper.BigFraction target = new FractionMapper.BigFraction(v[0], v[1]);
+		byte[] value = new byte[n];
+
+		ArrayList<ArrayList<Integer>> arithmetic_list = new ArrayList<>();
+		int m = 0;
+		for (int i = 0; i < frequency.length; i++)
+		{
+			if (frequency2[i] != 0)
+			{
+				ArrayList<Integer> list = new ArrayList<>();
+				list.add(i); list.add(frequency2[i]); list.add(m);
+				arithmetic_list.add(list);
+				m += frequency2[i];
+			}
+		}
+
+		FractionMapper.BigFraction offset = FractionMapper.BigFraction.ZERO;
+		FractionMapper.BigFraction range = FractionMapper.BigFraction.ONE;
+
+		for (int i = 0; i < n; i++)
+		{
+			FractionMapper.BigFraction w = target.subtract(offset);
+
+			int j = arithmetic_list.size() / 2;
+			ArrayList<Integer> list = arithmetic_list.get(j);
+			int f = list.get(1);
+			int s = list.get(2);
+
+			FractionMapper.BigFraction a = range.multiply(FractionMapper.BigFraction.of(s, m));
+			FractionMapper.BigFraction c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+
+			if (a.gt(w))
+			{
+				int k = j / 2;
+				while (a.gt(w))
+				{
+					j -= k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+				if (c.le(w))
+				{
+					while (c.le(w))
+					{
+						j++;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					}
+				}
+			}
+			else if (c.le(w))
+			{
+				int size = arithmetic_list.size();
+				int k = (size - j) / 2;
+				while (c.le(w))
+				{
+					j += k;
+					list = arithmetic_list.get(j);
+					f = list.get(1); s = list.get(2);
+					c = range.multiply(FractionMapper.BigFraction.of(s + f, m));
+					k /= 2;
+					if (k == 0) k = 1;
+				}
+				a = range.multiply(FractionMapper.BigFraction.of(s, m));
+				if (a.gt(w))
+				{
+					while (a.gt(w))
+					{
+						j--;
+						list = arithmetic_list.get(j);
+						f = list.get(1); s = list.get(2);
+						a = range.multiply(FractionMapper.BigFraction.of(s, m));
+					}
+				}
+			}
+
+			offset = offset.add(range.multiply(FractionMapper.BigFraction.of(s, m)));
+			range = range.multiply(FractionMapper.BigFraction.of(f, m));
+
+			for (int p = j + 1; p < arithmetic_list.size(); p++)
+			{
+				ArrayList<Integer> list2 = arithmetic_list.get(p);
+				int s2 = list2.get(2);
+				s2--;
+				list2.set(2, s2);
+				arithmetic_list.set(p, list2);
+			}
+
+			f--;
+			m--;
+			if (f != 0)
+			{
+				list.set(1, f);
+				arithmetic_list.set(j, list);
+			}
+			else
+				arithmetic_list.remove(j);
+
+			int k = list.get(0);
+			k = inverse_order[k];
+			if (k < 0) k += 256;
+			value[i] = (byte) k;
+		}
+		return value;
+	}
+
+	// =========================================================================
+	// Cheap approximate-offset scorer for order-table search (hill climbing /
+	// annealing). Does not modify any existing encode/decode path.
+	// =========================================================================
+
+	/**
+	 * Cheap approximate offset for order-table search. Runs the same long-based
+	 * E1/E2/E3 renormalization as getIntervalValueFast, with an order-table
+	 * remap like getIntervalValue(..., order), but instead of packing bits into
+	 * a byte stream for storage, captures the leading ~52 bits directly and
+	 * returns them as a double in [0, 1). Not intended for round-trip
+	 * encode/decode -- only as a fast scorer during hill-climbing/annealing.
+	 *
+	 * Precision note: for any segment large enough to emit more than ~52 bits
+	 * total (true of essentially all real segments), the interval has already
+	 * collapsed well past double precision, so this agrees with the exact
+	 * BigInteger offset from getIntervalValue(src, frequency, order) to full
+	 * double precision.
+	 */
+	public static double getApproxOffsetFastOrdered(byte[] src, int[] frequency, byte[] order)
+	{
+		int[] f = new int[frequency.length];
+		for (int i = 0; i < order.length; i++)
+		{
+			int j = order[i];
+			if (j < 0) j += 256;
+			f[j] = frequency[i];
+		}
+		int n = src.length;
+
+		int[] s = new int[f.length];
+		int   m = 0;
+		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
+
+		final long TOP  = 0x100000000L;
+		final long HALF = 0x80000000L;
+		final long QTR  = 0x40000000L;
+		final long TQTR = 0xC0000000L;
+
+		long low = 0L, high = TOP;
+		int  pending = 0;
+
+		LeadingBits bits = new LeadingBits();
+
+		for (int i = 0; i < n; i++)
+		{
+			int j = src[i];
+			if (j < 0) j += 256;
+			j = order[j];
+			if (j < 0) j += 256;
+
+			long range    = high - low;
+			long new_low  = low + (range * s[j]) / m;
+			long new_high = (s[j] + f[j] == m) ? high : low + (range * (long)(s[j] + f[j])) / m;
+			low  = new_low;
+			high = new_high;
+
+			for (;;)
+			{
+				if (high <= HALF)
+				{
+					bits.append(0);
+					for (int p = 0; p < pending; p++) bits.append(1);
+					pending = 0;
+					low <<= 1; high <<= 1;
+				}
+				else if (low >= HALF)
+				{
+					bits.append(1);
+					for (int p = 0; p < pending; p++) bits.append(0);
+					pending = 0;
+					low = (low - HALF) << 1; high = (high - HALF) << 1;
+				}
+				else if (low >= QTR && high <= TQTR)
+				{
+					pending++;
+					low = (low - QTR) << 1; high = (high - QTR) << 1;
+				}
+				else break;
+			}
+
+			f[j]--;
+			m--;
+			for (int k = j + 1; k < s.length; k++) s[k]--;
+		}
+
+		pending++;
+		if (low < QTR)
+		{
+			bits.append(0);
+			for (int p = 0; p < pending; p++) bits.append(1);
+		}
+		else
+		{
+			bits.append(1);
+			for (int p = 0; p < pending; p++) bits.append(0);
+		}
+
+		return bits.toApproxOffset();
+	}
+
+	/**
+	 * Keeps only the leading MAX_BITS bits appended to it -- enough for full
+	 * double precision -- and discards the rest. Used only by
+	 * getApproxOffsetFastOrdered; not a general-purpose bit buffer.
+	 */
+	private static final class LeadingBits
+	{
+		static final int MAX_BITS = 52; // matches double's mantissa precision
+		long accum = 0L;
+		int  count = 0;
+
+		void append(int bit)
+		{
+			if (count < MAX_BITS)
+			{
+				accum = (accum << 1) | bit;
+				count++;
+			}
+		}
+
+		double toApproxOffset()
+		{
+			return (count == 0) ? 0.0 : (double) accum / (double) (1L << count);
+		}
+	}
 }
