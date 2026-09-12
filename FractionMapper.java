@@ -3,6 +3,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.BitSet;
 
+// version 2.0 (added more infinity handling)
+
+
 /**
  * Exact rational arithmetic (BigFraction) plus conversion to and from
  * repeating-decimal digit strings.
