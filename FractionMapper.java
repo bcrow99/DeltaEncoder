@@ -15,15 +15,38 @@ public class FractionMapper
 
 		public BigFraction(BigInteger numerator, BigInteger denominator)
 		{
-			// 0/0 is indeterminate, not just "zero with an unusual
-			// denominator" -- and this single check also catches
-			// infinity-infinity, 0*infinity, and infinity/infinity for
-			// free, since add/subtract/multiply/divide all reduce those
-			// three forms to this exact same raw (0,0) pair before this
-			// constructor ever sees it (verified directly: e.g.
-			// (1/0).subtract(1/0) computes n = 1*0 - 1*0 = 0, d = 0*0 = 0).
 			if (numerator.signum() == 0 && denominator.signum() == 0)
-				throw new ArithmeticException("0/0 is an indeterminate form");
+			{
+				// BOTTOM (traditionally written as the up-tack, "not
+				// defined" symbol): the wheel's genuinely indeterminate
+				// element. It's its OWN equivalence class -- comparable
+				// and equal only to itself, never reducible to anything
+				// else -- unlike ordinary 0/0, which used to just throw
+				// here. Verified (see FractionMapper.java's usage
+				// elsewhere) that this single raw pair is exactly what
+				// add/subtract/multiply/divide all naturally produce for
+				// infinity-infinity, 0*infinity, and infinity/infinity,
+				// so routing (0,0) here instead of throwing gives all of
+				// those a real, defined value for free.
+				this.n = BigInteger.ZERO;
+				this.d = BigInteger.ZERO;
+				return;
+			}
+
+			if (denominator.signum() == 0)
+			{
+				// INFINITY: every nonzero-numerator/zero-denominator pair
+				// is equivalent under the wheel's fraction relation
+				// (a:0)~(c:0) for any nonzero a,c, since a*0 = 0*c = 0
+				// always -- including a and -a, so there is exactly ONE
+				// infinity here, not separate +infinity/-infinity.
+				// Canonicalize away the original numerator's sign and
+				// magnitude entirely, since they carry no information
+				// once collapsed into this single equivalence class.
+				this.n = BigInteger.ONE;
+				this.d = BigInteger.ZERO;
+				return;
+			}
 
 			if (denominator.signum() < 0)
 			{
@@ -93,24 +116,29 @@ public class FractionMapper
 		public BigFraction negate()                       { return new BigFraction(n.negate(), d); }
 		public BigFraction abs()                          { return n.signum() < 0 ? negate() : this; }
 
-		/** True for both +infinity (1/0) and -infinity (-1/0). */
-		public boolean isInfinite() { return d.signum() == 0; }
+		/** True for the single infinity (1/0) -- note this is now ONE
+		 *  element, not separate +infinity/-infinity; see the
+		 *  constructor's canonicalization. */
+		public boolean isInfinite() { return d.signum() == 0 && n.signum() != 0; }
+
+		/** True for bottom (0/0), the wheel's genuinely indeterminate
+		 *  element -- its own equivalence class, equal only to itself. */
+		public boolean isBottom() { return d.signum() == 0 && n.signum() == 0; }
 
 		@Override
 		public int compareTo(BigFraction fraction)
 		{
-			// Plain cross-multiplication (n*fraction.d vs fraction.n*d) breaks
-			// once either side is infinite, since anything times a zero
-			// denominator is 0 -- e.g. comparing 1/0 to -1/0 would compute
-			// 1*0=0 vs -1*0=0 and wrongly call them equal. Handle infinite
-			// operands explicitly first.
-			boolean thisInfinite = isInfinite(), otherInfinite = fraction.isInfinite();
-			if (thisInfinite || otherInfinite)
-			{
-				if (thisInfinite && otherInfinite) return Integer.compare(n.signum(), fraction.n.signum());
-				if (thisInfinite) return n.signum();          // +infinity > any finite, -infinity < any finite
-				return -fraction.n.signum();
-			}
+			// A wheel has no total order once infinity or bottom is
+			// involved -- topologically it's a circle (the projective
+			// line, where infinity and negative infinity are the SAME
+			// point) plus one extra point off to the side (bottom), not
+			// a line, so "is infinity greater than 5" isn't a coherent
+			// question here the way it would be on the ordinary real
+			// line. Ordinary finite-vs-finite comparison is completely
+			// unaffected and works exactly as before.
+			if (isInfinite() || isBottom() || fraction.isInfinite() || fraction.isBottom())
+				throw new ArithmeticException("cannot order infinity or bottom (0/0) against anything -- "
+					+ "a wheel has no total order once either value is infinite or indeterminate");
 			return smartMultiply(n, fraction.d).compareTo(smartMultiply(fraction.n, d));
 		}
 
@@ -141,8 +169,23 @@ public class FractionMapper
 		@Override
 		public int hashCode() { return java.util.Objects.hash(n, d); }
 
-		@Override public String toString() { return n + "/" + d; }
-		public double toDouble() { return new java.math.BigDecimal(n).divide(new java.math.BigDecimal(d), 40, java.math.RoundingMode.HALF_EVEN).doubleValue(); }
+		@Override public String toString()
+		{
+			if (isBottom()) return "\u22A5";    // ⊥ (bottom / indeterminate)
+			if (isInfinite()) return "\u221E";  // ∞
+			return n + "/" + d;
+		}
+
+		/** Double.POSITIVE_INFINITY for the wheel's infinity, Double.NaN
+		 *  for bottom (0/0) -- both are exact matches for what those
+		 *  wheel elements represent, unlike BigDecimal's own zero-
+		 *  denominator behavior (which would just throw here instead). */
+		public double toDouble()
+		{
+			if (isBottom()) return Double.NaN;
+			if (isInfinite()) return Double.POSITIVE_INFINITY;
+			return new java.math.BigDecimal(n).divide(new java.math.BigDecimal(d), 40, java.math.RoundingMode.HALF_EVEN).doubleValue();
+		}
 	}
 
 	/**
