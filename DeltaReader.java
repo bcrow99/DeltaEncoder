@@ -25,6 +25,10 @@ public class DeltaReader
 	byte entropy_type     = 0;
 	byte scanline5_variant = 0;
 
+	// ---- Image pyramid (read from file) --------------------------------------
+	int     pixel_pyramid = 0;
+	boolean use_saddle    = false;
+
 	// ---- Per-channel scalars ------------------------------------------------
 	int[]  min               = new int[3];
 	int[]  init              = new int[3];
@@ -38,6 +42,12 @@ public class DeltaReader
 
 	// ---- Delta-type maps (delta_type 5-9) -----------------------------------
 	ArrayList<byte[]> map_list = new ArrayList<byte[]>();
+
+	// ---- Pyramid sign-bit maps (pixel_pyramid != 0) -------------------------
+	// Each entry holds pixel_pyramid bitmaps, one per pyramid level
+	// transition (sign bits are computed and applied at every level, not
+	// just the outermost).
+	ArrayList<boolean[][]> sign_bit_list = new ArrayList<boolean[][]>();
 
 	// ---- Decoded channel arrays ---------------------------------------------
 	int[][] channel_array = new int[3][0];
@@ -55,11 +65,12 @@ public class DeltaReader
 	int[]             huff_pay_min   = new int[3];               // payload_min
 
 	// ---- Arithmetic per-channel data ----------------------------------------
+	// (offset_list/segment_list, used only by the removed exact-BigInteger
+	// "Slow Arithmetic" path, are gone -- freq_list is shared with the
+	// still-present renormalizing Arithmetic path below.)
 	ArrayList<int[][]>        freq_list    = new ArrayList<int[][]>();
-	ArrayList<BigInteger[][]> offset_list  = new ArrayList<BigInteger[][]>();
-	ArrayList<byte[][]>       segment_list = new ArrayList<byte[][]>();
 
-	// ---- Fast Arithmetic per-channel data (entropy_type == 3) ---------------
+	// ---- Arithmetic per-channel data (entropy_type == 2) --------------------
 	// Each entry is an array of encoded byte[] segments from getIntervalValueFast.
 	// Frequency tables are shared with the Arithmetic path (freq_list above).
 	ArrayList<byte[][]>       fast_enc_list = new ArrayList<byte[][]>();
@@ -82,7 +93,7 @@ public class DeltaReader
 		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic","Fast Arithmetic"};
+		"LZ77","Huffman","Arithmetic"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -198,6 +209,8 @@ public class DeltaReader
 			compress_type = in.readByte();
 			entropy_type      = in.readByte();
 				scanline5_variant = in.readByte();
+			pixel_pyramid = in.readByte();
+			use_saddle    = in.readByte() != 0;
 
 			System.out.println("Image:        " + xdim + " x " + ydim);
 			System.out.println("Channel set:  " + set_string[set_id & 0xFF]);
@@ -248,6 +261,12 @@ public class DeltaReader
 					map_list.add(map);
 				}
 
+				// Pyramid sign-bit map(s) (pixel_pyramid != 0), completely
+				// independent of the delta-type map above -- see
+				// DeltaWriter's writeSignBitMap for the exact packed format.
+				if (pixel_pyramid != 0)
+					sign_bit_list.add(readSignBitMap(in, pixel_pyramid));
+
 				// String table (compress_type > 0)
 				if (compress_type > 0)
 					table_list.add(readTable(in));
@@ -286,61 +305,13 @@ public class DeltaReader
 					huff_bl[i]      = bl;
 					huff_pay_min[i] = pay_min;
 				}
-				else if (entropy_type == 2) // Arithmetic (BigInteger)
+				else if (entropy_type == 2) // Arithmetic (renormalizing/fast). The
+				                            // exact-BigInteger "Slow Arithmetic"
+				                            // path (formerly entropy_type==2)
+				                            // has been removed -- see
+				                            // DeltaWriter's matching removal.
 				{
-					int n_segs  = in.readInt();
-					int len_type = in.readInt();
-					int zfl     = in.readInt();
-					byte[] zfd  = new byte[zfl];
-					in.readFully(zfd);
-
-					// Compute inflated frequency buffer size
-					int n_bytes = n_segs * 256 * ((len_type == 0) ? 1 : (len_type == 1) ? 2 : 4);
-					byte[] fb   = new byte[n_bytes];
-					Inflater inf = new Inflater();
-					inf.setInput(zfd, 0, zfl);
-					inf.inflate(fb);
-					inf.end();
-
-					int[][] freqs = new int[n_segs][256];
-					if (len_type == 0)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++) { freqs[k][m] = fb[k*256+m]; if (freqs[k][m]<0) freqs[k][m]+=256; }
-					else if (len_type == 1)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a = fb[k*512+2*m]; if(a<0)a+=256;
-								int b = fb[k*512+2*m+1]; if(b<0)b+=256; b<<=8;
-								freqs[k][m] = a|b;
-							}
-					else
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a=fb[k*1024+4*m];if(a<0)a+=256;
-								int b=fb[k*1024+4*m+1];if(b<0)b+=256;b<<=8;
-								int c=fb[k*1024+4*m+2];if(c<0)c+=256;c<<=16;
-								int d=fb[k*1024+4*m+3];if(d<0)d+=256;d<<=24;
-								freqs[k][m]=a|b|c|d;
-							}
-
-					BigInteger[][] offsets = new BigInteger[n_segs][2];
-					for (int k = 0; k < n_segs; k++)
-					{
-						int    ll;
-						byte[] bb;
-						ll = in.readInt(); bb = new byte[ll]; in.readFully(bb); offsets[k][0] = new BigInteger(bb);
-						ll = in.readInt(); bb = new byte[ll]; in.readFully(bb); offsets[k][1] = new BigInteger(bb);
-					}
-
-					freq_list.add(freqs);
-					offset_list.add(offsets);
-					segment_list.add(new byte[n_segs][0]);
-				}
-				else // entropy_type == 3 (Fast Arithmetic)
-				{
-					// Frequency tables use the same on-disk format as Arithmetic.
+					// Frequency tables use the same on-disk format they always have.
 					int n_segs   = in.readInt();
 					int len_type = in.readInt();
 					int zfl      = in.readInt();
@@ -468,6 +439,28 @@ public class DeltaReader
 		else
 			for (int k = 0; k < tl; k++) tbl[k] = in.readShort();
 		return tbl;
+	}
+
+	// Mirrors DeltaWriter.writeSignBitMap exactly: raw packed bits, 8 to a
+	// byte, no table, no compression, one bitmap per pyramid level
+	// transition. Reads pixel_pyramid bitmaps -- the count is never
+	// written explicitly, since the reader already knows it from that
+	// header field.
+	private static boolean[][] readSignBitMap(DataInputStream in, int pixel_pyramid) throws IOException
+	{
+		boolean[][] geqBitsPerLevel = new boolean[pixel_pyramid][];
+		for (int lvl = 0; lvl < pixel_pyramid; lvl++)
+		{
+			int    len       = in.readInt();
+			int    packedLen = (len + 7) / 8;
+			byte[] packed    = new byte[packedLen];
+			in.readFully(packed);
+			boolean[] geq = new boolean[len];
+			for (int q = 0; q < len; q++)
+				geq[q] = (packed[q >> 3] & (1 << (q & 7))) != 0;
+			geqBitsPerLevel[lvl] = geq;
+		}
+		return geqBitsPerLevel;
 	}
 
 	// =========================================================================
@@ -642,7 +635,21 @@ public class DeltaReader
 					intermediate_ydim = ydim - (int)(f*(ydim/2-2));
 					cur_xdim = intermediate_xdim; cur_ydim = intermediate_ydim;
 				}
-				size = cur_xdim * cur_ydim;
+
+				// Pyramid dimensions, derived the same way DeltaWriter derives
+				// them (no need to store them separately in the file) --
+				// entropy decode and the delta-type inverse both operate on
+				// this SMALLER, pyramid-shrunk size when pixel_pyramid != 0.
+				int pyramid_xdim = cur_xdim, pyramid_ydim = cur_ydim;
+				if (pixel_pyramid != 0)
+				{
+					int mult = 1 << pixel_pyramid;
+					int padded_xdim = ImageMapper.padTo(cur_xdim, mult);
+					int padded_ydim = ImageMapper.padTo(cur_ydim, mult);
+					pyramid_xdim = padded_xdim >> pixel_pyramid;
+					pyramid_ydim = padded_ydim >> pixel_pyramid;
+				}
+				size = pyramid_xdim * pyramid_ydim;
 
 				// ---- Entropy decode â†’ payload bytes ----
 				byte[] payload;
@@ -678,38 +685,10 @@ public class DeltaReader
 					for (int k = 0; k < num_sym; k++)
 						payload[k] = (byte)(decoded[k] + pay_min);
 				}
-				else if (entropy_type == 2) // Arithmetic (BigInteger)
-				{
-					// Expected total payload bytes
-					int expected = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
-
-					int[][]        freqs   = freq_list.get(i);
-					BigInteger[][] offsets = offset_list.get(i);
-					int            n_segs  = freqs.length;
-					int            seg_len = expected / n_segs;
-					int            odd_len = seg_len + expected % n_segs;
-
-					byte[][] segs = segment_list.get(i);
-					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
-
-					// Decode segments in parallel
-					Thread[] thr = new Thread[n_segs];
-					for (int k = 0; k < n_segs; k++)
-					{
-						final int ki = k;
-						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValues(offsets[ki], freqs[ki], segs[ki].length));
-						thr[k].start();
-					}
-					for (Thread t : thr) t.join();
-
-					// Reassemble
-					byte[] buf = new byte[expected];
-					int pos = 0;
-					for (int m = 0; m < n_segs; m++)
-					{ System.arraycopy(segs[m], 0, buf, pos, segs[m].length); pos += segs[m].length; }
-					payload = buf;
-				}
-				else // entropy_type == 3 (Fast Arithmetic)
+				else // entropy_type == 2 (Arithmetic, renormalizing/fast). The
+				     // exact-BigInteger "Slow Arithmetic" path (formerly
+				     // entropy_type==2, with this one at ==3) has been
+				     // removed -- see DeltaWriter's matching removal.
 				{
 					int expected  = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
 
@@ -766,20 +745,51 @@ public class DeltaReader
 
 				// ---- Delta â†’ channel values ----
 				int[] cur_ch;
-				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 2) cur_ch = DeltaMapper.getValuesFromAverageDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromMedDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromDirectionalDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 5)  cur_ch = DeltaMapper.getValuesFromAdaptiveDeltas(delta, cur_xdim, cur_ydim, init[i]);
-				else if (delta_type == 6)  cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 7)  cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 8)  cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 12) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, cur_xdim, cur_ydim, init[i], map_list.get(i));
-				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, cur_xdim, cur_ydim, init[i], map_list.get(i), scanline5_variant);
-				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, cur_xdim, cur_ydim, init[i]);
+				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 2) cur_ch = DeltaMapper.getValuesFromAverageDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromMedDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromDirectionalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 5)  cur_ch = DeltaMapper.getValuesFromAdaptiveDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+				else if (delta_type == 6)  cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 7)  cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 8)  cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 12) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
+				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i), scanline5_variant);
+				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
+
+				// ---- Image pyramid: expand back to cur_xdim x cur_ydim.
+				// Sign-bit correction is applied at EVERY level -- mirrors
+				// DeltaWriter's applyImpl() exactly. ----
+				if (pixel_pyramid != 0)
+				{
+					int mult = 1 << pixel_pyramid;
+					int padded_xdim = ImageMapper.padTo(cur_xdim, mult);
+					int padded_ydim = ImageMapper.padTo(cur_ydim, mult);
+
+					// Difference channels (blue-green, red-green, red-blue --
+					// channel_id[i]>2) are shifted by their own observed
+					// minimum to become non-negative but are NEVER rescaled,
+					// so their legitimate range can run up to 510 (two
+					// [0,255] channels differing by as much as 255 in
+					// either direction), not just 255 -- see DeltaWriter's
+					// matching comment for the full explanation.
+					int maxValue = (channel_id[i] > 2) ? 510 : 255;
+
+					boolean[][] geqBitsPerLevel = sign_bit_list.get(i);
+
+					int[] curLevel = cur_ch;
+					int curXdim = pyramid_xdim;
+					for (int lvl = pixel_pyramid - 1; lvl >= 0; lvl--)
+					{
+						int[] predicted = use_saddle ? ImageMapper.expandGradientSaddle(curLevel, curXdim, maxValue) : ImageMapper.expandGradient(curLevel, curXdim, maxValue);
+						curLevel = ImageMapper.refineWithSignBits(curLevel, predicted, geqBitsPerLevel[lvl], curXdim * 2, maxValue);
+						curXdim *= 2;
+					}
+					cur_ch = ImageMapper.crop(curLevel, padded_xdim, padded_ydim, cur_xdim, cur_ydim);
+				}
 
 				// Restore difference-channel offset
 				if (channel_id[i] > 2)
