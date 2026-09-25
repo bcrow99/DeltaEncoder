@@ -43,7 +43,10 @@ public class PacketWriter
 	// at Save and never affects the live preview.
 	int packet_level = 0;
 	static final int    MIN_SEGMENT_BITS = 256;
-	static final int    SEGMENT_TYPE     = 3;     // segment -> merge -> combine -> splice
+	// segment -> merge -> combine (no splice). Testing showed splice()/splice2()
+	// saved only ~0.5% of segment bits at 100x+ the run time -- their cost grows
+	// with the square of each uncompressed run, so large images effectively hang.
+	static final int    SEGMENT_TYPE     = 2;
 
 	// Merge criterion and bin width passed to getSegmentedData(); both
 	// adjustable from the Packet menu. Each segment's zero-bit ratio is
@@ -57,7 +60,7 @@ public class PacketWriter
 	// The bin width is set as an EVEN number of bins (2-50) from the Bins
 	// slider, so 0.5 always falls on a bin boundary and "same side of 0.5"
 	// splits cleanly.
-	int    merge_type = 3;
+	int    merge_type = 2;
 	int    bins       = 20;
 	double bin        = binWidth(20);
 	static final String[] MERGE_TYPE_NAMES = {
@@ -1111,7 +1114,7 @@ public class PacketWriter
 				// difference, the segments themselves compress as well as the
 				// whole string does. The entropy lines code BOTH payloads with
 				// the selected coder, whichever one was written, including that
-				// coder's own headers and tables.
+				// coder's own headers and tables, plus each layout's compressed table.
 				String[] en={"LZ77","Huffman","Arithmetic"};
 				System.out.println("Packet level "+packet_level+", merge type "+merge_type+", "+bins+" bins ("+String.format("%.4f",bin)+"), entropy "+en[entropy_type]);
 				for(int i=0;i<3;i++)
@@ -1120,7 +1123,9 @@ public class PacketWriter
 					int U=string_bits[i], W=wp.bits, S=sp.bits;
 					int Tw=wp.ztable.length*8, Ts=sp.ztable.length*8;
 					int d_payload=S-W, d_over=Ts-Tw;
-					int ew=entropySize(wp.payload), es=entropySize(sp.payload);
+					// Entropy output plus each layout's compressed table, so the
+					// comparison is on the same terms as the file sizes.
+					int ew=entropySize(wp.payload)+wp.ztable.length, es=entropySize(sp.payload)+sp.ztable.length;
 					System.out.println("Channel "+i+" ("+channel_string[channel_id[i]]+"):");
 					System.out.println(String.format("  uncompressed string          %10d bits",U));
 					System.out.println(String.format("  whole string, compressed     %10d bits   ratio %.4f   table %6d bits",W,(double)W/U,Tw));
@@ -1129,8 +1134,8 @@ public class PacketWriter
 					System.out.println(String.format("  payload difference  (S - W)  %+10d bits",d_payload));
 					System.out.println(String.format("  overhead difference (Ts - Tw)%+10d bits",d_over));
 					System.out.println(String.format("  total difference             %+10d bits   (%.2f%% of whole)",d_payload+d_over,100.0*(d_payload+d_over)/(W+Tw)));
-					System.out.println(String.format("  after %-10s whole %8d B (x%.4f)   segmented %8d B (x%.4f)   difference %+d B",
-						en[entropy_type],ew,ew*8.0/W,es,es*8.0/S,es-ew));
+					System.out.println(String.format("  after %-10s whole %8d B   segmented %8d B   difference %+d B (%+.2f%%)   [entropy output + table]",
+						en[entropy_type],ew,es,es-ew,100.0*(es-ew)/ew));
 				}
 
 				File saved=new File("foo");double rate=(double)saved.length()/(image_xdim*image_ydim*3);
