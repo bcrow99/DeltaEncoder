@@ -58,11 +58,8 @@ public class PacketReader
 	int[]             lz77_orig_length = new int[3];
 
 	// ---- Huffman per-channel data -------------------------------------------
-	ArrayList<int[]>  huff_rank_list = new ArrayList<int[]>();   // rank table
-	ArrayList<byte[]> huff_cl_list   = new ArrayList<byte[]>();  // code lengths
-	ArrayList<byte[]> huff_pay_list  = new ArrayList<byte[]>();  // packed payload
-	int[]             huff_bl        = new int[3];               // bit length
-	int[]             huff_pay_min   = new int[3];               // payload_min
+	ArrayList<byte[]> huff_length_list = new ArrayList<byte[]>();  // 256 code lengths
+	ArrayList<byte[]> huff_pay_list    = new ArrayList<byte[]>();  // coded payload
 
 	// ---- Arithmetic per-channel data ----------------------------------------
 	// (offset_list/segment_list, used only by the removed exact-BigInteger
@@ -74,6 +71,11 @@ public class PacketReader
 	// Each entry is an array of encoded byte[] segments from getIntervalValueFast.
 	// Frequency tables are shared with the Arithmetic path (freq_list above).
 	ArrayList<byte[][]>       fast_enc_list = new ArrayList<byte[][]>();
+	// entropy_type == 3 (Arithmetic per packet) uses the same two lists:
+	// one frequency table and one coded block per packet (segment).
+	// entropy_type == 4 (Huffman per packet) uses fast_enc_list for the
+	// coded packets and this list for their code-length tables.
+	ArrayList<byte[][]>       huffman_table_list = new ArrayList<byte[][]>();
 
 	// ---- Label strings (mirrors PacketWriter) -------------------------------
 	static final String[] set_string = {
@@ -93,7 +95,7 @@ public class PacketReader
 		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic"};
+		"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -305,26 +307,14 @@ public class PacketReader
 				}
 				else if (entropy_type == 1)
 				{
-					// Huffman
-					int[]  rank_table    = readTable(in);
-					int    pay_min       = in.readInt();
-					int    n             = in.readInt();
-					byte   init_val      = in.readByte();
-					byte   max_delta     = in.readByte();
-					int    pdt_len       = in.readByte() & 0xFF;  // unsigned byte
-					byte[] pdt           = new byte[pdt_len];
-					in.readFully(pdt);
-					byte[] code_length   = CodeMapper.unpackLengthTable(n, init_val, max_delta, pdt);
-					int    bl            = in.readInt();
-					int    pay_len       = in.readInt();
-					byte[] pay_bytes     = new byte[pay_len];
-					in.readFully(pay_bytes);
-
-					huff_rank_list.add(rank_table);
-					huff_cl_list.add(code_length);
-					huff_pay_list.add(pay_bytes);
-					huff_bl[i]      = bl;
-					huff_pay_min[i] = pay_min;
+					// Huffman: the payload's 256 code lengths (Deflated), then the
+					// coded payload -- see PacketWriter's codeHuffmanPayload.
+					byte[] huffman_table = new byte[in.readInt()];
+					in.readFully(huffman_table);
+					huff_length_list.add(CodeMapper.unpackRegularTables(huffman_table, 1)[0]);
+					byte[] coded = new byte[in.readInt()];
+					in.readFully(coded);
+					huff_pay_list.add(coded);
 				}
 				else if (entropy_type == 2) // Arithmetic (renormalizing/fast). The
 				                            // exact-BigInteger "Slow Arithmetic"
@@ -339,35 +329,7 @@ public class PacketReader
 					byte[] zfd   = new byte[zfl];
 					in.readFully(zfd);
 
-					int n_bytes = n_segs * 256 * ((len_type == 0) ? 1 : (len_type == 1) ? 2 : 4);
-					byte[] fb   = new byte[n_bytes];
-					Inflater inf = new Inflater();
-					inf.setInput(zfd, 0, zfl);
-					inf.inflate(fb);
-					inf.end();
-
-					int[][] freqs = new int[n_segs][256];
-					if (len_type == 0)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++) { freqs[k][m] = fb[k*256+m]; if (freqs[k][m]<0) freqs[k][m]+=256; }
-					else if (len_type == 1)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a = fb[k*512+2*m]; if(a<0)a+=256;
-								int b = fb[k*512+2*m+1]; if(b<0)b+=256; b<<=8;
-								freqs[k][m] = a|b;
-							}
-					else
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a=fb[k*1024+4*m];if(a<0)a+=256;
-								int b=fb[k*1024+4*m+1];if(b<0)b+=256;b<<=8;
-								int c=fb[k*1024+4*m+2];if(c<0)c+=256;c<<=16;
-								int d=fb[k*1024+4*m+3];if(d<0)d+=256;d<<=24;
-								freqs[k][m]=a|b|c|d;
-							}
+					int[][] freqs = inflateFrequencies(zfd, n_segs, len_type);
 
 					freq_list.add(freqs);
 
@@ -381,6 +343,45 @@ public class PacketReader
 						in.readFully(fast_enc[k]);
 					}
 					fast_enc_list.add(fast_enc);
+				}
+				else if (entropy_type == 3) // Arithmetic per packet: every packet
+				                            // coded on its own -- see PacketWriter's
+				                            // codePackets for the layout.
+				{
+					int n_packets = segment_bytelength[i].length;
+					int len_type  = in.readInt();
+					int zfl       = in.readInt();
+					byte[] zfd    = new byte[zfl];
+					in.readFully(zfd);
+					freq_list.add(inflateFrequencies(zfd, n_packets, len_type));
+
+					// Coded lengths: a varint per packet.
+					byte[] lengths = new byte[in.readInt()];
+					in.readFully(lengths);
+					byte[][] coded = new byte[n_packets][];
+					int pos = 0;
+					for (int k = 0; k < n_packets; k++)
+					{
+						int v = 0, shift = 0, b;
+						do { b = lengths[pos++] & 0xFF; v |= (b & 127) << shift; shift += 7; } while (b >= 128);
+						coded[k] = new byte[v];
+					}
+					for (int k = 0; k < n_packets; k++) in.readFully(coded[k]);
+					fast_enc_list.add(coded);
+				}
+				else if (entropy_type == 4) // Huffman per packet -- see
+				                            // PacketWriter's codeHuffmanPackets.
+				{
+					int n_packets = segment_bytelength[i].length;
+					byte[] tables = new byte[in.readInt()];
+					in.readFully(tables);
+					huffman_table_list.add(CodeMapper.unpackRegularTables(tables, n_packets));
+					byte[] lengths = new byte[in.readInt()];
+					in.readFully(lengths);
+					int[] coded_length = CodeMapper.unpackRegularLengths(lengths, n_packets);
+					byte[][] coded = new byte[n_packets][];
+					for (int k = 0; k < n_packets; k++) { coded[k] = new byte[coded_length[k]]; in.readFully(coded[k]); }
+					fast_enc_list.add(coded);
 				}
 			}
 
@@ -450,6 +451,27 @@ public class PacketReader
 	}
 
 	// ---- table I/O helper ---------------------------------------------------
+	// Frequency tables as the writers store them: n tables of 256 counts,
+	// 1, 2 or 4 bytes per count (len_type 0, 1, 2), Deflated together.
+	private static int[][] inflateFrequencies(byte[] zfd, int n, int len_type) throws Exception
+	{
+		int bpe = (len_type == 0) ? 1 : (len_type == 1) ? 2 : 4;
+		byte[] fb = new byte[n * 256 * bpe];
+		Inflater inf = new Inflater();
+		inf.setInput(zfd);
+		inf.inflate(fb);
+		inf.end();
+		int[][] freqs = new int[n][256];
+		for (int k = 0; k < n; k++)
+			for (int m = 0; m < 256; m++)
+			{
+				int v = 0;
+				for (int b = 0; b < bpe; b++) v |= (fb[(k * 256 + m) * bpe + b] & 0xFF) << (8 * b);
+				freqs[k][m] = v;
+			}
+		return freqs;
+	}
+
 	private static int[] readTable(DataInputStream in) throws IOException
 	{
 		int    tl  = in.readShort();
@@ -641,10 +663,47 @@ public class PacketReader
 				// length is the sum of the segment lengths.
 				int payload_length = PacketReader.this.payload_length[i];
 
-				// ---- Entropy decode -> payload bytes ----
-				byte[] payload;
+				// ---- Entropy decode -> payload bytes (or, per packet, straight
+				// to segments) ----
+				byte[] payload = null;
+				ArrayList<byte[]> segments = null;
 
-				if (entropy_type == 0)
+				if (entropy_type == 3)
+				{
+					// Arithmetic per packet: decode every packet on its own,
+					// in parallel, and re-attach its trailing data byte from
+					// the segment table.
+					int[][]  freqs = freq_list.get(i);
+					byte[][] coded = fast_enc_list.get(i);
+					int[]    blen  = segment_bytelength[i];
+					byte[]   sdata = segment_data[i];
+					byte[][] seg   = new byte[blen.length][];
+					java.util.stream.IntStream.range(0, blen.length).parallel().forEach(k ->
+					{
+						byte[] body = (blen[k] == 0) ? new byte[0] : ArithmeticMapper.getArithmeticValuesFast(coded[k], freqs[k], blen[k]);
+						seg[k] = Arrays.copyOf(body, blen[k] + 1);
+						seg[k][blen[k]] = sdata[k];
+					});
+					segments = new ArrayList<byte[]>(Arrays.asList(seg));
+				}
+				else if (entropy_type == 4)
+				{
+					// Huffman per packet: same idea, with each packet's own
+					// canonical Huffman code.
+					byte[][] table = huffman_table_list.get(i);
+					byte[][] coded = fast_enc_list.get(i);
+					int[]    blen  = segment_bytelength[i];
+					byte[]   sdata = segment_data[i];
+					byte[][] seg   = new byte[blen.length][];
+					java.util.stream.IntStream.range(0, blen.length).parallel().forEach(k ->
+					{
+						byte[] body = CodeMapper.unpackRegularCode(coded[k], table[k], blen[k]);
+						seg[k] = Arrays.copyOf(body, blen[k] + 1);
+						seg[k][blen[k]] = sdata[k];
+					});
+					segments = new ArrayList<byte[]>(Arrays.asList(seg));
+				}
+				else if (entropy_type == 0)
 				{
 					// LZ77
 					byte[]   zip_data = lz77_data_list.get(i);
@@ -657,22 +716,7 @@ public class PacketReader
 				else if (entropy_type == 1)
 				{
 					// Huffman
-					int[]  rank_table = huff_rank_list.get(i);
-					byte[] code_len   = huff_cl_list.get(i);
-					byte[] packed     = huff_pay_list.get(i);
-					int    bl         = huff_bl[i];
-					int    pay_min    = huff_pay_min[i];
-					int[]  hcode      = CodeMapper.getCanonicalCode(code_len);
-
-					int num_sym = payload_length;
-
-					int[] decoded = new int[num_sym];
-					CodeMapper.unpackCode(packed, rank_table, hcode, code_len, bl, decoded);
-
-					// Restore original unsigned byte values, then cast to signed byte
-					payload = new byte[num_sym];
-					for (int k = 0; k < num_sym; k++)
-						payload[k] = (byte)(decoded[k] + pay_min);
+					payload = CodeMapper.unpackRegularCode(huff_pay_list.get(i), huff_length_list.get(i), payload_length);
 				}
 				else // entropy_type == 2 (Arithmetic, renormalizing/fast)
 				{
@@ -706,7 +750,8 @@ public class PacketReader
 				// and re-attaches each one's data byte; restore() then
 				// decompresses whichever segments were compressed and joins
 				// them at their bit offsets.
-				ArrayList<byte[]> segments = SegmentMapper.unpackSegments3(payload, segment_bytelength[i], segment_data[i]);
+				if (segments == null)
+					segments = SegmentMapper.unpackSegments3(payload, segment_bytelength[i], segment_data[i]);
 				byte[] str = SegmentMapper.restore2(segments, string_data[i]);
 
 				// ---- Unary string -> delta values ----

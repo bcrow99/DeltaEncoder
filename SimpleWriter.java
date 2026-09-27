@@ -27,7 +27,7 @@ public class SimpleWriter
 	// ---- Compression parameters ---------------------------------------------
 	int pixel_quant   = 4;
 	int pixel_shift   = 3;
-	int pixel_segment = 0;
+	int pixel_segment = 10;  // Arithmetic blocks: 10 = one block per channel (default); lower = blocks of 500+500*pixel_segment bytes
 	int correction    = 0;
 	int min_set_id    = 0;
 	int delta_type    = 2;   // average filter by default; user can change it from the Delta menu
@@ -790,17 +790,19 @@ public class SimpleWriter
 						else
 						{
 							long t0=System.nanoTime();
-							int[] pi=new int[payload.length];for(int k=0;k<payload.length;k++){pi[k]=payload[k];if(pi[k]<0)pi[k]+=256;}
-							ArrayList hl=StringMapper.getHistogram(pi);int pmin=(int)hl.get(0);int[] hist=(int[])hl.get(1);int[] rt=StringMapper.getRankTable(hist);
-							for(int k=0;k<pi.length;k++)pi[k]-=pmin;int n=hist.length;
-							ArrayList<Integer> fl=new ArrayList<>();for(int v:hist)fl.add(v);Collections.sort(fl,Comparator.reverseOrder());
-							int[] freq=new int[n];for(int k=0;k<n;k++)freq[k]=fl.get(k);
-							byte[] hl2=CodeMapper.getHuffmanLength2(freq);int[] hc=CodeMapper.getCanonicalCode(hl2);
-							ArrayList pl=CodeMapper.packCode(pi,rt,hc,hl2);byte[] pb=(byte[])pl.get(0);int bl=(int)pl.get(1);
+							// Regular Huffman (CodeMapper): one canonical code for the
+							// channel's payload. Written as the 256 code lengths
+							// (Deflated), then the coded payload; the payload length
+							// comes from channel_compressed_length.
+							int[] freq=new int[256];for(byte v:payload)freq[v&0xFF]++;
+							byte[] lengths=CodeMapper.getRegularHuffmanLength(freq);
+							byte[] coded=CodeMapper.packRegularCode(payload,lengths);
+							byte[] table=CodeMapper.packRegularTables(new byte[][]{lengths},Deflater.BEST_COMPRESSION);
 							entropy_nanos+=System.nanoTime()-t0;
-							writeTable(out,rt);out.writeInt(pmin);
-							ArrayList ltl=CodeMapper.packLengthTable(hl2);int ltn=(int)ltl.get(0);byte ltinit=(byte)ltl.get(1);byte ltmax=(byte)ltl.get(2);byte[] ltdelta=(byte[])ltl.get(3);
-							out.writeInt(ltn);out.writeByte(ltinit);out.writeByte(ltmax);out.writeByte(ltdelta.length);out.write(ltdelta,0,ltdelta.length);out.writeInt(bl);out.writeInt(pb.length);out.write(pb,0,pb.length);
+							if(!Arrays.equals(payload,CodeMapper.unpackRegularCode(coded,lengths,payload.length)))
+								System.out.println("WARNING: channel "+i+" Huffman payload does not decode back.");
+							out.writeInt(table.length);out.write(table);
+							out.writeInt(coded.length);out.write(coded);
 						}
 					}
 					System.out.println("Entropy coding ["+(entropy_type==0?"LZ77":"Huffman")+"] took "+formatDuration(entropy_nanos));
@@ -835,7 +837,7 @@ public class SimpleWriter
 		private void deflateFrequencies(int[] n_segs,int[][][] freqs,int[] len_types,byte[][] zip_freqs,int[] zip_lens) throws InterruptedException
 		{
 			Thread[] dfl=new Thread[3];
-			for(int i=0;i<3;i++){final int fi=i;final int[][] fr=freqs[i];final int ns=n_segs[i];dfl[i]=new Thread(()->{int fmax=0;for(int[]row:fr)for(int v:row)if(v>fmax)fmax=v;int lt=(fmax<Byte.MAX_VALUE*2+2)?0:(fmax<Short.MAX_VALUE*2+2)?1:2;len_types[fi]=lt;int bpe=(lt==0)?1:(lt==1)?2:4;byte[] fb=new byte[ns*256*bpe];for(int k=0;k<ns;k++)for(int m=0;m<256;m++){int v=fr[k][m];int base=k*256*bpe+m*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}Deflater def=new Deflater(Deflater.BEST_COMPRESSION);byte[] zf=new byte[fb.length];def.setInput(fb);def.finish();int zl=def.deflate(zf);def.end();zip_freqs[fi]=zf;zip_lens[fi]=zl;});dfl[i].start();}
+			for(int i=0;i<3;i++){final int fi=i;final int[][] fr=freqs[i];final int ns=n_segs[i];dfl[i]=new Thread(()->{int fmax=0;for(int[]row:fr)for(int v:row)if(v>fmax)fmax=v;int lt=(fmax<Byte.MAX_VALUE*2+2)?0:(fmax<Short.MAX_VALUE*2+2)?1:2;len_types[fi]=lt;int bpe=(lt==0)?1:(lt==1)?2:4;byte[] fb=new byte[ns*256*bpe];for(int k=0;k<ns;k++)for(int m=0;m<256;m++){int v=fr[k][m];int base=k*256*bpe+m*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}Deflater def=new Deflater(Deflater.BEST_COMPRESSION);byte[] zf=new byte[fb.length+64];def.setInput(fb);def.finish();int zl=def.deflate(zf);def.end();zip_freqs[fi]=zf;zip_lens[fi]=zl;});dfl[i].start();}
 			for(Thread t:dfl)t.join();
 		}
 

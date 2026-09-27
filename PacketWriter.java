@@ -27,47 +27,50 @@ public class PacketWriter
 	// ---- Compression parameters ---------------------------------------------
 	int pixel_quant   = 4;
 	int pixel_shift   = 3;
-	int pixel_segment = 0;
+	int pixel_segment = 10;  // Arithmetic blocks: 10 = one block per channel (default); lower = blocks of 500+500*pixel_segment bytes
 	int correction    = 0;
 	int min_set_id    = 0;
 	int delta_type    = 2;   // average filter by default; user can change it from the Delta menu
 	int entropy_type  = 0;
+	// Entropy menu, in entropy_type order. 3 and 4 code every packet on its
+	// own (each with its own table) instead of all of a channel's packets as
+	// one stream -- see codePackets and codeHuffmanPackets.
+	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)"};
+	static final int ARITHMETIC_PER_PACKET = 3;
+	static final int HUFFMAN_PER_PACKET    = 4;
 	byte scanline5_variant = 0;
 
 	// ---- Packet (string segmentation) parameters ----------------------------
 	// packet_level 0..10 sets the minimum segment length passed to
-	// SegmentMapper.getSegmentedData2(): 0 = MIN_SEGMENT_BITS (32 bytes),
+	// SegmentMapper.getSegmentedData3(): 0 = MIN_SEGMENT_BITS (32 bytes),
 	// 10 = no segmentation (the whole string compressed as one piece, which
 	// is what SimpleWriter does). Levels in between are geometric steps.
+	// Merging is capped at MAX_PACKET_FACTOR times the minimum segment
+	// length: uncapped, merging collapses the packet count to a handful by
+	// level 2; capped, it falls roughly by half per level.
 	// Segmentation is lossless, so like the entropy settings it only runs
 	// at Save and never affects the live preview.
 	int packet_level = 0;
 	static final int    MIN_SEGMENT_BITS = 256;
+	static final int    MAX_PACKET_FACTOR = 4;
 	// segment -> merge -> combine (no splice). Testing showed splice()/splice2()
 	// saved only ~0.5% of segment bits at 100x+ the run time -- their cost grows
 	// with the square of each uncompressed run, so large images effectively hang.
 	static final int    SEGMENT_TYPE     = 2;
 
-	// Merge criterion and bin width passed to getSegmentedData(); both
-	// adjustable from the Packet menu. Each segment's zero-bit ratio is
-	// sorted into bins of width `bin`; merge() joins neighbouring segments
-	// whose bins are "similar" according to merge_type:
-	//   0: same side of 0.5 (both mostly zeros or both mostly ones)
-	//   1: same side, excluding the bins right next to 0.5
-	//   2: same side, and bins less than a quarter of the range apart
-	//   3: exactly the same bin (strictest, most segments)
-	//
-	// The bin width is set as an EVEN number of bins (2-50) from the Bins
-	// slider, so 0.5 always falls on a bin boundary and "same side of 0.5"
-	// splits cleanly.
-	int    merge_type = 2;
-	int    bins       = 20;
-	double bin        = binWidth(20);
-	static final String[] MERGE_TYPE_NAMES = {
-		"0  Same side of 0.5",
-		"1  Same side, away from 0.5",
-		"2  Same side, nearby bins",
-		"3  Same bin"};
+	// Merge criterion and bin width passed to getSegmentedData3(). Each
+	// segment's zero-bit ratio is sorted into BINS bins; merging joins
+	// neighbouring segments on the same side of 0.5 whose bins are less than
+	// a quarter of the range apart (merge type 2). Testing showed these work
+	// well as fixed defaults, so they're no longer in the Packet menu.
+	static final int    MERGE_TYPE = 2;
+	static final int    BINS       = 20;
+	static final double BIN        = binWidth(BINS);
+
+	// Auto (Segment Length dialog): at Save, try every level with the
+	// selected entropy coder and keep the one giving the smallest output.
+	boolean packet_auto = false;
+	JCheckBox packet_auto_box;
 
 	// Bin width for a bin count. merge() recovers the count as
 	// (int)(1.0/bin), so nudge the width down if floating-point rounding
@@ -314,7 +317,7 @@ public class PacketWriter
 		//
 		// Deltas are always packed as UNCOMPRESSED unary strings
 		// (getStringList(delta, false)). Compression happens per segment
-		// at Save time, inside SegmentMapper.getSegmentedData2().
+		// at Save time, inside SegmentMapper.getSegmentedData3().
 	}
 
 	public PacketWriter(String _filename)
@@ -418,11 +421,10 @@ public class PacketWriter
 				for(int i=0;i<13;i++)if(dtype_map[i]==delta_type){delta_button[i].setSelected(true);break;}
 
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button=new JRadioButtonMenuItem[3];
-				entropy_button[0]=new JRadioButtonMenuItem("LZ77"); entropy_button[1]=new JRadioButtonMenuItem("Huffman");
-				entropy_button[2]=new JRadioButtonMenuItem("Arithmetic");
+				entropy_button=new JRadioButtonMenuItem[ENTROPY_NAMES.length];
+				for(int i=0;i<ENTROPY_NAMES.length;i++)entropy_button[i]=new JRadioButtonMenuItem(ENTROPY_NAMES[i]);
 				ButtonGroup eg=new ButtonGroup();
-				for(int i=0;i<3;i++){eg.add(entropy_button[i]);entropy_menu.add(entropy_button[i]);}
+				for(int i=0;i<ENTROPY_NAMES.length;i++){eg.add(entropy_button[i]);entropy_menu.add(entropy_button[i]);}
 				// Slow Arithmetic (the exact-BigInteger entropy type, formerly
 				// entropy_type==2) has been removed -- it served its purpose
 				// during development but real segment sizes made it
@@ -430,8 +432,8 @@ public class PacketWriter
 				// Arithmetic path, which is now just "Arithmetic" (entropy_type==2).
 				// entropy_type now equals the button index directly; no
 				// remapping array needed since removal left no numbering gap.
-				for(int i=0;i<3;i++){entropy_button[i].setSelected(entropy_type==i);}
-				for(int i=0;i<3;i++){final int et=i;entropy_button[i].addActionListener(e->{if(entropy_type!=et)entropy_type=et;});}
+				for(int i=0;i<ENTROPY_NAMES.length;i++){entropy_button[i].setSelected(entropy_type==i);}
+				for(int i=0;i<ENTROPY_NAMES.length;i++){final int et=i;entropy_button[i].addActionListener(e->{if(entropy_type!=et)entropy_type=et;});}
 
 				// Segment size for the Arithmetic entropy type
 				// (SaveHandler's `min_seg = 500 + pixel_segment*500`, up to
@@ -446,39 +448,7 @@ public class PacketWriter
 				// Packet menu: minimum segment length for string segmentation.
 				// Like the entropy settings, this only takes effect at Save.
 				JMenu packet_menu = new JMenu("Packet");
-				packet_menu.add(makeSliderDialog(frame,"Segment Length",0,10,packet_level,v->{packet_level=v;},ss)); packet_slider=ss[0];
-
-				// Merge Type submenu and Bins slider. Like the other packet
-				// settings, these only take effect at Save.
-				JMenu merge_menu=new JMenu("Merge Type");
-				ButtonGroup mg=new ButtonGroup();
-				for(int m=0;m<MERGE_TYPE_NAMES.length;m++)
-				{
-					final int mt=m;
-					JRadioButtonMenuItem mi=new JRadioButtonMenuItem(MERGE_TYPE_NAMES[m],merge_type==m);
-					mi.addActionListener(e->merge_type=mt);
-					mg.add(mi); merge_menu.add(mi);
-				}
-				packet_menu.add(merge_menu);
-				// Bins slider: 1-25 -> 2-50 bins in steps of 2. The field shows
-				// the bin count and the resulting width.
-				{
-					JMenuItem bins_item=new JMenuItem("Bins");
-					JDialog bins_dialog=new JDialog(frame,"Bins");
-					JSlider bins_slider=new JSlider(1,25,bins/2);
-					JTextField bins_field=new JTextField(10);
-					bins_field.setEditable(false);
-					bins_field.setText(String.format(" %d (%.3f) ",bins,1.0/bins));
-					bins_slider.addChangeListener(e->{
-						bins=2*bins_slider.getValue();
-						bin=binWidth(bins);
-						bins_field.setText(String.format(" %d (%.3f) ",bins,1.0/bins));
-					});
-					JPanel bp=new JPanel(new BorderLayout()); bp.add(bins_slider,BorderLayout.CENTER); bp.add(bins_field,BorderLayout.EAST);
-					bins_dialog.add(bp);
-					bins_item.addActionListener(e->{Point loc=frame.getLocation();bins_dialog.setLocation((int)loc.getX(),(int)loc.getY()-60);bins_dialog.pack();bins_dialog.setVisible(true);});
-					packet_menu.add(bins_item);
-				}
+				packet_menu.add(makeSegmentLengthDialog(frame));
 
 				menu_bar.add(delta_menu); menu_bar.add(packet_menu); menu_bar.add(entropy_menu);
 				frame.setJMenuBar(menu_bar);
@@ -502,6 +472,23 @@ public class PacketWriter
 			}
 		}
 		catch(Exception e){e.printStackTrace();System.exit(1);}
+	}
+
+	// Segment Length: a 0-10 slider plus an Auto toggle. With Auto on, the
+	// slider is disabled and Save picks the level (then shows it here).
+	private JMenuItem makeSegmentLengthDialog(JFrame parent)
+	{
+		JMenuItem item=new JMenuItem("Segment Length"); JDialog dialog=new JDialog(parent,"Segment Length");
+		JSlider slider=new JSlider(0,10,packet_level); packet_slider=slider;
+		JTextField field=new JTextField(3); field.setText(" "+packet_level+" "); field.setEditable(false);
+		slider.addChangeListener(e->{int v=slider.getValue();field.setText(" "+v+" ");packet_level=v;});
+		JCheckBox auto=new JCheckBox("Auto",packet_auto); packet_auto_box=auto;
+		auto.addActionListener(e->{packet_auto=auto.isSelected();slider.setEnabled(!packet_auto);});
+		slider.setEnabled(!packet_auto);
+		JPanel p=new JPanel(new BorderLayout()); p.add(slider,BorderLayout.CENTER); p.add(field,BorderLayout.EAST); p.add(auto,BorderLayout.SOUTH);
+		dialog.add(p);
+		item.addActionListener(e->{Point loc=parent.getLocation();dialog.setLocation((int)loc.getX(),(int)loc.getY()-80);dialog.pack();dialog.setVisible(true);});
+		return item;
 	}
 
 	private JMenuItem makeSliderDialog(JFrame parent,String title,int lo,int hi,int init,java.util.function.IntConsumer onChange){return makeSliderDialog(parent,title,lo,hi,init,onChange,null);}
@@ -861,10 +848,10 @@ public class PacketWriter
 	// meaning "don't segment -- compress the whole string as one piece".
 	// Level 0 is MIN_SEGMENT_BITS; each level multiplies it by the same
 	// factor, so level 10 would reach the full string length.
-	private int getMinimumSegmentBits(int total_bits)
+	private static int getMinimumSegmentBits(int total_bits,int level)
 	{
-		if(packet_level>=10||total_bits<=2*MIN_SEGMENT_BITS) return 0;
-		double bits=MIN_SEGMENT_BITS*Math.pow((double)total_bits/MIN_SEGMENT_BITS,packet_level/10.0);
+		if(level>=10||total_bits<=2*MIN_SEGMENT_BITS) return 0;
+		double bits=MIN_SEGMENT_BITS*Math.pow((double)total_bits/MIN_SEGMENT_BITS,level/10.0);
 		int b=((int)bits)/8*8;
 		if(b<MIN_SEGMENT_BITS) b=MIN_SEGMENT_BITS;
 		if(b>=total_bits) return 0;
@@ -875,12 +862,12 @@ public class PacketWriter
 	// into segments, each with its own trailing data byte recording
 	// whether and how it was compressed.
 	@SuppressWarnings("unchecked")
-	private ArrayList<byte[]> segmentString(byte[] string)
+	private static ArrayList<byte[]> segmentString(byte[] string,int level)
 	{
 		ArrayList<byte[]> segs=new ArrayList<byte[]>();
-		int min_bits=getMinimumSegmentBits(StringMapper.getBitlength(string));
+		int min_bits=getMinimumSegmentBits(StringMapper.getBitlength(string),level);
 		if(min_bits==0){segs.add(StringMapper.compressStrings(string));return segs;}
-		ArrayList result=SegmentMapper.getSegmentedData2(string,min_bits,SEGMENT_TYPE,merge_type,bin);
+		ArrayList result=SegmentMapper.getSegmentedData3(string,min_bits,SEGMENT_TYPE,MERGE_TYPE,BIN,MAX_PACKET_FACTOR*min_bits);
 		if(result.size()==0){segs.add(StringMapper.compressStrings(string));return segs;}
 		return (ArrayList<byte[]>)result.get(0);
 	}
@@ -984,21 +971,14 @@ public class PacketWriter
 	{
 		if(payload.length==0) return 0;
 		if(entropy_type==0) return 8+deflate(payload).length;
-		if(entropy_type==1)
-		{
-			int[] pi=new int[payload.length];for(int k=0;k<payload.length;k++){pi[k]=payload[k];if(pi[k]<0)pi[k]+=256;}
-			ArrayList hl=StringMapper.getHistogram(pi);int pmin=(int)hl.get(0);int[] hist=(int[])hl.get(1);int[] rt=StringMapper.getRankTable(hist);
-			for(int k=0;k<pi.length;k++)pi[k]-=pmin;int n=hist.length;
-			ArrayList<Integer> fl=new ArrayList<>();for(int v:hist)fl.add(v);Collections.sort(fl,Comparator.reverseOrder());
-			int[] freq=new int[n];for(int k=0;k<n;k++)freq[k]=fl.get(k);
-			byte[] hl2=CodeMapper.getHuffmanLength2(freq);int[] hc=CodeMapper.getCanonicalCode(hl2);
-			ArrayList pl=CodeMapper.packCode(pi,rt,hc,hl2);byte[] pb=(byte[])pl.get(0);
-			byte[] ltdelta=(byte[])CodeMapper.packLengthTable(hl2).get(3);
-			int table=2+rt.length*(rt.length<=Byte.MAX_VALUE*2+1?1:2);
-			return table+4+4+1+1+1+ltdelta.length+4+4+pb.length;
-		}
-		// Arithmetic: same segmenting as SaveHandler; blocks encoded on the
-		// shared thread pool.
+		// entropy_type 3 falls through to Arithmetic here, and 4 to Huffman
+		// above: for them this is only used for the whole-string side of
+		// the comparison.
+		if(entropy_type==1||entropy_type==HUFFMAN_PER_PACKET)
+			return codeHuffmanPayload(payload).size();
+		// Arithmetic (and the whole-string side of Arithmetic per packet):
+		// same segmenting as SaveHandler; blocks encoded on the shared
+		// thread pool.
 		int min_seg=500+pixel_segment*500;
 		int ns=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
 		int seg_len=payload.length/ns, odd_len=seg_len+payload.length%ns;
@@ -1015,6 +995,149 @@ public class PacketWriter
 		return size;
 	}
 
+	// ---- Arithmetic per packet (entropy_type 3) -----------------------------
+	//
+	// Each packet (segment) is coded on its own: its bytes -- everything but
+	// the trailing data byte, which is already in the segment table -- go
+	// through ArithmeticMapper as one block with the packet's own frequency
+	// table. A channel is written as
+	//   int len_type, int zip_len, zip_len bytes: all the packets' frequency
+	//       tables, 256 counts each, 1/2/4 bytes per count, Deflated together
+	//       (the same format as the Arithmetic blocks);
+	//   int lengths_len, lengths_len bytes: each packet's coded length as a
+	//       varint (7 bits per byte, high bit = more), in packet order;
+	//   the coded packets, back to back.
+	// The packet count and each packet's byte length come from the segment
+	// table, so they aren't repeated. Packets are independent, so both
+	// sides code them in parallel.
+	static class PacketCoding
+	{
+		int     len_type;
+		byte[]  zip_freqs;
+		byte[]  lengths;     // varint column
+		byte[][] coded;
+		int size() { int n=12+zip_freqs.length+lengths.length; for(byte[] c:coded) n+=c.length; return n; }
+	}
+
+	private static PacketCoding codePackets(ArrayList<byte[]> segs)
+	{
+		int n=segs.size();
+		byte[][] body=new byte[n][];
+		int[][] freq=new int[n][256];
+		for(int k=0;k<n;k++){byte[] sg=segs.get(k);body[k]=Arrays.copyOf(sg,sg.length-1);for(byte b:body[k])freq[k][b&0xFF]++;}
+		PacketCoding pc=new PacketCoding();
+		pc.coded=new byte[n][];
+		parallel(n,k->pc.coded[k]=(body[k].length==0)?new byte[0]:ArithmeticMapper.getIntervalValueFast(body[k],freq[k]));
+		int fmax=0;for(int[] row:freq)for(int v:row)if(v>fmax)fmax=v;
+		pc.len_type=(fmax<Byte.MAX_VALUE*2+2)?0:(fmax<Short.MAX_VALUE*2+2)?1:2;
+		int bpe=(pc.len_type==0)?1:(pc.len_type==1)?2:4;
+		byte[] fb=new byte[n*256*bpe];
+		for(int k=0;k<n;k++)for(int m=0;m<256;m++){int v=freq[k][m];int base=k*256*bpe+m*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
+		pc.zip_freqs=deflate(fb);
+		ByteArrayOutputStream lens=new ByteArrayOutputStream();
+		for(byte[] c:pc.coded){int v=c.length;while(v>=128){lens.write((v&127)|128);v>>>=7;}lens.write(v);}
+		pc.lengths=lens.toByteArray();
+		return pc;
+	}
+
+	// Decodes every packet back and checks it against the segment it came
+	// from -- the same decode PacketReader does.
+	private static boolean packetsDecode(ArrayList<byte[]> segs,PacketCoding pc)
+	{
+		int n=segs.size();
+		boolean[] ok=new boolean[n];
+		parallel(n,k->{
+			byte[] sg=segs.get(k);
+			byte[] body=Arrays.copyOf(sg,sg.length-1);
+			if(body.length==0){ok[k]=true;return;}
+			int[] freq=new int[256];for(byte b:body)freq[b&0xFF]++;
+			ok[k]=Arrays.equals(body,ArithmeticMapper.getArithmeticValuesFast(pc.coded[k],freq,body.length));
+		});
+		for(boolean b:ok)if(!b)return false;
+		return true;
+	}
+
+	// ---- Huffman (entropy_type 1) ---------------------------------------------
+	//
+	// The same canonical Huffman code as Huffman per packet (CodeMapper's
+	// regular Huffman methods), applied to a channel's whole payload, so the
+	// two Huffman types differ only in whether the packets share one code. A
+	// channel is written as
+	//   int table_len, table_len bytes: the payload's 256 code lengths, Deflated;
+	//   int coded_len, coded_len bytes: the coded payload.
+	// The payload length comes from the segment table.
+	static class HuffmanPayload
+	{
+		byte[] lengths;   // 256 code lengths
+		byte[] table;     // Deflated lengths (what gets written)
+		byte[] coded;
+		int size() { return 8+table.length+coded.length; }
+	}
+
+	private static HuffmanPayload codeHuffmanPayload(byte[] payload)
+	{
+		int[] freq=new int[256]; for(byte b:payload)freq[b&0xFF]++;
+		HuffmanPayload hp=new HuffmanPayload();
+		hp.lengths=CodeMapper.getRegularHuffmanLength(freq);
+		hp.table=CodeMapper.packRegularTables(new byte[][]{hp.lengths},Deflater.BEST_COMPRESSION);
+		hp.coded=CodeMapper.packRegularCode(payload,hp.lengths);
+		return hp;
+	}
+
+	// ---- Huffman per packet (entropy_type 4) --------------------------------
+	//
+	// Each packet (its bytes, without the trailing data byte) gets its own
+	// canonical Huffman code -- see CodeMapper's regular Huffman methods. A channel is written as
+	//   int tables_len, tables_len bytes: every packet's 256 code lengths,
+	//       one after another, Deflated;
+	//   int lengths_len, lengths_len bytes: each packet's coded length as a
+	//       varint, in packet order;
+	//   the coded packets, back to back.
+	// As with Arithmetic per packet, the packet count and byte lengths come
+	// from the segment table.
+	static class HuffmanPackets
+	{
+		byte[]   tables;     // Deflated code-length tables
+		byte[]   lengths;    // varint column
+		byte[][] coded;
+		int size() { int n=8+tables.length+lengths.length; for(byte[] c:coded) n+=c.length; return n; }
+	}
+
+	private static HuffmanPackets codeHuffmanPackets(ArrayList<byte[]> segs)
+	{
+		int n=segs.size();
+		HuffmanPackets hp=new HuffmanPackets();
+		byte[][] table=new byte[n][];
+		hp.coded=new byte[n][];
+		parallel(n,k->{
+			byte[] sg=segs.get(k);
+			byte[] body=Arrays.copyOf(sg,sg.length-1);
+			int[] freq=new int[256]; for(byte b:body)freq[b&0xFF]++;
+			table[k]=CodeMapper.getRegularHuffmanLength(freq);
+			hp.coded[k]=CodeMapper.packRegularCode(body,table[k]);
+		});
+		hp.tables=CodeMapper.packRegularTables(table,Deflater.BEST_COMPRESSION);
+		hp.lengths=CodeMapper.packRegularLengths(hp.coded);
+		return hp;
+	}
+
+	// Decodes every packet back (as PacketReader will) and checks it.
+	private static boolean huffmanPacketsDecode(ArrayList<byte[]> segs,HuffmanPackets hp)
+	{
+		try
+		{
+			byte[][] table=CodeMapper.unpackRegularTables(hp.tables,segs.size());
+			boolean[] ok=new boolean[segs.size()];
+			parallel(segs.size(),k->{
+				byte[] sg=segs.get(k);
+				ok[k]=Arrays.equals(Arrays.copyOf(sg,sg.length-1),CodeMapper.unpackRegularCode(hp.coded[k],table[k],sg.length-1));
+			});
+			for(boolean b:ok)if(!b)return false;
+			return true;
+		}
+		catch(Exception e){return false;}
+	}
+
 	class SaveHandler implements ActionListener
 	{
 		Packet[] packets;
@@ -1027,6 +1150,13 @@ public class PacketWriter
 			int[] channel_id=DeltaMapper.getChannels(min_set_id);
 			try
 			{
+				// ---- Auto: pick the Segment Length level ----
+				if(packet_auto)
+				{
+					packet_level=chooseLevel();
+					if(packet_slider!=null)packet_slider.setValue(packet_level);
+				}
+
 				// ---- Segment each channel's uncompressed string ----
 				packets=new Packet[3];
 				string_data=new byte[3];
@@ -1046,7 +1176,7 @@ public class PacketWriter
 						string_bits[i]=StringMapper.getBitlength(string);
 						string_data[i]=string[string.length-1];
 
-						Packet seg=makePacket(segmentString(string));
+						Packet seg=makePacket(segmentString(string,packet_level));
 						ArrayList<byte[]> single=new ArrayList<byte[]>();
 						single.add(StringMapper.compressStrings(string));
 						Packet whole=makePacket(single);
@@ -1068,9 +1198,11 @@ public class PacketWriter
 				for(int i=0;i<3;i++)
 					if(!restore_ok[i])
 						System.out.println("WARNING: channel "+i+" packet does not restore to the original string.");
-				System.out.println("Segmentation (level "+packet_level+", merge type "+merge_type+", "+bins+" bins) took "+formatDuration(System.nanoTime()-seg_t0));
+				System.out.println("Segmentation (level "+packet_level+") took "+formatDuration(System.nanoTime()-seg_t0));
 
 				int[] entropy_bytes=new int[3];
+				final PacketCoding[] per_packet=new PacketCoding[3];
+				final HuffmanPackets[] huffman_packets=new HuffmanPackets[3];
 
 				DataOutputStream out=new DataOutputStream(new FileOutputStream(new File("foo")));
 				out.writeShort(image_xdim);out.writeShort(image_ydim);out.writeByte(pixel_shift);out.writeByte(pixel_quant);
@@ -1081,24 +1213,13 @@ public class PacketWriter
 					// Encode the 3 channels in parallel, then write them in order.
 					long entropy_t0=System.nanoTime();
 					final byte[][] zipped=new byte[3][];
-					final int[]    pmins=new int[3], bls=new int[3];
-					final int[][]  rts=new int[3][];
-					final byte[][] hls=new byte[3][], pbs=new byte[3][];
+					final HuffmanPayload[] huffman=new HuffmanPayload[3];
 					parallel(3,i->{
 						byte[] payload=payloads[i];
 						if(entropy_type==0)
 							zipped[i]=deflate(payload);
 						else
-						{
-							int[] pi=new int[payload.length];for(int k=0;k<payload.length;k++){pi[k]=payload[k];if(pi[k]<0)pi[k]+=256;}
-							ArrayList hl=StringMapper.getHistogram(pi);int pmin=(int)hl.get(0);int[] hist=(int[])hl.get(1);int[] rt=StringMapper.getRankTable(hist);
-							for(int k=0;k<pi.length;k++)pi[k]-=pmin;int n=hist.length;
-							ArrayList<Integer> fl=new ArrayList<>();for(int v:hist)fl.add(v);Collections.sort(fl,Comparator.reverseOrder());
-							int[] freq=new int[n];for(int k=0;k<n;k++)freq[k]=fl.get(k);
-							byte[] hl2=CodeMapper.getHuffmanLength2(freq);int[] hc=CodeMapper.getCanonicalCode(hl2);
-							ArrayList pl=CodeMapper.packCode(pi,rt,hc,hl2);
-							pmins[i]=pmin;rts[i]=rt;hls[i]=hl2;pbs[i]=(byte[])pl.get(0);bls[i]=(int)pl.get(1);
-						}
+							huffman[i]=codeHuffmanPayload(payload);
 					});
 					long entropy_nanos=System.nanoTime()-entropy_t0;
 					for(int i=0;i<3;i++)
@@ -1112,13 +1233,53 @@ public class PacketWriter
 						}
 						else
 						{
-							writeTable(out,rts[i]);out.writeInt(pmins[i]);
-							ArrayList ltl=CodeMapper.packLengthTable(hls[i]);int ltn=(int)ltl.get(0);byte ltinit=(byte)ltl.get(1);byte ltmax=(byte)ltl.get(2);byte[] ltdelta=(byte[])ltl.get(3);
-							out.writeInt(ltn);out.writeByte(ltinit);out.writeByte(ltmax);out.writeByte(ltdelta.length);out.write(ltdelta,0,ltdelta.length);out.writeInt(bls[i]);out.writeInt(pbs[i].length);out.write(pbs[i],0,pbs[i].length);
-							entropy_bytes[i]=pbs[i].length;
+							HuffmanPayload hp=huffman[i];
+							out.writeInt(hp.table.length);out.write(hp.table);
+							out.writeInt(hp.coded.length);out.write(hp.coded);
+							if(!Arrays.equals(payloads[i],CodeMapper.unpackRegularCode(hp.coded,hp.lengths,payloads[i].length)))
+								System.out.println("WARNING: channel "+i+" Huffman payload does not decode back.");
+							entropy_bytes[i]=hp.size();
 						}
 					}
 					System.out.println("Entropy coding ["+(entropy_type==0?"LZ77":"Huffman")+"] took "+formatDuration(entropy_nanos));
+				}
+				else if(entropy_type==HUFFMAN_PER_PACKET)
+				{
+					long t0=System.nanoTime();
+					for(int i=0;i<3;i++)huffman_packets[i]=codeHuffmanPackets(packets[i].segments);
+					System.out.println("Entropy coding [Huffman per packet] took "+formatDuration(System.nanoTime()-t0));
+					final boolean[] decode_ok=new boolean[3];
+					parallel(3,i->decode_ok[i]=huffmanPacketsDecode(packets[i].segments,huffman_packets[i]));
+					for(int i=0;i<3;i++)
+					{
+						if(!decode_ok[i])System.out.println("WARNING: channel "+i+" packets do not decode back to their segments.");
+						int j=channel_id[i];
+						writeChannelHeader(out,i,j);
+						HuffmanPackets hp=huffman_packets[i];
+						out.writeInt(hp.tables.length);out.write(hp.tables);
+						out.writeInt(hp.lengths.length);out.write(hp.lengths);
+						for(byte[] c:hp.coded)out.write(c);
+						entropy_bytes[i]=hp.size();
+					}
+				}
+				else if(entropy_type==ARITHMETIC_PER_PACKET)
+				{
+					long t0=System.nanoTime();
+					for(int i=0;i<3;i++)per_packet[i]=codePackets(packets[i].segments);
+					System.out.println("Entropy coding [Arithmetic per packet] took "+formatDuration(System.nanoTime()-t0));
+					final boolean[] decode_ok=new boolean[3];
+					parallel(3,i->decode_ok[i]=packetsDecode(packets[i].segments,per_packet[i]));
+					for(int i=0;i<3;i++)
+					{
+						if(!decode_ok[i])System.out.println("WARNING: channel "+i+" packets do not decode back to their segments.");
+						int j=channel_id[i];
+						writeChannelHeader(out,i,j);
+						PacketCoding pc=per_packet[i];
+						out.writeInt(pc.len_type);out.writeInt(pc.zip_freqs.length);out.write(pc.zip_freqs);
+						out.writeInt(pc.lengths.length);out.write(pc.lengths);
+						for(byte[] c:pc.coded)out.write(c);
+						entropy_bytes[i]=pc.size();
+					}
 				}
 				else
 				{
@@ -1157,8 +1318,8 @@ public class PacketWriter
 				// whole string does. The entropy lines code BOTH payloads with
 				// the selected coder, whichever one was written, including that
 				// coder's own headers and tables, plus each layout's compressed table.
-				String[] en={"LZ77","Huffman","Arithmetic"};
-				System.out.println("Packet level "+packet_level+", merge type "+merge_type+", "+bins+" bins ("+String.format("%.4f",bin)+"), entropy "+en[entropy_type]);
+				String[] en=ENTROPY_NAMES;
+				System.out.println("Packet level "+packet_level+(packet_auto?" (Auto)":"")+", entropy "+en[entropy_type]);
 				// Entropy output plus each layout's compressed table, so the
 				// comparison is on the same terms as the file sizes. Computed for
 				// all 3 channels in parallel.
@@ -1167,7 +1328,9 @@ public class PacketWriter
 					try
 					{
 						ews[i]=entropySize(whole_packets[i].payload)+whole_packets[i].ztable.length;
-						ess[i]=entropySize(seg_packets[i].payload)+seg_packets[i].ztable.length;
+						ess[i]=(entropy_type==ARITHMETIC_PER_PACKET) ? per_packet[i].size()+seg_packets[i].ztable.length
+						      :(entropy_type==HUFFMAN_PER_PACKET)    ? huffman_packets[i].size()+seg_packets[i].ztable.length
+						      : entropySize(seg_packets[i].payload)+seg_packets[i].ztable.length;
 					}
 					catch(InterruptedException e){throw new RuntimeException(e);}
 				});
@@ -1196,6 +1359,154 @@ public class PacketWriter
 				System.out.println();
 			}
 			catch(Exception e){System.out.println("SaveHandler exception: "+e);e.printStackTrace();}
+		}
+
+		// Tries every Segment Length level with the selected entropy coder
+		// and returns the one with the smallest output: segment table plus
+		// coded payload, summed over the 3 channels (everything else written
+		// doesn't depend on the level). Levels are tried from 10 down; levels
+		// whose minimum segment lengths match the previous one's give the
+		// same packets and reuse its result. Once a level comes out more
+		// than AUTO_STOP_PERCENT above the best so far, the lower levels
+		// (smaller, more numerous packets -- the slowest to try) are skipped:
+		// in testing, sizes only kept rising from there. Ties go to the
+		// higher level (fewer packets).
+		static final double AUTO_STOP_PERCENT = 3.0;
+
+		private int chooseLevel()
+		{
+			long t0=System.nanoTime();
+			byte[][] strings=new byte[3][];
+			for(int i=0;i<3;i++)strings[i]=(byte[])string_list.get(i);
+			long[] cost=new long[11];
+			int[] packets_at=new int[11];
+			java.util.Arrays.fill(cost,-1);
+			String previous=null;
+			long best_cost=Long.MAX_VALUE;
+			for(int level=10;level>=0;level--)
+			{
+				final int L=level;
+				String signature="";
+				for(int i=0;i<3;i++)signature+=getMinimumSegmentBits(StringMapper.getBitlength(strings[i]),L)+",";
+				if(signature.equals(previous)){cost[L]=cost[L+1];packets_at[L]=packets_at[L+1];continue;}
+				previous=signature;
+				final long[] c=new long[3]; final int[] n=new int[3];
+				parallel(3,i->{
+					try
+					{
+						ArrayList<byte[]> segs=segmentString(strings[i],L);
+						Packet p=makePacket(segs);
+						n[i]=segs.size();
+						// Arithmetic sizes are estimated (see estimateArithmetic);
+						// LZ77 and Huffman are coded for real.
+						c[i]=p.ztable.length+((entropy_type==ARITHMETIC_PER_PACKET)?estimatePerPacket(segs)
+						                    :(entropy_type==HUFFMAN_PER_PACKET)?estimateHuffmanPerPacket(segs)
+						                    :(entropy_type==2)?estimateArithmetic(p.payload)
+						                    :entropySize(p.payload));
+					}
+					catch(Exception e){throw new RuntimeException(e);}
+				});
+				cost[L]=c[0]+c[1]+c[2]; packets_at[L]=n[0]+n[1]+n[2];
+				if(cost[L]<best_cost)best_cost=cost[L];
+				else if(cost[L]>best_cost*(1+AUTO_STOP_PERCENT/100))break;
+			}
+			int best=10;
+			for(int level=9;level>=0;level--)if(cost[level]>=0&&cost[level]<cost[best])best=level;
+			System.out.println("Auto Segment Length ("+ENTROPY_NAMES[entropy_type]+"), bytes by level"+(entropy_type>=2?" (estimated)":"")+":");
+			for(int level=0;level<=10;level++)
+				if(cost[level]<0) System.out.println(String.format("  %2d  (skipped)",level));
+				else System.out.println(String.format("  %2d  %8d packets  %10d B  %+7.2f%%%s",level,packets_at[level],cost[level],100.0*(cost[level]-cost[10])/cost[10],level==best?"  <":""));
+			System.out.println("  (% vs level 10, the whole string); chose level "+best+" in "+formatDuration(System.nanoTime()-t0));
+			return best;
+		}
+
+		// ---- Size estimates for Auto -------------------------------------
+		// Auto only needs to compare levels, so for Arithmetic it doesn't
+		// code anything: a block's coded size is predicted from its byte
+		// counts (entropy, plus the coder's 4-byte header and flush -- within
+		// about 0.01% of the real size in testing), and the frequency tables
+		// are compressed with Deflate's default setting instead of the best
+		// one. The best setting is very slow on thousands of tables and only
+		// matters at levels with that many packets, which lose by a wide
+		// margin anyway. Save still codes the chosen level for real, with the
+		// best setting.
+		private long estimateArithmetic(byte[] payload)
+		{
+			if(payload.length==0) return 0;
+			int min_seg=500+pixel_segment*500;
+			int ns=(pixel_segment>=10)?1:Math.max(1,payload.length/min_seg);
+			int seg_len=payload.length/ns;
+			int[][] fr=new int[ns][256]; int[] len=new int[ns];
+			for(int k=0;k<payload.length;k++){int m=Math.min(k/Math.max(1,seg_len),ns-1);fr[m][payload[k]&0xFF]++;len[m]++;}
+			long size=12+tableEstimate(fr);
+			for(int m=0;m<ns;m++) size+=4+blockEstimate(fr[m],len[m]);
+			return size;
+		}
+
+		private long estimatePerPacket(ArrayList<byte[]> segs)
+		{
+			int n=segs.size();
+			int[][] fr=new int[n][256];
+			long size=12;
+			for(int k=0;k<n;k++)
+			{
+				byte[] sg=segs.get(k); int len=sg.length-1;
+				for(int q=0;q<len;q++) fr[k][sg[q]&0xFF]++;
+				long b=blockEstimate(fr[k],len);
+				size+=b; for(long v=b;;v>>>=7){size++; if(v<128)break;}   // + its varint length
+			}
+			return size+tableEstimate(fr);
+		}
+
+		// ArithmeticMapper counts each byte down as it codes it, so a block
+		// with counts c costs about log2(n! / (c0! c1! ...)) bits, a little
+		// under n times its entropy; plus its 4-byte header and flush.
+		private static long blockEstimate(int[] f,int n)
+		{
+			if(n==0) return 0;
+			double ln=logFactorial(n);
+			for(int v:f) if(v>0) ln-=logFactorial(v);
+			return (long)Math.ceil(ln/Math.log(2)/8)+5;
+		}
+
+		// ln(k!) by Stirling's series (plenty accurate for k >= 1).
+		private static double logFactorial(int k)
+		{
+			if(k<2) return 0;
+			double x=k;
+			return x*Math.log(x)-x+0.5*Math.log(2*Math.PI*x)+1/(12*x)-1/(360*x*x*x);
+		}
+
+		// Huffman per packet: code lengths are cheap to compute, so this is
+		// exact apart from the tables, which use Deflate's default setting.
+		private long estimateHuffmanPerPacket(ArrayList<byte[]> segs)
+		{
+			int n=segs.size();
+			byte[][] table=new byte[n][];
+			long[] coded=new long[n];
+			parallel(n,k->{
+				byte[] sg=segs.get(k); int[] fr=new int[256];
+				for(int q=0;q<sg.length-1;q++) fr[sg[q]&0xFF]++;
+				table[k]=CodeMapper.getRegularHuffmanLength(fr);
+				coded[k]=CodeMapper.getRegularCodeBytes(fr,table[k]);
+			});
+			long size=8+CodeMapper.packRegularTables(table,Deflater.DEFAULT_COMPRESSION).length;
+			for(long c:coded) size+=c+CodeMapper.getVarintBytes(c);
+			return size;
+		}
+
+		private static int tableEstimate(int[][] fr)
+		{
+			int fmax=0;for(int[] row:fr)for(int v:row)if(v>fmax)fmax=v;
+			int bpe=(fmax<Byte.MAX_VALUE*2+2)?1:(fmax<Short.MAX_VALUE*2+2)?2:4;
+			byte[] fb=new byte[fr.length*256*bpe];
+			for(int k=0;k<fr.length;k++)for(int m=0;m<256;m++){int v=fr[k][m];int base=k*256*bpe+m*bpe;for(int b=0;b<bpe;b++)fb[base+b]=(byte)(v>>(8*b));}
+			Deflater def=new Deflater(Deflater.DEFAULT_COMPRESSION);
+			def.setInput(fb); def.finish();
+			byte[] buf=new byte[65536]; int total=0;
+			while(!def.finished()) total+=def.deflate(buf);
+			def.end();
+			return total;
 		}
 
 		// Everything written for a channel before its entropy-coded payload.

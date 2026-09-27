@@ -1990,6 +1990,264 @@ public class CodeMapper
 
 		return list;
 	}
-	
-	
+
+	/********************************************************************************************************************/
+	/* "Regular" Huffman: canonical Huffman codes over the 256 byte values, built from a block's own byte counts --     */
+	/* a whole channel payload, or one of PacketWriter's packets. A block's table is just its 256 code lengths          */
+	/* (0 = byte value not used) -- no rank table, and no codes for unused values. Several blocks' tables can be       */
+	/* stored together and Deflated (packRegularTables), so Deflate can exploit how similar they are, and each block's  */
+	/* coded length can go in a varint column (packRegularLengths). Codes are written most significant bit first and   */
+	/* decoded with the canonical first-code/count tables, so decoding doesn't search the code list.                   */
+	/********************************************************************************************************************/
+
+	// Longest code allowed. If a packet's counts would need longer codes, the
+	// counts are halved (keeping every used value at least 1) and the code
+	// rebuilt until they fit -- a negligible cost, and it keeps codes in an int.
+	public static final int REGULAR_MAX_CODE_LENGTH = 24;
+
+	// Code length for each of the 256 byte values (0 = not used), from
+	// getHuffmanLength2 applied to the used values' counts.
+	public static byte[] getRegularHuffmanLength(int[] frequency)
+	{
+		int[] f = frequency.clone();
+		while(true)
+		{
+			byte[] length = buildRegularHuffmanLength(f);
+			int max = 0;
+			for(byte l : length)
+				if(l > max)
+					max = l;
+			if(max <= REGULAR_MAX_CODE_LENGTH)
+				return length;
+			for(int s = 0; s < 256; s++)
+				if(f[s] > 0)
+					f[s] = Math.max(1, f[s] / 2);
+		}
+	}
+
+	private static byte[] buildRegularHuffmanLength(int[] f)
+	{
+		byte[] length = new byte[256];
+		int used = 0;
+		for(int s = 0; s < 256; s++)
+			if(f[s] > 0)
+				used++;
+		if(used == 0)
+			return length;
+		if(used == 1)
+		{
+			for(int s = 0; s < 256; s++)
+				if(f[s] > 0)
+					length[s] = 1;
+			return length;
+		}
+
+		// getHuffmanLength2 wants the counts sorted from largest to smallest
+		// and returns the lengths in that same order.
+		Integer[] order = new Integer[used];
+		int k = 0;
+		for(int s = 0; s < 256; s++)
+			if(f[s] > 0)
+				order[k++] = s;
+		Arrays.sort(order, (a, b) -> f[a] != f[b] ? Integer.compare(f[b], f[a]) : Integer.compare(a, b));
+		int[] sorted = new int[used];
+		for(k = 0; k < used; k++)
+			sorted[k] = f[order[k]];
+		byte[] sorted_length = getHuffmanLength2(sorted);
+		for(k = 0; k < used; k++)
+			length[order[k]] = sorted_length[k];
+		return length;
+	}
+
+	private static int countUsedValues(byte[] length)
+	{
+		int used = 0;
+		for(byte l : length)
+			if(l > 0)
+				used++;
+		return used;
+	}
+
+	// Canonical codes: shorter codes first, and within a length, lower byte
+	// values first.
+	public static int[] getRegularCanonicalCode(byte[] length)
+	{
+		int[] code = new int[256];
+		int next = 0;
+		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
+		{
+			for(int s = 0; s < 256; s++)
+				if(length[s] == len)
+					code[s] = next++;
+			next <<= 1;
+		}
+		return code;
+	}
+
+	// Huffman-codes a packet. A packet that uses a single byte value codes to
+	// nothing -- its table says it all.
+	public static byte[] packRegularCode(byte[] data, byte[] length)
+	{
+		if(countUsedValues(length) <= 1)
+			return new byte[0];
+		int[] code = getRegularCanonicalCode(length);
+		long bits = 0;
+		for(byte b : data)
+			bits += length[b & 0xFF];
+		byte[] dst = new byte[(int) ((bits + 7) / 8)];
+		long position = 0;
+		for(byte b : data)
+		{
+			int s = b & 0xFF, len = length[s], code_word = code[s];
+			for(int k = len - 1; k >= 0; k--, position++)
+				if(((code_word >>> k) & 1) != 0)
+					dst[(int) (position >>> 3)] |= (byte) (0x80 >>> (position & 7));
+		}
+		return dst;
+	}
+
+	public static byte[] unpackRegularCode(byte[] src, byte[] length, int n)
+	{
+		byte[] dst = new byte[n];
+		if(countUsedValues(length) <= 1)
+		{
+			for(int s = 0; s < 256; s++)
+				if(length[s] > 0)
+					Arrays.fill(dst, (byte) s);
+			return dst;
+		}
+		// Per length: how many codes, the first code, and where its byte
+		// values start in the canonical order.
+		int[] count = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		for(byte l : length)
+			if(l > 0)
+				count[l]++;
+		int[] first_code  = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		int[] first_index = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		int[] order       = new int[256];
+		int code_word = 0, index = 0;
+		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
+		{
+			first_code[len]  = code_word;
+			first_index[len] = index;
+			for(int s = 0; s < 256; s++)
+				if(length[s] == len)
+					order[index++] = s;
+			code_word = (code_word + count[len]) << 1;
+		}
+		long position = 0;
+		for(int k = 0; k < n; k++)
+		{
+			int c = 0;
+			for(int len = 1; ; len++)
+			{
+				c = (c << 1) | ((src[(int) (position >>> 3)] >>> (7 - (position & 7))) & 1);
+				position++;
+				int offset = c - first_code[len];
+				if(offset < count[len])
+				{
+					dst[k] = (byte) order[first_index[len] + offset];
+					break;
+				}
+			}
+		}
+		return dst;
+	}
+
+	// Coded size in bytes, without coding.
+	public static long getRegularCodeBytes(int[] frequency, byte[] length)
+	{
+		if(countUsedValues(length) <= 1)
+			return 0;
+		long bits = 0;
+		for(int s = 0; s < 256; s++)
+			bits += (long) frequency[s] * length[s];
+		return (bits + 7) / 8;
+	}
+
+	// All of a channel's tables (256 bytes each), one after another, Deflated.
+	public static byte[] packRegularTables(byte[][] table, int deflate_level)
+	{
+		byte[] raw = new byte[table.length * 256];
+		for(int k = 0; k < table.length; k++)
+			System.arraycopy(table[k], 0, raw, k * 256, 256);
+		Deflater deflater = new Deflater(deflate_level);
+		deflater.setInput(raw);
+		deflater.finish();
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+		byte[] buffer = new byte[65536];
+		while(!deflater.finished())
+		{
+			int len = deflater.deflate(buffer);
+			out.write(buffer, 0, len);
+		}
+		deflater.end();
+		return out.toByteArray();
+	}
+
+	public static byte[][] unpackRegularTables(byte[] packed, int n) throws DataFormatException
+	{
+		byte[] raw = new byte[n * 256];
+		Inflater inflater = new Inflater();
+		inflater.setInput(packed);
+		int got = 0;
+		while(got < raw.length)
+		{
+			int len = inflater.inflate(raw, got, raw.length - got);
+			if(len == 0 && (inflater.finished() || inflater.needsInput()))
+				break;
+			got += len;
+		}
+		inflater.end();
+		byte[][] table = new byte[n][];
+		for(int k = 0; k < n; k++)
+			table[k] = Arrays.copyOfRange(raw, k * 256, k * 256 + 256);
+		return table;
+	}
+
+	// Each packet's coded length as a varint (7 bits per byte, high bit = more).
+	public static byte[] packRegularLengths(byte[][] coded)
+	{
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+		for(byte[] c : coded)
+		{
+			int v = c.length;
+			while(v >= 128)
+			{
+				out.write((v & 127) | 128);
+				v >>>= 7;
+			}
+			out.write(v);
+		}
+		return out.toByteArray();
+	}
+
+	public static int[] unpackRegularLengths(byte[] packed, int n)
+	{
+		int[] length = new int[n];
+		int position = 0;
+		for(int k = 0; k < n; k++)
+		{
+			int v = 0, shift = 0, b;
+			do
+			{
+				b = packed[position++] & 0xFF;
+				v |= (b & 127) << shift;
+				shift += 7;
+			} while(b >= 128);
+			length[k] = v;
+		}
+		return length;
+	}
+
+	public static int getVarintBytes(long v)
+	{
+		int n = 1;
+		while(v >= 128)
+		{
+			v >>>= 7;
+			n++;
+		}
+		return n;
+	}
 }

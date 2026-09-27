@@ -58,11 +58,8 @@ public class DeltaReader
 	int[]             lz77_orig_length = new int[3];
 
 	// ---- Huffman per-channel data -------------------------------------------
-	ArrayList<int[]>  huff_rank_list = new ArrayList<int[]>();   // rank table
-	ArrayList<byte[]> huff_cl_list   = new ArrayList<byte[]>();  // code lengths
-	ArrayList<byte[]> huff_pay_list  = new ArrayList<byte[]>();  // packed payload
-	int[]             huff_bl        = new int[3];               // bit length
-	int[]             huff_pay_min   = new int[3];               // payload_min
+	ArrayList<byte[]> huff_length_list = new ArrayList<byte[]>();  // 256 code lengths
+	ArrayList<byte[]> huff_pay_list    = new ArrayList<byte[]>();  // coded payload
 
 	// ---- Arithmetic per-channel data ----------------------------------------
 	// (offset_list/segment_list, used only by the removed exact-BigInteger
@@ -248,17 +245,42 @@ public class DeltaReader
 				}
 				else if (delta_type == 9 || delta_type == 10 || delta_type == 11 || delta_type == 12)
 				{
-					int    ml   = in.readInt();
-					int[]  tbl  = readTable(in);
-					int    dmin = in.readInt();
-					int    bl   = in.readInt();
-					byte[] str  = new byte[StringMapper.getBytelength(bl)];
-					in.readFully(str);
-					byte[] decomp = StringMapper.decompressStrings(str);
-					int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
-					byte[] map  = new byte[ml];
-					for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
-					map_list.add(map);
+					// Files from DeltaWriter2 (compress_type 3) have a flag
+					// byte in front of the map: 0 = string map, 1 =
+					// arithmetic-coded map. Older files have no flag and
+					// always hold a string map.
+					int map_coding = (compress_type == 3) ? in.readByte() : 0;
+					if (map_coding == 1)
+					{
+						// Map length, the table of distinct values and their
+						// counts, then the ArithmeticMapper bytes.
+						int   ml   = in.readInt();
+						int   K    = in.readShort();
+						int[] freq = new int[256];
+						int   only = 0;
+						for (int q = 0; q < K; q++) { only = in.readByte() & 0xFF; freq[only] = in.readInt(); }
+						int    enc_len = in.readInt();
+						byte[] enc     = new byte[enc_len];
+						in.readFully(enc);
+						byte[] map;
+						if (K <= 1) { map = new byte[ml]; java.util.Arrays.fill(map, (byte) only); }
+						else          map = ArithmeticMapper.getArithmeticValuesFast(enc, freq, ml);
+						map_list.add(map);
+					}
+					else
+					{
+						int    ml   = in.readInt();
+						int[]  tbl  = readTable(in);
+						int    dmin = in.readInt();
+						int    bl   = in.readInt();
+						byte[] str  = new byte[StringMapper.getBytelength(bl)];
+						in.readFully(str);
+						byte[] decomp = StringMapper.decompressStrings(str);
+						int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
+						byte[] map  = new byte[ml];
+						for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
+						map_list.add(map);
+					}
 				}
 
 				// Pyramid sign-bit map(s) (pixel_pyramid != 0), completely
@@ -284,26 +306,14 @@ public class DeltaReader
 				}
 				else if (entropy_type == 1)
 				{
-					// Huffman
-					int[]  rank_table    = readTable(in);
-					int    pay_min       = in.readInt();
-					int    n             = in.readInt();
-					byte   init_val      = in.readByte();
-					byte   max_delta     = in.readByte();
-					int    pdt_len       = in.readByte() & 0xFF;  // unsigned byte
-					byte[] pdt           = new byte[pdt_len];
-					in.readFully(pdt);
-					byte[] code_length   = CodeMapper.unpackLengthTable(n, init_val, max_delta, pdt);
-					int    bl            = in.readInt();
-					int    pay_len       = in.readInt();
-					byte[] pay_bytes     = new byte[pay_len];
-					in.readFully(pay_bytes);
-
-					huff_rank_list.add(rank_table);
-					huff_cl_list.add(code_length);
-					huff_pay_list.add(pay_bytes);
-					huff_bl[i]      = bl;
-					huff_pay_min[i] = pay_min;
+					// Huffman (regular, CodeMapper): the 256 code lengths
+					// (Deflated), then the coded payload.
+					byte[] huffman_table = new byte[in.readInt()];
+					in.readFully(huffman_table);
+					huff_length_list.add(CodeMapper.unpackRegularTables(huffman_table, 1)[0]);
+					byte[] coded = new byte[in.readInt()];
+					in.readFully(coded);
+					huff_pay_list.add(coded);
 				}
 				else if (entropy_type == 2) // Arithmetic (renormalizing/fast). The
 				                            // exact-BigInteger "Slow Arithmetic"
@@ -666,24 +676,10 @@ public class DeltaReader
 				}
 				else if (entropy_type == 1)
 				{
-					// Huffman
-					int[]  rank_table = huff_rank_list.get(i);
-					byte[] code_len   = huff_cl_list.get(i);
-					byte[] packed     = huff_pay_list.get(i);
-					int    bl         = huff_bl[i];
-					int    pay_min    = huff_pay_min[i];
-					int[]  hcode      = CodeMapper.getCanonicalCode(code_len);
-
-					// Number of payload symbols = payload byte count
+					// Huffman: the payload is a byte per pixel (Integer) or the
+					// unary-string bytes.
 					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
-
-					int[] decoded = new int[num_sym];
-					CodeMapper.unpackCode(packed, rank_table, hcode, code_len, bl, decoded);
-
-					// Restore original unsigned byte values, then cast to signed byte
-					payload = new byte[num_sym];
-					for (int k = 0; k < num_sym; k++)
-						payload[k] = (byte)(decoded[k] + pay_min);
+					payload = CodeMapper.unpackRegularCode(huff_pay_list.get(i), huff_length_list.get(i), num_sym);
 				}
 				else // entropy_type == 2 (Arithmetic, renormalizing/fast). The
 				     // exact-BigInteger "Slow Arithmetic" path (formerly
