@@ -502,7 +502,7 @@ public class DeltaReader
 			}
 		});
 
-		frame = new JFrame("Delta Reader  [decoding\u2026]");
+		frame = new JFrame("Delta Reader  [decoding�]");
 		frame.addWindowListener(new WindowAdapter(){ public void windowClosing(WindowEvent e){ System.exit(0); }});
 
 		JMenuBar mb = new JMenuBar();
@@ -581,7 +581,7 @@ public class DeltaReader
 	{
 		if (frame==null) return;
 		int pct = (int)Math.round(zoom_scale*100);
-		frame.setTitle("Delta Reader  [" + (decoded_image==null ? "decoding\u2026" : pct+"%") + "]");
+		frame.setTitle("Delta Reader  [" + (decoded_image==null ? "decoding�" : pct+"%") + "]");
 	}
 
 	// =========================================================================
@@ -609,7 +609,7 @@ public class DeltaReader
 	}
 
 	// =========================================================================
-	// Decompressor â€” one per channel; handles all entropy types
+	// Decompressor -- one per channel; handles all entropy types
 	// =========================================================================
 	class Decompressor implements Runnable
 	{
@@ -651,7 +651,7 @@ public class DeltaReader
 				}
 				size = pyramid_xdim * pyramid_ydim;
 
-				// ---- Entropy decode â†’ payload bytes ----
+				// ---- Entropy decode -> payload bytes ----
 				byte[] payload;
 
 				if (entropy_type == 0)
@@ -701,18 +701,11 @@ public class DeltaReader
 					byte[][] segs = new byte[n_segs][];
 					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
 
-					// Decode segments in parallel using fast long-arithmetic decoder
-					Thread[] thr = new Thread[n_segs];
-					for (int k = 0; k < n_segs; k++)
-					{
-						final int    ki   = k;
-						final byte[] enc  = fast_enc[k];
-						final int[]  freq = freqs[k];
-						final int    n    = segs[k].length;
-						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValuesFast(enc, freq, n));
-						thr[k].start();
-					}
-					for (Thread t : thr) t.join();
+					// Decode segments in parallel on the shared thread pool
+					// (previously one new Thread per block -- thousands at once
+					// on a large image, times 3 channels). Same output.
+					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
+						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];
@@ -722,7 +715,7 @@ public class DeltaReader
 					payload = buf;
 				}
 
-				// ---- Payload â†’ delta values ----
+				// ---- Payload -> delta values ----
 				int[] delta;
 
 				if (compress_type == 0)
@@ -743,7 +736,7 @@ public class DeltaReader
 					for (int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 				}
 
-				// ---- Delta â†’ channel values ----
+				// ---- Delta -> channel values ----
 				int[] cur_ch;
 				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
 				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);

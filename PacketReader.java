@@ -687,18 +687,11 @@ public class PacketReader
 					byte[][] segs = new byte[n_segs][];
 					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
 
-					// Decode segments in parallel using fast long-arithmetic decoder
-					Thread[] thr = new Thread[n_segs];
-					for (int k = 0; k < n_segs; k++)
-					{
-						final int    ki   = k;
-						final byte[] enc  = fast_enc[k];
-						final int[]  freq = freqs[k];
-						final int    n    = segs[k].length;
-						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValuesFast(enc, freq, n));
-						thr[k].start();
-					}
-					for (Thread t : thr) t.join();
+					// Decode segments in parallel on the shared thread pool
+					// (previously one new Thread per block -- thousands at once
+					// on a large image, times 3 channels). Same output.
+					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
+						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];
@@ -709,12 +702,12 @@ public class PacketReader
 				}
 
 				// ---- Payload -> segments -> uncompressed unary string ----
-				// unpackSegments2 splits the packed bits back into segments
+				// unpackSegments3 splits the packed bits back into segments
 				// and re-attaches each one's data byte; restore() then
 				// decompresses whichever segments were compressed and joins
 				// them at their bit offsets.
-				ArrayList<byte[]> segments = SegmentMapper.unpackSegments2(payload, segment_bytelength[i], segment_data[i]);
-				byte[] str = SegmentMapper.restore(segments, string_data[i]);
+				ArrayList<byte[]> segments = SegmentMapper.unpackSegments3(payload, segment_bytelength[i], segment_data[i]);
+				byte[] str = SegmentMapper.restore2(segments, string_data[i]);
 
 				// ---- Unary string -> delta values ----
 				int[]  tbl   = table_list.get(i);

@@ -646,18 +646,11 @@ public class SimpleReader
 					byte[][] segs = new byte[n_segs][];
 					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
 
-					// Decode segments in parallel using fast long-arithmetic decoder
-					Thread[] thr = new Thread[n_segs];
-					for (int k = 0; k < n_segs; k++)
-					{
-						final int    ki   = k;
-						final byte[] enc  = fast_enc[k];
-						final int[]  freq = freqs[k];
-						final int    n    = segs[k].length;
-						thr[k] = new Thread(() -> segs[ki] = ArithmeticMapper.getArithmeticValuesFast(enc, freq, n));
-						thr[k].start();
-					}
-					for (Thread t : thr) t.join();
+					// Decode segments in parallel on the shared thread pool
+					// (previously one new Thread per block -- thousands at once
+					// on a large image, times 3 channels). Same output.
+					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
+						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];

@@ -810,10 +810,16 @@ public class SimpleWriter
 					byte[][] payloads=new byte[3][];int[] n_segs=new int[3];byte[][][] segs=new byte[3][][];int[][][] freqs=new int[3][][];
 					for(int i=0;i<3;i++){payloads[i]=getPayload(i);int min_seg=500+pixel_segment*500;n_segs[i]=(pixel_segment>=10)?1:Math.max(1,payloads[i].length/min_seg);int seg_len=payloads[i].length/n_segs[i];int odd_len=seg_len+payloads[i].length%n_segs[i];segs[i]=new byte[n_segs[i]][];freqs[i]=new int[n_segs[i]][256];for(int m=0;m<n_segs[i];m++)segs[i][m]=new byte[m<n_segs[i]-1?seg_len:odd_len];int pos=0;for(int m=0;m<n_segs[i];m++)for(int nn=0;nn<segs[i][m].length;nn++){segs[i][m][nn]=payloads[i][pos];int p=payloads[i][pos];if(p<0)p+=256;freqs[i][m][p]++;pos++;}}
 					byte[][][] fast_enc=new byte[3][][];for(int i=0;i<3;i++)fast_enc[i]=new byte[n_segs[i]][];
-					Thread[][][] fast_threads=new Thread[3][][];
+					// All blocks of all 3 channels encoded on the shared thread
+					// pool (previously one new Thread per block -- thousands at
+					// once on a large image). Same output.
 					long fast_arithmetic_t0=System.nanoTime();
-					for(int i=0;i<3;i++){fast_threads[i]=new Thread[1][n_segs[i]];for(int m=0;m<n_segs[i];m++){final byte[][] fe=fast_enc[i];final int fm=m;final byte[] sd=segs[i][m];final int[] sf=freqs[i][m];fast_threads[i][0][m]=new Thread(()->fe[fm]=ArithmeticMapper.getIntervalValueFast(sd,sf));fast_threads[i][0][m].start();}}
-					for(int i=0;i<3;i++)for(Thread t:fast_threads[i][0])t.join();
+					int total_blocks=n_segs[0]+n_segs[1]+n_segs[2];
+					java.util.stream.IntStream.range(0,total_blocks).parallel().forEach(b->{
+						int i=(b<n_segs[0])?0:(b<n_segs[0]+n_segs[1])?1:2;
+						int m=b-((i==0)?0:(i==1)?n_segs[0]:n_segs[0]+n_segs[1]);
+						fast_enc[i][m]=ArithmeticMapper.getIntervalValueFast(segs[i][m],freqs[i][m]);
+					});
 					System.out.println("Entropy coding [Arithmetic] took "+formatDuration(System.nanoTime()-fast_arithmetic_t0));
 					int[] len_types=new int[3];byte[][] zip_freqs=new byte[3][];int[] zip_lens=new int[3];deflateFrequencies(n_segs,freqs,len_types,zip_freqs,zip_lens);
 					for(int i=0;i<3;i++){int j=channel_id[i];out.writeInt(channel_min[j]);out.writeInt(channel_init[j]);out.writeInt(channel_delta_min[j]);out.writeInt(channel_length[j]);out.writeInt(channel_compressed_length[j]);out.writeByte(channel_iterations[i]);if(delta_type>=6)writeMap(out,i);writeTable(out,(int[])table_list.get(i));out.writeInt(n_segs[i]);out.writeInt(len_types[i]);out.writeInt(zip_lens[i]);out.write(zip_freqs[i],0,zip_lens[i]);for(int k=0;k<n_segs[i];k++){byte[] enc=fast_enc[i][k];out.writeInt(enc.length);out.write(enc,0,enc.length);}}

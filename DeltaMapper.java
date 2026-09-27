@@ -478,6 +478,70 @@ public class DeltaMapper
 		return frequency;
 	}
 
+	// Same result as getIdealFrequency (identical histogram, element for
+	// element), but counts directly into an int array in a single pass
+	// instead of first collecting every delta in an ArrayList<Integer>.
+	// Every delta is a difference of two values in src, so it lies within
+	// +/-(src max - src min); the histogram is sized for that range up
+	// front, then trimmed to the deltas that actually occur.
+	public static int[] getIdealFrequency2(int src[], int xdim, int ydim)
+	{
+		// No interior pixels (xdim < 3 or ydim < 2): match what
+		// getIdealFrequency returns in that case.
+		if(xdim < 3 || ydim < 2)
+			return new int[2];
+
+		int src_min = src[0], src_max = src[0];
+		for(int v : src)
+		{
+			if(v < src_min) src_min = v;
+			if(v > src_max) src_max = v;
+		}
+		int span = src_max - src_min;
+
+		int[] count = new int[2 * span + 1];
+		for(int i = 1; i < ydim; i++)
+		{
+			int k = i * xdim + 1;
+			for(int j = 1; j < xdim - 1; j++)
+			{
+				count[idealDelta(src, k, xdim) + span]++;
+				k++;
+			}
+		}
+
+		int lo = 0, hi = count.length - 1;
+		while(count[lo] == 0) lo++;
+		while(count[hi] == 0) hi--;
+		return java.util.Arrays.copyOfRange(count, lo, hi + 1);
+	}
+
+	// The per-pixel delta used by getIdealFrequency/getIdealFrequency2: the
+	// difference from whichever causal neighbour (left, above, above-left,
+	// above-right) is closest, with ties broken in that order.
+	private static int idealDelta(int src[], int k, int xdim)
+	{
+		int a = src[k - 1];
+		int b = src[k - xdim];
+		int c = src[k - xdim - 1];
+		int d = src[k - xdim + 1];
+		int e = src[k];
+
+		int delta_a = Math.abs(a - e);
+		int delta_b = Math.abs(b - e);
+		int delta_c = Math.abs(c - e);
+		int delta_d = Math.abs(d - e);
+
+		if(delta_a <= delta_b && delta_a <= delta_c && delta_a <= delta_d)
+			return a - e;
+		else if(delta_b <= delta_c && delta_b <= delta_d)
+			return b - e;
+		else if(delta_c <= delta_d)
+			return c - e;
+		else
+			return d - e;
+	}
+	
 	// Frequency estimate for the 16-predictor causal set used by
 	// getIdealDeltasFromValues16.  Mirrors getIdealFrequency but evaluates
 	// all 16 predictors and records the minimum-absolute-delta for each
@@ -3684,7 +3748,7 @@ public class DeltaMapper
 
 
 	// -------------------------------------------------------------------------
-	// 16-option ideal delta encoder/decoder — all predictors are causal.
+	// 16-option ideal delta encoder/decoder all predictors are causal.
 	//
 	// Predictor set (a=left, b=above, c=above-left, d=above-right):
 	//
