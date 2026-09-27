@@ -5,78 +5,11 @@ import java.math.*;
 
 //version 1.0
 
-/*
- * Changes in this version (see inline FIX comments at each site):
- *
- * Bugs fixed:
- *   1. Eight encoders -- getHorizontalDeltasFromValues, getPaethDeltasFromValues,
- *      getGradientDeltasFromValues, getGradientDeltasFromValues2,
- *      getMixedDeltasFromValues, getMixedDeltasFromValues2,
- *      getMixedDeltasFromValues3, getMixedDeltasFromValues4 -- each
- *      initialized `int init_value = src[0]`, then mutated that SAME
- *      variable later (as a running column-0 predictor tracker across
- *      rows) and returned the mutated value instead of the true original
- *      src[0]. Since the paired decoder uses the returned value directly
- *      to seed pixel 0, this corrupted the entire reconstruction
- *      whenever the image had more than one row (ydim > 1). Confirmed via
- *      round-trip testing (376/1312 failures, isolated to exactly these
- *      8 methods) and independent static analysis (same 8 methods
- *      flagged by a script checking for "declared from src[0], mutated,
- *      then returned"). Fixed by preserving the original value in a
- *      separate variable (original_init_value) and returning that
- *      instead, without touching any of the surrounding delta-computation
- *      logic.
- *   2. getIdealDeltasFromValues5 never included init_value in its
- *      returned ArrayList -- it computed init_value = src[0] but the
- *      result list was [sum, dst, map] (3 elements) instead of
- *      [sum, dst, map, init_value] (4 elements) like all 7 sibling
- *      methods (Ideal1,2,3,4,6,8,16). This made it impossible to call the
- *      paired decoder, getValuesFromIdealDeltas5, correctly using only
- *      this method's own output. Fixed by adding the missing
- *      result.add(init_value).
- *   3. getValuesFromMixedDeltas3 (the decoder half of
- *      getMixedDeltasFromValues3) had a systematic copy-paste error: every
- *      branch that should average dst[k-1] with another pixel instead had
- *      dst[k-xdim] written in BOTH positions (e.g. m==5's second case
- *      computed `(dst[k-xdim]+dst[k-xdim])/2`, which reduces to just
- *      dst[k-xdim] and silently ignores dst[k-1] entirely, instead of the
- *      encoder's `(src[k-1]+src[k-xdim])/2`). This affected 9 separate
- *      expressions across the m==2,3,5,6,7,8 branches and the final else.
- *      This bug was completely masked by bug #1 above during initial
- *      testing -- every multi-row test case was already failing at pixel
- *      0 before execution ever reached these branches -- and only became
- *      visible once bug #1 was fixed and round-trip testing continued
- *      past the first pixel. Fixed by changing every erroneous
- *      dst[k-xdim] to dst[k-1] to match the encoder's formulas exactly.
- *
- * Minor fixes:
- *   - getIdealDeltasFromValues3 set dst[0] = 6 (an unexplained magic
- *     number) instead of 0 like every sibling method. Confirmed harmless
- *     either way, since the decoder overwrites dst[0] with init_value
- *     directly and never reads this encoded value -- changed to 0 to
- *     match the established convention.
- *   - getMixedDeltasFromValues2 had an unreachable `else delta = 0;`
- *     fallback (the map value is always 0-3 by construction in this same
- *     method's own map-building pass, and the paired decoder already
- *     treats m==3 as an explicit case rather than a fallback). Replaced
- *     with the explicit m==3 formula, matching the decoder's structure.
- *   - getDifference/getSum silently returned an all-zero array on
- *     mismatched input array lengths rather than raising an error. Both
- *     now throw IllegalArgumentException instead, since silently
- *     returning a plausible-looking but wrong result is a worse failure
- *     mode than an explicit, immediate error.
- */
 public class DeltaMapper
 {
 	public static int[] getDifference(int src1[], int src2[])
 	{
 		int length = src1.length;
-		// FIX: was `if(src2.length == length) { ... }` with no else -- on a
-		// length mismatch, this silently returned an all-zero array (the
-		// default int[] contents) instead of any indication something was
-		// wrong. An all-zero difference is rarely if ever a useful result;
-		// failing loudly is safer than silently returning data that looks
-		// valid but isn't.
 		if(src2.length != length)
 			throw new IllegalArgumentException("getDifference: src1.length (" + length + ") != src2.length (" + src2.length + ")");
 
@@ -89,8 +22,6 @@ public class DeltaMapper
 	public static int[] getSum(int src1[], int src2[])
 	{
 		int length = src1.length;
-		// FIX: same as getDifference above -- fail loudly on a length
-		// mismatch instead of silently returning an all-zero array.
 		if(src2.length != length)
 			throw new IllegalArgumentException("getSum: src1.length (" + length + ") != src2.length (" + src2.length + ")");
 
@@ -541,13 +472,10 @@ public class DeltaMapper
 		else
 			return d - e;
 	}
-	
-	// Frequency estimate for the 16-predictor causal set used by
-	// getIdealDeltasFromValues16.  Mirrors getIdealFrequency but evaluates
-	// all 16 predictors and records the minimum-absolute-delta for each
-	// interior pixel.  Used by DeltaWriter.init() for auto-selection.
-	// Returns [delta_frequency, map_frequency (8 entries, one per predictor)]
-	// using the same 8-predictor causal ring as getIdealDeltasFromValues8.
+
+	// Frequency estimate for getIdealDeltasFromValues8: for each interior
+	// pixel, the delta from the closest of the 8 predictors. Returns
+	// [delta_frequency, map_frequency (8 entries, one per predictor)].
 	public static ArrayList<int[]> getIdealFrequency8(int src[], int xdim, int ydim)
 	{
 		ArrayList<Integer> delta_list = new ArrayList<Integer>();
@@ -1093,14 +1021,8 @@ public class DeltaMapper
 		int[] dst = new int[xdim * ydim];
 		int sum = 0;
 		int init_value = src[0];
-		// FIX: init_value gets mutated below (via `init_value += delta`) to
-		// track a running column-0 predictor across rows, but the decoder
-		// (getValuesFromHorizontalDeltas) needs the TRUE original src[0] to
-		// seed dst[0]. Preserve it separately so the returned value is
-		// correct rather than whatever the tracker ended up at after the
-		// last row. Confirmed via round-trip testing: previously this
-		// returned the wrong value whenever ydim > 1, corrupting the whole
-		// reconstruction starting at pixel 0.
+		// init_value is updated below as the column-0 predictor; the decoder
+		// needs the original src[0], so that is what gets returned.
 		int original_init_value = src[0];
 		int value = init_value;
 
@@ -1286,10 +1208,7 @@ public class DeltaMapper
 	{
 		int[] dst = new int[xdim * ydim];
 		int init_value = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below (`init_value =
-		// src[k]`) to track each row's leading pixel, but the decoder needs
-		// the true original src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int original_init_value = src[0];
 		int value = init_value;
 		int delta = 0;
@@ -1632,10 +1551,7 @@ public class DeltaMapper
 		int[] dst        = new int[xdim * ydim];
 		int[] gradient   = new int[4];
 		int   init_value = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below to track a running
-		// column-0 predictor, but the decoder needs the true original
-		// src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int   original_init_value = src[0];
 		int   sum        = 0;
 		int   delta      = 0;
@@ -1764,10 +1680,7 @@ public class DeltaMapper
 		int[] dst      = new int[xdim * ydim];
 		int[] gradient = new int[4];
 		int   init_value = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below to track a running
-		// column-0 predictor, but the decoder needs the true original
-		// src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int   original_init_value = src[0];
 		int   sum = 0;
 		int   k   = 0;
@@ -1945,10 +1858,7 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below (`init_value =
-		// src[k]`) to track each row's leading pixel, but the decoder needs
-		// the true original src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int original_init_value = src[0];
 		int sum         = 0;
 		int k           = 0;
@@ -2105,10 +2015,7 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below (`init_value =
-		// src[k]`) to track each row's leading pixel, but the decoder needs
-		// the true original src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int original_init_value = src[0];
 		int value       = init_value;
 		int sum         = 0;
@@ -2144,7 +2051,7 @@ public class DeltaMapper
 					if(m == 0)      delta = src[k] - src[k - 1];
 					else if(m == 1) delta = src[k] - src[k - xdim];
 					else if(m == 2) delta = src[k] - (src[k-1] + src[k-xdim]) / 2;
-					else            delta = src[k] - (src[k-1] + src[k-xdim+1]) / 2; // m == 3, the only remaining case (map values are always 0-3 here) -- was an unreachable "delta = 0" fallback
+					else            delta = src[k] - (src[k-1] + src[k-xdim+1]) / 2; // m == 3
 
 					dst[k++] = delta;
 					sum += Math.abs(delta);
@@ -2320,10 +2227,7 @@ public class DeltaMapper
 
 		int[] dst      = new int[xdim * ydim];
 		int init_value = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below (`init_value =
-		// src[k]`) to track each row's leading pixel, but the decoder needs
-		// the true original src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int original_init_value = src[0];
 		int value      = init_value;
 		int sum        = 0;
@@ -2404,21 +2308,6 @@ public class DeltaMapper
 				else if(j < xdim - 1)
 				{
 					int n = pixel_map[p++];
-					// FIX: every branch below that should average dst[k-1] with
-					// something else had dst[k-xdim] written in place of
-					// dst[k-1] instead -- a systematic copy-paste error
-					// affecting m==2,3,5,6,7,8 and the final else (9
-					// separate wrong expressions in total). Confirmed by
-					// direct comparison against the encoder's formulas
-					// above (e.g. encoder's m==5,n==1 is
-					// `src[k]-(src[k-1]+src[k-xdim])/2`, but this decoder
-					// previously computed `(dst[k-xdim]+dst[k-xdim])/2` --
-					// using k-xdim twice, which just reduces to dst[k-xdim]
-					// alone and silently ignores dst[k-1] entirely) and by
-					// round-trip testing: this was masked by the separate
-					// init_value bug (which broke every multi-row test at
-					// pixel 0 before reaching these branches at all) and
-					// only became visible once that bug was fixed.
 					if(m == 0)      value = (n==0) ? dst[k-1]     : dst[k-xdim];
 					else if(m == 1) value = (n==0) ? dst[k-1]     : dst[k-xdim-1];
 					else if(m == 2) value = (n==0) ? dst[k-1]     : (dst[k-1]+dst[k-xdim])/2;
@@ -2523,10 +2412,7 @@ public class DeltaMapper
 
 		int[] dst       = new int[xdim * ydim];
 		int init_value  = src[0];
-		// FIX: see getHorizontalDeltasFromValues's comment for the full
-		// explanation -- init_value gets mutated below (`init_value =
-		// src[k]`) to track each row's leading pixel, but the decoder needs
-		// the true original src[0]. Preserve it separately.
+		// The original src[0] (init_value changes below).
 		int original_init_value = src[0];
 		int sum         = 0;
 		int k           = 0;
@@ -2742,7 +2628,7 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
-	// Scanline (4) — per-row selection from 16 predictors
+	// Scanline (4) -- per-row selection from 16 predictors
 	// =========================================================================
 
 	private static int pred16(int a, int b, int c, int d, int p)
@@ -2886,8 +2772,8 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
-	// Bilateral smoothing — preserves edges, suppresses noise.
-	// threshold 0 = no-op; 1-10 maps range sigma 10-100.
+	// Bilateral smoothing -- preserves edges, suppresses noise.
+	// threshold 0 = no-op; range sigma = threshold^2.
 	// =========================================================================
 	public static int[] bilateralSmooth(int[] src, int xdim, int ydim, int threshold)
 	{
@@ -2938,9 +2824,9 @@ public class DeltaMapper
 
 
 	// =========================================================================
-	// Anisotropic diffusion (Perona-Malik) — iterative edge-preserving smooth.
+	// Anisotropic diffusion (Perona-Malik) -- iterative edge-preserving smooth.
 	// threshold 0 = no-op; iterations = threshold, K = threshold*3+5 (8-35).
-	// λ = 0.25 (stability limit for 4-directional scheme).
+	// lambda = 0.25 (stability limit for 4-directional scheme).
 	// =========================================================================
 	public static int[] anisotropicSmooth(int[] src, int xdim, int ydim, int threshold)
 	{
@@ -2950,7 +2836,7 @@ public class DeltaMapper
 		double K2         = (threshold * 3.0 + 5.0) * (threshold * 3.0 + 5.0);
 		double lambda     = 0.25;
 
-		// Conductance lookup: c[d+255] = exp(-d²/K²) for d in [-255,255]
+		// Conductance lookup: c[d+255] = exp(-d^2/K^2) for d in [-255,255]
 		double[] c = new double[511];
 		for (int d = -255; d <= 255; d++) c[d + 255] = Math.exp(-(d * d) / K2);
 
@@ -2991,9 +2877,9 @@ public class DeltaMapper
 	// Each row maps local predictor index 0-7 to a pred16 index.
 	// Add new rows here to define new variants; variant 0 is the default.
 	public static final int[][] FILTER_SETS_8 = {
-		// variant 0: spread coverage — directional anchors + best composites
+		// variant 0: spread coverage -- directional anchors + best composites
 		{ 0, 1, 2, 3, 4, 10, 9, 5 },
-		// variant 1: averaging focus — left, above, avg(l,a), avg-all-4, gradient, MED, weighted blends
+		// variant 1: averaging focus -- left, above, avg(l,a), avg-all-4, gradient, MED, weighted blends
 		{ 0, 1, 4, 9, 10, 11, 12, 13 },
 		// variant 2: variant 1 with weighted 1:3 swapped for avg(above, above-right)
 		{ 0, 1, 4, 9, 10, 11, 12, 7 },
@@ -3339,13 +3225,6 @@ public class DeltaMapper
 		{
 			if(i == 0)
 			{
-				// FIX: was `dst[k++] = 6;` -- every sibling method (Ideal1,2,4,5,6,8,16)
-				// uses 0 for this placeholder slot, matching the convention that
-				// there's no previous pixel to predict pixel 0 from. Confirmed
-				// harmless either way since the decoder overwrites dst[0] with
-				// init_value directly and never reads this encoded value, but 0
-				// matches the established convention instead of an unexplained
-				// magic number.
 				dst[k++] = 0;
 				for(int j = 1; j < xdim; j++) { int delta = src[k]-src[k-1]; dst[k++] = delta; sum += Math.abs(delta); }
 			}
@@ -3517,13 +3396,6 @@ public class DeltaMapper
 		}
 
 		ArrayList result = new ArrayList();
-		// FIX: was missing `result.add(init_value);` here -- every sibling
-		// method (Ideal1,2,3,4,6,8,16) returns [sum, dst, map, init_value],
-		// but this one returned only 3 elements, computing init_value
-		// (above) without ever exposing it. The corresponding decoder,
-		// getValuesFromIdealDeltas5, requires init_value as a parameter, so
-		// this method's own output previously couldn't be used to call it
-		// correctly.
 		result.add(sum); result.add(dst); result.add(map); result.add(init_value);
 		return result;
 	}
@@ -3952,24 +3824,18 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
-	// Adaptive predictor — no map, deterministic from causal neighbors.
+	// Adaptive predictor -- no map; decided from the causal neighbours.
 	//
-	// Uses local gradient indicators:
-	//   h = |a-c| + |d-b|  (horizontal variation)
-	//   v = |b-c| + |a-d|  (vertical variation)
-	//
-	// Smooth  → all-four average
-	// h >> v  → above-based average  (vertical-edge region)
-	// v >> h  → left-based average   (horizontal-edge region)
-	// mixed   → MED predictor
+	// With pa = |b-c| and pb = |a-c|: left (a) if pb > 2*pa, above (b) if
+	// pa > 2*pb, otherwise MED.
 	// =========================================================================
 	private static int adaptivePred(int a, int b, int c, int d)
 	{
 		int pa = Math.abs(b - c);   // vertical gradient at above-left corner
 		int pb = Math.abs(a - c);   // horizontal gradient at above-left corner
-		if (pb > pa * 2) return a;  // strong horizontal edge → left
-		if (pa > pb * 2) return b;  // strong vertical edge → above
-		// Mixed or smooth → MED
+		if (pb > pa * 2) return a;  // left
+		if (pa > pb * 2) return b;  // above
+		// otherwise MED
 		if (c >= Math.max(a, b)) return Math.min(a, b);
 		if (c <= Math.min(a, b)) return Math.max(a, b);
 		return a + b - c;
@@ -4341,6 +4207,249 @@ public class DeltaMapper
 	public static int getInverseLocation(int location)
 	{
 		return 7 - location;
+	}
+
+	// =========================================================================
+	// Shared by the writers and readers: quantizing, choosing and undoing
+	// the delta type, recombining channel sets, and writing/reading maps.
+	// =========================================================================
+
+	public static final String[] SET_NAMES = {
+		"blue, green, red", "blue, red, red-green", "blue, red, blue-green",
+		"blue, blue-green, red-green", "blue, blue-green, red-blue",
+		"green, red, blue-green", "red, blue-green, red-green",
+		"green, blue-green, red-green", "green, red-green, red-blue",
+		"red, red-green, red-blue"};
+
+	public static final String[] DELTA_TYPE_NAMES = {
+		"horizontal", "vertical", "average", "med", "directional", "adaptive",
+		"scanline (1)", "scanline (2)", "scanline (3)", "scanline (4)", "scanline (5)",
+		"frame map (1)", "frame map (2)"};
+
+	// Smallest image the writers accept (the delta types need an interior).
+	public static final int MIN_DIM = 4;
+
+	// Size after Pixel Resolution (pixel_quant 0-10) resizing. Images under
+	// MIN_DIM in either direction are not resized.
+	public static int[] getQuantizedSize(int xdim, int ydim, int pixel_quant)
+	{
+		if(pixel_quant == 0 || xdim < MIN_DIM || ydim < MIN_DIM)
+			return new int[] {xdim, ydim};
+		double factor = pixel_quant / 10.0;
+		return new int[] {xdim - (int)(factor * (xdim / 2 - 2)), ydim - (int)(factor * (ydim / 2 - 2))};
+	}
+
+	// Right-shifts a channel by pixel_shift, rounding to nearest (clamped so
+	// the result never reconstructs past 255). Returns a new array: the
+	// channel passed in is often the stored source data and must not change.
+	public static int[] quantizeChannel(int[] channel, int pixel_shift)
+	{
+		if(pixel_shift == 0) return channel.clone();
+		int half = 1 << (pixel_shift - 1);
+		int[] rounded = new int[channel.length];
+		for(int k = 0; k < channel.length; k++)
+			rounded[k] = Math.min(channel[k] + half, 255);
+		return shift(rounded, -pixel_shift);
+	}
+
+	// Deltas for delta_type 0-12. Returns the encoder's list: [sum, deltas,
+	// map, init_value] for types 6-12, [sum, deltas, init_value] otherwise.
+	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant)
+	{
+		switch(delta_type)
+		{
+			case 0:  return getHorizontalDeltasFromValues(src, xdim, ydim);
+			case 1:  return getVerticalDeltasFromValues(src, xdim, ydim);
+			case 2:  return getAverageDeltasFromValues(src, xdim, ydim);
+			case 3:  return getMedDeltasFromValues(src, xdim, ydim);
+			case 4:  return getDirectionalDeltasFromValues(src, xdim, ydim);
+			case 5:  return getAdaptiveDeltasFromValues(src, xdim, ydim);
+			case 6:  return getMixedDeltasFromValues(src, xdim, ydim);
+			case 7:  return getMixedDeltasFromValues2(src, xdim, ydim);
+			case 8:  return getMixedDeltasFromValues4(src, xdim, ydim);
+			case 9:  return getMixedDeltasFromValues16Rows(src, xdim, ydim);
+			case 10: return getMixedDeltasFromValues8Rows(src, xdim, ydim, variant);
+			case 11: return getIdealDeltasFromValues8(src, xdim, ydim);
+			case 12: return getIdealDeltasFromValues16(src, xdim, ydim);
+			default: throw new IllegalArgumentException("delta_type " + delta_type);
+		}
+	}
+
+	public static boolean hasMap(int delta_type) { return delta_type >= 6; }
+
+	// Inverse of getDeltas. map is ignored for types 0-5.
+	public static int[] getValuesFromDeltas(int[] delta, int xdim, int ydim, int init_value, int delta_type, byte[] map, int variant)
+	{
+		switch(delta_type)
+		{
+			case 0:  return getValuesFromHorizontalDeltas(delta, xdim, ydim, init_value);
+			case 1:  return getValuesFromVerticalDeltas(delta, xdim, ydim, init_value);
+			case 2:  return getValuesFromAverageDeltas(delta, xdim, ydim, init_value);
+			case 3:  return getValuesFromMedDeltas(delta, xdim, ydim, init_value);
+			case 4:  return getValuesFromDirectionalDeltas(delta, xdim, ydim, init_value);
+			case 5:  return getValuesFromAdaptiveDeltas(delta, xdim, ydim, init_value);
+			case 6:  return getValuesFromMixedDeltas(delta, xdim, ydim, init_value, map);
+			case 7:  return getValuesFromMixedDeltas2(delta, xdim, ydim, init_value, map);
+			case 8:  return getValuesFromMixedDeltas4(delta, xdim, ydim, init_value, map);
+			case 9:  return getValuesFromMixedDeltas16Rows(delta, xdim, ydim, init_value, map);
+			case 10: return getValuesFromMixedDeltas8Rows(delta, xdim, ydim, init_value, map, variant);
+			case 11: return getValuesFromIdealDeltas8(delta, xdim, ydim, init_value, map);
+			case 12: return getValuesFromIdealDeltas16(delta, xdim, ydim, init_value, map);
+			default: throw new IllegalArgumentException("delta_type " + delta_type);
+		}
+	}
+
+	// The six candidate channels: blue, green, red, then blue-green,
+	// red-green and red-blue. Each difference channel is shifted by its
+	// minimum so it starts at 0; min[i] holds that minimum (and the
+	// minimum of the colour channels, unshifted).
+	public static int[][] getCandidateChannels(int[] blue, int[] green, int[] red, int[] min)
+	{
+		int[][] c = {blue, green, red, getDifference(blue, green), getDifference(red, green), getDifference(red, blue)};
+		for(int i = 0; i < 6; i++)
+		{
+			int m = Integer.MAX_VALUE;
+			for(int v : c[i]) if(v < m) m = v;
+			min[i] = m;
+			if(i > 2) for(int k = 0; k < c[i].length; k++) c[i][k] -= m;
+		}
+		return c;
+	}
+
+	// Rebuilds blue, green and red from the three channels of set_id (see
+	// getChannels), with the difference channels' minimums already added
+	// back. The arrays passed in are not changed.
+	public static int[][] getBlueGreenRed(int set_id, int[] c0, int[] c1, int[] c2)
+	{
+		int[] blue, green, red;
+		switch(set_id)
+		{
+			case 0:  blue = c0; green = c1; red = c2; break;
+			case 1:  blue = c0; red = c1; green = getDifference(red, c2); break;
+			case 2:  blue = c0; red = c1; green = getDifference(blue, c2); break;
+			case 3:  blue = c0; green = getDifference(blue, c1); red = getSum(c2, green); break;
+			case 4:  blue = c0; green = getDifference(blue, c1); red = getSum(blue, c2); break;
+			case 5:  green = c0; red = c1; blue = getSum(c2, green); break;
+			case 6:  red = c0; green = getDifference(red, c2); blue = getSum(c1, green); break;
+			case 7:  green = c0; blue = getSum(green, c1); red = getSum(green, c2); break;
+			case 8:  green = c0; red = getSum(green, c1); blue = getDifference(red, c2); break;
+			case 9:  red = c0; green = getDifference(red, c1); blue = getDifference(red, c2); break;
+			default: throw new IllegalArgumentException("set_id " + set_id);
+		}
+		return new int[][] {blue, green, red};
+	}
+
+	// ---- Tables and maps on disk ---------------------------------------------
+
+	// StringMapper rank table: short length, then one unsigned byte per
+	// entry if the length is at most 255, otherwise one short per entry.
+	public static void writeTable(java.io.DataOutputStream out, int[] table) throws java.io.IOException
+	{
+		out.writeShort(table.length);
+		if(table.length <= 255) for(int v : table) out.writeByte(v);
+		else                    for(int v : table) out.writeShort(v);
+	}
+
+	public static int[] readTable(java.io.DataInputStream in) throws java.io.IOException
+	{
+		int   n     = in.readShort();
+		int[] table = new int[n];
+		if(n <= 255) for(int k = 0; k < n; k++) table[k] = in.readUnsignedByte();
+		else         for(int k = 0; k < n; k++) table[k] = in.readShort();
+		return table;
+	}
+
+	// A delta-type map. Types 6-8 (values 0-3): int length, int packed
+	// length, then 4 values per byte, low bits first. Types 9-12: a flag
+	// byte, then either (0) a unary-string map -- int length, table, int
+	// min, int bit length, first value as a byte, then the string -- or (1)
+	// an arithmetic-coded map -- int length, short K, K pairs of (value
+	// byte, int count), int coded length, coded bytes. The writer keeps
+	// whichever is smaller.
+	public static void writeMap(java.io.DataOutputStream out, int delta_type, byte[] map) throws java.io.IOException
+	{
+		if(delta_type <= 8)
+		{
+			byte[] packed = new byte[(map.length + 3) / 4];
+			for(int q = 0; q < map.length; q++)
+				packed[q >> 2] |= (byte)((map[q] & 3) << ((q & 3) << 1));
+			out.writeInt(map.length); out.writeInt(packed.length); out.write(packed);
+			return;
+		}
+		byte[] string_form = mapToString(map), arith_form = mapToArithmetic(map);
+		if(arith_form.length < string_form.length) { out.writeByte(1); out.write(arith_form); }
+		else                                        { out.writeByte(0); out.write(string_form); }
+	}
+
+	public static byte[] readMap(java.io.DataInputStream in, int delta_type) throws java.io.IOException
+	{
+		if(delta_type <= 8)
+		{
+			int    n      = in.readInt();
+			byte[] packed = new byte[in.readInt()];
+			in.readFully(packed);
+			byte[] map = new byte[n];
+			for(int q = 0; q < n; q++) map[q] = (byte)((packed[q >> 2] >> ((q & 3) << 1)) & 3);
+			return map;
+		}
+		int coding = in.readByte();
+		int n      = in.readInt();
+		if(coding == 1)
+		{
+			int   K    = in.readShort();
+			int[] freq = new int[256];
+			int   only = 0;
+			for(int q = 0; q < K; q++) { only = in.readUnsignedByte(); freq[only] = in.readInt(); }
+			byte[] coded = new byte[in.readInt()];
+			in.readFully(coded);
+			if(K > 1) return ArithmeticMapper.getArithmeticValuesFastFenwick(coded, freq, n);
+			byte[] map = new byte[n];
+			Arrays.fill(map, (byte) only);
+			return map;
+		}
+		int[]  table = readTable(in);
+		int    min   = in.readInt();
+		int    bits  = in.readInt();
+		int    first = in.readUnsignedByte();
+		byte[] str   = new byte[StringMapper.getBytelength(bits)];
+		in.readFully(str);
+		byte[] unpacked = StringMapper.decompressStrings(str);
+		int[]  value    = StringMapper.unpackStrings(unpacked, table, n, StringMapper.getBitlength(unpacked));
+		byte[] map = new byte[n];
+		for(int q = 0; q < n; q++) map[q] = (byte)(value[q] + min);
+		map[0] = (byte) first;   // getStringList doesn't keep the first value
+		return map;
+	}
+
+	private static byte[] mapToString(byte[] map) throws java.io.IOException
+	{
+		int[] value = new int[map.length];
+		for(int q = 0; q < map.length; q++) value[q] = map[q] & 0xFF;
+		ArrayList list  = StringMapper.getStringList(value, false);
+		int[]     table = (int[]) list.get(2);
+		byte[]    str   = (byte[]) list.get(3);
+		int       bits  = StringMapper.getBitlength(str);
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+		out.writeInt(map.length); writeTable(out, table); out.writeInt((int) list.get(0)); out.writeInt(bits);
+		out.writeByte(map[0]); out.write(str, 0, StringMapper.getBytelength(bits));
+		return bytes.toByteArray();
+	}
+
+	private static byte[] mapToArithmetic(byte[] map) throws java.io.IOException
+	{
+		int[] freq = new int[256];
+		for(byte b : map) freq[b & 0xFF]++;
+		int K = 0;
+		for(int v : freq) if(v > 0) K++;
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+		out.writeInt(map.length);
+		out.writeShort(K);
+		for(int v = 0; v < 256; v++) if(freq[v] > 0) { out.writeByte(v); out.writeInt(freq[v]); }
+		if(K <= 1) out.writeInt(0);
+		else { byte[] coded = ArithmeticMapper.getIntervalValueFastFenwick(map, freq); out.writeInt(coded.length); out.write(coded); }
+		return bytes.toByteArray();
 	}
 
 	public static int[] getChannels(int set_id)

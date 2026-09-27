@@ -4,60 +4,16 @@ import java.math.*;
 //version 4.0
 
 /*
- * Added after version 4.0:
- *   - getIntervalValueAdaptive / getArithmeticValuesAdaptive, an adaptive,
- *     context-modeled version of the fast coder that stores no frequency
- *     table (see the section at the end).
- *   - The fast coders (getIntervalValueFast/-Fenwick and
- *     getArithmeticValuesFast/-Fenwick) and the adaptive coder now use a
- *     byte-oriented range coder instead of the bit-at-a-time coder: two to
- *     three times faster, nearly the same size, and a different output
- *     format (no 4-byte length header; older files don't decode). The
- *     exact BigInteger coders are unchanged.
- *
- * Changes in this version:
- *
- *   1. All order-table-related code moved out to SteeredArithmeticMapper,
- *      to keep this file focused on the core (canonical-order) codec:
- *      getAscendingTable, getDescendingTable, getFirstTable, getLastTable,
- *      getTableSeries (1-4), getRandomTable (2 overloads),
- *      getRandomOrderTable (3 overloads), the order-table overloads of
- *      getIntervalValue and getArithmeticValues, and
- *      getApproxOffsetFastOrdered (plus its private LeadingBits helper).
- *      None of this was in active use -- kept for possible future use
- *      rather than deleted outright. simplestFractionInInterval stays
- *      here (still used by the core getIntervalValue/getIntervalValueFenwick),
- *      and SteeredArithmeticMapper already has its own independent copy
- *      for encodeCSequence, so the moved order-table methods call that
- *      one directly now that they live in the same file -- no cross-file
- *      dependency introduced.
- *
- *   2. Cleaned up two orphaned leftover comments spotted while doing this
- *      move: a stale section-header comment for the already-removed
- *      getSerialOffset/getSerialValues pairing, and a stale "Requires a
- *      < b." doc comment left over from the already-removed gcd(long,long)
- *      -- both were never cleaned up when those methods were removed in
- *      version 3.0, and this version's edits happened to pass right by
- *      them.
- *
- * (Prior versions' fixes/changes -- simplestFractionInInterval's Stern-
- * Brocot rewrite, the getArithmeticValuesFast/getArithmeticValuesFastFenwick
- * boundary nudge fix, and the version 2.0 BigFraction refactor of the
- * remaining slow/exact methods -- remain in place, unmodified by this
- * version.)
+ * The order-table coders (getAscendingTable, getRandomOrderTable, the
+ * order-table overloads of getIntervalValue/getArithmeticValues, etc.)
+ * live in SteeredArithmeticMapper.
  */
 public class ArithmeticMapper
 {
 	/**
-	 * Exact rational arithmetic, local to this file so ArithmeticMapper
-	 * doesn't depend on FractionMapper.java for now. A minimal copy of
-	 * BigFraction, carrying only what this file actually
-	 * uses (add/subtract/multiply/divide/compareTo/gt/le, plus the
-	 * ZERO/ONE constants and the parallelMultiply threshold logic) --
-	 * matching the "keep this file simple" preference this reorganization
-	 * is already following, rather than pulling in the full feature set
-	 * (negate/abs/isInfinite/equals/hashCode/lt/eq/toDouble) that this
-	 * file has no use for.
+	 * Exact rational arithmetic. A minimal local copy of FractionMapper's
+	 * BigFraction with only what this file uses, so this file doesn't
+	 * depend on FractionMapper.java.
 	 */
 	public static final class BigFraction
 	{
@@ -96,10 +52,8 @@ public class ArithmeticMapper
 		public static final BigFraction ZERO = BigFraction.of(0, 1);
 		public static final BigFraction ONE  = BigFraction.of(1, 1);
 
-		// Threshold (in bits) above which we ask the JDK to attempt a
-		// parallelMultiply instead of a plain sequential multiply. Only
-		// benefits machines with more than one core; see FractionMapper's
-		// own copy of this same logic for the fuller discussion of why.
+		// Operand size (in bits) above which parallelMultiply is used. Only
+		// helps on multi-core machines; see FractionMapper for details.
 		private static final int PARALLEL_MULTIPLY_THRESHOLD_BITS = 4000;
 
 		private static BigInteger smartMultiply(BigInteger a, BigInteger b)
@@ -124,23 +78,15 @@ public class ArithmeticMapper
 
 
 	// =========================================================================
-	// simplestFractionInInterval: UNCHANGED from the prior version. This
-	// method already takes separate (loN,loD) / (hiN,hiD) pairs and cross-
-	// multiplies correctly regardless of whether they share a denominator
-	// -- it does not have the "assumed same denominator" bug class the
-	// other methods in this file had, so there's nothing for a BigFraction
-	// refactor to fix here.
+	// simplestFractionInInterval: the fraction with the smallest denominator
+	// in [lo, hi). lo and hi need not share a denominator.
 	// =========================================================================
 	public static BigInteger[] simplestFractionInInterval(BigInteger loN, BigInteger loD, BigInteger hiN, BigInteger hiD)
 	{
-		// The interval is half-open [lo, hi): lo itself is always a valid,
-		// includable point (matching how off/off+rng are used everywhere
-		// in this codebase -- any point in [off, off+rng) decodes
-		// correctly, including off itself). The search below only looks
-		// STRICTLY inside (lo, hi), so it must be compared against lo
-		// itself (reduced to lowest terms) at the end -- without this, a
-		// lo that's already simple gets needlessly passed over in favor
-		// of a far more complex fraction found strictly between lo and hi.
+		// The interval is half-open: any point in [off, off+rng) decodes,
+		// including off itself. The search below only looks strictly inside
+		// (lo, hi), so the result is compared against lo (reduced) at the
+		// end; otherwise a simple lo would lose to a more complex fraction.
 		BigInteger origLoN = loN, origLoD = loD;
 
 		ArrayList<BigInteger> floors = new ArrayList<BigInteger>();
@@ -443,29 +389,20 @@ public class ArithmeticMapper
 	}
 
 	// =========================================================================
-	// Fast arithmetic coder (no BigInteger).
+	// Fast arithmetic coder (no BigInteger), using the range coder below.
 	//
-	// A byte-oriented range coder: the interval is kept as a 40-bit range and
-	// narrowed a whole byte at a time, with carries propagated into the bytes
-	// already written, instead of the older 32-bit coder that decided and
-	// wrote one bit at a time (with runs of pending bits). Same model -- the
-	// counts start as the exact byte counts and each byte is counted down as
-	// it is coded -- and nearly the same size (the interval is rounded to a
-	// multiple of total/range, which costs a small fraction of a bit per
-	// thousand bytes), but two to three times faster.
+	// The counts start as the exact byte counts and each byte is counted
+	// down as it is coded. Rounding the interval to a multiple of
+	// total/range costs a small fraction of a bit per thousand bytes.
 	//
-	// The output format changed with this version: the coded bytes, with no
-	// length header -- the caller stores the number of bytes coded, n, and
-	// the decoder reads zeros past the end. Older files coded with the
-	// bit-at-a-time coder don't decode with it.
+	// Output: the coded bytes, with no length header. The caller stores the
+	// number of bytes coded, n; the decoder reads zeros past the end.
 	//
-	// getIntervalValueFast / getArithmeticValuesFast and the ...Fenwick
-	// versions are now the same coder (both keep the running totals in a
-	// Fenwick tree); the names are kept so callers don't change.
+	// The ...Fast and ...FastFenwick methods are the same coder (running
+	// totals in a Fenwick tree); both names are kept for callers.
 	//
-	// Limits: the total count (the number of bytes in the block) must stay
-	// under 2^30. The rounding loss grows with the total, but stays under
-	// about 0.01% for totals below 2^24 (16 million bytes).
+	// Limits: the total count (bytes in the block) must stay under 2^30.
+	// The rounding loss stays under about 0.01% for totals below 2^24.
 	// =========================================================================
 
 	public static byte[] getIntervalValueFast(byte[] src, int[] frequency)
@@ -519,12 +456,12 @@ public class ArithmeticMapper
 
 	// ---- Range coder --------------------------------------------------------
 	//
-	// low holds the bottom of the interval in its low 40 bits (plus a
-	// possible carry into bit 40); range is kept between 2^32 and 2^40 by
-	// shifting out a byte whenever it drops below 2^32. The top byte of low
-	// isn't written until it can no longer change: it's held in `cache`,
-	// along with a count of 0xFF bytes after it that a carry would also
-	// change (the standard carry-propagation scheme used by LZMA's coder).
+	// Byte-oriented, with LZMA-style carry propagation. low holds the bottom
+	// of the interval in its low 40 bits (plus a possible carry into bit 40);
+	// range stays between 2^32 and 2^40, shifting out a byte when it drops
+	// below 2^32. The top byte of low is held in `cache` until it can no
+	// longer change, along with a count of following 0xFF bytes that a
+	// carry would also change.
 
 	private static final long RANGE_TOP    = 1L << 40;
 	private static final long RANGE_BOTTOM = 1L << 32;
@@ -621,25 +558,20 @@ public class ArithmeticMapper
 	// =========================================================================
 	// Adaptive arithmetic coder (context-modeled, no stored table).
 	//
-	// Same range coder as the fast coder above, but instead of
-	// being given the byte counts up front, the coder learns them as it goes,
-	// and the decoder learns them the same way -- so nothing has to be stored
-	// besides the coded bits. It keeps a separate set of counts for each of
-	// 2^ADAPTIVE_CONTEXT_BITS contexts, chosen by the top bits of the previous
-	// byte, since the next byte depends noticeably on the one before it. Every
-	// byte value starts at count 1 in every context; each coded byte adds
-	// ADAPTIVE_INCREMENT to its count. If a context's total ever passes
-	// ADAPTIVE_LIMIT its counts are halved (keeping them >= 1) -- a safety
-	// limit that keeps the totals well inside the coder's precision.
+	// Uses the RangeEncoder/RangeDecoder above, but learns the counts as it
+	// goes (the decoder learns them the same way), so no table is stored.
+	// Counts are kept per context: 2^ADAPTIVE_CONTEXT_BITS contexts, chosen
+	// by the top bits of the previous byte. Every count starts at 1; each
+	// coded byte adds ADAPTIVE_INCREMENT. If a context's total passes
+	// ADAPTIVE_LIMIT its counts are halved (staying >= 1), keeping totals
+	// well inside the coder's precision.
 	//
-	// Settings chosen by testing on the sample images: 16 contexts (top 4
-	// bits), increment 2. Fewer contexts learn faster but capture less; a
-	// full 256-value context lost on small images, where there isn't enough
-	// data to learn 256 sets of counts. Larger increments made the first
-	// bytes seen in each context count for too much.
+	// Tested best on the sample images: 16 contexts (top 4 bits), increment
+	// 2. 256 contexts lost on small images (too little data to learn them);
+	// larger increments overweighted the first bytes in each context.
 	//
-	// Output: the coded bytes, with no length header -- the caller stores
-	// the number of bytes coded, n, and the decoder reads zeros past the end.
+	// Output: the coded bytes, with no length header. The caller stores the
+	// number of bytes coded, n; the decoder reads zeros past the end.
 	// =========================================================================
 
 	public static final int ADAPTIVE_CONTEXT_BITS = 4;
@@ -756,5 +688,102 @@ public class ArithmeticMapper
 			previous = j;
 		}
 		return value;
+	}
+
+	// =========================================================================
+	// Blocks and frequency tables, shared by the writers and readers.
+	// =========================================================================
+
+	// Splits src into n blocks of length/n bytes, the last one taking the
+	// remainder.
+	public static byte[][] getBlocks(byte[] src, int n)
+	{
+		int[]    length = getBlockLengths(src.length, n);
+		byte[][] block  = new byte[n][];
+		int      pos    = 0;
+		for(int k = 0; k < n; k++) { block[k] = Arrays.copyOfRange(src, pos, pos + length[k]); pos += length[k]; }
+		return block;
+	}
+
+	public static int[] getBlockLengths(int length, int n)
+	{
+		int[] block_length = new int[n];
+		Arrays.fill(block_length, length / n);
+		block_length[n - 1] += length % n;
+		return block_length;
+	}
+
+	public static byte[] joinBlocks(byte[][] block)
+	{
+		int length = 0;
+		for(byte[] b : block) length += b.length;
+		byte[] dst = new byte[length];
+		int pos = 0;
+		for(byte[] b : block) { System.arraycopy(b, 0, dst, pos, b.length); pos += b.length; }
+		return dst;
+	}
+
+	// Byte counts of src (256 entries).
+	public static int[] getFrequency(byte[] src)
+	{
+		int[] frequency = new int[256];
+		for(byte b : src) frequency[b & 0xFF]++;
+		return frequency;
+	}
+
+	// Frequency tables are stored as n*256 counts, little-endian, 1, 2 or 4
+	// bytes each (type 0, 1, 2: the smallest that holds the largest count),
+	// then Deflated.
+	public static int getFrequencyType(int[][] frequency)
+	{
+		int max = 0;
+		for(int[] row : frequency) for(int v : row) if(v > max) max = v;
+		return (max <= 255) ? 0 : (max <= 65535) ? 1 : 2;
+	}
+
+	public static byte[] deflateFrequencies(int[][] frequency, int type, int level)
+	{
+		int    width = (type == 0) ? 1 : (type == 1) ? 2 : 4;
+		byte[] raw   = new byte[frequency.length * 256 * width];
+		for(int k = 0; k < frequency.length; k++)
+			for(int m = 0; m < 256; m++)
+				for(int b = 0; b < width; b++)
+					raw[(k * 256 + m) * width + b] = (byte)(frequency[k][m] >> (8 * b));
+		return CodeMapper.deflate(raw, level);
+	}
+
+	public static int[][] inflateFrequencies(byte[] zipped, int n, int type) throws java.util.zip.DataFormatException
+	{
+		int     width     = (type == 0) ? 1 : (type == 1) ? 2 : 4;
+		byte[]  raw       = CodeMapper.inflate(zipped, n * 256 * width);
+		int[][] frequency = new int[n][256];
+		for(int k = 0; k < n; k++)
+			for(int m = 0; m < 256; m++)
+			{
+				int v = 0;
+				for(int b = 0; b < width; b++) v |= (raw[(k * 256 + m) * width + b] & 0xFF) << (8 * b);
+				frequency[k][m] = v;
+			}
+		return frequency;
+	}
+
+	// A set of tables as the writers store them: int n, int type, int
+	// Deflated length, Deflated bytes.
+	public static byte[] packFrequencies(int[][] frequency, int level)
+	{
+		int    type   = getFrequencyType(frequency);
+		byte[] zipped = deflateFrequencies(frequency, type, level);
+		java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(12 + zipped.length);
+		buffer.putInt(frequency.length).putInt(type).putInt(zipped.length).put(zipped);
+		return buffer.array();
+	}
+
+	public static int[][] readFrequencies(java.io.DataInputStream in) throws java.io.IOException, java.util.zip.DataFormatException
+	{
+		int    n      = in.readInt();
+		int    type   = in.readInt();
+		byte[] zipped = new byte[in.readInt()];
+		in.readFully(zipped);
+		return inflateFrequencies(zipped, n, type);
 	}
 }
