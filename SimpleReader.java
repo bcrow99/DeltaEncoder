@@ -80,7 +80,7 @@ public class SimpleReader
 		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic"};
+		"LZ77","Huffman","Arithmetic","Adaptive"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -316,7 +316,7 @@ public class SimpleReader
 					freq_list.add(freqs);
 
 					// Per-segment data: a single encoded byte[] from getIntervalValueFast
-					// (includes its own 4-byte bit-length header).
+					// (the coded bytes; the block's byte count comes from the channel data).
 					byte[][] fast_enc = new byte[n_segs][];
 					for (int k = 0; k < n_segs; k++)
 					{
@@ -325,6 +325,12 @@ public class SimpleReader
 						in.readFully(fast_enc[k]);
 					}
 					fast_enc_list.add(fast_enc);
+				}
+				else if (entropy_type == 3) // Adaptive: the coded payload (no table).
+				{
+					byte[] coded = new byte[in.readInt()];
+					in.readFully(coded);
+					fast_enc_list.add(new byte[][]{coded});
 				}
 			}
 
@@ -603,6 +609,11 @@ public class SimpleReader
 					// Huffman
 					payload = CodeMapper.unpackRegularCode(huff_pay_list.get(i), huff_length_list.get(i), payload_length);
 				}
+				else if (entropy_type == 3)
+				{
+					// Adaptive
+					payload = ArithmeticMapper.getArithmeticValuesAdaptive(fast_enc_list.get(i)[0], payload_length);
+				}
 				else // entropy_type == 2 (Arithmetic, renormalizing/fast)
 				{
 					int expected  = payload_length;
@@ -620,7 +631,7 @@ public class SimpleReader
 					// (previously one new Thread per block -- thousands at once
 					// on a large image, times 3 channels). Same output.
 					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
-						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
+						segs[k] = ArithmeticMapper.getArithmeticValuesFastFenwick(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];

@@ -90,7 +90,7 @@ public class DeltaReader
 		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic"};
+		"LZ77","Huffman","Arithmetic","Adaptive"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -264,7 +264,7 @@ public class DeltaReader
 						in.readFully(enc);
 						byte[] map;
 						if (K <= 1) { map = new byte[ml]; java.util.Arrays.fill(map, (byte) only); }
-						else          map = ArithmeticMapper.getArithmeticValuesFast(enc, freq, ml);
+						else          map = ArithmeticMapper.getArithmeticValuesFastFenwick(enc, freq, ml);
 						map_list.add(map);
 					}
 					else
@@ -361,7 +361,7 @@ public class DeltaReader
 					freq_list.add(freqs);
 
 					// Per-segment data: a single encoded byte[] from getIntervalValueFast
-					// (includes its own 4-byte bit-length header).
+					// (the coded bytes; the block's byte count comes from the channel data).
 					byte[][] fast_enc = new byte[n_segs][];
 					for (int k = 0; k < n_segs; k++)
 					{
@@ -370,6 +370,12 @@ public class DeltaReader
 						in.readFully(fast_enc[k]);
 					}
 					fast_enc_list.add(fast_enc);
+				}
+				else if (entropy_type == 3) // Adaptive: the coded payload (no table).
+				{
+					byte[] coded = new byte[in.readInt()];
+					in.readFully(coded);
+					fast_enc_list.add(new byte[][]{coded});
 				}
 			}
 
@@ -681,6 +687,13 @@ public class DeltaReader
 					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
 					payload = CodeMapper.unpackRegularCode(huff_pay_list.get(i), huff_length_list.get(i), num_sym);
 				}
+				else if (entropy_type == 3)
+				{
+					// Adaptive: the payload is a byte per pixel (Integer) or the
+					// unary-string bytes.
+					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
+					payload = ArithmeticMapper.getArithmeticValuesAdaptive(fast_enc_list.get(i)[0], num_sym);
+				}
 				else // entropy_type == 2 (Arithmetic, renormalizing/fast). The
 				     // exact-BigInteger "Slow Arithmetic" path (formerly
 				     // entropy_type==2, with this one at ==3) has been
@@ -701,7 +714,7 @@ public class DeltaReader
 					// (previously one new Thread per block -- thousands at once
 					// on a large image, times 3 channels). Same output.
 					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
-						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
+						segs[k] = ArithmeticMapper.getArithmeticValuesFastFenwick(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];

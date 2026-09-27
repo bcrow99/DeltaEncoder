@@ -4,6 +4,17 @@ import java.math.*;
 //version 4.0
 
 /*
+ * Added after version 4.0:
+ *   - getIntervalValueAdaptive / getArithmeticValuesAdaptive, an adaptive,
+ *     context-modeled version of the fast coder that stores no frequency
+ *     table (see the section at the end).
+ *   - The fast coders (getIntervalValueFast/-Fenwick and
+ *     getArithmeticValuesFast/-Fenwick) and the adaptive coder now use a
+ *     byte-oriented range coder instead of the bit-at-a-time coder: two to
+ *     three times faster, nearly the same size, and a different output
+ *     format (no 4-byte length header; older files don't decode). The
+ *     exact BigInteger coders are unchanged.
+ *
  * Changes in this version:
  *
  *   1. All order-table-related code moved out to SteeredArithmeticMapper,
@@ -432,385 +443,318 @@ public class ArithmeticMapper
 	}
 
 	// =========================================================================
-	// Fast renormalization-based arithmetic coder (no BigInteger). Untouched
-	// by the BigFraction refactor above -- uses plain longs throughout, no
-	// fractions at all.
+	// Fast arithmetic coder (no BigInteger).
+	//
+	// A byte-oriented range coder: the interval is kept as a 40-bit range and
+	// narrowed a whole byte at a time, with carries propagated into the bytes
+	// already written, instead of the older 32-bit coder that decided and
+	// wrote one bit at a time (with runs of pending bits). Same model -- the
+	// counts start as the exact byte counts and each byte is counted down as
+	// it is coded -- and nearly the same size (the interval is rounded to a
+	// multiple of total/range, which costs a small fraction of a bit per
+	// thousand bytes), but two to three times faster.
+	//
+	// The output format changed with this version: the coded bytes, with no
+	// length header -- the caller stores the number of bytes coded, n, and
+	// the decoder reads zeros past the end. Older files coded with the
+	// bit-at-a-time coder don't decode with it.
+	//
+	// getIntervalValueFast / getArithmeticValuesFast and the ...Fenwick
+	// versions are now the same coder (both keep the running totals in a
+	// Fenwick tree); the names are kept so callers don't change.
+	//
+	// Limits: the total count (the number of bytes in the block) must stay
+	// under 2^30. The rounding loss grows with the total, but stays under
+	// about 0.01% for totals below 2^24 (16 million bytes).
 	// =========================================================================
 
 	public static byte[] getIntervalValueFast(byte[] src, int[] frequency)
 	{
-		int[] f = frequency.clone();
-		int   n = src.length;
-
-		int[] s = new int[f.length];
-		int   m = 0;
-		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
-
-		final long TOP  = 0x100000000L;
-		final long HALF = 0x80000000L;
-		final long QTR  = 0x40000000L;
-		final long TQTR = 0xC0000000L;
-
-		long low     = 0L;
-		long high    = TOP;
-		int  pending = 0;
-
-		byte[] buf     = new byte[n * 2 + 16];
-		int    bit_pos = 0;
-
-		for (int i = 0; i < n; i++)
-		{
-			int j = src[i];
-			if (j < 0) j += 256;
-
-			long range    = high - low;
-			long new_low  = low + (range * s[j]) / m;
-			long new_high = (s[j] + f[j] == m)
-			                ? high
-			                : low + (range * (long)(s[j] + f[j])) / m;
-			low  = new_low;
-			high = new_high;
-
-			for (;;)
-			{
-				if (high <= HALF)
-				{
-					fastWriteBit(buf, bit_pos++, 0);
-					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
-					pending = 0;
-					low  <<= 1;
-					high <<= 1;
-				}
-				else if (low >= HALF)
-				{
-					fastWriteBit(buf, bit_pos++, 1);
-					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
-					pending = 0;
-					low  = (low  - HALF) << 1;
-					high = (high - HALF) << 1;
-				}
-				else if (low >= QTR && high <= TQTR)
-				{
-					pending++;
-					low  = (low  - QTR) << 1;
-					high = (high - QTR) << 1;
-				}
-				else break;
-			}
-
-			f[j]--;
-			m--;
-			for (int k = j + 1; k < s.length; k++) s[k]--;
-		}
-
-		pending++;
-		if (low < QTR)
-		{
-			fastWriteBit(buf, bit_pos++, 0);
-			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
-		}
-		else
-		{
-			fastWriteBit(buf, bit_pos++, 1);
-			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
-		}
-
-		int    bit_length  = bit_pos;
-		int    byte_length = (bit_length + 7) / 8;
-		byte[] result      = new byte[4 + byte_length];
-		result[0] = (byte)(bit_length >>> 24);
-		result[1] = (byte)(bit_length >>> 16);
-		result[2] = (byte)(bit_length >>>  8);
-		result[3] = (byte) bit_length;
-		System.arraycopy(buf, 0, result, 4, byte_length);
-		return result;
+		return getIntervalValueFastFenwick(src, frequency);
 	}
 
 	public static byte[] getArithmeticValuesFast(byte[] encoded, int[] frequency, int n)
 	{
-		int bit_length = ((encoded[0] & 0xFF) << 24)
-		               | ((encoded[1] & 0xFF) << 16)
-		               | ((encoded[2] & 0xFF) <<  8)
-		               |  (encoded[3] & 0xFF);
-
-		int[] f = frequency.clone();
-
-		int[] s = new int[f.length];
-		int   m = 0;
-		for (int i = 0; i < f.length; i++) { s[i] = m; m += f[i]; }
-
-		final long TOP  = 0x100000000L;
-		final long HALF = 0x80000000L;
-		final long QTR  = 0x40000000L;
-		final long TQTR = 0xC0000000L;
-		final long MASK = 0xFFFFFFFFL;
-
-		long low     = 0L;
-		long high    = TOP;
-		int  bit_ptr = 0;
-
-		long code = 0L;
-		for (int b = 0; b < 32; b++)
-		{
-			int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-			code = (code << 1) | bit;
-		}
-
-		byte[] value = new byte[n];
-
-		for (int i = 0; i < n; i++)
-		{
-			long range  = high - low;
-			long scaled = (code - low) * m / range;
-			if (scaled < 0)  scaled = 0;
-			if (scaled >= m) scaled = m - 1;
-
-			int j = findFastSymbol(s, (int) scaled);
-			while (j < f.length - 1 && f[j] == 0) j++;
-
-			long new_low  = low + (range * s[j]) / m;
-			long new_high = (s[j] + f[j] == m)
-			                ? high
-			                : low + (range * (long)(s[j] + f[j])) / m;
-
-			while (code >= new_high && j < f.length - 1)
-			{
-				j++;
-				while (j < f.length - 1 && f[j] == 0) j++;
-				new_low  = low + (range * s[j]) / m;
-				new_high = (s[j] + f[j] == m) ? high : low + (range * (long)(s[j] + f[j])) / m;
-			}
-			while (code < new_low && j > 0)
-			{
-				j--;
-				while (j > 0 && f[j] == 0) j--;
-				new_low  = low + (range * s[j]) / m;
-				new_high = (s[j] + f[j] == m) ? high : low + (range * (long)(s[j] + f[j])) / m;
-			}
-
-			value[i] = (byte) j;
-
-			low  = new_low;
-			high = new_high;
-
-			for (;;)
-			{
-				if (high <= HALF)
-				{
-					low  <<= 1;
-					high <<= 1;
-					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = ((code << 1) | bit) & MASK;
-				}
-				else if (low >= HALF)
-				{
-					low  = (low  - HALF) << 1;
-					high = (high - HALF) << 1;
-					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = (((code - HALF) << 1) | bit) & MASK;
-				}
-				else if (low >= QTR && high <= TQTR)
-				{
-					low  = (low  - QTR) << 1;
-					high = (high - QTR) << 1;
-					int bit = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = (((code - QTR) << 1) | bit) & MASK;
-				}
-				else break;
-			}
-
-			f[j]--;
-			m--;
-			for (int k = j + 1; k < s.length; k++) s[k]--;
-		}
-
-		return value;
+		return getArithmeticValuesFastFenwick(encoded, frequency, n);
 	}
-
-	private static void fastWriteBit(byte[] buf, int pos, int bit)
-	{
-		if (bit != 0)
-			buf[pos >> 3] |= (byte)(1 << (pos & 7));
-	}
-
-	private static int fastReadBit(byte[] buf, int data_byte_offset, int pos)
-	{
-		int abs = data_byte_offset * 8 + pos;
-		return (buf[abs >> 3] >> (abs & 7)) & 1;
-	}
-
-	private static int findFastSymbol(int[] s, int target)
-	{
-		int lo = 0, hi = s.length - 1;
-		while (lo < hi)
-		{
-			int mid = (lo + hi + 1) >> 1;
-			if (s[mid] <= target) lo = mid;
-			else                  hi = mid - 1;
-		}
-		return lo;
-	}
-
-	// =========================================================================
-	// Fenwick-tree accelerated fast arithmetic coder.
-	// Same 32-bit renormalization as getIntervalValueFast/getArithmeticValuesFast
-	// but O(log 256) cumulative frequency updates instead of O(256).
-	// =========================================================================
 
 	public static byte[] getIntervalValueFastFenwick(byte[] src, int[] frequency)
 	{
 		int[] f   = frequency.clone();
-		int   n   = src.length;
 		int[] bit = fenwickBuild(f);
 		int   m   = 0; for (int v : f) m += v;
 
-		final long TOP  = 0x100000000L;
-		final long HALF = 0x80000000L;
-		final long QTR  = 0x40000000L;
-		final long TQTR = 0xC0000000L;
-
-		long low = 0L, high = TOP;
-		int  pending = 0;
-
-		byte[] buf     = new byte[n * 2 + 16];
-		int    bit_pos = 0;
-
-		for (int i = 0; i < n; i++)
+		RangeEncoder encoder = new RangeEncoder(src.length);
+		for (int i = 0; i < src.length; i++)
 		{
-			int j = src[i]; if (j < 0) j += 256;
-
-			int sj     = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-			int sj_fj  = fenwickQuery(bit, j);
-
-			long range    = high - low;
-			long new_low  = low + (range * sj) / m;
-			long new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
-			low = new_low; high = new_high;
-
-			for (;;)
-			{
-				if (high <= HALF) {
-					fastWriteBit(buf, bit_pos++, 0);
-					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
-					pending = 0; low <<= 1; high <<= 1;
-				} else if (low >= HALF) {
-					fastWriteBit(buf, bit_pos++, 1);
-					for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
-					pending = 0; low = (low - HALF) << 1; high = (high - HALF) << 1;
-				} else if (low >= QTR && high <= TQTR) {
-					pending++; low = (low - QTR) << 1; high = (high - QTR) << 1;
-				} else break;
-			}
-
+			int j  = src[i] & 0xFF;
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+			encoder.encode(sj, f[j], m);
 			fenwickUpdate(bit, j, -1);
 			f[j]--; m--;
 		}
-
-		pending++;
-		if (low < QTR) {
-			fastWriteBit(buf, bit_pos++, 0);
-			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 1);
-		} else {
-			fastWriteBit(buf, bit_pos++, 1);
-			for (int p = 0; p < pending; p++) fastWriteBit(buf, bit_pos++, 0);
-		}
-
-		int bit_length = bit_pos, byte_length = (bit_length + 7) / 8;
-		byte[] result = new byte[4 + byte_length];
-		result[0] = (byte)(bit_length >>> 24); result[1] = (byte)(bit_length >>> 16);
-		result[2] = (byte)(bit_length >>> 8);  result[3] = (byte) bit_length;
-		System.arraycopy(buf, 0, result, 4, byte_length);
-		return result;
+		return encoder.finish();
 	}
 
 	public static byte[] getArithmeticValuesFastFenwick(byte[] encoded, int[] frequency, int n)
 	{
-		int bit_length = ((encoded[0] & 0xFF) << 24) | ((encoded[1] & 0xFF) << 16)
-		               | ((encoded[2] & 0xFF) <<  8) |  (encoded[3] & 0xFF);
-
 		int[] f   = frequency.clone();
 		int[] bit = fenwickBuild(f);
-		int   m   = 0; for (int fv : f) m += fv;
+		int   m   = 0; for (int v : f) m += v;
 
-		final long TOP  = 0x100000000L;
-		final long HALF = 0x80000000L;
-		final long QTR  = 0x40000000L;
-		final long TQTR = 0xC0000000L;
-		final long MASK = 0xFFFFFFFFL;
-
-		long low = 0L, high = TOP;
-		int  bit_ptr = 0;
-
-		long code = 0L;
-		for (int b = 0; b < 32; b++) {
-			int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-			code = (code << 1) | bt;
-		}
-
+		RangeDecoder decoder = new RangeDecoder(encoded);
 		byte[] value = new byte[n];
-
 		for (int i = 0; i < n; i++)
 		{
-			long range  = high - low;
-			long scaled = (code - low) * m / range;
-			if (scaled < 0) scaled = 0; if (scaled >= m) scaled = m - 1;
-
-			int j = fenwickFind(bit, (int)scaled);
-			while (j < f.length - 1 && f[j] == 0) j++;
-
-			int sj    = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-			int sj_fj = fenwickQuery(bit, j);
-
-			long new_low  = low + (range * sj) / m;
-			long new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
-
-			// Same boundary-nudge fix as getArithmeticValuesFast -- see that
-			// method's history for the full explanation. Verify and nudge j
-			// using Fenwick queries instead of direct array access.
-			while (code >= new_high && j < f.length - 1)
-			{
-				j++;
-				while (j < f.length - 1 && f[j] == 0) j++;
-				sj    = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-				sj_fj = fenwickQuery(bit, j);
-				new_low  = low + (range * sj) / m;
-				new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
-			}
-			while (code < new_low && j > 0)
-			{
-				j--;
-				while (j > 0 && f[j] == 0) j--;
-				sj    = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
-				sj_fj = fenwickQuery(bit, j);
-				new_low  = low + (range * sj) / m;
-				new_high = (sj_fj == m) ? high : low + (range * (long)sj_fj) / m;
-			}
-
+			int target = decoder.target(m);
+			int j  = fenwickFind(bit, target);
+			int sj = (j > 0) ? fenwickQuery(bit, j - 1) : 0;
+			decoder.decode(sj, f[j]);
 			value[i] = (byte) j;
-
-			low = new_low; high = new_high;
-
-			for (;;)
-			{
-				if (high <= HALF) {
-					low <<= 1; high <<= 1;
-					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = ((code << 1) | bt) & MASK;
-				} else if (low >= HALF) {
-					low = (low - HALF) << 1; high = (high - HALF) << 1;
-					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = (((code - HALF) << 1) | bt) & MASK;
-				} else if (low >= QTR && high <= TQTR) {
-					low = (low - QTR) << 1; high = (high - QTR) << 1;
-					int bt = (bit_ptr < bit_length) ? fastReadBit(encoded, 4, bit_ptr++) : 0;
-					code = (((code - QTR) << 1) | bt) & MASK;
-				} else break;
-			}
-
 			fenwickUpdate(bit, j, -1);
 			f[j]--; m--;
 		}
+		return value;
+	}
 
+	// ---- Range coder --------------------------------------------------------
+	//
+	// low holds the bottom of the interval in its low 40 bits (plus a
+	// possible carry into bit 40); range is kept between 2^32 and 2^40 by
+	// shifting out a byte whenever it drops below 2^32. The top byte of low
+	// isn't written until it can no longer change: it's held in `cache`,
+	// along with a count of 0xFF bytes after it that a carry would also
+	// change (the standard carry-propagation scheme used by LZMA's coder).
+
+	private static final long RANGE_TOP    = 1L << 40;
+	private static final long RANGE_BOTTOM = 1L << 32;
+
+	private static final class RangeEncoder
+	{
+		byte[] out;
+		int    size = 0;
+		long   low = 0, range = RANGE_TOP - 1;
+		int    cache = 0;
+		long   cache_size = 1;
+
+		RangeEncoder(int n) { out = new byte[Math.max(16, n + n / 4 + 16)]; }
+
+		// Narrows the interval to [start, start + count) out of total.
+		void encode(long start, long count, long total)
+		{
+			long r = range / total;
+			low  += start * r;
+			range = count * r;
+			while (range < RANGE_BOTTOM)
+			{
+				range <<= 8;
+				shiftLow();
+			}
+		}
+
+		void shiftLow()
+		{
+			if (low < 0xFF00000000L || low >= RANGE_TOP)
+			{
+				int carry = (int) (low >>> 40);
+				int temp  = cache;
+				do
+				{
+					put(temp + carry);
+					temp = 0xFF;
+				}
+				while (--cache_size != 0);
+				cache = (int) ((low >>> 32) & 0xFF);
+			}
+			cache_size++;
+			low = (low & 0xFFFFFFFFL) << 8;
+		}
+
+		void put(int b)
+		{
+			if (size == out.length) out = Arrays.copyOf(out, out.length * 2);
+			out[size++] = (byte) b;
+		}
+
+		byte[] finish()
+		{
+			for (int k = 0; k < 6; k++) shiftLow();
+			return Arrays.copyOf(out, size);
+		}
+	}
+
+	private static final class RangeDecoder
+	{
+		final byte[] in;
+		int  pos = 1;             // the first byte written is always the initial cache
+		long code = 0, range = RANGE_TOP - 1, r;
+
+		RangeDecoder(byte[] in)
+		{
+			this.in = in;
+			for (int k = 0; k < 5; k++) code = (code << 8) | next();
+		}
+
+		int next() { return (pos < in.length) ? (in[pos++] & 0xFF) : 0; }
+
+		// Where the code falls, as a count out of total. Must be followed by
+		// decode() with the interval that holds it.
+		int target(long total)
+		{
+			r = range / total;
+			long t = code / r;
+			return (int) Math.min(t, total - 1);
+		}
+
+		void decode(long start, long count)
+		{
+			code -= start * r;
+			range = count * r;
+			while (range < RANGE_BOTTOM)
+			{
+				range <<= 8;
+				code = (code << 8) | next();
+			}
+		}
+	}
+
+	// =========================================================================
+	// Adaptive arithmetic coder (context-modeled, no stored table).
+	//
+	// Same range coder as the fast coder above, but instead of
+	// being given the byte counts up front, the coder learns them as it goes,
+	// and the decoder learns them the same way -- so nothing has to be stored
+	// besides the coded bits. It keeps a separate set of counts for each of
+	// 2^ADAPTIVE_CONTEXT_BITS contexts, chosen by the top bits of the previous
+	// byte, since the next byte depends noticeably on the one before it. Every
+	// byte value starts at count 1 in every context; each coded byte adds
+	// ADAPTIVE_INCREMENT to its count. If a context's total ever passes
+	// ADAPTIVE_LIMIT its counts are halved (keeping them >= 1) -- a safety
+	// limit that keeps the totals well inside the coder's precision.
+	//
+	// Settings chosen by testing on the sample images: 16 contexts (top 4
+	// bits), increment 2. Fewer contexts learn faster but capture less; a
+	// full 256-value context lost on small images, where there isn't enough
+	// data to learn 256 sets of counts. Larger increments made the first
+	// bytes seen in each context count for too much.
+	//
+	// Output: the coded bytes, with no length header -- the caller stores
+	// the number of bytes coded, n, and the decoder reads zeros past the end.
+	// =========================================================================
+
+	public static final int ADAPTIVE_CONTEXT_BITS = 4;
+	public static final int ADAPTIVE_INCREMENT    = 2;
+	public static final int ADAPTIVE_LIMIT        = 1 << 22;
+
+	public static byte[] getIntervalValueAdaptive(byte[] src)
+	{
+		return getIntervalValueAdaptive(src, ADAPTIVE_CONTEXT_BITS, ADAPTIVE_INCREMENT, ADAPTIVE_LIMIT);
+	}
+
+	public static byte[] getArithmeticValuesAdaptive(byte[] encoded, int n)
+	{
+		return getArithmeticValuesAdaptive(encoded, n, ADAPTIVE_CONTEXT_BITS, ADAPTIVE_INCREMENT, ADAPTIVE_LIMIT);
+	}
+
+	// One context's counts, with a Fenwick tree over them for the running
+	// totals.
+	private static final class AdaptiveModel
+	{
+		final int[] f   = new int[256];
+		final int[] bit = new int[257];
+		int total;
+		final int increment, limit;
+
+		AdaptiveModel(int increment, int limit)
+		{
+			this.increment = increment;
+			this.limit     = limit;
+			Arrays.fill(f, 1);
+			rebuild();
+		}
+
+		void rebuild()
+		{
+			Arrays.fill(bit, 0);
+			total = 0;
+			for (int s = 0; s < 256; s++)
+			{
+				total += f[s];
+				for (int i = s + 1; i <= 256; i += i & -i) bit[i] += f[s];
+			}
+		}
+
+		// Total count of the byte values below s.
+		int start(int s)
+		{
+			int sum = 0;
+			for (int i = s; i > 0; i -= i & -i) sum += bit[i];
+			return sum;
+		}
+
+		// The byte value whose interval holds target (0 <= target < total).
+		int find(int target)
+		{
+			int pos = 0;
+			for (int b = 8; b >= 0; b--)
+			{
+				int nxt = pos + (1 << b);
+				if (nxt <= 256 && bit[nxt] <= target) { target -= bit[nxt]; pos = nxt; }
+			}
+			return pos;
+		}
+
+		void update(int s)
+		{
+			f[s]  += increment;
+			total += increment;
+			for (int i = s + 1; i <= 256; i += i & -i) bit[i] += increment;
+			if (total > limit)
+			{
+				for (int k = 0; k < 256; k++) f[k] = (f[k] + 1) >>> 1;
+				rebuild();
+			}
+		}
+	}
+
+	private static AdaptiveModel[] adaptiveModels(int context_bits, int increment, int limit)
+	{
+		AdaptiveModel[] model = new AdaptiveModel[1 << context_bits];
+		for (int k = 0; k < model.length; k++) model[k] = new AdaptiveModel(increment, limit);
+		return model;
+	}
+
+	public static byte[] getIntervalValueAdaptive(byte[] src, int context_bits, int increment, int limit)
+	{
+		AdaptiveModel[] model = adaptiveModels(context_bits, increment, limit);
+		RangeEncoder encoder = new RangeEncoder(src.length);
+		int previous = 0;
+		for (int i = 0; i < src.length; i++)
+		{
+			int j = src[i] & 0xFF;
+			AdaptiveModel m = model[previous >>> (8 - context_bits)];
+			encoder.encode(m.start(j), m.f[j], m.total);
+			m.update(j);
+			previous = j;
+		}
+		return encoder.finish();
+	}
+
+	public static byte[] getArithmeticValuesAdaptive(byte[] encoded, int n, int context_bits, int increment, int limit)
+	{
+		AdaptiveModel[] model = adaptiveModels(context_bits, increment, limit);
+		RangeDecoder decoder = new RangeDecoder(encoded);
+		byte[] value = new byte[n];
+		int previous = 0;
+		for (int i = 0; i < n; i++)
+		{
+			AdaptiveModel m = model[previous >>> (8 - context_bits)];
+			int j = m.find(decoder.target(m.total));
+			decoder.decode(m.start(j), m.f[j]);
+			value[i] = (byte) j;
+			m.update(j);
+			previous = j;
+		}
 		return value;
 	}
 }

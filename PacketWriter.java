@@ -32,12 +32,15 @@ public class PacketWriter
 	int min_set_id    = 0;
 	int delta_type    = 2;   // average filter by default; user can change it from the Delta menu
 	int entropy_type  = 0;
-	// Entropy menu, in entropy_type order. 3 and 4 code every packet on its
-	// own (each with its own table) instead of all of a channel's packets as
-	// one stream -- see codePackets and codeHuffmanPackets.
-	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)"};
+	// Entropy menu, in entropy_type order. 3, 4 and 6 code every packet on
+	// its own instead of all of a channel's packets as one stream -- see
+	// codePackets, codeHuffmanPackets and codeAdaptivePackets. 5 and 6 use
+	// ArithmeticMapper's adaptive coder, which stores no frequency table.
+	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)","Adaptive","Adaptive (per packet)"};
 	static final int ARITHMETIC_PER_PACKET = 3;
 	static final int HUFFMAN_PER_PACKET    = 4;
+	static final int ADAPTIVE              = 5;
+	static final int ADAPTIVE_PER_PACKET   = 6;
 	byte scanline5_variant = 0;
 
 	// ---- Packet (string segmentation) parameters ----------------------------
@@ -971,6 +974,9 @@ public class PacketWriter
 	{
 		if(payload.length==0) return 0;
 		if(entropy_type==0) return 8+deflate(payload).length;
+		// Adaptive (and the whole-string side of Adaptive per packet): the
+		// coded length plus its 4-byte length field.
+		if(entropy_type==ADAPTIVE||entropy_type==ADAPTIVE_PER_PACKET) return 4+ArithmeticMapper.getIntervalValueAdaptive(payload).length;
 		// entropy_type 3 falls through to Arithmetic here, and 4 to Huffman
 		// above: for them this is only used for the whole-string side of
 		// the comparison.
@@ -985,7 +991,7 @@ public class PacketWriter
 		byte[][] sg=new byte[ns][]; int[][] fr=new int[ns][256]; int pos=0;
 		for(int m=0;m<ns;m++){sg[m]=new byte[m<ns-1?seg_len:odd_len];for(int k=0;k<sg[m].length;k++){sg[m][k]=payload[pos++];fr[m][sg[m][k]&0xFF]++;}}
 		byte[][] enc=new byte[ns][];
-		parallel(ns,m->enc[m]=ArithmeticMapper.getIntervalValueFast(sg[m],fr[m]));
+		parallel(ns,m->enc[m]=ArithmeticMapper.getIntervalValueFastFenwick(sg[m],fr[m]));
 		int fmax=0;for(int[] row:fr)for(int v:row)if(v>fmax)fmax=v;
 		int bpe=(fmax<Byte.MAX_VALUE*2+2)?1:(fmax<Short.MAX_VALUE*2+2)?2:4;
 		byte[] fb=new byte[ns*256*bpe];
@@ -1027,7 +1033,7 @@ public class PacketWriter
 		for(int k=0;k<n;k++){byte[] sg=segs.get(k);body[k]=Arrays.copyOf(sg,sg.length-1);for(byte b:body[k])freq[k][b&0xFF]++;}
 		PacketCoding pc=new PacketCoding();
 		pc.coded=new byte[n][];
-		parallel(n,k->pc.coded[k]=(body[k].length==0)?new byte[0]:ArithmeticMapper.getIntervalValueFast(body[k],freq[k]));
+		parallel(n,k->pc.coded[k]=(body[k].length==0)?new byte[0]:ArithmeticMapper.getIntervalValueFastFenwick(body[k],freq[k]));
 		int fmax=0;for(int[] row:freq)for(int v:row)if(v>fmax)fmax=v;
 		pc.len_type=(fmax<Byte.MAX_VALUE*2+2)?0:(fmax<Short.MAX_VALUE*2+2)?1:2;
 		int bpe=(pc.len_type==0)?1:(pc.len_type==1)?2:4;
@@ -1051,7 +1057,7 @@ public class PacketWriter
 			byte[] body=Arrays.copyOf(sg,sg.length-1);
 			if(body.length==0){ok[k]=true;return;}
 			int[] freq=new int[256];for(byte b:body)freq[b&0xFF]++;
-			ok[k]=Arrays.equals(body,ArithmeticMapper.getArithmeticValuesFast(pc.coded[k],freq,body.length));
+			ok[k]=Arrays.equals(body,ArithmeticMapper.getArithmeticValuesFastFenwick(pc.coded[k],freq,body.length));
 		});
 		for(boolean b:ok)if(!b)return false;
 		return true;
@@ -1138,6 +1144,42 @@ public class PacketWriter
 		catch(Exception e){return false;}
 	}
 
+	// ---- Adaptive per packet (entropy_type 6) -------------------------------
+	//
+	// Each packet (its bytes, without the trailing data byte) is coded on its
+	// own by ArithmeticMapper's adaptive coder, starting from fresh counts, so
+	// there are no tables at all. A channel is written as
+	//   int lengths_len, lengths_len bytes: each packet's coded length as a
+	//       varint, in packet order;
+	//   the coded packets, back to back.
+	// The packet count and byte lengths come from the segment table.
+	static class AdaptivePackets
+	{
+		byte[]   lengths;
+		byte[][] coded;
+		int size() { int n=4+lengths.length; for(byte[] c:coded) n+=c.length; return n; }
+	}
+
+	private static AdaptivePackets codeAdaptivePackets(ArrayList<byte[]> segs)
+	{
+		AdaptivePackets ap=new AdaptivePackets();
+		ap.coded=new byte[segs.size()][];
+		parallel(segs.size(),k->{byte[] sg=segs.get(k);ap.coded[k]=ArithmeticMapper.getIntervalValueAdaptive(Arrays.copyOf(sg,sg.length-1));});
+		ap.lengths=CodeMapper.packRegularLengths(ap.coded);
+		return ap;
+	}
+
+	private static boolean adaptivePacketsDecode(ArrayList<byte[]> segs,AdaptivePackets ap)
+	{
+		boolean[] ok=new boolean[segs.size()];
+		parallel(segs.size(),k->{
+			byte[] sg=segs.get(k);
+			ok[k]=Arrays.equals(Arrays.copyOf(sg,sg.length-1),ArithmeticMapper.getArithmeticValuesAdaptive(ap.coded[k],sg.length-1));
+		});
+		for(boolean b:ok)if(!b)return false;
+		return true;
+	}
+
 	class SaveHandler implements ActionListener
 	{
 		Packet[] packets;
@@ -1203,6 +1245,7 @@ public class PacketWriter
 				int[] entropy_bytes=new int[3];
 				final PacketCoding[] per_packet=new PacketCoding[3];
 				final HuffmanPackets[] huffman_packets=new HuffmanPackets[3];
+				final AdaptivePackets[] adaptive_packets=new AdaptivePackets[3];
 
 				DataOutputStream out=new DataOutputStream(new FileOutputStream(new File("foo")));
 				out.writeShort(image_xdim);out.writeShort(image_ydim);out.writeByte(pixel_shift);out.writeByte(pixel_quant);
@@ -1242,6 +1285,39 @@ public class PacketWriter
 						}
 					}
 					System.out.println("Entropy coding ["+(entropy_type==0?"LZ77":"Huffman")+"] took "+formatDuration(entropy_nanos));
+				}
+				else if(entropy_type==ADAPTIVE)
+				{
+					long t0=System.nanoTime();
+					final byte[][] coded=new byte[3][];
+					parallel(3,i->coded[i]=ArithmeticMapper.getIntervalValueAdaptive(payloads[i]));
+					System.out.println("Entropy coding [Adaptive] took "+formatDuration(System.nanoTime()-t0));
+					final boolean[] decode_ok=new boolean[3];
+					parallel(3,i->decode_ok[i]=Arrays.equals(payloads[i],ArithmeticMapper.getArithmeticValuesAdaptive(coded[i],payloads[i].length)));
+					for(int i=0;i<3;i++)
+					{
+						if(!decode_ok[i])System.out.println("WARNING: channel "+i+" adaptive payload does not decode back.");
+						writeChannelHeader(out,i,channel_id[i]);
+						out.writeInt(coded[i].length);out.write(coded[i]);
+						entropy_bytes[i]=4+coded[i].length;
+					}
+				}
+				else if(entropy_type==ADAPTIVE_PER_PACKET)
+				{
+					long t0=System.nanoTime();
+					for(int i=0;i<3;i++)adaptive_packets[i]=codeAdaptivePackets(packets[i].segments);
+					System.out.println("Entropy coding [Adaptive per packet] took "+formatDuration(System.nanoTime()-t0));
+					final boolean[] decode_ok=new boolean[3];
+					parallel(3,i->decode_ok[i]=adaptivePacketsDecode(packets[i].segments,adaptive_packets[i]));
+					for(int i=0;i<3;i++)
+					{
+						if(!decode_ok[i])System.out.println("WARNING: channel "+i+" packets do not decode back to their segments.");
+						writeChannelHeader(out,i,channel_id[i]);
+						AdaptivePackets ap=adaptive_packets[i];
+						out.writeInt(ap.lengths.length);out.write(ap.lengths);
+						for(byte[] c:ap.coded)out.write(c);
+						entropy_bytes[i]=ap.size();
+					}
 				}
 				else if(entropy_type==HUFFMAN_PER_PACKET)
 				{
@@ -1294,7 +1370,7 @@ public class PacketWriter
 					parallel(total_blocks,b->{
 						int i=(b<n_segs[0])?0:(b<n_segs[0]+n_segs[1])?1:2;
 						int m=b-((i==0)?0:(i==1)?n_segs[0]:n_segs[0]+n_segs[1]);
-						fast_enc[i][m]=ArithmeticMapper.getIntervalValueFast(segs[i][m],freqs[i][m]);
+						fast_enc[i][m]=ArithmeticMapper.getIntervalValueFastFenwick(segs[i][m],freqs[i][m]);
 					});
 					System.out.println("Entropy coding [Arithmetic] took "+formatDuration(System.nanoTime()-fast_arithmetic_t0));
 					int[] len_types=new int[3];byte[][] zip_freqs=new byte[3][];int[] zip_lens=new int[3];deflateFrequencies(n_segs,freqs,len_types,zip_freqs,zip_lens);
@@ -1330,6 +1406,7 @@ public class PacketWriter
 						ews[i]=entropySize(whole_packets[i].payload)+whole_packets[i].ztable.length;
 						ess[i]=(entropy_type==ARITHMETIC_PER_PACKET) ? per_packet[i].size()+seg_packets[i].ztable.length
 						      :(entropy_type==HUFFMAN_PER_PACKET)    ? huffman_packets[i].size()+seg_packets[i].ztable.length
+						      :(entropy_type==ADAPTIVE_PER_PACKET)   ? adaptive_packets[i].size()+seg_packets[i].ztable.length
 						      : entropySize(seg_packets[i].payload)+seg_packets[i].ztable.length;
 					}
 					catch(InterruptedException e){throw new RuntimeException(e);}
@@ -1398,9 +1475,10 @@ public class PacketWriter
 						Packet p=makePacket(segs);
 						n[i]=segs.size();
 						// Arithmetic sizes are estimated (see estimateArithmetic);
-						// LZ77 and Huffman are coded for real.
+						// LZ77, Huffman and Adaptive are coded for real.
 						c[i]=p.ztable.length+((entropy_type==ARITHMETIC_PER_PACKET)?estimatePerPacket(segs)
 						                    :(entropy_type==HUFFMAN_PER_PACKET)?estimateHuffmanPerPacket(segs)
+						                    :(entropy_type==ADAPTIVE_PER_PACKET)?codeAdaptivePackets(segs).size()
 						                    :(entropy_type==2)?estimateArithmetic(p.payload)
 						                    :entropySize(p.payload));
 					}
@@ -1412,7 +1490,7 @@ public class PacketWriter
 			}
 			int best=10;
 			for(int level=9;level>=0;level--)if(cost[level]>=0&&cost[level]<cost[best])best=level;
-			System.out.println("Auto Segment Length ("+ENTROPY_NAMES[entropy_type]+"), bytes by level"+(entropy_type>=2?" (estimated)":"")+":");
+			System.out.println("Auto Segment Length ("+ENTROPY_NAMES[entropy_type]+"), bytes by level"+((entropy_type==2||entropy_type==ARITHMETIC_PER_PACKET||entropy_type==HUFFMAN_PER_PACKET)?" (estimated)":"")+":");
 			for(int level=0;level<=10;level++)
 				if(cost[level]<0) System.out.println(String.format("  %2d  (skipped)",level));
 				else System.out.println(String.format("  %2d  %8d packets  %10d B  %+7.2f%%%s",level,packets_at[level],cost[level],100.0*(cost[level]-cost[10])/cost[10],level==best?"  <":""));
@@ -1423,7 +1501,7 @@ public class PacketWriter
 		// ---- Size estimates for Auto -------------------------------------
 		// Auto only needs to compare levels, so for Arithmetic it doesn't
 		// code anything: a block's coded size is predicted from its byte
-		// counts (entropy, plus the coder's 4-byte header and flush -- within
+		// counts (entropy, plus the range coder's leading and flush bytes -- within
 		// about 0.01% of the real size in testing), and the frequency tables
 		// are compressed with Deflate's default setting instead of the best
 		// one. The best setting is very slow on thousands of tables and only
@@ -1460,13 +1538,14 @@ public class PacketWriter
 
 		// ArithmeticMapper counts each byte down as it codes it, so a block
 		// with counts c costs about log2(n! / (c0! c1! ...)) bits, a little
-		// under n times its entropy; plus its 4-byte header and flush.
+		// under n times its entropy; plus the range coder's leading byte and
+		// its flush.
 		private static long blockEstimate(int[] f,int n)
 		{
 			if(n==0) return 0;
 			double ln=logFactorial(n);
 			for(int v:f) if(v>0) ln-=logFactorial(v);
-			return (long)Math.ceil(ln/Math.log(2)/8)+5;
+			return (long)Math.ceil(ln/Math.log(2)/8)+6;
 		}
 
 		// ln(k!) by Stirling's series (plenty accurate for k >= 1).

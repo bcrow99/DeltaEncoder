@@ -95,7 +95,7 @@ public class PacketReader
 		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
 
 	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)"};
+		"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)","Adaptive","Adaptive (per packet)"};
 	BufferedImage decoded_image = null;
 	BufferedImage display_image = null;
 	ImageCanvas   image_canvas  = null;
@@ -334,7 +334,7 @@ public class PacketReader
 					freq_list.add(freqs);
 
 					// Per-segment data: a single encoded byte[] from getIntervalValueFast
-					// (includes its own 4-byte bit-length header).
+					// (the coded bytes; the block's byte count comes from the channel data).
 					byte[][] fast_enc = new byte[n_segs][];
 					for (int k = 0; k < n_segs; k++)
 					{
@@ -376,6 +376,24 @@ public class PacketReader
 					byte[] tables = new byte[in.readInt()];
 					in.readFully(tables);
 					huffman_table_list.add(CodeMapper.unpackRegularTables(tables, n_packets));
+					byte[] lengths = new byte[in.readInt()];
+					in.readFully(lengths);
+					int[] coded_length = CodeMapper.unpackRegularLengths(lengths, n_packets);
+					byte[][] coded = new byte[n_packets][];
+					for (int k = 0; k < n_packets; k++) { coded[k] = new byte[coded_length[k]]; in.readFully(coded[k]); }
+					fast_enc_list.add(coded);
+				}
+				else if (entropy_type == 5) // Adaptive: the coded payload.
+				{
+					byte[] coded = new byte[in.readInt()];
+					in.readFully(coded);
+					fast_enc_list.add(new byte[][]{coded});
+				}
+				else if (entropy_type == 6) // Adaptive per packet: each packet's
+				                            // coded length (varints), then the
+				                            // coded packets.
+				{
+					int n_packets = segment_bytelength[i].length;
 					byte[] lengths = new byte[in.readInt()];
 					in.readFully(lengths);
 					int[] coded_length = CodeMapper.unpackRegularLengths(lengths, n_packets);
@@ -680,11 +698,32 @@ public class PacketReader
 					byte[][] seg   = new byte[blen.length][];
 					java.util.stream.IntStream.range(0, blen.length).parallel().forEach(k ->
 					{
-						byte[] body = (blen[k] == 0) ? new byte[0] : ArithmeticMapper.getArithmeticValuesFast(coded[k], freqs[k], blen[k]);
+						byte[] body = (blen[k] == 0) ? new byte[0] : ArithmeticMapper.getArithmeticValuesFastFenwick(coded[k], freqs[k], blen[k]);
 						seg[k] = Arrays.copyOf(body, blen[k] + 1);
 						seg[k][blen[k]] = sdata[k];
 					});
 					segments = new ArrayList<byte[]>(Arrays.asList(seg));
+				}
+				else if (entropy_type == 6)
+				{
+					// Adaptive per packet: each packet decoded on its own, in
+					// parallel, with its trailing data byte re-attached.
+					byte[][] coded = fast_enc_list.get(i);
+					int[]    blen  = segment_bytelength[i];
+					byte[]   sdata = segment_data[i];
+					byte[][] seg   = new byte[blen.length][];
+					java.util.stream.IntStream.range(0, blen.length).parallel().forEach(k ->
+					{
+						byte[] body = ArithmeticMapper.getArithmeticValuesAdaptive(coded[k], blen[k]);
+						seg[k] = Arrays.copyOf(body, blen[k] + 1);
+						seg[k][blen[k]] = sdata[k];
+					});
+					segments = new ArrayList<byte[]>(Arrays.asList(seg));
+				}
+				else if (entropy_type == 5)
+				{
+					// Adaptive: the whole payload.
+					payload = ArithmeticMapper.getArithmeticValuesAdaptive(fast_enc_list.get(i)[0], payload_length);
 				}
 				else if (entropy_type == 4)
 				{
@@ -735,7 +774,7 @@ public class PacketReader
 					// (previously one new Thread per block -- thousands at once
 					// on a large image, times 3 channels). Same output.
 					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
-						segs[k] = ArithmeticMapper.getArithmeticValuesFast(fast_enc[k], freqs[k], segs[k].length));
+						segs[k] = ArithmeticMapper.getArithmeticValuesFastFenwick(fast_enc[k], freqs[k], segs[k].length));
 
 					// Reassemble
 					byte[] buf = new byte[expected];

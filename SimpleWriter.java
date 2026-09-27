@@ -376,11 +376,11 @@ public class SimpleWriter
 				for(int i=0;i<13;i++)if(dtype_map[i]==delta_type){delta_button[i].setSelected(true);break;}
 
 				JMenu entropy_menu = new JMenu("Entropy");
-				entropy_button=new JRadioButtonMenuItem[3];
+				entropy_button=new JRadioButtonMenuItem[4];
 				entropy_button[0]=new JRadioButtonMenuItem("LZ77"); entropy_button[1]=new JRadioButtonMenuItem("Huffman");
-				entropy_button[2]=new JRadioButtonMenuItem("Arithmetic");
+				entropy_button[2]=new JRadioButtonMenuItem("Arithmetic"); entropy_button[3]=new JRadioButtonMenuItem("Adaptive");
 				ButtonGroup eg=new ButtonGroup();
-				for(int i=0;i<3;i++){eg.add(entropy_button[i]);entropy_menu.add(entropy_button[i]);}
+				for(int i=0;i<4;i++){eg.add(entropy_button[i]);entropy_menu.add(entropy_button[i]);}
 				// Slow Arithmetic (the exact-BigInteger entropy type, formerly
 				// entropy_type==2) has been removed -- it served its purpose
 				// during development but real segment sizes made it
@@ -388,8 +388,8 @@ public class SimpleWriter
 				// Arithmetic path, which is now just "Arithmetic" (entropy_type==2).
 				// entropy_type now equals the button index directly; no
 				// remapping array needed since removal left no numbering gap.
-				for(int i=0;i<3;i++){entropy_button[i].setSelected(entropy_type==i);}
-				for(int i=0;i<3;i++){final int et=i;entropy_button[i].addActionListener(e->{if(entropy_type!=et)entropy_type=et;});}
+				for(int i=0;i<4;i++){entropy_button[i].setSelected(entropy_type==i);}
+				for(int i=0;i<4;i++){final int et=i;entropy_button[i].addActionListener(e->{if(entropy_type!=et)entropy_type=et;});}
 
 				// Segment size for the Arithmetic entropy type
 				// (SaveHandler's `min_seg = 500 + pixel_segment*500`, up to
@@ -807,6 +807,28 @@ public class SimpleWriter
 					}
 					System.out.println("Entropy coding ["+(entropy_type==0?"LZ77":"Huffman")+"] took "+formatDuration(entropy_nanos));
 				}
+				else if(entropy_type==3)
+				{
+					// Adaptive (ArithmeticMapper's adaptive coder): no table,
+					// just each channel's coded payload. The 3 channels are
+					// coded in parallel, then written in order.
+					long t0=System.nanoTime();
+					final byte[][] coded=new byte[3][];
+					java.util.stream.IntStream.range(0,3).parallel().forEach(i->coded[i]=ArithmeticMapper.getIntervalValueAdaptive(getPayload(i)));
+					System.out.println("Entropy coding [Adaptive] took "+formatDuration(System.nanoTime()-t0));
+					for(int i=0;i<3;i++)
+					{
+						int j=channel_id[i];
+						byte[] payload=getPayload(i);
+						if(!Arrays.equals(payload,ArithmeticMapper.getArithmeticValuesAdaptive(coded[i],payload.length)))
+							System.out.println("WARNING: channel "+i+" adaptive payload does not decode back.");
+						out.writeInt(channel_min[j]);out.writeInt(channel_init[j]);out.writeInt(channel_delta_min[j]);
+						out.writeInt(channel_length[j]);out.writeInt(channel_compressed_length[j]);out.writeByte(channel_iterations[i]);
+						if(delta_type>=6)writeMap(out,i);
+						writeTable(out,(int[])table_list.get(i));
+						out.writeInt(coded[i].length);out.write(coded[i]);
+					}
+				}
 				else
 				{
 					byte[][] payloads=new byte[3][];int[] n_segs=new int[3];byte[][][] segs=new byte[3][][];int[][][] freqs=new int[3][][];
@@ -820,7 +842,7 @@ public class SimpleWriter
 					java.util.stream.IntStream.range(0,total_blocks).parallel().forEach(b->{
 						int i=(b<n_segs[0])?0:(b<n_segs[0]+n_segs[1])?1:2;
 						int m=b-((i==0)?0:(i==1)?n_segs[0]:n_segs[0]+n_segs[1]);
-						fast_enc[i][m]=ArithmeticMapper.getIntervalValueFast(segs[i][m],freqs[i][m]);
+						fast_enc[i][m]=ArithmeticMapper.getIntervalValueFastFenwick(segs[i][m],freqs[i][m]);
 					});
 					System.out.println("Entropy coding [Arithmetic] took "+formatDuration(System.nanoTime()-fast_arithmetic_t0));
 					int[] len_types=new int[3];byte[][] zip_freqs=new byte[3][];int[] zip_lens=new int[3];deflateFrequencies(n_segs,freqs,len_types,zip_freqs,zip_lens);
