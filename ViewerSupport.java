@@ -203,6 +203,76 @@ public class ViewerSupport
 		return item;
 	}
 
+	// A menu item that opens a small dialog with a number field and up/down
+	// arrows (lo..hi). onChange gets every new value.
+	public static JMenuItem makeSpinnerDialog(JFrame parent, String title, int lo, int hi, int init,
+	                                          java.util.function.IntConsumer onChange)
+	{
+		return makeSpinnerDialog(parent, title, lo, hi, init, onChange, null);
+	}
+
+	// As above; if ref is given, ref[0] is set to the spinner so the caller
+	// can change its value.
+	public static JMenuItem makeSpinnerDialog(JFrame parent, String title, int lo, int hi, int init,
+	                                          java.util.function.IntConsumer onChange, JSpinner[] ref)
+	{
+		JMenuItem item    = new JMenuItem(title);
+		JDialog   dialog  = new JDialog(parent, title);
+		JSpinner  spinner = new JSpinner(new SpinnerNumberModel(init, lo, hi, 1));
+		if(ref != null) ref[0] = spinner;
+		spinner.addChangeListener(e -> onChange.accept((Integer) spinner.getValue()));
+		JPanel panel = new JPanel();
+		panel.add(new JLabel(title + ":"));
+		panel.add(spinner);
+		dialog.add(panel);
+		item.addActionListener(e ->
+		{
+			Point p = parent.getLocation();
+			dialog.setLocation(p.x, p.y - 60);
+			dialog.pack();
+			dialog.setVisible(true);
+		});
+		return item;
+	}
+
+	// A menu item that opens a small dialog of radio buttons, one per name.
+	// onChange gets the index of the button chosen.
+	public static JMenuItem makeRadioDialog(JFrame parent, String title, String[] names, int init,
+	                                        java.util.function.IntConsumer onChange)
+	{
+		return makeRadioDialog(parent, title, names, init, onChange, null);
+	}
+
+	// As above; if buttons is given (length names.length) it receives the
+	// radio buttons so the caller can change the selection.
+	public static JMenuItem makeRadioDialog(JFrame parent, String title, String[] names, int init,
+	                                        java.util.function.IntConsumer onChange, JRadioButton[] buttons)
+	{
+		JMenuItem   item   = new JMenuItem(title);
+		JDialog     dialog = new JDialog(parent, title);
+		JPanel      panel  = new JPanel(new GridLayout(names.length, 1, 4, 4));
+		ButtonGroup group  = new ButtonGroup();
+		for(int i = 0; i < names.length; i++)
+		{
+			final int index = i;
+			JRadioButton button = new JRadioButton(names[i], i == init);
+			if(buttons != null) buttons[i] = button;
+			button.addActionListener(e -> onChange.accept(index));
+			group.add(button);
+			panel.add(button);
+		}
+		panel.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+		dialog.add(panel);
+		item.addActionListener(e ->
+		{
+			Point p = parent.getLocation();
+			dialog.setLocation(p.x, p.y - 60);
+			dialog.pack();
+			dialog.setVisible(true);
+		});
+		return item;
+	}
+
 	// ---- The image window ---------------------------------------------------
 
 	// A window titled `title` for an xdim x ydim image, sized to fit 70% of

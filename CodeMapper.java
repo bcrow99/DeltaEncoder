@@ -7,45 +7,6 @@ import java.awt.image.BufferedImage;
 
 //version 1.0
 
-/*
- * Changes in this version (see inline FIX/NOTE comments at each site):
- *
- * Bugs fixed:
- *   1. unpackLengthTable(ArrayList)'s max_delta==2 branch was missing
- *      `length[0] = init_value;` (present in every sibling branch and in
- *      the other overload). Confirmed: packing [3,3,5,5,5,7] (max_delta=2)
- *      and unpacking via this overload returned [0,0,2,2,2,4] -- the whole
- *      sequence offset by -init_value. Now returns [3,3,5,5,5,7] correctly.
- *   2. getHuffmanList()/getHuffmanList2() built rank_table from
- *      StringMapper.getHistogram()'s min-relative compact histogram, but
- *      packCode() (called inside getHuffmanList2) indexes that table by
- *      the raw 0..255 byte value. Confirmed: getHuffmanList2() threw
- *      ArrayIndexOutOfBoundsException on typical byte strings whenever the
- *      input didn't happen to include the byte value 0. Now builds a full
- *      256-entry histogram directly; verified crash-free across 50
- *      randomized trials, including data deliberately excluding 0.
- *   3. packLengthTable()/unpackLengthTable() didn't round-trip when
- *      max_delta==0 (all Huffman lengths equal): pack's catch-all branch
- *      (anything other than max_delta 1/2/3) stores raw one-byte-per-delta
- *      data for max_delta>4 AND max_delta==0, but unpack's matching
- *      catch-all branch assumed 4-bit-packed pairs (correct only for
- *      max_delta==3) for both cases too. Fixed by routing max_delta==0 to
- *      the same raw-byte branch as max_delta>4, in both overloads.
- *
- * Inert code removed (verified to have zero effect on behavior --
- * confirmed via byte-identical test output before/after removal):
- *   - getHuffmanBitlength(byte[]) / getHuffmanBitlength(int[]): a computed-
- *     but-never-read canonical code.
- *   - Three unpackCode(...) overloads ("the method used in HuffmanWriter",
- *     the "longer codes" int[] version, and the BigInteger[] version): a
- *     `boolean debug = false` gate and its unreachable printing blocks
- *     (no code path ever sets debug true), plus unused `number_of_codes`
- *     and `matched` variables in the "longer codes" overload.
- *   - The now-uninformative `System.out.println("Max delta is " +
- *     max_delta)` in unpackLengthTable(int,byte,byte,byte[]) -- after fix
- *     #3, that branch is only ever reached for max_delta==3, so the print
- *     would always report the same fixed value.
- */
 public class CodeMapper
 {
 	public static int getHuffmanBitlength(byte [] src)
@@ -62,9 +23,6 @@ public class CodeMapper
 	    for(int k = 0; k < n; k++)
 	    	    frequency[k] = frequency_list.get(k);
 	    byte [] huffman_length = getHuffmanLength2(frequency);
-	    // NOTE: was `int[] huffman_code = getCanonicalCode(huffman_length);` here --
-	    // computed but never subsequently read (a pure computation with no side
-	    // effects, so removing it doesn't change behavior). Removed.
 	    int bitlength = getCost(huffman_length, frequency);
 		return bitlength;
 	}
@@ -83,7 +41,6 @@ public class CodeMapper
 	    for(int k = 0; k < n; k++)
 	    	    frequency[k] = frequency_list.get(k);
 	    byte [] huffman_length = getHuffmanLength2(frequency);
-	    // (see NOTE above -- same removal here)
 	    int bitlength = getCost(huffman_length, frequency);
 		return bitlength;
 	}
@@ -1626,18 +1583,8 @@ public class CodeMapper
 
 		byte[] length = new byte[n];
 
-		// FIX: was `if(max_delta > 4)` -- max_delta==0 (all lengths equal)
-		// also needs to route here. packLengthTable()'s catch-all branch
-		// (anything other than max_delta 1/2/3) stores raw, one-byte-per-
-		// delta data for BOTH max_delta>4 and max_delta==0, but this
-		// unpack side previously only recognized max_delta>4 here, letting
-		// max_delta==0 fall through to the final else (which assumes
-		// 4-bit-packed pairs, correct only for max_delta==3). That length
-		// mismatch made the "Packed deltas are not the right length 4."
-		// check fail and the data was never recovered. Confirmed against
-		// real Java: packing an all-equal-length table and unpacking it
-		// printed that error and returned an all-zero (except length[0])
-		// array instead of the original data.
+		// packLengthTable() stores one raw byte per delta for max_delta > 4
+		// and for max_delta == 0 (all lengths equal).
 		if(max_delta > 4 || max_delta == 0)
 		{
 			if(packed_delta.length != n - 1)
@@ -1691,15 +1638,6 @@ public class CodeMapper
 				for(int i = 1; i < 4; i++)
 					mask[i] = (byte) (mask[i - 1] << 2);
 
-				// FIX: was missing `length[0] = init_value;` here, unlike
-				// every sibling branch (max_delta==1 above, max_delta>4, and
-				// the final else) and unlike this same branch in the OTHER
-				// unpackLengthTable overload below, which sets length[0]
-				// unconditionally before branching. Confirmed against real
-				// Java: without this fix, unpacking a table with max_delta==2
-				// through this overload left length[0] at Java's default (0)
-				// instead of init_value, offsetting every subsequent entry
-				// (each built from the previous one) by -init_value.
 				length[0] = init_value;
 				int k = 1;
 				outer: for(int i = 0; i < byte_length; i++)
@@ -1757,10 +1695,7 @@ public class CodeMapper
 		byte[] length = new byte[n];
 		length[0] = init_value;
 
-		// FIX: was `if(max_delta > 4)` -- see the identical fix (and full
-		// explanation) in unpackLengthTable(ArrayList) above. max_delta==0
-		// needs to route to this raw-byte branch too, matching how
-		// packLengthTable() actually stored it.
+		// Raw bytes for max_delta > 4 and max_delta == 0, as packed.
 		if(max_delta > 4 || max_delta == 0)
 		{
 			if(packed_delta.length != n - 1)
@@ -1830,10 +1765,6 @@ public class CodeMapper
 		} 
 		else
 		{
-			// NOTE: was `System.out.println("Max delta is " + max_delta);`
-			// here. With the max_delta==0 fix above, this branch is only
-			// ever reached for max_delta==3 now, so the print would always
-			// say the same fixed value -- removed as no longer informative.
 			int byte_length = (n - 1) / 2;
 			if((n - 1) % 2 != 0)
 				byte_length++;
@@ -1875,20 +1806,8 @@ public class CodeMapper
 	{
 		ArrayList list = new ArrayList();
 
-		// FIX: was built via StringMapper.getHistogram(string), which
-		// returns a histogram RELATIVE TO THE OBSERVED MIN VALUE (size =
-		// max-min+1). The resulting rank_table is indexed elsewhere (see
-		// getHuffmanList2 below, and any other caller that later feeds
-		// this table into packCode) by the RAW unsigned byte value
-		// (0..255), not adjusted by that min -- causing an index-out-of-
-		// bounds whenever the string's minimum byte value isn't 0.
-		// Confirmed against real Java: getHuffmanList2() throws
-		// ArrayIndexOutOfBoundsException on typical byte strings that
-		// don't happen to include the value 0. Building a full 256-entry
-		// histogram directly (matching how the table is actually indexed)
-		// fixes this. string_min/value_range were already unused after
-		// this point in the original, so they're dropped along with this
-		// fix rather than kept as further inert code.
+		// Full 256-entry histogram: packCode() indexes the rank table by the
+		// raw byte value (0..255), so a min-relative histogram won't do.
 		int[] string_histogram = new int[256];
 		for(int i = 0; i < string.length; i++)
 		{
@@ -1935,9 +1854,7 @@ public class CodeMapper
 	{
 		ArrayList list = new ArrayList();
 
-		// FIX: see the identical fix (and full explanation) in
-		// getHuffmanList() above -- this is the exact call that was
-		// confirmed to crash against real Java.
+		// Full 256-entry histogram; see getHuffmanList().
 		int[] string_histogram = new int[256];
 		for(int i = 0; i < string.length; i++)
 		{
@@ -1992,17 +1909,13 @@ public class CodeMapper
 	}
 
 	/********************************************************************************************************************/
-	/* "Regular" Huffman: canonical Huffman codes over the 256 byte values, built from a block's own byte counts --     */
-	/* a whole channel payload, or one of PacketWriter's packets. A block's table is just its 256 code lengths          */
-	/* (0 = byte value not used) -- no rank table, and no codes for unused values. Several blocks' tables can be       */
-	/* stored together and Deflated (packRegularTables), so Deflate can exploit how similar they are, and each block's  */
-	/* coded length can go in a varint column (packRegularLengths). Codes are written most significant bit first and   */
-	/* decoded with the canonical first-code/count tables, so decoding doesn't search the code list.                   */
+	/* "Regular" Huffman: canonical codes over the 256 byte values, from a block's own byte counts (a channel payload  */
+	/* or a packet). A block's table is its 256 code lengths (0 = not used), no rank table. Tables are Deflated        */
+	/* together (packRegularTables); coded lengths go in a varint column (packRegularLengths). Codes are MSB first.    */
 	/********************************************************************************************************************/
 
-	// Longest code allowed. If a packet's counts would need longer codes, the
-	// counts are halved (keeping every used value at least 1) and the code
-	// rebuilt until they fit -- a negligible cost, and it keeps codes in an int.
+	// Longest code allowed, so codes fit in an int. Longer codes are avoided
+	// by halving the counts (used values stay >= 1) and rebuilding.
 	public static final int REGULAR_MAX_CODE_LENGTH = 24;
 
 	// Code length for each of the 256 byte values (0 = not used), from
@@ -2249,5 +2162,43 @@ public class CodeMapper
 			n++;
 		}
 		return n;
+	}
+
+	// ---- Deflate helpers -----------------------------------------------------
+
+	// Deflates all of src (looping until the stream is finished, so even
+	// tiny or incompressible inputs come out whole).
+	public static byte[] deflate(byte[] src, int level)
+	{
+		Deflater deflater = new Deflater(level);
+		deflater.setInput(src);
+		deflater.finish();
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(src.length / 2 + 64);
+		byte[] buffer = new byte[65536];
+		while(!deflater.finished())
+		{
+			int n = deflater.deflate(buffer);
+			out.write(buffer, 0, n);
+		}
+		deflater.end();
+		return out.toByteArray();
+	}
+
+	// Inflates src into exactly n bytes.
+	public static byte[] inflate(byte[] src, int n) throws DataFormatException
+	{
+		Inflater inflater = new Inflater();
+		inflater.setInput(src);
+		byte[] dst = new byte[n];
+		int    pos = 0;
+		while(pos < n && !inflater.finished())
+		{
+			int k = inflater.inflate(dst, pos, n - pos);
+			if(k == 0 && (inflater.needsInput() || inflater.needsDictionary())) break;
+			pos += k;
+		}
+		inflater.end();
+		if(pos < n) throw new DataFormatException("inflated " + pos + " of " + n + " bytes");
+		return dst;
 	}
 }

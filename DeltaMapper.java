@@ -4210,6 +4210,237 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
+	// Block map (delta type 13): the interior is split into block x block
+	// squares, and each uses the predictor from its set (BLOCK_SETS) with
+	// the smallest sum of |delta| over the square. Row 0 is horizontal,
+	// column 0 vertical and the last column horizontal, as in frame map 2.
+	// The map is [block size, set, then one entry per block, row by row].
+	// Measured with FrameTest and BlockSetTest: 1-3% smaller than scanline
+	// 4 on most images; block sizes 8-16 do about equally well, and the
+	// Scanline 16 and Neighbours 8 sets best (a set without the plain
+	// neighbours, and one of gradients only, both did worse).
+	// =========================================================================
+
+	public static final int BLOCK_MIN = 4, BLOCK_MAX = 32, BLOCK_DEFAULT = 8;
+
+	public static final String[] BLOCK_SET_NAMES = {"Scanline 16", "No Neighbours 16", "Neighbours 8", "Basic 4"};
+
+	// Predictors, as ids for blockPredictor (a = left, b = above,
+	// c = above-left, d = above-right):
+	//   0 a            1 b            2 c            3 d
+	//   4 (a+b)/2      5 (b+c)/2      6 (a+c)/2      7 (b+d)/2
+	//   8 (c+d)/2      9 (a+b+c+d)/4 10 a+b-c       11 MED(a,b,c)
+	//  12 (3a+b)/4    13 (a+3b)/4    14 (3a+d)/4    15 (3b+a)/4
+	//  16 (a+d)/2     17 a+(b-c)/2   18 b+(a-c)/2   19 a+d-b
+	//  20 (a+b+d)/3   21 b+(d-c)/2
+	private static final int[][] BLOCK_SETS = {
+		// Scanline 16: the scanline 4 set (pred16).
+		{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
+		// No Neighbours 16: only averages, blends and gradients -- no plain
+		// neighbour, which a flat or smoothly varying block rarely wants.
+		{ 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+		// Neighbours 8: the four neighbours, MED, gradient and two averages
+		// about as good as Scanline 16 with a cheaper map.
+		{ 0, 1, 2, 3, 11, 4, 10, 9 },
+		// Basic 4: MED, gradient, and two averages -- a cheap map.
+		{ 11, 10, 4, 9 },
+	};
+
+	public static int blockPredictor(int id, int a, int b, int c, int d)
+	{
+		switch(id)
+		{
+			case  0: return a;
+			case  1: return b;
+			case  2: return c;
+			case  3: return d;
+			case  4: return (a + b) >> 1;
+			case  5: return (b + c) >> 1;
+			case  6: return (a + c) >> 1;
+			case  7: return (b + d) >> 1;
+			case  8: return (c + d) >> 1;
+			case  9: return (a + b + c + d + 2) >> 2;
+			case 10: return a + b - c;
+			case 11: if(c >= Math.max(a, b)) return Math.min(a, b); if(c <= Math.min(a, b)) return Math.max(a, b); return a + b - c;
+			case 12: return (a * 3 + b + 2) >> 2;
+			case 13: return (a + b * 3 + 2) >> 2;
+			case 14: return (a * 3 + d + 2) >> 2;
+			case 15: return (b * 3 + a + 2) >> 2;
+			case 16: return (a + d) >> 1;
+			case 17: return a + ((b - c) >> 1);
+			case 18: return b + ((a - c) >> 1);
+			case 19: return a + d - b;
+			case 20: return (a + b + d + 1) / 3;
+			default: return b + ((d - c) >> 1);
+		}
+	}
+
+	public static int blockSetSize(int set) { return BLOCK_SETS[set].length; }
+
+	// ---- Choosing the block size and predictor set -----------------------
+
+	// Block sizes findBestBlock may pick.
+	public static final int[] BLOCK_SEARCH_SIZES = {4, 6, 8, 12, 16, 24, 32};
+
+	// Bytes the three channels take as block map deltas (Context coded,
+	// packContextDeltas) plus maps (writeMap), as the writers save them.
+	public static long getBlockMapBytes(int[][] channel, int xdim, int ydim, int block, int set)
+	{
+		try
+		{
+			int[][] d = new int[3][]; byte[][] m = new byte[3][];
+			for(int i = 0; i < 3; i++)
+			{
+				ArrayList result = getDeltas(channel[i], xdim, ydim, 13, 0, block, set);
+				d[i] = (int[]) result.get(1); m[i] = (byte[]) result.get(2);
+			}
+			long total = 0;
+			for(int i = 0; i < 3; i++)
+			{
+				total += packContextDeltas(d[i], Arrays.copyOf(d, i), xdim).length;
+				java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+				writeMap(new java.io.DataOutputStream(b), 13, m[i], (i > 0) ? m[i - 1] : null, xdim);
+				total += b.size();
+			}
+			return total;
+		}
+		catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+	}
+
+	// The block size and predictor set that code the three channels
+	// smallest (actual sizes): every set at sizes 4, 8 and 16, then the best
+	// set at the untried sizes next to its best. Returns {block size, set};
+	// bytes[set][index in BLOCK_SEARCH_SIZES] gets the sizes tried (-1 for
+	// the others). Runs the trials in parallel.
+	public static int[] findBestBlock(int[][] channel, int xdim, int ydim, long[][] bytes)
+	{
+		int   n_sets = BLOCK_SET_NAMES.length;
+		int[] first  = {0, 2, 4};   // 4, 8, 16
+		for(long[] row : bytes) Arrays.fill(row, -1);
+		java.util.stream.IntStream.range(0, n_sets * first.length).parallel().forEach(t ->
+		{
+			int set = t / first.length, s = first[t % first.length];
+			bytes[set][s] = getBlockMapBytes(channel, xdim, ydim, BLOCK_SEARCH_SIZES[s], set);
+		});
+		int best_set = 0, best_s = first[0];
+		for(int set = 0; set < n_sets; set++)
+			for(int s : first) if(bytes[set][s] < bytes[best_set][best_s]) { best_set = set; best_s = s; }
+
+		final int bs = best_set;
+		int[] next = {best_s - 1, best_s + 1};
+		java.util.stream.IntStream.range(0, 2).parallel().forEach(t ->
+		{
+			int s = next[t];
+			if(s >= 0 && s < BLOCK_SEARCH_SIZES.length && bytes[bs][s] < 0)
+				bytes[bs][s] = getBlockMapBytes(channel, xdim, ydim, BLOCK_SEARCH_SIZES[s], bs);
+		});
+		for(int s = 0; s < BLOCK_SEARCH_SIZES.length; s++) if(bytes[bs][s] >= 0 && bytes[bs][s] < bytes[bs][best_s]) best_s = s;
+		return new int[] {BLOCK_SEARCH_SIZES[best_s], bs};
+	}
+
+	// findBestBlock's results as a table, the chosen one marked *.
+	public static String getBlockTable(long[][] bytes, int[] best)
+	{
+		StringBuilder t = new StringBuilder("Block map, bytes coded (Context-coded deltas + maps, 3 channels):\n");
+		t.append(String.format("  %-18s", "set \\ block"));
+		for(int b : BLOCK_SEARCH_SIZES) t.append(String.format(" %9d ", b));
+		t.append('\n');
+		for(int set = 0; set < BLOCK_SET_NAMES.length; set++)
+		{
+			t.append(String.format("  %-18s", BLOCK_SET_NAMES[set]));
+			for(int s = 0; s < BLOCK_SEARCH_SIZES.length; s++)
+			{
+				boolean chosen = set == best[1] && BLOCK_SEARCH_SIZES[s] == best[0];
+				t.append((bytes[set][s] < 0) ? String.format(" %9s ", "-") : String.format(" %9d", bytes[set][s]) + (chosen ? "*" : " "));
+			}
+			t.append('\n');
+		}
+		return t.toString();
+	}
+
+	private static int blocksAcross(int xdim, int block) { return (xdim - 2 + block - 1) / block; }
+
+	public static ArrayList getBlockDeltasFromValues(int[] src, int xdim, int ydim, int block, int set)
+	{
+		int[]  dst = new int[xdim * ydim];
+		int[]  ids = BLOCK_SETS[set];
+		int    bw  = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
+		byte[] map = new byte[2 + bw * bh];
+		map[0] = (byte) block; map[1] = (byte) set;
+		blockEdges(src, dst, xdim, ydim);
+		for(int by = 0; by < bh; by++)
+			for(int bx = 0; bx < bw; bx++)
+			{
+				int  y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+				int  x0 = 1 + bx * block, x1 = Math.min(xdim - 1, x0 + block);
+				long best_sum = Long.MAX_VALUE;
+				int  best = 0;
+				for(int p = 0; p < ids.length; p++)
+				{
+					long sum = 0;
+					for(int y = y0; y < y1; y++)
+						for(int x = x0; x < x1; x++)
+						{
+							int k = y * xdim + x;
+							sum += Math.abs(src[k] - blockPredictor(ids[p], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]));
+						}
+					if(sum < best_sum) { best_sum = sum; best = p; }
+				}
+				map[2 + by * bw + bx] = (byte) best;
+				for(int y = y0; y < y1; y++)
+					for(int x = x0; x < x1; x++)
+					{
+						int k = y * xdim + x;
+						dst[k] = src[k] - blockPredictor(ids[best], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+					}
+			}
+		int sum = 0;
+		for(int v : dst) sum += Math.abs(v);
+
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(map);
+		result.add(src[0]);
+		return result;
+	}
+
+	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map)
+	{
+		int   block = map[0], bw = blocksAcross(xdim, block);
+		int[] ids   = BLOCK_SETS[map[1]];
+		int[] dst   = new int[xdim * ydim];
+		dst[0] = init_value;
+		for(int x = 1; x < xdim; x++) dst[x] = dst[x - 1] + delta[x];
+		for(int y = 1; y < ydim; y++)
+		{
+			int k = y * xdim;
+			dst[k] = dst[k - xdim] + delta[k];
+			int row = 2 + (y - 1) / block * bw;
+			for(int x = 1; x < xdim - 1; x++)
+			{
+				k++;
+				int id = ids[map[row + (x - 1) / block]];
+				dst[k] = delta[k] + blockPredictor(id, dst[k - 1], dst[k - xdim], dst[k - xdim - 1], dst[k - xdim + 1]);
+			}
+			k++;
+			dst[k] = dst[k - 1] + delta[k];
+		}
+		return dst;
+	}
+
+	// Row 0 horizontal, column 0 vertical, last column horizontal.
+	private static void blockEdges(int[] src, int[] dst, int xdim, int ydim)
+	{
+		for(int x = 1; x < xdim; x++) dst[x] = src[x] - src[x - 1];
+		for(int y = 1; y < ydim; y++)
+		{
+			dst[y * xdim]            = src[y * xdim] - src[(y - 1) * xdim];
+			dst[y * xdim + xdim - 1] = src[y * xdim + xdim - 1] - src[y * xdim + xdim - 2];
+		}
+	}
+
+	// =========================================================================
 	// Shared by the writers and readers: quantizing, choosing and undoing
 	// the delta type, recombining channel sets, and writing/reading maps.
 	// =========================================================================
@@ -4224,7 +4455,9 @@ public class DeltaMapper
 	public static final String[] DELTA_TYPE_NAMES = {
 		"horizontal", "vertical", "average", "med", "directional", "adaptive",
 		"scanline (1)", "scanline (2)", "scanline (3)", "scanline (4)", "scanline (5)",
-		"frame map (1)", "frame map (2)"};
+		"frame map (1)", "frame map (2)", "block map"};
+
+	public static final int DELTA_TYPES = DELTA_TYPE_NAMES.length;
 
 	// Smallest image the writers accept (the delta types need an interior).
 	public static final int MIN_DIM = 4;
@@ -4252,9 +4485,15 @@ public class DeltaMapper
 		return shift(rounded, -pixel_shift);
 	}
 
-	// Deltas for delta_type 0-12. Returns the encoder's list: [sum, deltas,
-	// map, init_value] for types 6-12, [sum, deltas, init_value] otherwise.
+	// Deltas for delta_type 0-13. Returns the encoder's list: [sum, deltas,
+	// map, init_value] for types 6-13, [sum, deltas, init_value] otherwise.
 	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant)
+	{
+		return getDeltas(src, xdim, ydim, delta_type, variant, BLOCK_DEFAULT, 0);
+	}
+
+	// block and block_set are used by the block map (13) only.
+	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant, int block, int block_set)
 	{
 		switch(delta_type)
 		{
@@ -4271,6 +4510,7 @@ public class DeltaMapper
 			case 10: return getMixedDeltasFromValues8Rows(src, xdim, ydim, variant);
 			case 11: return getIdealDeltasFromValues8(src, xdim, ydim);
 			case 12: return getIdealDeltasFromValues16(src, xdim, ydim);
+			case 13: return getBlockDeltasFromValues(src, xdim, ydim, block, block_set);
 			default: throw new IllegalArgumentException("delta_type " + delta_type);
 		}
 	}
@@ -4295,6 +4535,7 @@ public class DeltaMapper
 			case 10: return getValuesFromMixedDeltas8Rows(delta, xdim, ydim, init_value, map, variant);
 			case 11: return getValuesFromIdealDeltas8(delta, xdim, ydim, init_value, map);
 			case 12: return getValuesFromIdealDeltas16(delta, xdim, ydim, init_value, map);
+			case 13: return getValuesFromBlockDeltas(delta, xdim, ydim, init_value, map);
 			default: throw new IllegalArgumentException("delta_type " + delta_type);
 		}
 	}
@@ -4361,12 +4602,19 @@ public class DeltaMapper
 
 	// A delta-type map. Types 6-8 (values 0-3): int length, int packed
 	// length, then 4 values per byte, low bits first. Types 9-12: a flag
-	// byte, then either (0) a unary-string map -- int length, table, int
-	// min, int bit length, first value as a byte, then the string -- or (1)
-	// an arithmetic-coded map -- int length, short K, K pairs of (value
-	// byte, int count), int coded length, coded bytes. The writer keeps
-	// whichever is smaller.
-	public static void writeMap(java.io.DataOutputStream out, int delta_type, byte[] map) throws java.io.IOException
+	// byte, then one of
+	//   0: a unary-string map -- int length, table, int min, int bit length,
+	//      first value as a byte, then the string;
+	//   1: an arithmetic-coded map -- int length, short K, K pairs of (value
+	//      byte, int count), int coded length, coded bytes;
+	//   2: a context-coded map (see mapContext) -- int length, byte K (values
+	//      are 0..K-1), int coded length, coded bytes.
+	// A block map (type 13) starts with its block size and predictor set
+	// bytes (map[0], map[1]); the rest is coded as above.
+	// The writer keeps whichever is smallest. previous is the map of the
+	// channel before (null for the first channel) and xdim the row width of
+	// the deltas; the reader must pass the same.
+	public static void writeMap(java.io.DataOutputStream out, int delta_type, byte[] map, byte[] previous, int xdim) throws java.io.IOException
 	{
 		if(delta_type <= 8)
 		{
@@ -4376,12 +4624,23 @@ public class DeltaMapper
 			out.writeInt(map.length); out.writeInt(packed.length); out.write(packed);
 			return;
 		}
-		byte[] string_form = mapToString(map), arith_form = mapToArithmetic(map);
-		if(arith_form.length < string_form.length) { out.writeByte(1); out.write(arith_form); }
-		else                                        { out.writeByte(0); out.write(string_form); }
+		int width = mapWidth(delta_type, xdim);
+		if(delta_type == 13)
+		{
+			// Block size and predictor set, then the entries.
+			out.writeByte(map[0]); out.writeByte(map[1]);
+			width    = blocksAcross(xdim, map[0]);
+			map      = Arrays.copyOfRange(map, 2, map.length);
+			previous = (previous == null) ? null : Arrays.copyOfRange(previous, 2, previous.length);
+		}
+		byte[][] form = {mapToString(map), mapToArithmetic(map), mapToContext(map, previous, width)};
+		int best = 0;
+		for(int f = 1; f < 3; f++) if(form[f].length < form[best].length) best = f;
+		out.writeByte(best);
+		out.write(form[best]);
 	}
 
-	public static byte[] readMap(java.io.DataInputStream in, int delta_type) throws java.io.IOException
+	public static byte[] readMap(java.io.DataInputStream in, int delta_type, byte[] previous, int xdim) throws java.io.IOException
 	{
 		if(delta_type <= 8)
 		{
@@ -4392,8 +4651,33 @@ public class DeltaMapper
 			for(int q = 0; q < n; q++) map[q] = (byte)((packed[q >> 2] >> ((q & 3) << 1)) & 3);
 			return map;
 		}
+		if(delta_type == 13)
+		{
+			byte block = in.readByte(), set = in.readByte();
+			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, 2, previous.length), blocksAcross(xdim, block));
+			byte[] map  = new byte[body.length + 2];
+			map[0] = block; map[1] = set;
+			System.arraycopy(body, 0, map, 2, body.length);
+			return map;
+		}
+		return readMapForms(in, previous, mapWidth(delta_type, xdim));
+	}
+
+	private static byte[] readMapForms(java.io.DataInputStream in, byte[] previous, int width) throws java.io.IOException
+	{
 		int coding = in.readByte();
 		int n      = in.readInt();
+		if(coding == 2)
+		{
+			int    K     = in.readUnsignedByte();
+			byte[] coded = new byte[in.readInt()];
+			in.readFully(coded);
+			int[] symbol = ArithmeticMapper.getArithmeticValuesContext(coded, n, K, K * K * K * 3,
+				(k, s) -> mapContext(s, previous, k, width, K));
+			byte[] map = new byte[n];
+			for(int q = 0; q < n; q++) map[q] = (byte) symbol[q];
+			return map;
+		}
 		if(coding == 1)
 		{
 			int   K    = in.readShort();
@@ -4436,6 +4720,46 @@ public class DeltaMapper
 		return bytes.toByteArray();
 	}
 
+	// Row width of a map: one entry per row for the scanline types (9, 10),
+	// one per interior pixel for the frame maps (11, 12). (The block map's
+	// width depends on its block size; see blocksAcross.)
+	private static int mapWidth(int delta_type, int xdim)
+	{
+		return (delta_type <= 10) ? 1 : xdim - 2;
+	}
+
+	// Context of map entry k: its left and upper neighbours, the entry at
+	// the same place in the previous channel's map, and whether the upper-
+	// left neighbour equals the left one, the upper one, or neither.
+	// Measured with MapTest: 13-24% smaller than the string or arithmetic
+	// forms. Missing neighbours count as 0.
+	private static int mapContext(int[] m, byte[] previous, int k, int width, int K)
+	{
+		int x     = k % width;
+		int left  = (x > 0) ? m[k - 1] : 0;
+		int up    = (k >= width) ? m[k - width] : 0;
+		int ul    = (x > 0 && k >= width) ? m[k - width - 1] : 0;
+		int prev  = (previous != null) ? previous[k] : 0;
+		int shape = (ul == left) ? 0 : (ul == up) ? 1 : 2;
+		return ((left * K + up) * K + prev) * 3 + shape;
+	}
+
+	private static byte[] mapToContext(byte[] map, byte[] previous, int width) throws java.io.IOException
+	{
+		int K = 1;
+		for(byte b : map) K = Math.max(K, (b & 0xFF) + 1);
+		if(previous != null) for(byte b : previous) K = Math.max(K, (b & 0xFF) + 1);
+		int[] symbol  = new int[map.length];
+		for(int q = 0; q < map.length; q++) symbol[q] = map[q];
+		int[] context = new int[map.length];
+		for(int q = 0; q < map.length; q++) context[q] = mapContext(symbol, previous, q, width, K);
+		byte[] coded = ArithmeticMapper.getIntervalValueContext(symbol, K, context, K * K * K * 3);
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+		out.writeInt(map.length); out.writeByte(K); out.writeInt(coded.length); out.write(coded);
+		return bytes.toByteArray();
+	}
+
 	private static byte[] mapToArithmetic(byte[] map) throws java.io.IOException
 	{
 		int[] freq = new int[256];
@@ -4450,6 +4774,100 @@ public class DeltaMapper
 		if(K <= 1) out.writeInt(0);
 		else { byte[] coded = ArithmeticMapper.getIntervalValueFastFenwick(map, freq); out.writeInt(coded.length); out.write(coded); }
 		return bytes.toByteArray();
+	}
+
+	// ---- Context coding of deltas ------------------------------------------
+	//
+	// For the Context entropy type: the deltas are coded directly, as ranks
+	// (most frequent value = 0), with ArithmeticMapper's context coder. The
+	// context of a pixel combines how busy its neighbourhood is -- |left| +
+	// |above| + |above-left| + |above-right| of the deltas already coded,
+	// in 12 buckets -- with the size of the deltas at the same pixel in the
+	// channels coded before it (5 buckets), so channels must be decoded in
+	// order. Measured with ModelTest: 4-9.5% smaller than the Adaptive type.
+
+	private static final int[] ACTIVITY_LIMIT = {0, 1, 2, 3, 5, 7, 10, 14, 20, 28, 40, 60};
+	private static final int[] CROSS_LIMIT    = {0, 1, 3, 6, 12};
+	public  static final int   CONTEXTS       = ACTIVITY_LIMIT.length * CROSS_LIMIT.length;
+
+	// Context of pixel k of delta d (row width xdim); previous holds the
+	// deltas of the channels coded before this one.
+	public static int getContext(int[] d, int[][] previous, int k, int xdim)
+	{
+		int x = k % xdim, activity = 0, cross = 0;
+		if(x > 0) activity += Math.abs(d[k - 1]);
+		if(k >= xdim)
+		{
+			activity += Math.abs(d[k - xdim]);
+			if(x > 0)        activity += Math.abs(d[k - xdim - 1]);
+			if(x < xdim - 1) activity += Math.abs(d[k - xdim + 1]);
+		}
+		for(int[] p : previous) cross += Math.abs(p[k]);
+		return bucket(activity, ACTIVITY_LIMIT) * CROSS_LIMIT.length + bucket(cross, CROSS_LIMIT);
+	}
+
+	private static int bucket(int v, int[] limit)
+	{
+		int b = 0;
+		while(b + 1 < limit.length && v >= limit[b + 1]) b++;
+		return b;
+	}
+
+	// A channel's deltas, context coded: int min, the rank table (value ->
+	// rank, see writeTable), int coded length, coded bytes. The number of
+	// deltas is not stored (it is xdim * ydim).
+	public static byte[] packContextDeltas(int[] delta, int[][] previous, int xdim) throws java.io.IOException
+	{
+		int min = Integer.MAX_VALUE, max = Integer.MIN_VALUE;
+		for(int v : delta) { if(v < min) min = v; if(v > max) max = v; }
+		int[] count = new int[max - min + 1];
+		for(int v : delta) count[v - min]++;
+
+		// Rank by count, most frequent first (ties: smaller value first).
+		Integer[] order = new Integer[count.length];
+		for(int v = 0; v < count.length; v++) order[v] = v;
+		Arrays.sort(order, (a, b) -> (count[a] != count[b]) ? count[b] - count[a] : a - b);
+		int[] rank = new int[count.length];
+		for(int r = 0; r < order.length; r++) rank[order[r]] = r;
+
+		int[] symbol  = new int[delta.length];
+		int[] context = new int[delta.length];
+		for(int k = 0; k < delta.length; k++)
+		{
+			symbol[k]  = rank[delta[k] - min];
+			context[k] = getContext(delta, previous, k, xdim);
+		}
+		byte[] coded = ArithmeticMapper.getIntervalValueContext(symbol, rank.length, context, CONTEXTS);
+
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+		out.writeInt(min);
+		writeTable(out, rank);
+		out.writeInt(coded.length);
+		out.write(coded);
+		return bytes.toByteArray();
+	}
+
+	public static int[] readContextDeltas(java.io.DataInputStream in, int n, int[][] previous, int xdim) throws java.io.IOException
+	{
+		int    min   = in.readInt();
+		int[]  rank  = readTable(in);
+		byte[] coded = new byte[in.readInt()];
+		in.readFully(coded);
+
+		int[] value = new int[rank.length];
+		for(int v = 0; v < rank.length; v++) value[rank[v]] = v + min;
+
+		// Deltas are filled in as the decoder asks for each context.
+		int[] delta = new int[n];
+		int[] done  = {0};
+		int[] symbol = ArithmeticMapper.getArithmeticValuesContext(coded, n, rank.length, CONTEXTS, (k, s) ->
+		{
+			while(done[0] < k) { delta[done[0]] = value[s[done[0]]]; done[0]++; }
+			return getContext(delta, previous, k, xdim);
+		});
+		for(int k = done[0]; k < n; k++) delta[k] = value[symbol[k]];
+		return delta;
 	}
 
 	public static int[] getChannels(int set_id)

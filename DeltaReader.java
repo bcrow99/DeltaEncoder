@@ -1,805 +1,272 @@
 import java.awt.*;
 import java.awt.image.*;
 import java.io.*;
-import java.awt.event.*;
-import java.awt.geom.AffineTransform;
 import java.util.*;
-import java.util.zip.*;
-import java.math.*;
 import javax.swing.*;
 
+// DeltaReader version 1.0
 public class DeltaReader
 {
-	// ---- Image dimensions ---------------------------------------------------
-	int  xdim              = 0;
-	int  ydim              = 0;
-	int  intermediate_xdim = 0;
-	int  intermediate_ydim = 0;
+	// File format: every file starts with FORMAT_ID ('D' = Delta format) and
+	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
+	// whenever the file layout or a coder's output changes.
+	static final char FORMAT_ID      = 'D';
+	static final int  FORMAT_VERSION = 1;
 
-	// ---- Compression parameters (read from file) ----------------------------
-	int  pixel_shift   = 0;
-	int  pixel_quant   = 0;
-	int  set_id        = 0;
-	byte delta_type    = 0;
-	byte compress_type = 0;
-	byte entropy_type     = 0;
-	byte scanline5_variant = 0;
+	static final String[] ENTROPY_NAMES  = {"LZ77", "Huffman", "Arithmetic", "Adaptive", "Context"};
+	static final String[] COMPRESS_NAMES = {"Integer", "String", "String*", "String* (DeltaWriter2)"};
 
-	// ---- Image pyramid (read from file) --------------------------------------
-	int     pixel_pyramid = 0;
-	boolean use_saddle    = false;
+	// ---- Header -------------------------------------------------------------
+	// compress_type: 0 Integer (one byte per delta), 1 String, 2 String*,
+	// 3 String* from DeltaWriter2 (read like 2).
+	int     xdim, ydim;
+	int     pixel_shift, pixel_quant, set_id, delta_type, compress_type, entropy_type, scanline5_variant;
+	int     pixel_pyramid;
+	boolean use_saddle;
 
-	// ---- Per-channel scalars ------------------------------------------------
-	int[]  min               = new int[3];
-	int[]  init              = new int[3];
-	int[]  delta_min         = new int[3];
-	int[]  length            = new int[3];
-	int[]  compressed_length = new int[3];
-	byte[] channel_iterations = new byte[3];
+	// ---- Per channel, as read -----------------------------------------------
+	int[]         min = new int[3], init = new int[3], delta_min = new int[3], length = new int[3], compressed_length = new int[3];
+	int[][]       table    = new int[3][];
+	byte[][]      map      = new byte[3][];
+	boolean[][][] sign_bit = new boolean[3][][];  // pyramid sign bits, one bitmap per level
+	byte[][]      coded    = new byte[3][];       // LZ77 (already inflated), Huffman and Adaptive payloads
+	int[][]       delta    = new int[3][];        // Context (4): decoded while reading
+	byte[][]      huffman_lengths = new byte[3][];
+	int[][][]     freqs  = new int[3][][];        // Arithmetic: one table per block
+	byte[][][]    blocks = new byte[3][][];
 
-	// ---- Unary-string decode tables (compress_type > 0) --------------------
-	ArrayList<int[]> table_list = new ArrayList<int[]>();
-
-	// ---- Delta-type maps (delta_type 5-9) -----------------------------------
-	ArrayList<byte[]> map_list = new ArrayList<byte[]>();
-
-	// ---- Pyramid sign-bit maps (pixel_pyramid != 0) -------------------------
-	// Each entry holds pixel_pyramid bitmaps, one per pyramid level
-	// transition (sign bits are computed and applied at every level, not
-	// just the outermost).
-	ArrayList<boolean[][]> sign_bit_list = new ArrayList<boolean[][]>();
-
-	// ---- Decoded channel arrays ---------------------------------------------
-	int[][] channel_array = new int[3][0];
-	int[][] resize_array  = new int[3][0];
-
-	// ---- LZ77 per-channel data ----------------------------------------------
-	ArrayList<byte[]> lz77_data_list   = new ArrayList<byte[]>();
-	int[]             lz77_orig_length = new int[3];
-
-	// ---- Huffman per-channel data -------------------------------------------
-	ArrayList<byte[]> huff_length_list = new ArrayList<byte[]>();  // 256 code lengths
-	ArrayList<byte[]> huff_pay_list    = new ArrayList<byte[]>();  // coded payload
-
-	// ---- Arithmetic per-channel data ----------------------------------------
-	// (offset_list/segment_list, used only by the removed exact-BigInteger
-	// "Slow Arithmetic" path, are gone -- freq_list is shared with the
-	// still-present renormalizing Arithmetic path below.)
-	ArrayList<int[][]>        freq_list    = new ArrayList<int[][]>();
-
-	// ---- Arithmetic per-channel data (entropy_type == 2) --------------------
-	// Each entry is an array of encoded byte[] segments from getIntervalValueFast.
-	// Frequency tables are shared with the Arithmetic path (freq_list above).
-	ArrayList<byte[][]>       fast_enc_list = new ArrayList<byte[][]>();
-
-	// ---- Label strings (mirrors DeltaWriter) --------------------------------
-	static final String[] set_string = {
-		"blue, green, and red.",
-		"blue, red, and red-green.",
-		"blue, red, and blue-green.",
-		"blue, blue-green, and red-green.",
-		"blue, blue-green, and red-blue.",
-		"green, red, and blue-green.",
-		"red, blue-green, and red-green.",
-		"green, blue-green, and red-green.",
-		"green, red-green, and red-blue.",
-		"red, red-green, red-blue."};
-
-	static final String[] delta_type_string = {
-		"horizontal","vertical","average","med","directional",
-		"adaptive","scanline (1)","scanline (2)","scanline (3)","scanline (4)","scanline (5)","frame map","frame map (2)"};
-
-	static final String[] entropy_type_string = {
-		"LZ77","Huffman","Arithmetic","Adaptive"};
 	BufferedImage decoded_image = null;
-	BufferedImage display_image = null;
-	ImageCanvas   image_canvas  = null;
-	JScrollPane   scroll_pane   = null;
-	JFrame        frame         = null;
+	ViewerSupport view;
 
-	double zoom_scale = 1.0;
-	double fit_scale  = 1.0;
-	static final double ZOOM_FACTOR = 1.25;
-	static final double ZOOM_MIN    = 0.05;
-	static final double ZOOM_MAX    = 32.0;
-
-	// See DeltaWriter.java's matching field for the full explanation.
-	static double hidpi_scale = 1.0;
-
-	// =========================================================================
 	public static void main(String[] args)
 	{
-		applyHiDpiFontScaleIfNeeded();
-		if (args.length != 1) { System.out.println("Usage: java DeltaReader <filename>"); System.exit(0); }
+		ViewerSupport.applyHiDpiFontScaleIfNeeded();
+		if(args.length != 1) { System.out.println("Usage: java DeltaReader <filename>"); System.exit(0); }
 		new DeltaReader(args[0]);
 	}
 
-	// =========================================================================
-	// HiDPI font-scale fallback -- see DeltaWriter.java's matching methods
-	// for the full explanation. Windows already detects and applies
-	// per-monitor HiDPI scaling reliably since JDK 9 (JEP 263), so
-	// detectMissingUiScale() returns 1.0 there and this is a no-op; it only
-	// activates on Linux/X11 sessions where Java's automatic scaling missed
-	// a genuinely HiDPI display.
-	// =========================================================================
-
-	private static double detectMissingUiScale()
-	{
-		try
-		{
-			GraphicsConfiguration gc = GraphicsEnvironment.getLocalGraphicsEnvironment()
-				.getDefaultScreenDevice().getDefaultConfiguration();
-			double current_scale = gc.getDefaultTransform().getScaleX();
-
-			if (current_scale > 1.01) return 1.0;
-
-			// See DeltaWriter.java's matching method for the full
-			// explanation of why this checks multiple independent
-			// signals rather than trusting any single one.
-			String gdk_scale_str = System.getenv("GDK_SCALE");
-			if (gdk_scale_str != null)
-			{
-				try
-				{
-					double gdk_scale = Double.parseDouble(gdk_scale_str.trim());
-					if (gdk_scale >= 1.25) return gdk_scale;
-				}
-				catch (NumberFormatException nfe) { /* fall through to next signal */ }
-			}
-
-			Object xft_dpi_prop = Toolkit.getDefaultToolkit().getDesktopProperty("gnome.Xft/DPI");
-			if (xft_dpi_prop instanceof Integer)
-			{
-				double xft_dpi           = ((Integer) xft_dpi_prop) / 1024.0;
-				double xft_implied_scale = xft_dpi / 96.0;
-				if (xft_implied_scale >= 1.25) return xft_implied_scale;
-			}
-
-			int    dpi           = Toolkit.getDefaultToolkit().getScreenResolution();
-			double implied_scale = dpi / 96.0;
-			if (implied_scale >= 1.25) return implied_scale;
-
-			return 1.0;
-		}
-		catch (Exception e)
-		{
-			return 1.0;
-		}
-	}
-
-	private static void applyHiDpiFontScaleIfNeeded()
-	{
-		double scale = detectMissingUiScale();
-		hidpi_scale  = scale;
-		if (scale <= 1.01) return;
-
-		UIDefaults defaults = UIManager.getLookAndFeelDefaults();
-		for (Object key : new java.util.Vector<Object>(defaults.keySet()))
-		{
-			Object value = defaults.get(key);
-			if (value instanceof Font)
-			{
-				Font  font     = (Font) value;
-				float new_size = (float) (font.getSize() * scale);
-				Font  scaled   = font.deriveFont(new_size);
-				defaults.put(key, scaled);
-				UIManager.put(key, scaled);
-			}
-		}
-	}
-
-	// =========================================================================
 	public DeltaReader(String filename)
 	{
 		try
 		{
-			File            file = new File(filename);
-			DataInputStream in   = new DataInputStream(new FileInputStream(file));
-
-			// ---- Header ----
-			xdim         = in.readShort();
-			ydim         = in.readShort();
-			pixel_shift  = in.readByte();
-			pixel_quant  = in.readByte();
-			set_id       = in.readByte();
-			delta_type   = in.readByte();
-			compress_type = in.readByte();
-			entropy_type      = in.readByte();
-				scanline5_variant = in.readByte();
-			pixel_pyramid = in.readByte();
-			use_saddle    = in.readByte() != 0;
-
-			System.out.println("Image:        " + xdim + " x " + ydim);
-			System.out.println("Channel set:  " + set_string[set_id & 0xFF]);
-			System.out.println("Delta type:   " + delta_type_string[delta_type & 0xFF]);
-			System.out.println("Entropy type: " + entropy_type_string[entropy_type & 0xFF]);
-			System.out.println();
-
-			int[] channel_id = DeltaMapper.getChannels(set_id);
-
 			long start = System.nanoTime();
-
-			for (int i = 0; i < 3; i++)
+			try(DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(filename))))
 			{
-				System.out.println("Reading channel " + i);
+				read(in, filename);
+			}
+			System.out.println("File read in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
 
-				// Common scalars
-				min[i]                = in.readInt();
-				init[i]               = in.readInt();
-				delta_min[i]          = in.readInt();
-				length[i]             = in.readInt();
-				compressed_length[i]  = in.readInt();
-				channel_iterations[i] = in.readByte();
+			ViewerSupport.runOnEdt(() ->
+			{
+				view = new ViewerSupport("Delta Reader  " + filename, xdim, ydim);
+				view.frame.getJMenuBar().add(view.makeViewMenu());
+				view.setStatus("decoding…");
+				view.show();
+			});
 
-				// Map (delta_type 5-9)
-				if (delta_type >= 6 && delta_type <= 8)
+			start = System.nanoTime();
+			int[][] channel = new int[3][];
+			ViewerSupport.parallel(3, i -> channel[i] = decodeChannel(i));
+			System.out.println("Channels processed in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
+
+			start = System.nanoTime();
+			decoded_image = assemble(channel);
+			System.out.println("RGB assembled in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
+			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
+		}
+		catch(Exception e)
+		{
+			String message = (e instanceof IOException && e.getMessage() != null) ? e.getMessage() : "Can't decode " + filename + ": " + e;
+			if(view != null) SwingUtilities.invokeLater(() -> view.setStatus("decode failed"));
+			ViewerSupport.showError(view != null ? view.frame : null, message);
+			ViewerSupport.exitIfNoWindows();
+		}
+	}
+
+	private void read(DataInputStream in, String filename) throws Exception
+	{
+		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
+		if(id != FORMAT_ID || version != FORMAT_VERSION)
+			throw new IOException(id != FORMAT_ID
+				? filename + " is not a Delta Writer file."
+				: filename + " is Delta format version " + version + "; this reader reads version " + FORMAT_VERSION + ".");
+		xdim              = in.readUnsignedShort();
+		ydim              = in.readUnsignedShort();
+		pixel_shift       = in.readByte();
+		pixel_quant       = in.readByte();
+		set_id            = in.readByte();
+		delta_type        = in.readByte();
+		compress_type     = in.readByte();
+		entropy_type      = in.readByte();
+		scanline5_variant = in.readByte();
+		pixel_pyramid     = in.readByte();
+		use_saddle        = in.readByte() != 0;
+
+		System.out.println("Image:        " + xdim + " x " + ydim);
+		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
+		System.out.println("Delta type:   " + DeltaMapper.DELTA_TYPE_NAMES[delta_type]);
+		System.out.println("Datatype:     " + COMPRESS_NAMES[compress_type]);
+		System.out.println("Entropy type: " + ENTROPY_NAMES[entropy_type]);
+		System.out.println();
+
+		for(int i = 0; i < 3; i++)
+		{
+			min[i]               = in.readInt();
+			init[i]              = in.readInt();
+			delta_min[i]         = in.readInt();
+			length[i]            = in.readInt();
+			compressed_length[i] = in.readInt();
+			in.readByte();   // iterations (the string carries them too)
+			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, getPyramidSize(DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0], DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[1], pixel_pyramid)[0]);
+			if(pixel_pyramid != 0) sign_bit[i] = readSignBits(in, pixel_pyramid);
+			if(entropy_type == 4)        // Context: decoded here, in channel order
+			{
+				int[] size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
+				int[] top  = getPyramidSize(size[0], size[1], pixel_pyramid);
+				delta[i] = DeltaMapper.readContextDeltas(in, top[0] * top[1], Arrays.copyOf(delta, i), top[0]);
+				continue;
+			}
+			if(compress_type > 0) table[i] = DeltaMapper.readTable(in);
+
+			if(entropy_type == 0)        // LZ77: payload length, Deflated length, Deflated bytes
+			{
+				int n = in.readInt();
+				byte[] zipped = new byte[in.readInt()];
+				in.readFully(zipped);
+				coded[i] = CodeMapper.inflate(zipped, n);
+			}
+			else if(entropy_type == 1)   // Huffman: code lengths (Deflated), coded payload
+			{
+				byte[] packed = new byte[in.readInt()];
+				in.readFully(packed);
+				huffman_lengths[i] = CodeMapper.unpackRegularTables(packed, 1)[0];
+				coded[i] = new byte[in.readInt()];
+				in.readFully(coded[i]);
+			}
+			else if(entropy_type == 2)   // Arithmetic: frequency tables, then the coded blocks
+			{
+				freqs[i]  = ArithmeticMapper.readFrequencies(in);
+				blocks[i] = new byte[freqs[i].length][];
+				for(int k = 0; k < blocks[i].length; k++)
 				{
-					int    ml  = in.readInt();
-					int    pml = in.readInt();
-					byte[] pm  = new byte[pml];
-					in.readFully(pm);
-					byte[] map_raw = new byte[ml];
-					for (int q = 0; q < ml; q++)
-						map_raw[q] = (byte) ((pm[q >> 2] >> ((q & 3) << 1)) & 0x3);
-					map_list.add(map_raw);
-				}
-				else if (delta_type == 9 || delta_type == 10 || delta_type == 11 || delta_type == 12)
-				{
-					// Files from DeltaWriter2 (compress_type 3) have a flag
-					// byte in front of the map: 0 = string map, 1 =
-					// arithmetic-coded map. Older files have no flag and
-					// always hold a string map.
-					int map_coding = (compress_type == 3) ? in.readByte() : 0;
-					if (map_coding == 1)
-					{
-						// Map length, the table of distinct values and their
-						// counts, then the ArithmeticMapper bytes.
-						int   ml   = in.readInt();
-						int   K    = in.readShort();
-						int[] freq = new int[256];
-						int   only = 0;
-						for (int q = 0; q < K; q++) { only = in.readByte() & 0xFF; freq[only] = in.readInt(); }
-						int    enc_len = in.readInt();
-						byte[] enc     = new byte[enc_len];
-						in.readFully(enc);
-						byte[] map;
-						if (K <= 1) { map = new byte[ml]; java.util.Arrays.fill(map, (byte) only); }
-						else          map = ArithmeticMapper.getArithmeticValuesFastFenwick(enc, freq, ml);
-						map_list.add(map);
-					}
-					else
-					{
-						int    ml   = in.readInt();
-						int[]  tbl  = readTable(in);
-						int    dmin = in.readInt();
-						int    bl   = in.readInt();
-						byte[] str  = new byte[StringMapper.getBytelength(bl)];
-						in.readFully(str);
-						byte[] decomp = StringMapper.decompressStrings(str);
-						int[]  vals   = StringMapper.unpackStrings(decomp, tbl, ml, StringMapper.getBitlength(decomp));
-						byte[] map  = new byte[ml];
-						for (int q = 0; q < ml; q++) map[q] = (byte)(vals[q] + dmin);
-						map_list.add(map);
-					}
-				}
-
-				// Pyramid sign-bit map(s) (pixel_pyramid != 0), completely
-				// independent of the delta-type map above -- see
-				// DeltaWriter's writeSignBitMap for the exact packed format.
-				if (pixel_pyramid != 0)
-					sign_bit_list.add(readSignBitMap(in, pixel_pyramid));
-
-				// String table (compress_type > 0)
-				if (compress_type > 0)
-					table_list.add(readTable(in));
-
-				// Entropy-specific payload
-				if (entropy_type == 0)
-				{
-					// LZ77
-					int    orig_len   = in.readInt();
-					int    zip_len    = in.readInt();
-					byte[] zip_data   = new byte[zip_len];
-					in.readFully(zip_data);
-					lz77_orig_length[i] = orig_len;
-					lz77_data_list.add(zip_data);
-				}
-				else if (entropy_type == 1)
-				{
-					// Huffman (regular, CodeMapper): the 256 code lengths
-					// (Deflated), then the coded payload.
-					byte[] huffman_table = new byte[in.readInt()];
-					in.readFully(huffman_table);
-					huff_length_list.add(CodeMapper.unpackRegularTables(huffman_table, 1)[0]);
-					byte[] coded = new byte[in.readInt()];
-					in.readFully(coded);
-					huff_pay_list.add(coded);
-				}
-				else if (entropy_type == 2) // Arithmetic (renormalizing/fast). The
-				                            // exact-BigInteger "Slow Arithmetic"
-				                            // path (formerly entropy_type==2)
-				                            // has been removed -- see
-				                            // DeltaWriter's matching removal.
-				{
-					// Frequency tables use the same on-disk format they always have.
-					int n_segs   = in.readInt();
-					int len_type = in.readInt();
-					int zfl      = in.readInt();
-					byte[] zfd   = new byte[zfl];
-					in.readFully(zfd);
-
-					int n_bytes = n_segs * 256 * ((len_type == 0) ? 1 : (len_type == 1) ? 2 : 4);
-					byte[] fb   = new byte[n_bytes];
-					Inflater inf = new Inflater();
-					inf.setInput(zfd, 0, zfl);
-					inf.inflate(fb);
-					inf.end();
-
-					int[][] freqs = new int[n_segs][256];
-					if (len_type == 0)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++) { freqs[k][m] = fb[k*256+m]; if (freqs[k][m]<0) freqs[k][m]+=256; }
-					else if (len_type == 1)
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a = fb[k*512+2*m]; if(a<0)a+=256;
-								int b = fb[k*512+2*m+1]; if(b<0)b+=256; b<<=8;
-								freqs[k][m] = a|b;
-							}
-					else
-						for (int k = 0; k < n_segs; k++)
-							for (int m = 0; m < 256; m++)
-							{
-								int a=fb[k*1024+4*m];if(a<0)a+=256;
-								int b=fb[k*1024+4*m+1];if(b<0)b+=256;b<<=8;
-								int c=fb[k*1024+4*m+2];if(c<0)c+=256;c<<=16;
-								int d=fb[k*1024+4*m+3];if(d<0)d+=256;d<<=24;
-								freqs[k][m]=a|b|c|d;
-							}
-
-					freq_list.add(freqs);
-
-					// Per-segment data: a single encoded byte[] from getIntervalValueFast
-					// (the coded bytes; the block's byte count comes from the channel data).
-					byte[][] fast_enc = new byte[n_segs][];
-					for (int k = 0; k < n_segs; k++)
-					{
-						int enc_len  = in.readInt();
-						fast_enc[k]  = new byte[enc_len];
-						in.readFully(fast_enc[k]);
-					}
-					fast_enc_list.add(fast_enc);
-				}
-				else if (entropy_type == 3) // Adaptive: the coded payload (no table).
-				{
-					byte[] coded = new byte[in.readInt()];
-					in.readFully(coded);
-					fast_enc_list.add(new byte[][]{coded});
+					blocks[i][k] = new byte[in.readInt()];
+					in.readFully(blocks[i][k]);
 				}
 			}
-
-			in.close();
-			System.out.println("File read in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
-
-			buildViewer(filename);
-
-			// ---- Run Decompressor threads (handles all entropy types) --------
-			start = System.nanoTime();
-			Thread[] decompression_thread = new Thread[3];
-			for (int i = 0; i < 3; i++)
+			else                         // Adaptive: the coded payload
 			{
-				decompression_thread[i] = new Thread(new Decompressor(i));
-				decompression_thread[i].start();
+				coded[i] = new byte[in.readInt()];
+				in.readFully(coded[i]);
 			}
-			for (int i = 0; i < 3; i++) decompression_thread[i].join();
+		}
+	}
 
-			System.out.println("Channels processed in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
+	// DeltaWriter's sign bits: one bitmap per pyramid level, each an int
+	// length, then (length+7)/8 bytes, bit q in byte q>>3, bit q&7.
+	private static boolean[][] readSignBits(DataInputStream in, int levels) throws IOException
+	{
+		boolean[][] sign_bits = new boolean[levels][];
+		for(int lvl = 0; lvl < levels; lvl++)
+		{
+			boolean[] bits   = new boolean[in.readInt()];
+			byte[]    packed = new byte[(bits.length + 7) / 8];
+			in.readFully(packed);
+			for(int q = 0; q < bits.length; q++) bits[q] = (packed[q >> 3] & (1 << (q & 7))) != 0;
+			sign_bits[lvl] = bits;
+		}
+		return sign_bits;
+	}
 
-			// ---- Assemble RGB -----------------------------------------------
-			start = System.nanoTime();
-			int[][] ch = new int[3][0];
-			if      (set_id==0){ch[0]=channel_array[0];ch[1]=channel_array[1];ch[2]=channel_array[2];}
-			else if (set_id==1){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[1],channel_array[2]);ch[2]=channel_array[1];}
-			else if (set_id==2){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[2]);ch[2]=channel_array[1];}
-			else if (set_id==3){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=DeltaMapper.getSum(channel_array[2],ch[1]);}
-			else if (set_id==4){ch[0]=channel_array[0];ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[2]);}
-			else if (set_id==5){ch[0]=DeltaMapper.getSum(channel_array[2],channel_array[0]);ch[1]=channel_array[0];ch[2]=channel_array[1];}
-			else if (set_id==6){for(int i=0;i<channel_array[2].length;i++)channel_array[2][i]=-channel_array[2][i];ch[1]=DeltaMapper.getSum(channel_array[2],channel_array[0]);ch[0]=DeltaMapper.getSum(channel_array[1],ch[1]);ch[2]=channel_array[0];}
-			else if (set_id==7){ch[0]=DeltaMapper.getSum(channel_array[0],channel_array[1]);ch[1]=channel_array[0];ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[2]);}
-			else if (set_id==8){ch[2]=DeltaMapper.getSum(channel_array[0],channel_array[1]);ch[0]=DeltaMapper.getDifference(ch[2],channel_array[2]);ch[1]=channel_array[0];}
-			else if (set_id==9){ch[0]=DeltaMapper.getDifference(channel_array[0],channel_array[2]);ch[1]=DeltaMapper.getDifference(channel_array[0],channel_array[1]);ch[2]=channel_array[0];}
-
-			BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			if (pixel_quant == 0)
+	// Entropy decode -> deltas (bytes or unary strings) -> channel values,
+	// then the pyramid expand if there is one.
+	private int[] decodeChannel(int i)
+	{
+		try
+		{
+			int[]  size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
+			int[]  top  = getPyramidSize(size[0], size[1], pixel_pyramid);
+			int    n    = top[0] * top[1];
+			if(entropy_type == 4) return toChannel(i, delta[i], size, top);
+			int    payload_length = (compress_type == 0) ? n : StringMapper.getBytelength(compressed_length[i]);
+			byte[] payload;
+			if(entropy_type == 0)      payload = coded[i];
+			else if(entropy_type == 1) payload = CodeMapper.unpackRegularCode(coded[i], huffman_lengths[i], payload_length);
+			else if(entropy_type == 3) payload = ArithmeticMapper.getArithmeticValuesAdaptive(coded[i], payload_length);
+			else
 			{
-				int[] px = DeltaMapper.getPixel(ch[0], ch[1], ch[2], xdim, pixel_shift);
-				image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
+				int[]    block_length = ArithmeticMapper.getBlockLengths(payload_length, freqs[i].length);
+				byte[][] block = new byte[block_length.length][];
+				ViewerSupport.parallel(block.length, k ->
+					block[k] = ArithmeticMapper.getArithmeticValuesFastFenwick(blocks[i][k], freqs[i][k], block_length[k]));
+				payload = ArithmeticMapper.joinBlocks(block);
+			}
+
+			int[] delta;
+			if(compress_type == 0)
+			{
+				// One unsigned byte per delta: delta - delta_min.
+				delta = new int[n];
+				for(int k = 1; k < n; k++) delta[k] = (payload[k] & 0xFF) + delta_min[i];
 			}
 			else
 			{
-				if (xdim > 600)
-				{
-					Thread[] rt = new Thread[3];
-					for (int i = 0; i < 3; i++) { rt[i] = new Thread(new Resizer(ch[i], intermediate_xdim, xdim, ydim, i)); rt[i].start(); }
-					for (int i = 0; i < 3; i++) rt[i].join();
-					int[] px = DeltaMapper.getPixel(resize_array[0], resize_array[1], resize_array[2], xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
-				}
-				else
-				{
-					int[] px = DeltaMapper.getPixel(
-						ResizeMapper.resize(ch[0], intermediate_xdim, xdim, ydim),
-						ResizeMapper.resize(ch[1], intermediate_xdim, xdim, ydim),
-						ResizeMapper.resize(ch[2], intermediate_xdim, xdim, ydim),
-						xdim, pixel_shift);
-					image.setRGB(0, 0, xdim, ydim, px, 0, xdim);
-				}
+				byte[] str = StringMapper.decompressStrings(payload);
+				delta = StringMapper.unpackStrings(str, table[i], n, length[i]);
+				delta[0] = 0;
+				for(int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 			}
-			System.out.println("RGB assembled in " + ((System.nanoTime()-start)/1_000_000) + " ms.");
 
-			decoded_image = image;
-			SwingUtilities.invokeLater(() -> showImage());
+			return toChannel(i, delta, size, top);
 		}
-		catch (Exception e) { System.out.println(e.toString()); }
+		catch(Exception e) { throw new RuntimeException("channel " + i + ": " + e, e); }
 	}
 
-	// ---- table I/O helper ---------------------------------------------------
-	private static int[] readTable(DataInputStream in) throws IOException
+	private int[] toChannel(int i, int[] delta, int[] size, int[] top)
 	{
-		int    tl  = in.readShort();
-		int[]  tbl = new int[tl];
-		int    max = Byte.MAX_VALUE * 2 + 1;
-		if (tl <= max)
-			for (int k = 0; k < tl; k++) { tbl[k] = in.readByte(); if (tbl[k] < 0) tbl[k] = max + 1 + tbl[k]; }
-		else
-			for (int k = 0; k < tl; k++) tbl[k] = in.readShort();
-		return tbl;
+		int[]   channel    = DeltaMapper.getValuesFromDeltas(delta, top[0], top[1], init[i], delta_type, map[i], scanline5_variant);
+		boolean difference = DeltaMapper.getChannels(set_id)[i] > 2;
+		if(pixel_pyramid != 0) channel = expandPyramid(channel, size[0], size[1], sign_bit[i], difference, use_saddle);
+		if(difference) for(int k = 0; k < channel.length; k++) channel[k] += min[i];
+		return channel;
 	}
 
-	// Mirrors DeltaWriter.writeSignBitMap exactly: raw packed bits, 8 to a
-	// byte, no table, no compression, one bitmap per pyramid level
-	// transition. Reads pixel_pyramid bitmaps -- the count is never
-	// written explicitly, since the reader already knows it from that
-	// header field.
-	private static boolean[][] readSignBitMap(DataInputStream in, int pixel_pyramid) throws IOException
+	// ---- Image pyramid (see DeltaWriter) ------------------------------------
+
+	// Size of the top pyramid level, the size the deltas are coded at.
+	static int[] getPyramidSize(int xdim, int ydim, int levels)
 	{
-		boolean[][] geqBitsPerLevel = new boolean[pixel_pyramid][];
-		for (int lvl = 0; lvl < pixel_pyramid; lvl++)
+		if(levels == 0) return new int[] {xdim, ydim};
+		int mult = 1 << levels;
+		return new int[] {ImageMapper.padTo(xdim, mult) >> levels, ImageMapper.padTo(ydim, mult) >> levels};
+	}
+
+	// Inverse of DeltaWriter.shrinkPyramid (DeltaWriter's preview uses it
+	// too): expands the top level back to xdim x ydim with sign-bit
+	// correction at each level. Difference channels are offset by their minimum but not rescaled, so
+	// they range 0-510 (clamping them to 255 would corrupt high-contrast areas).
+	static int[] expandPyramid(int[] top, int xdim, int ydim, boolean[][] sign_bits, boolean difference, boolean saddle)
+	{
+		int levels = sign_bits.length, mult = 1 << levels;
+		int max_value = difference ? 510 : 255;
+		int[] level = top;
+		int   level_xdim = ImageMapper.padTo(xdim, mult) >> levels;
+		for(int lvl = levels - 1; lvl >= 0; lvl--)
 		{
-			int    len       = in.readInt();
-			int    packedLen = (len + 7) / 8;
-			byte[] packed    = new byte[packedLen];
-			in.readFully(packed);
-			boolean[] geq = new boolean[len];
-			for (int q = 0; q < len; q++)
-				geq[q] = (packed[q >> 3] & (1 << (q & 7))) != 0;
-			geqBitsPerLevel[lvl] = geq;
+			int[] predicted = saddle ? ImageMapper.expandGradientSaddle(level, level_xdim, max_value) : ImageMapper.expandGradient(level, level_xdim, max_value);
+			level = ImageMapper.refineWithSignBits(level, predicted, sign_bits[lvl], level_xdim * 2, max_value);
+			level_xdim *= 2;
 		}
-		return geqBitsPerLevel;
+		return ImageMapper.crop(level, ImageMapper.padTo(xdim, mult), ImageMapper.padTo(ydim, mult), xdim, ydim);
 	}
 
-	// =========================================================================
-	// Viewer
-	// =========================================================================
-	private void buildViewer(String filename)
+	// Recombine the channel set, then resize, then shift.
+	private BufferedImage assemble(int[][] channel)
 	{
-		Dimension sc  = Toolkit.getDefaultToolkit().getScreenSize();
-		int sw = (int)sc.getWidth(), sh = (int)sc.getHeight();
-		fit_scale  = Math.min(hidpi_scale, Math.min((double)(sw*70/100-(int)(40*hidpi_scale))/xdim, (double)(sh*70/100-(int)(80*hidpi_scale))/ydim));
-		zoom_scale = fit_scale;
-
-		image_canvas = new ImageCanvas();
-		image_canvas.setPreferredSize(new Dimension(Math.max(1,(int)(xdim*zoom_scale)), Math.max(1,(int)(ydim*zoom_scale))));
-
-		scroll_pane = new JScrollPane(image_canvas, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-		scroll_pane.getVerticalScrollBar().setUnitIncrement(16);
-		scroll_pane.getHorizontalScrollBar().setUnitIncrement(16);
-		scroll_pane.addMouseWheelListener(new MouseWheelListener()
-		{
-			public void mouseWheelMoved(MouseWheelEvent e)
-			{
-				if (e.isControlDown())
-				{
-					JViewport vp = scroll_pane.getViewport();
-					Point vpos = vp.getViewPosition(); Point mpt = e.getPoint();
-					int mcx = mpt.x+vpos.x, mcy = mpt.y+vpos.y;
-					double old = zoom_scale;
-					zoom_scale = (e.getWheelRotation()<0) ? Math.min(ZOOM_MAX,zoom_scale*ZOOM_FACTOR) : Math.max(ZOOM_MIN,zoom_scale/ZOOM_FACTOR);
-					if (zoom_scale==old) return;
-					updateDisplayImage();
-					image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
-					image_canvas.revalidate(); image_canvas.repaint();
-					double r = zoom_scale/old;
-					vp.setViewPosition(new Point(Math.max(0,(int)(mcx*r)-mpt.x), Math.max(0,(int)(mcy*r)-mpt.y)));
-					updateTitle();
-				}
-				else scroll_pane.dispatchEvent(e);
-			}
-		});
-
-		frame = new JFrame("Delta Reader  [decoding…]");
-		frame.addWindowListener(new WindowAdapter(){ public void windowClosing(WindowEvent e){ System.exit(0); }});
-
-		JMenuBar mb = new JMenuBar();
-		JMenu vm    = new JMenu("View");
-		JMenuItem zi = new JMenuItem("Zoom In (+)");
-		zi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
-		zi.addActionListener(e -> zoomBy(ZOOM_FACTOR)); vm.add(zi);
-		JMenuItem zo = new JMenuItem("Zoom Out (-)");
-		zo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
-		zo.addActionListener(e -> zoomBy(1.0/ZOOM_FACTOR)); vm.add(zo);
-		JMenuItem zf = new JMenuItem("Fit to Window");
-		zf.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
-		zf.addActionListener(e ->
-		{
-			Dimension vps = scroll_pane.getViewport().getSize();
-			zoom_scale = Math.min((double)vps.width/xdim, (double)vps.height/ydim);
-			updateDisplayImage(); image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
-			image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
-		}); vm.add(zf);
-		JMenuItem za = new JMenuItem("Actual Size (100%)");
-		za.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
-		za.addActionListener(e ->
-		{
-			zoom_scale = hidpi_scale; updateDisplayImage();
-			image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
-			image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
-		}); vm.add(za);
-		mb.add(vm);
-		frame.setJMenuBar(mb);
-		frame.getContentPane().add(scroll_pane, BorderLayout.CENTER);
-		frame.setSize(Math.min((int)(xdim*fit_scale)+(int)(40*hidpi_scale),(int)(sw*0.70)), Math.min((int)(ydim*fit_scale)+(int)(80*hidpi_scale),(int)(sh*0.70)));
-		frame.setLocation(5,5);
-		frame.setVisible(true);
-	}
-
-	private void showImage()
-	{
-		Dimension vps = scroll_pane.getViewport().getSize();
-		fit_scale  = Math.min(hidpi_scale, Math.min(vps.width>0?(double)vps.width/xdim:hidpi_scale, vps.height>0?(double)vps.height/ydim:hidpi_scale));
-		zoom_scale = fit_scale;
-		updateDisplayImage();
-		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
-		image_canvas.revalidate(); image_canvas.repaint(); updateTitle();
-		int display_w  = (int)(xdim * zoom_scale);
-		int display_h  = (int)(ydim * zoom_scale);
-		int overhead_w = frame.getWidth()  - vps.width;
-		int overhead_h = frame.getHeight() - vps.height;
-		Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-		frame.setSize(Math.min(display_w + overhead_w, (int)(screen.width  * 0.70)),
-		              Math.min(display_h + overhead_h, (int)(screen.height * 0.70)));
-	}
-
-	private void zoomBy(double factor)
-	{
-		double ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom_scale*factor));
-		if (ns==zoom_scale) return;
-		JViewport vp = scroll_pane.getViewport(); Point vpos = vp.getViewPosition(); Dimension vs = vp.getSize();
-		double cx=vpos.x+vs.width/2.0, cy=vpos.y+vs.height/2.0, r=ns/zoom_scale;
-		zoom_scale = ns; updateDisplayImage();
-		image_canvas.setPreferredSize(new Dimension((int)(xdim*zoom_scale),(int)(ydim*zoom_scale)));
-		image_canvas.revalidate(); image_canvas.repaint();
-		vp.setViewPosition(new Point(Math.max(0,(int)(cx*r-vs.width/2.0)), Math.max(0,(int)(cy*r-vs.height/2.0))));
-		updateTitle();
-	}
-
-	private void updateDisplayImage()
-	{
-		if (decoded_image==null) return;
-		if (zoom_scale==1.0) { display_image=decoded_image; return; }
-		int w=Math.max(1,(int)(xdim*zoom_scale)), h=Math.max(1,(int)(ydim*zoom_scale));
-		AffineTransform t = new AffineTransform(); t.scale(zoom_scale,zoom_scale);
-		display_image = new AffineTransformOp(t,AffineTransformOp.TYPE_BILINEAR).filter(decoded_image, new BufferedImage(w,h,decoded_image.getType()));
-	}
-
-	private void updateTitle()
-	{
-		if (frame==null) return;
-		int pct = (int)Math.round(zoom_scale*100);
-		frame.setTitle("Delta Reader  [" + (decoded_image==null ? "decoding…" : pct+"%") + "]");
-	}
-
-	// =========================================================================
-	// ImageCanvas
-	// =========================================================================
-	class ImageCanvas extends JPanel
-	{
-		public ImageCanvas() { setOpaque(true); }
-		@Override public Dimension getPreferredSize()
-		{
-			return (display_image!=null) ? new Dimension(display_image.getWidth(),display_image.getHeight())
-				: new Dimension(Math.max(1,(int)(xdim*zoom_scale)), Math.max(1,(int)(ydim*zoom_scale)));
-		}
-		@Override protected synchronized void paintComponent(Graphics g) { super.paintComponent(g); if(display_image!=null) g.drawImage(display_image,0,0,this); }
-	}
-
-	// =========================================================================
-	// Resizer
-	// =========================================================================
-	class Resizer implements Runnable
-	{
-		int[] src; int xdim,nx,ny,i;
-		Resizer(int[] src,int xdim,int nx,int ny,int i){this.src=src;this.xdim=xdim;this.nx=nx;this.ny=ny;this.i=i;}
-		public void run(){ resize_array[i]=ResizeMapper.resize(src,xdim,nx,ny); }
-	}
-
-	// =========================================================================
-	// Decompressor -- one per channel; handles all entropy types
-	// =========================================================================
-	class Decompressor implements Runnable
-	{
-		int i;
-		Decompressor(int i){ this.i=i; }
-
-		public void run()
-		{
-			try
-			{
-				int[] channel_id = DeltaMapper.getChannels(set_id);
-
-				// ---- Compute current dimensions ----
-				int cur_xdim, cur_ydim, size;
-				if (pixel_quant == 0)
-				{
-					cur_xdim = xdim; cur_ydim = ydim;
-				}
-				else
-				{
-					double f = pixel_quant / 10.0;
-					intermediate_xdim = xdim - (int)(f*(xdim/2-2));
-					intermediate_ydim = ydim - (int)(f*(ydim/2-2));
-					cur_xdim = intermediate_xdim; cur_ydim = intermediate_ydim;
-				}
-
-				// Pyramid dimensions, derived the same way DeltaWriter derives
-				// them (no need to store them separately in the file) --
-				// entropy decode and the delta-type inverse both operate on
-				// this SMALLER, pyramid-shrunk size when pixel_pyramid != 0.
-				int pyramid_xdim = cur_xdim, pyramid_ydim = cur_ydim;
-				if (pixel_pyramid != 0)
-				{
-					int mult = 1 << pixel_pyramid;
-					int padded_xdim = ImageMapper.padTo(cur_xdim, mult);
-					int padded_ydim = ImageMapper.padTo(cur_ydim, mult);
-					pyramid_xdim = padded_xdim >> pixel_pyramid;
-					pyramid_ydim = padded_ydim >> pixel_pyramid;
-				}
-				size = pyramid_xdim * pyramid_ydim;
-
-				// ---- Entropy decode -> payload bytes ----
-				byte[] payload;
-
-				if (entropy_type == 0)
-				{
-					// LZ77
-					byte[]   zip_data = lz77_data_list.get(i);
-					int      orig_len = lz77_orig_length[i];
-					byte[]   buf      = new byte[orig_len];
-					Inflater inf      = new Inflater();
-					inf.setInput(zip_data); inf.inflate(buf); inf.end();
-					payload = buf;
-				}
-				else if (entropy_type == 1)
-				{
-					// Huffman: the payload is a byte per pixel (Integer) or the
-					// unary-string bytes.
-					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
-					payload = CodeMapper.unpackRegularCode(huff_pay_list.get(i), huff_length_list.get(i), num_sym);
-				}
-				else if (entropy_type == 3)
-				{
-					// Adaptive: the payload is a byte per pixel (Integer) or the
-					// unary-string bytes.
-					int num_sym = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
-					payload = ArithmeticMapper.getArithmeticValuesAdaptive(fast_enc_list.get(i)[0], num_sym);
-				}
-				else // entropy_type == 2 (Arithmetic, renormalizing/fast). The
-				     // exact-BigInteger "Slow Arithmetic" path (formerly
-				     // entropy_type==2, with this one at ==3) has been
-				     // removed -- see DeltaWriter's matching removal.
-				{
-					int expected  = (compress_type == 0) ? size : StringMapper.getBytelength(compressed_length[i]);
-
-					int[][]  freqs    = freq_list.get(i);
-					byte[][] fast_enc = fast_enc_list.get(i);
-					int      n_segs   = freqs.length;
-					int      seg_len  = expected / n_segs;
-					int      odd_len  = seg_len + expected % n_segs;
-
-					byte[][] segs = new byte[n_segs][];
-					for (int m = 0; m < n_segs; m++) segs[m] = new byte[m < n_segs-1 ? seg_len : odd_len];
-
-					// Decode segments in parallel on the shared thread pool
-					// (previously one new Thread per block -- thousands at once
-					// on a large image, times 3 channels). Same output.
-					java.util.stream.IntStream.range(0, n_segs).parallel().forEach(k ->
-						segs[k] = ArithmeticMapper.getArithmeticValuesFastFenwick(fast_enc[k], freqs[k], segs[k].length));
-
-					// Reassemble
-					byte[] buf = new byte[expected];
-					int pos = 0;
-					for (int m = 0; m < n_segs; m++)
-					{ System.arraycopy(segs[m], 0, buf, pos, segs[m].length); pos += segs[m].length; }
-					payload = buf;
-				}
-
-				// ---- Payload -> delta values ----
-				int[] delta;
-
-				if (compress_type == 0)
-				{
-					// payload bytes are (delta[k] - delta_min) stored as signed bytes
-					delta    = new int[size];
-					delta[0] = 0;
-					for (int k = 1; k < size; k++) delta[k] = payload[k] + delta_min[i];
-				}
-				else
-				{
-					// payload is the unary-string byte array
-					int[]  tbl  = table_list.get(i);
-					byte[] str  = payload;
-					str         = StringMapper.decompressStrings(str);
-					delta       = StringMapper.unpackStrings(str, tbl, size, length[i]);
-					delta[0]    = 0;
-					for (int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
-				}
-
-				// ---- Delta -> channel values ----
-				int[] cur_ch;
-				if      (delta_type == 0) cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 1) cur_ch = DeltaMapper.getValuesFromVerticalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 2) cur_ch = DeltaMapper.getValuesFromAverageDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 3) cur_ch = DeltaMapper.getValuesFromMedDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 4) cur_ch = DeltaMapper.getValuesFromDirectionalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 5)  cur_ch = DeltaMapper.getValuesFromAdaptiveDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-				else if (delta_type == 6)  cur_ch = DeltaMapper.getValuesFromMixedDeltas(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 7)  cur_ch = DeltaMapper.getValuesFromMixedDeltas2(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 8)  cur_ch = DeltaMapper.getValuesFromMixedDeltas4(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 9)  cur_ch = DeltaMapper.getValuesFromMixedDeltas16Rows(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 11) cur_ch = DeltaMapper.getValuesFromIdealDeltas8(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 12) cur_ch = DeltaMapper.getValuesFromIdealDeltas16(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i));
-				else if (delta_type == 10) cur_ch = DeltaMapper.getValuesFromMixedDeltas8Rows(delta, pyramid_xdim, pyramid_ydim, init[i], map_list.get(i), scanline5_variant);
-				else                       cur_ch = DeltaMapper.getValuesFromHorizontalDeltas(delta, pyramid_xdim, pyramid_ydim, init[i]);
-
-				// ---- Image pyramid: expand back to cur_xdim x cur_ydim.
-				// Sign-bit correction is applied at EVERY level -- mirrors
-				// DeltaWriter's applyImpl() exactly. ----
-				if (pixel_pyramid != 0)
-				{
-					int mult = 1 << pixel_pyramid;
-					int padded_xdim = ImageMapper.padTo(cur_xdim, mult);
-					int padded_ydim = ImageMapper.padTo(cur_ydim, mult);
-
-					// Difference channels (blue-green, red-green, red-blue --
-					// channel_id[i]>2) are shifted by their own observed
-					// minimum to become non-negative but are NEVER rescaled,
-					// so their legitimate range can run up to 510 (two
-					// [0,255] channels differing by as much as 255 in
-					// either direction), not just 255 -- see DeltaWriter's
-					// matching comment for the full explanation.
-					int maxValue = (channel_id[i] > 2) ? 510 : 255;
-
-					boolean[][] geqBitsPerLevel = sign_bit_list.get(i);
-
-					int[] curLevel = cur_ch;
-					int curXdim = pyramid_xdim;
-					for (int lvl = pixel_pyramid - 1; lvl >= 0; lvl--)
-					{
-						int[] predicted = use_saddle ? ImageMapper.expandGradientSaddle(curLevel, curXdim, maxValue) : ImageMapper.expandGradient(curLevel, curXdim, maxValue);
-						curLevel = ImageMapper.refineWithSignBits(curLevel, predicted, geqBitsPerLevel[lvl], curXdim * 2, maxValue);
-						curXdim *= 2;
-					}
-					cur_ch = ImageMapper.crop(curLevel, padded_xdim, padded_ydim, cur_xdim, cur_ydim);
-				}
-
-				// Restore difference-channel offset
-				if (channel_id[i] > 2)
-					for (int k = 0; k < cur_ch.length; k++) cur_ch[k] += min[i];
-
-				channel_array[i] = cur_ch;
-			}
-			catch (Exception e) { System.out.println("Decompressor " + i + ": " + e); }
-		}
+		int[]   size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
+		int[][] bgr  = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
+		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize(bgr[c], size[0], xdim, ydim));
+		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
+		image.setRGB(0, 0, xdim, ydim, DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift), 0, xdim);
+		return image;
 	}
 }

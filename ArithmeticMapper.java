@@ -691,6 +691,123 @@ public class ArithmeticMapper
 	}
 
 	// =========================================================================
+	// Context-adaptive coder: like the adaptive coder above, but over any
+	// alphabet (n_symbols) and with the context of each symbol chosen by the
+	// caller rather than by the previous byte. Each context has its own
+	// counts, starting at 1, +CONTEXT_INCREMENT per symbol coded, halved
+	// (keeping them >= 1) when a context's total passes CONTEXT_LIMIT.
+	//
+	// The decoder can't be handed the contexts up front -- they usually
+	// depend on symbols not yet decoded -- so it asks a ContextFunction for
+	// each one as it goes.
+	//
+	// Output: the range coder's bytes; the caller stores the symbol count.
+	// =========================================================================
+
+	public static final int CONTEXT_INCREMENT = 32;
+	public static final int CONTEXT_LIMIT     = 1 << 16;
+
+	// The context (0..n_contexts-1) of symbol k; symbol[0..k-1] are decoded.
+	public interface ContextFunction { int context(int k, int[] symbol); }
+
+	public static byte[] getIntervalValueContext(int[] symbol, int n_symbols, int[] context, int n_contexts)
+	{
+		ContextModel[] model   = contextModels(n_contexts, n_symbols);
+		RangeEncoder   encoder = new RangeEncoder(symbol.length / 2);
+		for(int k = 0; k < symbol.length; k++)
+		{
+			ContextModel m = model[context[k]];
+			int s = symbol[k];
+			encoder.encode(m.start(s), m.f[s], m.total);
+			m.update(s);
+		}
+		return encoder.finish();
+	}
+
+	public static int[] getArithmeticValuesContext(byte[] coded, int n, int n_symbols, int n_contexts, ContextFunction function)
+	{
+		ContextModel[] model   = contextModels(n_contexts, n_symbols);
+		RangeDecoder   decoder = new RangeDecoder(coded);
+		int[]          symbol  = new int[n];
+		for(int k = 0; k < n; k++)
+		{
+			ContextModel m = model[function.context(k, symbol)];
+			int s = m.find(decoder.target(m.total));
+			decoder.decode(m.start(s), m.f[s]);
+			symbol[k] = s;
+			m.update(s);
+		}
+		return symbol;
+	}
+
+	private static ContextModel[] contextModels(int n_contexts, int n_symbols)
+	{
+		ContextModel[] model = new ContextModel[n_contexts];
+		for(int c = 0; c < n_contexts; c++) model[c] = new ContextModel(n_symbols);
+		return model;
+	}
+
+	// One context's counts over n symbols, with a Fenwick tree for the
+	// running totals.
+	private static final class ContextModel
+	{
+		final int[] f, bit;
+		final int   n, top;
+		int total;
+
+		ContextModel(int n)
+		{
+			this.n = n;
+			f   = new int[n];
+			bit = new int[n + 1];
+			top = Integer.highestOneBit(n);
+			Arrays.fill(f, 1);
+			rebuild();
+		}
+
+		void rebuild()
+		{
+			Arrays.fill(bit, 0);
+			total = 0;
+			for(int s = 0; s < n; s++)
+			{
+				total += f[s];
+				for(int i = s + 1; i <= n; i += i & -i) bit[i] += f[s];
+			}
+		}
+
+		int start(int s)
+		{
+			int sum = 0;
+			for(int i = s; i > 0; i -= i & -i) sum += bit[i];
+			return sum;
+		}
+
+		int find(int target)
+		{
+			int pos = 0;
+			for(int b = top; b > 0; b >>= 1)
+			{
+				int next = pos + b;
+				if(next <= n && bit[next] <= target) { target -= bit[next]; pos = next; }
+			}
+			return pos;
+		}
+
+		void update(int s)
+		{
+			f[s]  += CONTEXT_INCREMENT;
+			total += CONTEXT_INCREMENT;
+			for(int i = s + 1; i <= n; i += i & -i) bit[i] += CONTEXT_INCREMENT;
+			if(total > CONTEXT_LIMIT)
+			{
+				for(int k = 0; k < n; k++) f[k] = (f[k] + 1) >>> 1;
+				rebuild();
+			}
+		}
+	}
+
+	// =========================================================================
 	// Blocks and frequency tables, shared by the writers and readers.
 	// =========================================================================
 
