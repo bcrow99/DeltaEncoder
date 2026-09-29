@@ -109,6 +109,7 @@ public class DeltaWriter2
 		boolean[][] per_channel_delta_compressed = new boolean[3][N_DELTA_TYPES];
 		boolean[][] per_channel_map_compressed   = new boolean[3][N_DELTA_TYPES];
 		long[][][]  map_report = new long[3][N_DELTA_TYPES][MAP_REPORT_COLUMNS];
+		byte[][][]  maps       = new byte[3][N_DELTA_TYPES][];
 		ViewerSupport.parallel(3, i ->
 		{
 			for(int t = 0; t < N_DELTA_TYPES; t++)
@@ -121,28 +122,46 @@ public class DeltaWriter2
 				per_channel_delta_bits[i][t]       = StringMapper.getBitlength(delta_bytes);
 				per_channel_delta_compressed[i][t] = (StringMapper.getIterations(delta_bytes) & 15) > 0;
 
-				// Maps for types 9-12 are stored in the smallest of the string,
-				// arithmetic and context-coded forms (see DeltaMapper.writeMap),
-				// so rank them on that (estimated without the previous channel's
-				// map, which the survey doesn't have). Types 6-8 are tiny raw
-				// 2-bit maps.
+				maps[i][t] = m;
 				byte[] map_bytes  = DeltaWriter.packAndCompress(DeltaWriter.widen(m));
 				int    map_bits   = StringMapper.getBitlength(map_bytes);
 				int    arith_size = arithmeticMapBytes(m);
-				int    written    = writtenMapBytes(type, m, new_xdim);
-				per_channel_map_bits[i][t]       = (type >= 9) ? 8 * (written - 1) : map_bits;
+				per_channel_map_bits[i][t]       = map_bits;
 				per_channel_map_compressed[i][t] = (StringMapper.getIterations(map_bytes) & 15) > 0;
 
 				long[] mr = map_report[i][t];
 				mr[0] = m.length;
-				mr[1] = written;
 				mr[2] = (map_bits + 7) / 8;
 				mr[3] = CodeMapper.deflate(m, Deflater.BEST_COMPRESSION).length;
 				mr[4] = arith_size;
 				mr[5] = (long) Math.ceil(entropyBits(m) / 8);
 				mr[6] = (StringMapper.getBitlength(delta_bytes) + 7) / 8;
 				mr[7] = (long) Math.ceil(conditionalEntropyBits(m, 0) / 8);
-				mr[8] = (m.length == new_xdim * new_ydim) ? (long) Math.ceil(conditionalEntropyBits(m, new_xdim) / 8) : -1;
+				// Left+up estimate for the 2-D maps: frame maps (interior
+				// pixels, xdim - 2 across) and block maps (one entry per block,
+				// after the 2 header bytes).
+				if(type == 11 || type == 12)
+					mr[8] = (long) Math.ceil(conditionalEntropyBits(m, new_xdim - 2) / 8);
+				else if(type == 13)
+					mr[8] = (long) Math.ceil(conditionalEntropyBits(Arrays.copyOfRange(m, 2, m.length), (new_xdim - 2 + m[0] - 1) / m[0]) / 8);
+				else
+					mr[8] = -1;
+			}
+		});
+
+		// Maps for types 9-13 are stored in the smallest of the string,
+		// arithmetic and context-coded forms (see DeltaMapper.writeMap), and
+		// the context form uses the previous channel's map, so they are sized
+		// here, once all three channels' maps exist. Types 6-8 are tiny raw
+		// 2-bit maps, ranked on the string size.
+		ViewerSupport.parallel(N_DELTA_TYPES, t ->
+		{
+			int type = FIRST_DELTA_TYPE + t;
+			for(int i = 0; i < 3; i++)
+			{
+				int written = writtenMapBytes(type, maps[i][t], (i > 0) ? maps[i - 1][t] : null, new_xdim);
+				map_report[i][t][1] = written;
+				per_channel_map_bits[i][t] = 8 * written;
 			}
 		});
 
@@ -238,25 +257,32 @@ public class DeltaWriter2
 	}
 
 	// ---- Map-coding report ---------------------------------------------------
-	// Printed after the delta-type ranking. For each of the 7 types, summed
-	// over the 3 channels: map entries, then the map's size in bytes
-	//   written  -- as Save writes it (DeltaMapper.writeMap);
-	//   strings  -- after StringMapper.compressStrings;
-	//   deflate  -- one byte per entry, Deflate at BEST_COMPRESSION;
-	//   arith    -- the arithmetic-coded form writeMap can store;
-	//   H0       -- order-0 entropy (Deflate can beat it on runs);
-	//   H|L      -- entropy given the previous entry;
-	//   H|LU     -- entropy given the left and upper entries, for maps with
-	//               one entry per pixel ("-" otherwise); a slightly
-	//               optimistic bound for a context-modeling coder;
-	// and, for scale, the compressed delta string. Report only.
+	// Printed after the delta-type ranking; the legend is printed with it.
+	// Columns (sums over the 3 channels): map entries; actual sizes from
+	// writeMap (with the previous channel's map, as Save writes it),
+	// StringMapper, Deflate and the arithmetic form; entropy estimates (order
+	// 0, given the left entry, given left and upper); and the delta string
+	// size for scale. Report only.
 	static final int MAP_REPORT_COLUMNS = 9;
 
 	private void printMapReport(long[][][] map_report)
 	{
-		System.out.println("Map coding (bytes, 3 channels; smallest real coder marked <):");
-		System.out.println(String.format("      %-16s %10s %10s %10s %10s %10s %10s %10s %10s %12s",
-			"", "entries", "written", "strings", "deflate", "arith", "H0", "H|L", "H|LU", "delta"));
+		System.out.println("Map coding: size of each delta type's predictor map, in bytes, all 3 channels together");
+		System.out.println("  map entries    how many predictor choices the map holds");
+		System.out.println("  Actual coders (the smallest is marked <):");
+		System.out.println("    as saved     what Save writes: the smallest of unary strings, arithmetic, and context coding");
+		System.out.println("    strings      unary strings (StringMapper)");
+		System.out.println("    deflate      one byte per entry, zip-style Deflate");
+		System.out.println("    arithmetic   arithmetic coding with fixed frequencies");
+		System.out.println("  Estimates (theoretical minimum if each entry is coded knowing only...):");
+		System.out.println("    alone        ...how often each value occurs (arithmetic lands just above this;");
+		System.out.println("                 Deflate can go below it on long runs)");
+		System.out.println("    given left   ...plus the entry to its left");
+		System.out.println("    given l+up   ...plus the entries to its left and above (frame and block maps only; \"-\" otherwise).");
+		System.out.println("                 \"as saved\" can beat this: the context coder also uses the previous channel.");
+		System.out.println("  deltas         the deltas' size (unary strings), for scale");
+		System.out.println(String.format("  %-16s %11s |%10s %10s %10s %11s  |%10s %11s %11s  |%10s",
+			"delta type", "map entries", "as saved", "strings", "deflate", "arithmetic", "alone", "given left", "given l+up", "deltas"));
 		for(int t = 0; t < N_DELTA_TYPES; t++)
 		{
 			long[] sum = new long[MAP_REPORT_COLUMNS];
@@ -267,19 +293,19 @@ public class DeltaWriter2
 			String[] cell = new String[5];
 			for(int c = 1; c <= 4; c++) cell[c] = sum[c] + (c == best ? "<" : " ");
 			String hlu = (sum[8] < 0) ? "-" : String.valueOf(sum[8]);
-			System.out.println(String.format("      %-16s %10d %11s%11s%11s%11s %10d %10d %10s %12d",
+			System.out.println(String.format("  %-16s %11d |%11s%11s%11s%11s  |%10d %11d %11s  |%10d",
 				DeltaMapper.DELTA_TYPE_NAMES[FIRST_DELTA_TYPE + t], sum[0], cell[1], cell[2], cell[3], cell[4], sum[5], sum[7], hlu, sum[6]));
 		}
 		System.out.println();
 	}
 
 	// Bytes DeltaMapper.writeMap writes for this map.
-	private static int writtenMapBytes(int type, byte[] m, int xdim)
+	private static int writtenMapBytes(int type, byte[] m, byte[] previous, int xdim)
 	{
 		try
 		{
 			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-			DeltaMapper.writeMap(new DataOutputStream(bytes), type, m, null, xdim);
+			DeltaMapper.writeMap(new DataOutputStream(bytes), type, m, previous, xdim);
 			return bytes.size();
 		}
 		catch(IOException e) { return -1; }
@@ -478,32 +504,36 @@ public class DeltaWriter2
 		Integer[] order = new Integer[10];
 		for(int i = 0; i < 10; i++) order[i] = i;
 		Arrays.sort(order, (a, b) -> set_sum[a] - set_sum[b]);
-		System.out.println("Channel sets (ranked):");
+		System.out.println("Channel sets, smallest first: estimated bytes for each channel's deltas");
+		System.out.println("(entropy estimate, before real coding), and the set's total. <= marks the set used.");
+		System.out.println(String.format("      %-32s %10s %10s %10s %12s", "channel set", "1st", "2nd", "3rd", "total"));
 		for(int r = 0; r < 10; r++)
 		{
 			int idx = order[r];
 			int[] c = DeltaMapper.getChannels(idx);
 			System.out.println(String.format("  %2d. %-32s %10d %10d %10d %12d%s", r + 1, DeltaMapper.SET_NAMES[idx],
-				channel_sum[c[0]], channel_sum[c[1]], channel_sum[c[2]], set_sum[idx], (idx == min_set_id) ? " **" : ""));
+				channel_sum[c[0]] / 8, channel_sum[c[1]] / 8, channel_sum[c[2]] / 8, set_sum[idx] / 8, (idx == min_set_id) ? "  <=" : ""));
 		}
 		System.out.println();
 	}
 
-	// Prints the ranked delta-type table: delta bits and map bits (each
-	// with a * if compressStrings really compressed it) and their total,
-	// marking the selected type. Arrays are indexed 0-6.
+	// Prints the ranked delta-type table in bytes: deltas, map and total,
+	// marking the selected type. Arrays are indexed by delta_type -
+	// FIRST_DELTA_TYPE.
 	private void printDeltaTypeRanking(int[] delta_bits, int[] map_bits, boolean[] delta_compressed, boolean[] map_compressed, int[] total)
 	{
 		Integer[] order = new Integer[N_DELTA_TYPES];
 		for(int i = 0; i < N_DELTA_TYPES; i++) order[i] = i;
 		Arrays.sort(order, (a, b) -> total[a] - total[b]);
-		System.out.println("Delta types (ranked):");
+		System.out.println("Delta types, smallest first: bytes for the deltas (unary strings) and the predictor map");
+		System.out.println("(as Save writes it; scanline maps are tiny), all 3 channels. <= marks the type chosen.");
+		System.out.println(String.format("      %-16s %12s %12s %12s", "delta type", "deltas", "map", "total"));
 		for(int r = 0; r < N_DELTA_TYPES; r++)
 		{
 			int idx = order[r];
-			System.out.println(String.format("  %2d. %-16s delta: %12d%s      map: %12d%s      total: %12d%s",
-				r + 1, DeltaMapper.DELTA_TYPE_NAMES[FIRST_DELTA_TYPE + idx], delta_bits[idx], delta_compressed[idx] ? "*" : " ",
-				map_bits[idx], map_compressed[idx] ? "*" : " ", total[idx], (FIRST_DELTA_TYPE + idx == delta_type) ? " **" : ""));
+			System.out.println(String.format("  %2d. %-16s %12d %12d %12d%s",
+				r + 1, DeltaMapper.DELTA_TYPE_NAMES[FIRST_DELTA_TYPE + idx], delta_bits[idx] / 8,
+				map_bits[idx] / 8, total[idx] / 8, (FIRST_DELTA_TYPE + idx == delta_type) ? "  <=" : ""));
 		}
 		System.out.println();
 	}

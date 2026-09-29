@@ -110,6 +110,7 @@ public class DeltaWriter
 		int[][]     per_channel_map_bits         = new int[3][DeltaMapper.DELTA_TYPES];
 		boolean[][] per_channel_delta_compressed = new boolean[3][DeltaMapper.DELTA_TYPES];
 		boolean[][] per_channel_map_compressed   = new boolean[3][DeltaMapper.DELTA_TYPES];
+		byte[][][]  maps                         = new byte[3][DeltaMapper.DELTA_TYPES][];
 		ViewerSupport.parallel(3, i ->
 		{
 			for(int t = 0; t < DeltaMapper.DELTA_TYPES; t++)
@@ -120,10 +121,26 @@ public class DeltaWriter
 				per_channel_delta_compressed[i][t] = (StringMapper.getIterations(delta_bytes) & 15) > 0;
 				if(DeltaMapper.hasMap(t))
 				{
-					byte[] map_bytes = packAndCompress(widen((byte[]) result.get(2)));
-					per_channel_map_bits[i][t]       = StringMapper.getBitlength(map_bytes);
-					per_channel_map_compressed[i][t] = (StringMapper.getIterations(map_bytes) & 15) > 0;
+					maps[i][t] = (byte[]) result.get(2);
 				}
+			}
+		});
+
+		// Maps are ranked on what Save writes (DeltaMapper.writeMap), whose
+		// context form uses the previous channel's map, so they are sized
+		// once all three channels' maps exist.
+		ViewerSupport.parallel(DeltaMapper.DELTA_TYPES, t ->
+		{
+			if(!DeltaMapper.hasMap(t)) return;
+			for(int i = 0; i < 3; i++)
+			{
+				try
+				{
+					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+					DeltaMapper.writeMap(new DataOutputStream(bytes), t, maps[i][t], (i > 0) ? maps[i - 1][t] : null, new_xdim);
+					per_channel_map_bits[i][t] = 8 * bytes.size();
+				}
+				catch(IOException e) { per_channel_map_bits[i][t] = Integer.MAX_VALUE / 8; }
 			}
 		});
 
@@ -462,38 +479,35 @@ public class DeltaWriter
 		Integer[] order = new Integer[10];
 		for(int i = 0; i < 10; i++) order[i] = i;
 		Arrays.sort(order, (a, b) -> set_sum[a] - set_sum[b]);
-		System.out.println("Channel sets (ranked):");
+		System.out.println("Channel sets, smallest first: estimated bytes for each channel's deltas");
+		System.out.println("(entropy estimate, before real coding), and the set's total. <= marks the set used.");
+		System.out.println(String.format("      %-32s %10s %10s %10s %12s", "channel set", "1st", "2nd", "3rd", "total"));
 		for(int r = 0; r < 10; r++)
 		{
 			int idx = order[r];
 			int[] c = DeltaMapper.getChannels(idx);
 			System.out.println(String.format("  %2d. %-32s %10d %10d %10d %12d%s", r + 1, DeltaMapper.SET_NAMES[idx],
-				channel_sum[c[0]], channel_sum[c[1]], channel_sum[c[2]], set_sum[idx], (idx == min_set_id) ? " **" : ""));
+				channel_sum[c[0]] / 8, channel_sum[c[1]] / 8, channel_sum[c[2]] / 8, set_sum[idx] / 8, (idx == min_set_id) ? "  <=" : ""));
 		}
 		System.out.println();
 	}
 
-	// Prints the ranked delta-type table: rank, name, delta bits, map bits
-	// (types 6-13 only; blank for 0-5 so columns stay aligned) and the total
-	// used for selection, marking the selected type. A "*" means
-	// compressStrings() really compressed that bit string (delta or map).
+	// Prints the ranked delta-type table in bytes: deltas, map (types with
+	// a map only) and total, marking the selected type.
 	private void printDeltaTypeRanking(int[] delta_bits, int[] map_bits, boolean[] delta_compressed, boolean[] map_compressed, int[] total)
 	{
 		Integer[] order = new Integer[DeltaMapper.DELTA_TYPES];
 		for(int i = 0; i < DeltaMapper.DELTA_TYPES; i++) order[i] = i;
 		Arrays.sort(order, (a, b) -> total[a] - total[b]);
-		System.out.println("Delta types (ranked):");
+		System.out.println("Delta types, smallest first: bytes for the deltas and, for types that have one, the");
+		System.out.println("predictor map, all 3 channels. <= marks the type chosen.");
+		System.out.println(String.format("      %-16s %12s %12s %12s", "delta type", "deltas", "map", "total"));
 		for(int r = 0; r < DeltaMapper.DELTA_TYPES; r++)
 		{
-			int    idx = order[r];
-			String dc  = delta_compressed[idx] ? "*" : " ";
-			String sel = (idx == delta_type) ? " **" : "";
-			if(DeltaMapper.hasMap(idx))
-				System.out.println(String.format("  %2d. %-16s delta: %12d%s      map: %12d%s      total: %12d%s",
-					r + 1, DeltaMapper.DELTA_TYPE_NAMES[idx], delta_bits[idx], dc, map_bits[idx], map_compressed[idx] ? "*" : " ", total[idx], sel));
-			else
-				System.out.println(String.format("  %2d. %-16s delta: %12d%s                              total: %12d%s",
-					r + 1, DeltaMapper.DELTA_TYPE_NAMES[idx], delta_bits[idx], dc, total[idx], sel));
+			int idx = order[r];
+			System.out.println(String.format("  %2d. %-16s %12d %12s %12d%s",
+				r + 1, DeltaMapper.DELTA_TYPE_NAMES[idx], delta_bits[idx] / 8,
+				DeltaMapper.hasMap(idx) ? String.valueOf(map_bits[idx] / 8) : "", total[idx] / 8, (idx == delta_type) ? "  <=" : ""));
 		}
 		System.out.println();
 	}
