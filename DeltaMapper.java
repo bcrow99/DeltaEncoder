@@ -4218,12 +4218,13 @@ public class DeltaMapper
 	// Measured with FrameTest and BlockSetTest: 1-3% smaller than scanline
 	// 4 on most images; block sizes 8-16 do about equally well, and the
 	// Scanline 16 and Neighbours 8 sets best (a set without the plain
-	// neighbours, and one of gradients only, both did worse).
+	// neighbours, and one of gradients only, both did worse). The Blends 32
+	// set (SetSearch) adds another 0.5% lossless, 1% at Colour Resolution 3.
 	// =========================================================================
 
 	public static final int BLOCK_MIN = 4, BLOCK_MAX = 32, BLOCK_DEFAULT = 8;
 
-	public static final String[] BLOCK_SET_NAMES = {"Scanline 16", "No Neighbours 16", "Neighbours 8", "Basic 4"};
+	public static final String[] BLOCK_SET_NAMES = {"Scanline 16", "No Neighbours 16", "Neighbours 8", "Basic 4", "Blends 32"};
 
 	// Predictors, as ids for blockPredictor (a = left, b = above,
 	// c = above-left, d = above-right):
@@ -4233,6 +4234,8 @@ public class DeltaMapper
 	//  12 (3a+b)/4    13 (a+3b)/4    14 (3a+d)/4    15 (3b+a)/4
 	//  16 (a+d)/2     17 a+(b-c)/2   18 b+(a-c)/2   19 a+d-b
 	//  20 (a+b+d)/3   21 b+(d-c)/2
+	// A set entry of 32 or more is the average of two of these:
+	// 32 * (i + 1) + j means (P_i + P_j + 1) / 2 (see setPredictor).
 	private static final int[][] BLOCK_SETS = {
 		// Scanline 16: the scanline 4 set (pred16).
 		{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
@@ -4244,7 +4247,21 @@ public class DeltaMapper
 		{ 0, 1, 2, 3, 11, 4, 10, 9 },
 		// Basic 4: MED, gradient, and two averages -- a cheap map.
 		{ 11, 10, 4, 9 },
+		// Blends 32: picked by SetSearch from all 253 predictors and
+		// averages of two, greedily, on 7 test images at Colour Resolution
+		// 0 and 3 (tested leave-one-out: 0.5% smaller than the best of the
+		// sets above lossless, 1.1% at Colour Resolution 3; a few
+		// flat, synthetic images do better with the sets above).
+		{ 11, 564, 37, 275, 1, 165, 46, 267, 102, 169, 368, 7, 178, 3, 0, 176,
+		  66, 75, 6, 145, 50, 69, 168, 403, 307, 181, 101, 38, 80, 561, 231, 4 },
 	};
+
+	// Prediction for a set entry: a predictor, or the average of two.
+	public static int setPredictor(int entry, int a, int b, int c, int d)
+	{
+		if(entry < 32) return blockPredictor(entry, a, b, c, d);
+		return (blockPredictor(entry / 32 - 1, a, b, c, d) + blockPredictor(entry % 32, a, b, c, d) + 1) >> 1;
+	}
 
 	public static int blockPredictor(int id, int a, int b, int c, int d)
 	{
@@ -4367,31 +4384,42 @@ public class DeltaMapper
 		int    bw  = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
 		byte[] map = new byte[2 + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) set;
+		boolean blends = false;
+		for(int e : ids) if(e >= 32) blends = true;
+		int[] prim = new int[22];
 		blockEdges(src, dst, xdim, ydim);
 		for(int by = 0; by < bh; by++)
 			for(int bx = 0; bx < bw; bx++)
 			{
 				int  y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
 				int  x0 = 1 + bx * block, x1 = Math.min(xdim - 1, x0 + block);
-				long best_sum = Long.MAX_VALUE;
-				int  best = 0;
-				for(int p = 0; p < ids.length; p++)
-				{
-					long sum = 0;
-					for(int y = y0; y < y1; y++)
-						for(int x = x0; x < x1; x++)
+				long[] sums = new long[ids.length];
+				for(int y = y0; y < y1; y++)
+					for(int x = x0; x < x1; x++)
+					{
+						int k = y * xdim + x, a = src[k - 1], b = src[k - xdim], c = src[k - xdim - 1], d = src[k - xdim + 1];
+						if(blends)
 						{
-							int k = y * xdim + x;
-							sum += Math.abs(src[k] - blockPredictor(ids[p], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]));
+							// Each primitive once, then the set's entries from them.
+							for(int q = 0; q < 22; q++) prim[q] = blockPredictor(q, a, b, c, d);
+							for(int p = 0; p < ids.length; p++)
+							{
+								int e = ids[p];
+								int v = (e < 32) ? prim[e] : (prim[e / 32 - 1] + prim[e % 32] + 1) >> 1;
+								sums[p] += Math.abs(src[k] - v);
+							}
 						}
-					if(sum < best_sum) { best_sum = sum; best = p; }
-				}
+						else
+							for(int p = 0; p < ids.length; p++) sums[p] += Math.abs(src[k] - blockPredictor(ids[p], a, b, c, d));
+					}
+				int best = 0;
+				for(int p = 1; p < ids.length; p++) if(sums[p] < sums[best]) best = p;
 				map[2 + by * bw + bx] = (byte) best;
 				for(int y = y0; y < y1; y++)
 					for(int x = x0; x < x1; x++)
 					{
 						int k = y * xdim + x;
-						dst[k] = src[k] - blockPredictor(ids[best], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+						dst[k] = src[k] - setPredictor(ids[best], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
 					}
 			}
 		int sum = 0;
@@ -4421,7 +4449,7 @@ public class DeltaMapper
 			{
 				k++;
 				int id = ids[map[row + (x - 1) / block]];
-				dst[k] = delta[k] + blockPredictor(id, dst[k - 1], dst[k - xdim], dst[k - xdim - 1], dst[k - xdim + 1]);
+				dst[k] = delta[k] + setPredictor(id, dst[k - 1], dst[k - xdim], dst[k - xdim - 1], dst[k - xdim + 1]);
 			}
 			k++;
 			dst[k] = dst[k - 1] + delta[k];
@@ -4654,6 +4682,8 @@ public class DeltaMapper
 		if(delta_type == 13)
 		{
 			byte block = in.readByte(), set = in.readByte();
+			if(set < 0 || set >= BLOCK_SET_NAMES.length || block < BLOCK_MIN || block > BLOCK_MAX)
+				throw new java.io.IOException("Block map with predictor set " + set + " and block size " + block + ": not one this version reads.");
 			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, 2, previous.length), blocksAcross(xdim, block));
 			byte[] map  = new byte[body.length + 2];
 			map[0] = block; map[1] = set;
