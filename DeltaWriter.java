@@ -37,6 +37,9 @@ public class DeltaWriter
 	byte scanline5_variant = 0;
 	int  block_size = DeltaMapper.BLOCK_DEFAULT;   // block map (delta type 13): block width/height
 	int  block_set  = 0;                           // block map: predictor set (DeltaMapper.BLOCK_SET_NAMES)
+	JSpinner       block_spinner;
+	JRadioButton[] block_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length];
+	boolean        updating = false;               // set while the program moves the block controls
 
 	// ---- Image pyramid (detail-preserving average/expand) -------------------
 	// pixel_pyramid: number of shrink/expand levels (0 = none), capped at 2:
@@ -154,6 +157,64 @@ public class DeltaWriter
 			str_star_bits[i] = StringMapper.getBitlength((byte[]) StringMapper.getStringList(delta.clone(), true).get(3));
 		});
 		compress_type = (str_star_bits[0] + str_star_bits[1] + str_star_bits[2] < str_bits[0] + str_bits[1] + str_bits[2]) ? 2 : 1;
+		if(delta_type == 13) searchBlockSettings(qc, size, channel_id);
+	}
+
+	// ---- Block map settings --------------------------------------------------
+
+	// Picks block_size and block_set for the current settings by coding with
+	// each candidate (DeltaMapper.findBestBlock, Context-coded sizes), in the
+	// background with the other menus disabled, then applies.
+	private void findBlockSettings()
+	{
+		view.setMenusEnabled(false);
+		view.setStatus("finding block settings\u2026");
+		new SwingWorker<Void,Void>()
+		{
+			@Override protected Void doInBackground()
+			{
+				int[]   size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+				int[][] qc   = quantizedChannels(size, true);
+				searchBlockSettings(qc, size, DeltaMapper.getChannels(min_set_id));
+				return null;
+			}
+			@Override protected void done()
+			{
+				try { get(); } catch(Exception e) { System.out.println("Find block settings: " + e); }
+				view.setMenusEnabled(true);
+				datatype_menu.setEnabled(entropy_type != 4);
+				view.setStatus(null);
+				showBlockSettings();
+				apply();
+			}
+		}.execute();
+	}
+
+	// With a pixel pyramid the block map codes the top level, so the search
+	// does too.
+	private void searchBlockSettings(int[][] qc, int[] size, int[] channel_id)
+	{
+		long    start = System.nanoTime();
+		int[]   top   = DeltaReader.getPyramidSize(size[0], size[1], pixel_pyramid);
+		int[][] ch    = new int[3][];
+		for(int i = 0; i < 3; i++)
+			ch[i] = (pixel_pyramid == 0) ? qc[channel_id[i]] : shrinkPyramid(qc[channel_id[i]], size[0], size[1], new boolean[pixel_pyramid][]);
+		long[][] bytes = new long[DeltaMapper.BLOCK_SET_NAMES.length][DeltaMapper.BLOCK_SEARCH_SIZES.length];
+		int[]    best  = DeltaMapper.findBestBlock(ch, top[0], top[1], bytes);
+		block_size = best[0]; block_set = best[1];
+		System.out.print(DeltaMapper.getBlockTable(bytes, best));
+		System.out.println("Block search took " + ViewerSupport.formatDuration(System.nanoTime() - start));
+		System.out.println();
+	}
+
+	// Moves the block controls to block_size and block_set without
+	// triggering an apply.
+	private void showBlockSettings()
+	{
+		updating = true;
+		block_spinner.setValue(block_size);
+		block_button[block_set].setSelected(true);
+		updating = false;
 	}
 
 	// The six candidate channels after smoothing (if asked), resizing and
@@ -258,17 +319,28 @@ public class DeltaWriter
 		{
 			final int dt = i;
 			delta_button[i] = new JRadioButtonMenuItem(dnames[i]); dg.add(delta_button[i]); delta_menu.add(delta_button[i]);
-			delta_button[i].addActionListener(e -> { if(delta_type != dt) { delta_type = dt; apply(); } });
+			delta_button[i].addActionListener(e ->
+			{
+				if(delta_type == dt) return;
+				delta_type = dt;
+				if(dt == 13) findBlockSettings(); else apply();
+			});
 		}
 		delta_button[delta_type].setSelected(true);
 
 		// Block map settings (delta type 13); a change re-applies only when
-		// the block map is selected.
+		// the block map is selected. Choosing Block Map, or Find Best Block
+		// Settings, picks both by coding with each candidate (see
+		// findBlockSettings).
 		delta_menu.addSeparator();
+		JSpinner[] sp = new JSpinner[1];
 		delta_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
-			v -> { block_size = v; if(delta_type == 13) apply(); }));
+			v -> { block_size = v; if(delta_type == 13 && !updating) apply(); }, sp)); block_spinner = sp[0];
 		delta_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", DeltaMapper.BLOCK_SET_NAMES, block_set,
-			v -> { block_set = v; if(delta_type == 13) apply(); }));
+			v -> { block_set = v; if(delta_type == 13 && !updating) apply(); }, block_button));
+		JMenuItem find_item = new JMenuItem("Find Best Block Settings");
+		find_item.addActionListener(e -> findBlockSettings());
+		delta_menu.add(find_item);
 
 		// entropy_type equals the button index: 0 LZ77, 1 Huffman, 2 Arithmetic,
 		// 3 Adaptive, 4 Context.
@@ -351,6 +423,7 @@ public class DeltaWriter
 				datatype_menu.setEnabled(entropy_type != 4);
 				delta_button[delta_type].setSelected(true);
 				compress_button[compress_type == 0 ? 0 : 1].setSelected(true);
+				showBlockSettings();
 				apply();
 			}
 		}.execute();
