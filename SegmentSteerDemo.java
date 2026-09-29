@@ -4,7 +4,7 @@ import java.util.concurrent.*;
 
 /**
  * Compresses a square (dimension x dimension) segment of symbol data via
- * SteeredArithmeticMapper's target-steering scheme, using true concurrent
+ * ProbabilisticMapper's target-steering scheme, using true concurrent
  * Java threads (up to a configurable core count) to try several candidate
  * target fractions in parallel within a time budget -- since not every
  * (histogram, sequence, target) combination admits an exact steering path
@@ -66,8 +66,8 @@ public class SegmentSteerDemo
 		for (FractionMapper.BigFraction target : candidateTargets)
 		{
 			futures.add(pool.submit(() -> {
-				SteeredArithmeticMapper.SteerResult r =
-					SteeredArithmeticMapper.steerEncode(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
+				ProbabilisticMapper.SteerResult r =
+					ProbabilisticMapper.steerEncode(segment, freq, target, maxBacktracksPerAttempt, deadlineNanos);
 				return new Object[]{ target, r };
 			}));
 		}
@@ -108,14 +108,14 @@ public class SegmentSteerDemo
 			return new CompressResult(false, null, null, -1, elapsedMillis, -1);
 
 		FractionMapper.BigFraction target = (FractionMapper.BigFraction) winner[0];
-		SteeredArithmeticMapper.SteerResult r = (SteeredArithmeticMapper.SteerResult) winner[1];
-		double bits = SteeredArithmeticMapper.serializedOrderingBits(r.orderings);
+		ProbabilisticMapper.SteerResult r = (ProbabilisticMapper.SteerResult) winner[1];
+		double bits = ProbabilisticMapper.serializedOrderingBits(r.orderings);
 		return new CompressResult(true, target, r.orderings, r.backtracks, elapsedMillis, bits);
 	}
 
 	public static int[] decompressSegment(int[][] orderings, int[] freq, FractionMapper.BigFraction target, int n)
 	{
-		return SteeredArithmeticMapper.steerDecode(orderings, freq, target, n);
+		return ProbabilisticMapper.steerDecode(orderings, freq, target, n);
 	}
 
 	// =========================================================================
