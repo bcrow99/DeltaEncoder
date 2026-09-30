@@ -21,14 +21,11 @@ public class DeltaReader
 	// 3 String* from DeltaWriter2 (read like 2).
 	int     xdim, ydim;
 	int     pixel_shift, pixel_quant, set_id, delta_type, compress_type, entropy_type, scanline5_variant;
-	int     pixel_pyramid;
-	boolean use_saddle;
 
 	// ---- Per channel, as read -----------------------------------------------
 	int[]         min = new int[3], init = new int[3], delta_min = new int[3], length = new int[3], compressed_length = new int[3];
 	int[][]       table    = new int[3][];
 	byte[][]      map      = new byte[3][];
-	boolean[][][] sign_bit = new boolean[3][][];  // pyramid sign bits, one bitmap per level
 	byte[][]      coded    = new byte[3][];       // LZ77 (already inflated), Huffman and Adaptive payloads
 	int[][]       delta    = new int[3][];        // Context (4): decoded while reading
 	byte[][]      huffman_lengths = new byte[3][];
@@ -99,8 +96,12 @@ public class DeltaReader
 		compress_type     = in.readByte();
 		entropy_type      = in.readByte();
 		scanline5_variant = in.readByte();
-		pixel_pyramid     = in.readByte();
-		use_saddle        = in.readByte() != 0;
+		// Pixel pyramid levels and saddle flag: DeltaWriter no longer writes
+		// the pyramid, so both are 0; files that used it are refused.
+		int pixel_pyramid = in.readByte();
+		in.readByte();
+		if(pixel_pyramid != 0)
+			throw new IOException(filename + " was saved with the pixel pyramid (Average), which this reader no longer supports.");
 
 		System.out.println("Image:        " + xdim + " x " + ydim);
 		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
@@ -117,13 +118,11 @@ public class DeltaReader
 			length[i]            = in.readInt();
 			compressed_length[i] = in.readInt();
 			in.readByte();   // iterations (the string carries them too)
-			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, getPyramidSize(DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0], DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[1], pixel_pyramid)[0]);
-			if(pixel_pyramid != 0) sign_bit[i] = readSignBits(in, pixel_pyramid);
+			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0]);
 			if(entropy_type == 4)        // Context: decoded here, in channel order
 			{
 				int[] size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
-				int[] top  = getPyramidSize(size[0], size[1], pixel_pyramid);
-				delta[i] = DeltaMapper.readContextDeltas(in, top[0] * top[1], Arrays.copyOf(delta, i), top[0]);
+				delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
 				continue;
 			}
 			if(compress_type > 0) table[i] = DeltaMapper.readTable(in);
@@ -161,32 +160,14 @@ public class DeltaReader
 		}
 	}
 
-	// DeltaWriter's sign bits: one bitmap per pyramid level, each an int
-	// length, then (length+7)/8 bytes, bit q in byte q>>3, bit q&7.
-	private static boolean[][] readSignBits(DataInputStream in, int levels) throws IOException
-	{
-		boolean[][] sign_bits = new boolean[levels][];
-		for(int lvl = 0; lvl < levels; lvl++)
-		{
-			boolean[] bits   = new boolean[in.readInt()];
-			byte[]    packed = new byte[(bits.length + 7) / 8];
-			in.readFully(packed);
-			for(int q = 0; q < bits.length; q++) bits[q] = (packed[q >> 3] & (1 << (q & 7))) != 0;
-			sign_bits[lvl] = bits;
-		}
-		return sign_bits;
-	}
-
-	// Entropy decode -> deltas (bytes or unary strings) -> channel values,
-	// then the pyramid expand if there is one.
+	// Entropy decode -> deltas (bytes or unary strings) -> channel values.
 	private int[] decodeChannel(int i)
 	{
 		try
 		{
 			int[]  size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
-			int[]  top  = getPyramidSize(size[0], size[1], pixel_pyramid);
-			int    n    = top[0] * top[1];
-			if(entropy_type == 4) return toChannel(i, delta[i], size, top);
+			int    n    = size[0] * size[1];
+			if(entropy_type == 4) return toChannel(i, delta[i], size);
 			int    payload_length = (compress_type == 0) ? n : StringMapper.getBytelength(compressed_length[i]);
 			byte[] payload;
 			if(entropy_type == 0)      payload = coded[i];
@@ -216,47 +197,16 @@ public class DeltaReader
 				for(int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 			}
 
-			return toChannel(i, delta, size, top);
+			return toChannel(i, delta, size);
 		}
 		catch(Exception e) { throw new RuntimeException("channel " + i + ": " + e, e); }
 	}
 
-	private int[] toChannel(int i, int[] delta, int[] size, int[] top)
+	private int[] toChannel(int i, int[] delta, int[] size)
 	{
-		int[]   channel    = DeltaMapper.getValuesFromDeltas(delta, top[0], top[1], init[i], delta_type, map[i], scanline5_variant);
-		boolean difference = DeltaMapper.getChannels(set_id)[i] > 2;
-		if(pixel_pyramid != 0) channel = expandPyramid(channel, size[0], size[1], sign_bit[i], difference, use_saddle);
-		if(difference) for(int k = 0; k < channel.length; k++) channel[k] += min[i];
+		int[] channel = DeltaMapper.getValuesFromDeltas(delta, size[0], size[1], init[i], delta_type, map[i], scanline5_variant);
+		if(DeltaMapper.getChannels(set_id)[i] > 2) for(int k = 0; k < channel.length; k++) channel[k] += min[i];
 		return channel;
-	}
-
-	// ---- Image pyramid (see DeltaWriter) ------------------------------------
-
-	// Size of the top pyramid level, the size the deltas are coded at.
-	static int[] getPyramidSize(int xdim, int ydim, int levels)
-	{
-		if(levels == 0) return new int[] {xdim, ydim};
-		int mult = 1 << levels;
-		return new int[] {ImageMapper.padTo(xdim, mult) >> levels, ImageMapper.padTo(ydim, mult) >> levels};
-	}
-
-	// Inverse of DeltaWriter.shrinkPyramid (DeltaWriter's preview uses it
-	// too): expands the top level back to xdim x ydim with sign-bit
-	// correction at each level. Difference channels are offset by their minimum but not rescaled, so
-	// they range 0-510 (clamping them to 255 would corrupt high-contrast areas).
-	static int[] expandPyramid(int[] top, int xdim, int ydim, boolean[][] sign_bits, boolean difference, boolean saddle)
-	{
-		int levels = sign_bits.length, mult = 1 << levels;
-		int max_value = difference ? 510 : 255;
-		int[] level = top;
-		int   level_xdim = ImageMapper.padTo(xdim, mult) >> levels;
-		for(int lvl = levels - 1; lvl >= 0; lvl--)
-		{
-			int[] predicted = saddle ? ImageMapper.expandGradientSaddle(level, level_xdim, max_value) : ImageMapper.expandGradient(level, level_xdim, max_value);
-			level = ImageMapper.refineWithSignBits(level, predicted, sign_bits[lvl], level_xdim * 2, max_value);
-			level_xdim *= 2;
-		}
-		return ImageMapper.crop(level, ImageMapper.padTo(xdim, mult), ImageMapper.padTo(ydim, mult), xdim, ydim);
 	}
 
 	// Recombine the channel set, then resize, then shift.

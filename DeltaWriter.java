@@ -41,26 +41,7 @@ public class DeltaWriter
 	JRadioButton[] block_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length];
 	boolean        updating = false;               // set while the program moves the block controls
 
-	// ---- Image pyramid (detail-preserving average/expand) -------------------
-	// pixel_pyramid: number of shrink/expand levels (0 = none), capped at 2:
-	// deeper levels produced block artifacts even with sign-bit correction.
-	// Applied after every other quantizing step, only to the 3 selected
-	// channels; channel-set selection still uses the full-resolution channels.
-	//
-	// use_saddle: use ImageMapper.expandGradientSaddle (adds the cross-
-	// derivative term) instead of plain expandGradient at every expand step.
-	//
-	// Sign bits (one bit per pixel, restoring detail lost by averaging) are
-	// applied at every level: level(k-1) is rebuilt from level(k) with
-	// level(k)'s sign bits, and that corrected level becomes the reference
-	// for the next. Each level's sign-bit map is 1/4 the size of the one
-	// before it.
-	int     pixel_pyramid = 0;
-	boolean use_saddle    = false;
-
 	JSlider smooth_slider, smooth2_slider, pquant_slider, pshift_slider, corr_slider, segment_slider;
-	java.util.function.IntConsumer pyramid_setter;
-	JCheckBox saddle_checkbox;
 	JRadioButtonMenuItem[] delta_button, entropy_button;
 	JRadioButton[] compress_button, int_radio_btns;
 	JMenu          datatype_menu;   // greyed out for Context, which codes the deltas directly
@@ -75,7 +56,6 @@ public class DeltaWriter
 	int[][]       delta_list = new int[3][];     // the deltas themselves, for the Context type
 	int           delta_xdim;                    // their row width
 	byte[][]      map      = new byte[3][];      // delta-type maps (types 6-13)
-	boolean[][][] sign_bit = new boolean[3][][]; // pyramid sign bits, one bitmap per level
 
 	long    file_length;
 	boolean applied = false;   // the last Apply finished; Save needs it
@@ -207,17 +187,13 @@ public class DeltaWriter
 		}.execute();
 	}
 
-	// With a pixel pyramid the block map codes the top level, so the search
-	// does too.
 	private void searchBlockSettings(int[][] qc, int[] size, int[] channel_id)
 	{
 		long    start = System.nanoTime();
-		int[]   top   = DeltaReader.getPyramidSize(size[0], size[1], pixel_pyramid);
 		int[][] ch    = new int[3][];
-		for(int i = 0; i < 3; i++)
-			ch[i] = (pixel_pyramid == 0) ? qc[channel_id[i]] : shrinkPyramid(qc[channel_id[i]], size[0], size[1], new boolean[pixel_pyramid][]);
+		for(int i = 0; i < 3; i++) ch[i] = qc[channel_id[i]];
 		long[][] bytes = new long[DeltaMapper.BLOCK_SET_NAMES.length][DeltaMapper.BLOCK_SEARCH_SIZES.length];
-		int[]    best  = DeltaMapper.findBestBlock(ch, top[0], top[1], bytes);
+		int[]    best  = DeltaMapper.findBestBlock(ch, size[0], size[1], bytes);
 		block_size = best[0]; block_set = best[1];
 		System.out.print(DeltaMapper.getBlockTable(bytes, best));
 		System.out.println("Block search took " + ViewerSupport.formatDuration(System.nanoTime() - start));
@@ -291,8 +267,8 @@ public class DeltaWriter
 		JMenuItem reset_item = new JMenuItem("Reset");
 		reset_item.addActionListener(e ->
 		{
-			smooth_level = 0; smooth2_level = 0; pixel_quant = 0; pixel_shift = 0; correction = 0; pixel_pyramid = 0;
-			smooth_slider.setValue(0); smooth2_slider.setValue(0); pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); pyramid_setter.accept(0);
+			smooth_level = 0; smooth2_level = 0; pixel_quant = 0; pixel_shift = 0; correction = 0;
+			smooth_slider.setValue(0); smooth2_slider.setValue(0); pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0);
 			apply();
 		});
 		file_menu.add(reset_item);
@@ -304,10 +280,6 @@ public class DeltaWriter
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Smooth2", 0, 10, smooth2_level, v -> { smooth2_level = v; apply(); }, ss)); smooth2_slider = ss[0];
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; apply(); }, ss)); pquant_slider = ss[0];
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; apply(); }, ss)); pshift_slider = ss[0];
-		java.util.function.IntConsumer[] ps = new java.util.function.IntConsumer[1];
-		quant_menu.add(makePyramidDialog(frame, "Average", 0, 2, pixel_pyramid, use_saddle,
-			v -> { pixel_pyramid = v; apply(); },
-			v -> { use_saddle = v; apply(); }, ps)); pyramid_setter = ps[0];
 		// Error Correction (below a separator) is not a quantizing step: it blends
 		// the preview back toward the original by correction/10. Preview only;
 		// the saved file is unaffected.
@@ -390,37 +362,6 @@ public class DeltaWriter
 		panel.add(a); panel.add(b); dialog.add(panel);
 		JMenuItem item = new JMenuItem(title);
 		item.addActionListener(e -> { Point p = parent.getLocation(); dialog.setLocation(p.x, p.y - 80); dialog.pack(); dialog.setVisible(true); });
-		return item;
-	}
-
-	// Dialog for pixel_pyramid (lo-hi): a read-only value field with +/-
-	// buttons, plus the "Use Saddle" checkbox. setter_ref receives a setter
-	// the caller can use later (e.g. from Reset) to change the value.
-	private JMenuItem makePyramidDialog(JFrame parent, String title, int lo, int hi, int init, boolean saddle_init,
-	                                    java.util.function.IntConsumer on_value_change,
-	                                    java.util.function.Consumer<Boolean> on_saddle_change,
-	                                    java.util.function.IntConsumer[] setter_ref)
-	{
-		JMenuItem item = new JMenuItem(title); JDialog dialog = new JDialog(parent, title);
-		int[] value = {init};
-		JTextField field = new JTextField(3); field.setText(" " + init + " "); field.setEditable(false); field.setHorizontalAlignment(JTextField.CENTER);
-
-		java.util.function.IntConsumer setter = v -> { value[0] = Math.max(lo, Math.min(hi, v)); field.setText(" " + value[0] + " "); on_value_change.accept(value[0]); };
-		if(setter_ref != null) setter_ref[0] = setter;
-
-		JButton minus_button = new JButton("-"), plus_button = new JButton("+");
-		minus_button.addActionListener(e -> { if(value[0] > lo) setter.accept(value[0] - 1); });
-		plus_button.addActionListener(e -> { if(value[0] < hi) setter.accept(value[0] + 1); });
-
-		JPanel field_panel = new JPanel(); field_panel.add(field);
-		JPanel button_panel = new JPanel(); button_panel.add(minus_button); button_panel.add(plus_button);
-		saddle_checkbox = new JCheckBox("Use Saddle", saddle_init);
-		saddle_checkbox.addActionListener(e -> on_saddle_change.accept(saddle_checkbox.isSelected()));
-
-		JPanel panel = new JPanel(new GridLayout(3, 1));
-		panel.add(field_panel); panel.add(button_panel); panel.add(saddle_checkbox);
-		dialog.add(panel);
-		item.addActionListener(e -> { Point p = parent.getLocation(); dialog.setLocation(p.x, p.y - 100); dialog.pack(); dialog.setVisible(true); });
 		return item;
 	}
 
@@ -512,27 +453,6 @@ public class DeltaWriter
 		System.out.println();
 	}
 
-	// ---- Image pyramid --------------------------------------------------------
-
-	// Pads c to a multiple of 2^levels, then shrinks it levels times;
-	// sign_bits[lvl] compares level lvl with level lvl+1. Returns the top
-	// level (DeltaReader.expandPyramid undoes it).
-	private static int[] shrinkPyramid(int[] c, int xdim, int ydim, boolean[][] sign_bits)
-	{
-		int levels = sign_bits.length, mult = 1 << levels;
-		int padded_xdim = ImageMapper.padTo(xdim, mult), padded_ydim = ImageMapper.padTo(ydim, mult);
-		int[] level = ImageMapper.padEdgeReplicate(c, xdim, ydim, padded_xdim, padded_ydim);
-		int   level_xdim = padded_xdim;
-		for(int lvl = 0; lvl < levels; lvl++)
-		{
-			int[] next = ImageMapper.shrinkAvg(level, level_xdim);
-			sign_bits[lvl] = ImageMapper.buildGeqBits(level, next, level_xdim);
-			level = next;
-			level_xdim /= 2;
-		}
-		return level;
-	}
-
 	// ---- Apply --------------------------------------------------------------
 
 	// Quantizes, picks the channel set, codes the deltas (what Save writes),
@@ -566,27 +486,18 @@ public class DeltaWriter
 		final boolean enable_int = int_allowed;
 		SwingUtilities.invokeLater(() -> { for(JRadioButton b : int_radio_btns) b.setEnabled(enable_int); });
 
-		int[] top = DeltaReader.getPyramidSize(new_xdim, new_ydim, pixel_pyramid);
-		int   top_xdim = top[0], top_ydim = top[1];
-
-		// The 3 chosen channels in parallel: pyramid, deltas, encode, then
-		// decode back. Each writes only its own slot.
-		int[][]       new_table    = new int[3][];
-		byte[][]      new_payload  = new byte[3][];
-		byte[][]      new_map      = new byte[3][];
-		boolean[][][] new_sign_bit = new boolean[3][][];
-		int[][]       new_delta    = new int[3][];
-		int[][]       dc           = new int[3][];
+		// The 3 chosen channels in parallel: deltas, encode, then decode
+		// back. Each writes only its own slot.
+		int[][]  new_table   = new int[3][];
+		byte[][] new_payload = new byte[3][];
+		byte[][] new_map     = new byte[3][];
+		int[][]  new_delta   = new int[3][];
+		int[][]  dc          = new int[3][];
 		ViewerSupport.parallel(3, i ->
 		{
 			int   j = channel_id[i];
 			int[] c = qc[j];
-			if(pixel_pyramid != 0)
-			{
-				new_sign_bit[i] = new boolean[pixel_pyramid][];
-				c = shrinkPyramid(c, new_xdim, new_ydim, new_sign_bit[i]);
-			}
-			ArrayList result = DeltaMapper.getDeltas(c, top_xdim, top_ydim, delta_type, scanline5_variant, block_size, block_set);
+			ArrayList result = DeltaMapper.getDeltas(c, new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set);
 			int[] delta = (int[]) result.get(1);
 			new_delta[i] = delta.clone();
 			if(DeltaMapper.hasMap(delta_type)) new_map[i] = (byte[]) result.get(2);
@@ -614,22 +525,21 @@ public class DeltaWriter
 			int[] d2;
 			if(compress_type == 0)
 			{
-				d2 = new int[top_xdim * top_ydim];
+				d2 = new int[new_xdim * new_ydim];
 				for(int k = 1; k < d2.length; k++) d2[k] = (new_payload[i][k] & 0xFF) + channel_delta_min[j];
 			}
 			else
 			{
 				byte[] str = StringMapper.decompressStrings(new_payload[i]);
-				d2 = StringMapper.unpackStrings(str, new_table[i], top_xdim * top_ydim, channel_length[j]);
+				d2 = StringMapper.unpackStrings(str, new_table[i], new_xdim * new_ydim, channel_length[j]);
 				d2[0] = 0; for(int k = 1; k < d2.length; k++) d2[k] += channel_delta_min[j];
 			}
-			int[] ch = DeltaMapper.getValuesFromDeltas(d2, top_xdim, top_ydim, channel_init[j], delta_type, new_map[i], scanline5_variant);
-			if(pixel_pyramid != 0) ch = DeltaReader.expandPyramid(ch, new_xdim, new_ydim, new_sign_bit[i], j > 2, use_saddle);
+			int[] ch = DeltaMapper.getValuesFromDeltas(d2, new_xdim, new_ydim, channel_init[j], delta_type, new_map[i], scanline5_variant);
 			if(j > 2) for(int k = 0; k < ch.length; k++) ch[k] += channel_min[j];
 			dc[i] = ch;
 		});
-		table = new_table; payload = new_payload; map = new_map; sign_bit = new_sign_bit;
-		delta_list = new_delta; delta_xdim = top_xdim;
+		table = new_table; payload = new_payload; map = new_map;
+		delta_list = new_delta; delta_xdim = new_xdim;
 
 		// Like DeltaReader: recombine the channels first, then resize, then
 		// shift. Resizing each channel before recombining gives different
@@ -679,15 +589,15 @@ public class DeltaWriter
 		}
 
 		// Header, then per channel: min, init, delta min, bit lengths,
-		// iterations, map (types 6-13), sign bits (pyramid), string table
-		// (String and String*, not Context), then the entropy-coded payload.
+		// iterations, map (types 6-13), string table (String and String*, not
+		// Context), then the entropy-coded payload.
 		private void save(DataOutputStream out) throws IOException
 		{
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
 			out.writeShort(image_xdim); out.writeShort(image_ydim); out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 			out.writeByte(min_set_id); out.writeByte(delta_type); out.writeByte(compress_type); out.writeByte(entropy_type); out.writeByte(scanline5_variant);
-			out.writeByte(pixel_pyramid); out.writeByte(use_saddle ? 1 : 0);
+			out.writeByte(0); out.writeByte(0);   // pixel pyramid levels and saddle: no longer used
 
 			long t0 = System.nanoTime();
 			byte[][] coded = (entropy_type == 4) ? contextCode(delta_list, delta_xdim) : entropyCode(payload, entropy_type, pixel_segment);
@@ -699,24 +609,9 @@ public class DeltaWriter
 				out.writeInt(channel_min[j]); out.writeInt(channel_init[j]); out.writeInt(channel_delta_min[j]);
 				out.writeInt(channel_length[j]); out.writeInt(channel_compressed_length[j]); out.writeByte(channel_iterations[i]);
 				if(DeltaMapper.hasMap(delta_type)) DeltaMapper.writeMap(out, delta_type, map[i], (i > 0) ? map[i - 1] : null, delta_xdim);
-				if(pixel_pyramid != 0) writeSignBits(out, sign_bit[i]);
 				if(compress_type > 0 && entropy_type != 4) DeltaMapper.writeTable(out, table[i]);
 				out.write(coded[i]);
 			}
-		}
-	}
-
-	// Sign bits, one bitmap per pyramid level: int length, then
-	// (length+7)/8 bytes, bit q in byte q>>3, bit q&7. The reader takes the
-	// number of levels from the header.
-	private static void writeSignBits(DataOutputStream out, boolean[][] sign_bits) throws IOException
-	{
-		for(boolean[] bits : sign_bits)
-		{
-			byte[] packed = new byte[(bits.length + 7) / 8];
-			for(int q = 0; q < bits.length; q++) if(bits[q]) packed[q >> 3] |= (byte)(1 << (q & 7));
-			out.writeInt(bits.length);
-			out.write(packed);
 		}
 	}
 
