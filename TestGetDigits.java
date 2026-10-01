@@ -33,9 +33,11 @@ public class TestGetDigits
 		FractionMapper.BigFraction reconstructed = FractionMapper.getRationalNumber(staticDigits, repeatingDigits);
 		System.out.println("\nReconstructed fraction: " + reconstructed);
 
-		int remainder = Math.abs(a) % Math.abs(b);
+		// In long arithmetic, so Integer.MIN_VALUE works (Math.abs of it is
+		// still negative as an int).
+		long remainder = Math.abs((long) a) % Math.abs((long) b);
 		FractionMapper.BigFraction expected = new FractionMapper.BigFraction(
-			BigInteger.valueOf(remainder), BigInteger.valueOf(Math.abs(b)));
+			BigInteger.valueOf(remainder), BigInteger.valueOf(Math.abs((long) b)));
 
 		System.out.println("Expected (|a| % |b|) / |b|: " + expected);
 		System.out.println("Got the integers back: " + reconstructed.equals(expected));

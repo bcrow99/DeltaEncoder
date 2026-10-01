@@ -3,7 +3,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.BitSet;
 
-// version 2.0 (added more infinity handling)
+// version 2.1 (fixed integer overflow in getDecimalDigits and
+// getBinaryDigits(long, long); see their comments)
 
 
 /**
@@ -207,16 +208,20 @@ public class FractionMapper
 	 *         terminates (e.g. "125", "" for 1/8 = 0.125). Neither empty
 	 *         means a mixed case (e.g. "1", "6" for 1/6 = 0.1(6)).
 	 * @throws ArithmeticException if b == 0
+	 *
+	 * Works in long arithmetic: a and b are ints, so remainder * 10 (at
+	 * most 10 * (2^31 - 1)) always fits, and so does Math.abs of
+	 * Integer.MIN_VALUE. (In int arithmetic, remainder * 10 overflowed for
+	 * any b above 214,748,364, giving wrong digits, and Math.abs left
+	 * Integer.MIN_VALUE negative.)
 	 */
 	public static ArrayList<String> getDecimalDigits(int a, int b)
 	{
 		if (b == 0)
 			throw new ArithmeticException("division by zero");
 
-		a = Math.abs(a);
-		b = Math.abs(b);
-
-		int remainder = a % b;
+		long divisor   = Math.abs((long) b);
+		long remainder = Math.abs((long) a) % divisor;
 
 		ArrayList<String> result = new ArrayList<>();
 		if (remainder == 0)
@@ -230,15 +235,15 @@ public class FractionMapper
 		// maps a remainder value to the digit-position at which it was
 		// first seen, so we can find exactly where the cycle starts
 		// once (if) a remainder repeats.
-		HashMap<Integer, Integer> seenAt = new HashMap<>();
+		HashMap<Long, Integer> seenAt = new HashMap<>();
 
 		while (remainder != 0 && !seenAt.containsKey(remainder))
 		{
 			seenAt.put(remainder, digits.length());
 			remainder *= 10;
-			int digit = remainder / b;
+			int digit = (int) (remainder / divisor);
 			digits.append((char) ('0' + digit));
-			remainder = remainder % b;
+			remainder = remainder % divisor;
 		}
 
 		String staticDigits, repeatingDigits;
@@ -356,11 +361,23 @@ public class FractionMapper
 		}
 	}
 
-	/** long overload of getBinaryDigits -- identical algorithm, long arithmetic. */
+	/** long overload of getBinaryDigits -- the same digits as the BigInteger
+	 *  version, in long arithmetic.
+	 *
+	 *  Doubling the remainder can't overflow: remainder < b, and instead of
+	 *  computing 2 * remainder and comparing it with b, this compares
+	 *  remainder with b - remainder (2r >= b exactly when r >= b - r) and
+	 *  takes the new remainder as r - (b - r) or r + r, which are both
+	 *  below b. Long.MIN_VALUE has no positive long, so either argument
+	 *  being MIN_VALUE goes to the BigInteger version. (Previously
+	 *  remainder * 2 overflowed for b above 2^62, and Math.abs left
+	 *  Long.MIN_VALUE negative, which could loop until out of memory.) */
 	public static BinaryDigits[] getBinaryDigits(long a, long b)
 	{
 		if (b == 0)
 			throw new ArithmeticException("division by zero");
+		if (a == Long.MIN_VALUE || b == Long.MIN_VALUE)
+			return getBinaryDigits(BigInteger.valueOf(a), BigInteger.valueOf(b));
 
 		a = Math.abs(a); b = Math.abs(b);
 		long remainder = a % b;
@@ -374,8 +391,9 @@ public class FractionMapper
 		while (remainder != 0 && !seenAt.containsKey(remainder))
 		{
 			seenAt.put(remainder, pos);
-			remainder *= 2;
-			if (remainder >= b) { digits.set(pos); remainder -= b; }
+			long rest = b - remainder;
+			if (remainder >= rest) { digits.set(pos); remainder -= rest; }
+			else                   remainder += remainder;
 			pos++;
 		}
 
