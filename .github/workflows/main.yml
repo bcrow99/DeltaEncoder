@@ -1,0 +1,74 @@
+# Builds DeltaEncoder.jar on every push to master and publishes it as the
+# "latest-build" release, replacing the previous one. Download link:
+#   https://github.com/bcrow99/DeltaEncoder/releases/download/latest-build/DeltaEncoder.jar
+# Everything is compiled with --release 8, so the jar runs on Java 8 or later
+# (a runtime is enough). If the code doesn't compile for Java 8, or the jar
+# doesn't start on Java 8, the run fails (a red X on the Actions tab) and the
+# previous jar stays published.
+#
+# To build without pushing: Actions tab -> "Build jar" -> "Run workflow".
+
+name: Build jar
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # to publish the release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install Java 21 (compiler)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile everything for Java 8
+        run: |
+          mkdir -p build/classes
+          javac --release 8 -encoding UTF-8 -nowarn -Xlint:-options -d build/classes *.java
+
+      - name: Make the jar
+        run: |
+          SHORT=$(git rev-parse --short HEAD)
+          printf 'Main-Class: Launcher\nImplementation-Version: %s (%s)\n' "$SHORT" "$(date -u +%Y-%m-%d)" > build/manifest.txt
+          cp *.java build/classes/
+          jar cfm DeltaEncoder.jar build/manifest.txt -C build/classes .
+          ls -l DeltaEncoder.jar
+
+      - name: Install Java 8 (runtime only)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-package: jre
+          java-version: '8'
+
+      - name: Check the jar starts on a Java 8 runtime
+        run: |
+          java -version
+          java -jar DeltaEncoder.jar | tee programs.txt
+          grep -q DeltaWriter programs.txt
+          grep -q DeltaReader programs.txt
+
+      - name: Publish as the latest-build release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=$(git rev-parse --short HEAD)
+          gh release delete latest-build --yes --cleanup-tag || true
+          gh release create latest-build DeltaEncoder.jar \
+            --target "$GITHUB_SHA" \
+            --title "Latest build ($SHORT)" \
+            --notes "Built automatically from commit $SHORT. Runs on Java 8 or later; a Java runtime (JRE) is enough.
+
+          Usage: java -jar DeltaEncoder.jar <program> [arguments...]
+          With no program name it lists the programs, e.g. java -jar DeltaEncoder.jar DeltaWriter image.png" \
+            --latest
