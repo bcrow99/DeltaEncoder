@@ -878,7 +878,7 @@ public class PacketWriter
 		// with counts c costs about log2(n! / (c0! c1! ...)) bits, a little
 		// under n times its entropy; plus the range coder's leading byte and
 		// its flush.
-		private static long blockEstimate(int[] f, int n)
+		private long blockEstimate(int[] f, int n)
 		{
 			if(n == 0) return 0;
 			double ln = logFactorial(n);
@@ -887,7 +887,7 @@ public class PacketWriter
 		}
 
 		// ln(k!) by Stirling's series (plenty accurate for k >= 1).
-		private static double logFactorial(int k)
+		private double logFactorial(int k)
 		{
 			if(k < 2) return 0;
 			double x = k;
@@ -913,7 +913,7 @@ public class PacketWriter
 			return size;
 		}
 
-		private static int tableEstimate(int[][] freq)
+		private int tableEstimate(int[][] freq)
 		{
 			return ArithmeticMapper.deflateFrequencies(freq, ArithmeticMapper.getFrequencyType(freq), Deflater.DEFAULT_COMPRESSION).length;
 		}

@@ -105,10 +105,24 @@ public class FractionMapper
 		// real multi-core hardware if this path matters for performance.
 		private static final int PARALLEL_MULTIPLY_THRESHOLD_BITS = 4000;
 
+		private static final java.lang.invoke.MethodHandle PARALLEL_MULTIPLY = findParallelMultiply();
+
+		private static java.lang.invoke.MethodHandle findParallelMultiply()
+		{
+			try { return java.lang.invoke.MethodHandles.publicLookup().findVirtual(BigInteger.class, "parallelMultiply",
+				java.lang.invoke.MethodType.methodType(BigInteger.class, BigInteger.class)); }
+			catch (Throwable t) { return null; }
+		}
+
 		private static BigInteger smartMultiply(BigInteger a, BigInteger b)
 		{
 			if (a.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS && b.bitLength() >= PARALLEL_MULTIPLY_THRESHOLD_BITS)
-				return a.parallelMultiply(b);
+			{
+				// BigInteger.parallelMultiply is Java 19+; on older Java this is a plain multiply.
+				if (PARALLEL_MULTIPLY != null)
+					try { return (BigInteger) PARALLEL_MULTIPLY.invokeExact(a, b); }
+					catch (Throwable t) { throw new RuntimeException(t); }
+			}
 			return a.multiply(b);
 		}
 
@@ -343,7 +357,7 @@ public class FractionMapper
 		while (remainder.signum() != 0 && !seenAt.containsKey(remainder))
 		{
 			seenAt.put(remainder, pos);
-			remainder = remainder.multiply(BigInteger.TWO);
+			remainder = remainder.multiply(BigInteger.valueOf(2));
 			if (remainder.compareTo(b) >= 0) { digits.set(pos); remainder = remainder.subtract(b); }
 			pos++;
 		}

@@ -984,11 +984,11 @@ public class CodeMapper
 			{
 				BigInteger code_word = code[j];
 				BigInteger mask = BigInteger.ONE;
-				BigInteger addend = BigInteger.TWO;
+				BigInteger addend = BigInteger.valueOf(2);
 				for(int k = 1; k < code_length[j]; k++)
 				{
 					mask = mask.add(addend);
-					addend = addend.multiply(BigInteger.TWO);
+					addend = addend.multiply(BigInteger.valueOf(2));
 				}
 				BigInteger masked_src_word = src_word.and(mask);
 
@@ -1037,7 +1037,7 @@ public class CodeMapper
 			BigInteger value = code[i - 1];
 			value = value.add(addend);
 			code[i] = value;
-			addend = addend.multiply(BigInteger.TWO);
+			addend = addend.multiply(BigInteger.valueOf(2));
 		}
 		return code;
 	}
