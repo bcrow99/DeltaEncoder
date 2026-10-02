@@ -329,7 +329,7 @@ public class StringMapper
 				if (j == 8) { j = 0; k++; }
 				if ((src[k] & (mask << j)) != 0)
 				{
-					// "11" → "01"
+					// "11" -> "01"
 					current_bit++;
 					if (current_bit == 8) { current_byte++; current_bit = 0; }
 					if (current_byte >= dst.length - 1) break;
@@ -339,7 +339,7 @@ public class StringMapper
 				}
 				else
 				{
-					// "10" → "1"
+					// "10" -> "1"
 					if (current_byte >= dst.length - 1) break;
 					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
@@ -348,13 +348,13 @@ public class StringMapper
 			}
 			else if ((src[k] & (mask << j)) != 0 && i == size - 1)
 			{
-				// "1" at end → "0"
+				// "1" at end -> "0"
 				current_bit++;
 				if (current_bit == 8) { current_byte++; current_bit = 0; }
 			}
 			else
 			{
-				// "0" → "00"
+				// "0" -> "00"
 				current_bit++;
 				if (current_bit == 8) { current_byte++; current_bit = 0; }
 				current_bit++;
@@ -434,13 +434,13 @@ public class StringMapper
 				if (j == 8) { j = 0; k++; }
 				if ((src[k] & (mask << j)) == 0)
 				{
-					// "00" → "0"
+					// "00" -> "0"
 					current_bit++;
 					if (current_bit == 8) { current_byte++; current_bit = 0; }
 				}
 				else
 				{
-					// "01" → "10"
+					// "01" -> "10"
 					if (current_byte >= dst.length - 1) break;
 					dst[current_byte] |= (byte) mask << current_bit;
 					current_bit++;
@@ -451,7 +451,7 @@ public class StringMapper
 			}
 			else if ((src[k] & (mask << j)) == 0 && i == size - 1)
 			{
-				// "0" at end → "1"
+				// "0" at end -> "1"
 				if (current_byte >= dst.length - 1) break;
 				dst[current_byte] |= (byte) mask << current_bit;
 				current_bit++;
@@ -459,7 +459,7 @@ public class StringMapper
 			}
 			else
 			{
-				// "1" → "11"
+				// "1" -> "11"
 				if (current_byte >= dst.length - 1) break;
 				dst[current_byte] |= (byte) mask << current_bit;
 				current_bit++;

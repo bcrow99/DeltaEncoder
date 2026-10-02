@@ -43,7 +43,7 @@ public class BlockReader
 			{
 				view = new ViewerSupport("Block Reader  " + filename, xdim, ydim);
 				view.frame.getJMenuBar().add(view.makeViewMenu());
-				view.setStatus("decoding…");
+				view.setStatus("decoding...");
 				view.show();
 			});
 

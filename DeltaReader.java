@@ -57,7 +57,7 @@ public class DeltaReader
 			{
 				view = new ViewerSupport("Delta Reader  " + filename, xdim, ydim);
 				view.frame.getJMenuBar().add(view.makeViewMenu());
-				view.setStatus("decoding…");
+				view.setStatus("decoding...");
 				view.show();
 			});
 

@@ -139,7 +139,7 @@ public class BlockWriter
 	private void runAnalysis()
 	{
 		view.setMenusEnabled(false);
-		view.setStatus("analysing…");
+		view.setStatus("analysing...");
 		new SwingWorker<int[],Void>()
 		{
 			@Override protected int[] doInBackground() { return init(); }

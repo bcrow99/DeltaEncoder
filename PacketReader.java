@@ -71,7 +71,7 @@ public class PacketReader
 			{
 				view = new ViewerSupport("Packet Reader  " + filename, xdim, ydim);
 				view.frame.getJMenuBar().add(view.makeViewMenu());
-				view.setStatus("decoding…");
+				view.setStatus("decoding...");
 				view.show();
 			});
 

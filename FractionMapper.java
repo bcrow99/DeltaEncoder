@@ -175,8 +175,8 @@ public class FractionMapper
 
 		@Override public String toString()
 		{
-			if (isBottom()) return "\u22A5";    // ⊥ (bottom / indeterminate)
-			if (isInfinite()) return "\u221E";  // ∞
+			if (isBottom()) return "\u22A5";    // bottom (indeterminate)
+			if (isInfinite()) return "\u221E";  // infinity
 			return n + "/" + d;
 		}
 
