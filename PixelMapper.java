@@ -1,6 +1,6 @@
 import java.util.*;
 
-// PixelMapper version 1.1
+// PixelMapper version 1.2
 //
 // Codes the pixels of the red, green and blue channels with context-
 // adaptive arithmetic coding, for PixelWriter and PixelReader.
@@ -14,8 +14,9 @@ import java.util.*;
 //
 // The channels are coded green, red, blue. Every coding starts from the same
 // prediction: the median edge predictor (MED) of the left, upper and upper-
-// left neighbours, corrected by how far the earlier channels at the same
-// pixel were from their own MED predictions (the average of those errors).
+// left neighbours, corrected (when coding red, green and blue; see
+// CHANNEL_SET_NAMES) by how far the earlier channels at the same pixel were
+// from their own MED predictions (the average of those errors).
 // The channels move together, so this removes much of the prediction error
 // of the second and third channels. "Activity" is how busy the neighbourhood
 // is: |left - upper-left| + |upper - upper-left| on the 0-255 scale.
@@ -75,6 +76,19 @@ public class PixelMapper
 	public static final int[] ORDER = {1, 0, 2};
 	public static final String[] CHANNEL_NAMES = {"red", "green", "blue"};
 
+	// Channels coded (CHANNEL_SET_NAMES):
+	//   PRIMARY:    green, red, blue, with red's and blue's predictions
+	//               corrected by the earlier channels' errors (see above).
+	//   DIFFERENCE: green, red - green, blue - green (each difference offset
+	//               by max_value so it is never negative), with no correction:
+	//               the difference already removes what green shares with
+	//               red and blue, and correcting as well made files larger.
+	// Measured with DiffTest (7 photographs, blocks of 256): with the value
+	// codings, DIFFERENCE was 2.4% smaller lossless and 1.7% at Color
+	// Resolution 3; with Errors the two were within 0.3%.
+	public static final int PRIMARY = 0, DIFFERENCE = 1;
+	public static final String[] CHANNEL_SET_NAMES = {"Red, green, blue (corrected)", "Green, red - green, blue - green"};
+
 	// The block sizes init() tries: powers of 2, then the steps halfway
 	// (by ratio) around the best of those.
 	public static final int[] SEARCH_SIZES = {8, 16, 32, 64, 128, 256};
@@ -84,34 +98,52 @@ public class PixelMapper
 	// Codes 3 channels (values 0..max_value, in red, green, blue order) of an
 	// xdim x ydim image. Returns the coded bytes per channel, in ORDER. The
 	// channels are coded in parallel: the encoder has all of them.
-	public static byte[][] encode(int[][] channel, int xdim, int ydim, int max_value, int shift, int block, int coding)
+	public static byte[][] encode(int[][] channel, int xdim, int ydim, int max_value, int shift, int block, int coding, int channels)
 	{
 		int[][] ordered = new int[3][];
 		for(int i = 0; i < 3; i++) ordered[i] = channel[ORDER[i]];
+		if(channels == DIFFERENCE)
+			for(int i = 1; i < 3; i++)
+			{
+				int[] d = new int[ordered[0].length];
+				for(int k = 0; k < d.length; k++) d[k] = ordered[i][k] - ordered[0][k] + max_value;
+				ordered[i] = d;
+			}
+		int[]   max   = channelMax(max_value, channels);
 		int[][] error = new int[3][];
-		for(int i = 0; i < 2; i++) error[i] = predictionError(ordered[i], xdim, ydim, max_value);
+		for(int i = 0; i < 2; i++) error[i] = predictionError(ordered[i], xdim, ydim, max[i]);
 		byte[][] coded = new byte[3][];
-		ViewerSupport.parallel(3, i -> coded[i] = encodeChannel(ordered[i], i, error, xdim, ydim, max_value, shift, block, coding));
+		ViewerSupport.parallel(3, i -> coded[i] = encodeChannel(ordered[i], i, error, xdim, ydim, max[i], shift, block, coding, channels == PRIMARY));
 		return coded;
 	}
 
 	// Decodes what encode() made; returns red, green, blue. The channels are
 	// decoded in order, since each one's contexts use the ones before it.
-	public static int[][] decode(byte[][] coded, int xdim, int ydim, int max_value, int shift, int block, int coding)
+	public static int[][] decode(byte[][] coded, int xdim, int ydim, int max_value, int shift, int block, int coding, int channels)
 	{
+		int[]   max     = channelMax(max_value, channels);
 		int[][] ordered = new int[3][];
 		int[][] error   = new int[3][];
 		for(int i = 0; i < 3; i++)
 		{
-			ordered[i] = decodeChannel(coded[i], i, error, xdim, ydim, max_value, shift, block, coding);
-			if(i < 2) error[i] = predictionError(ordered[i], xdim, ydim, max_value);
+			ordered[i] = decodeChannel(coded[i], i, error, xdim, ydim, max[i], shift, block, coding, channels == PRIMARY);
+			if(i < 2) error[i] = predictionError(ordered[i], xdim, ydim, max[i]);
 		}
+		if(channels == DIFFERENCE)
+			for(int i = 1; i < 3; i++)
+				for(int k = 0; k < ordered[i].length; k++) ordered[i][k] += ordered[0][k] - max_value;
 		int[][] channel = new int[3][];
 		for(int i = 0; i < 3; i++) channel[ORDER[i]] = ordered[i];
 		return channel;
 	}
 
-	private static byte[] encodeChannel(int[] v, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding)
+	// The largest value of each coded channel: a difference spans 0..2 * max_value.
+	static int[] channelMax(int max_value, int channels)
+	{
+		return (channels == DIFFERENCE) ? new int[] {max_value, 2 * max_value, 2 * max_value} : new int[] {max_value, max_value, max_value};
+	}
+
+	private static byte[] encodeChannel(int[] v, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding, boolean correct)
 	{
 		Models models = new Models(max_value + 1);
 		ArithmeticMapper.RangeEncoder encoder = new ArithmeticMapper.RangeEncoder(v.length / 2);
@@ -124,7 +156,7 @@ public class PixelMapper
 				for(int y = by; y < y1; y++)
 					for(int x = bx; x < x1; x++)
 					{
-						context(v, i, error, x, y, xdim, max_value, shift, coding, cp);
+						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, cp);
 						Model m = models.get(cp[0]);
 						int value = v[y * xdim + x];
 						int s = (coding == ERRORS) ? Math.floorMod(value - cp[1], max_value + 1) : value;
@@ -135,7 +167,7 @@ public class PixelMapper
 		return encoder.finish();
 	}
 
-	private static int[] decodeChannel(byte[] coded, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding)
+	private static int[] decodeChannel(byte[] coded, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding, boolean correct)
 	{
 		int[] v = new int[xdim * ydim];
 		Models models = new Models(max_value + 1);
@@ -149,7 +181,7 @@ public class PixelMapper
 				for(int y = by; y < y1; y++)
 					for(int x = bx; x < x1; x++)
 					{
-						context(v, i, error, x, y, xdim, max_value, shift, coding, cp);
+						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, cp);
 						Model m = models.get(cp[0]);
 						int s = m.find(decoder.target(m.total));
 						decoder.decode(m.start(s), m.f[s]);
@@ -164,8 +196,8 @@ public class PixelMapper
 
 	// For pixel (x, y) of channel i (in coding order), sets cp[0] to its
 	// context and cp[1] to its prediction. error[0..i-1] are the earlier
-	// channels' MED errors.
-	static void context(int[] v, int i, int[][] error, int x, int y, int xdim, int max_value, int shift, int coding, int[] cp)
+	// channels' MED errors; correct says whether they correct the prediction.
+	static void context(int[] v, int i, int[][] error, int x, int y, int xdim, int max_value, int shift, int coding, boolean correct, int[] cp)
 	{
 		int k = y * xdim + x;
 		int a = (x > 0) ? v[k - 1] : (y > 0) ? v[k - xdim] : (max_value + 1) / 2;
@@ -176,8 +208,11 @@ public class PixelMapper
 		{
 			int sum = 0, size = 0;
 			for(int j = 0; j < i; j++) { sum += error[j][k]; size += Math.abs(error[j][k]); }
-			p += sum / i;
-			if(p < 0) p = 0; else if(p > max_value) p = max_value;
+			if(correct)
+			{
+				p += sum / i;
+				if(p < 0) p = 0; else if(p > max_value) p = max_value;
+			}
 			cross = bucket((size / i) << shift, CROSS_LIMIT);
 		}
 		int[] limit    = ACTIVITY_LIMIT[coding];
@@ -224,10 +259,10 @@ public class PixelMapper
 	// every size in SEARCH_SIZES, then the sizes halfway (by ratio) to each
 	// neighbour of the best. tried, if not null, gets {size, coded bytes of
 	// the 3 channels} for every size tried, smallest size first.
-	public static int findBestBlock(int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, List<int[]> tried)
+	public static int findBestBlock(int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, int channels, List<int[]> tried)
 	{
 		TreeMap<Integer, Long> bytes = new TreeMap<Integer, Long>();
-		measure(SEARCH_SIZES, channel, xdim, ydim, max_value, shift, coding, bytes);
+		measure(SEARCH_SIZES, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
 		int best = bestOf(bytes);
 		ArrayList<Integer> more = new ArrayList<Integer>();
 		int lower = (int) Math.round(best / Math.sqrt(2)), upper = (int) Math.round(best * Math.sqrt(2));
@@ -235,17 +270,17 @@ public class PixelMapper
 		if(upper <= BLOCK_MAX && !bytes.containsKey(upper)) more.add(upper);
 		int[] extra = new int[more.size()];
 		for(int k = 0; k < extra.length; k++) extra[k] = more.get(k);
-		measure(extra, channel, xdim, ydim, max_value, shift, coding, bytes);
+		measure(extra, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
 		if(tried != null) for(Map.Entry<Integer, Long> e : bytes.entrySet()) tried.add(new int[] {e.getKey(), (int) (long) e.getValue()});
 		return bestOf(bytes);
 	}
 
-	private static void measure(int[] sizes, int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, TreeMap<Integer, Long> bytes)
+	private static void measure(int[] sizes, int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, int channels, TreeMap<Integer, Long> bytes)
 	{
 		long[] b = new long[sizes.length];
 		ViewerSupport.parallel(sizes.length, s ->
 		{
-			for(byte[] c : encode(channel, xdim, ydim, max_value, shift, sizes[s], coding)) b[s] += c.length;
+			for(byte[] c : encode(channel, xdim, ydim, max_value, shift, sizes[s], coding, channels)) b[s] += c.length;
 		});
 		for(int s = 0; s < sizes.length; s++) bytes.put(sizes[s], b[s]);
 	}

@@ -2,9 +2,9 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// PixelReader version 1.1
+// PixelReader version 1.2
 //
-// Reads the Pixel format files PixelWriter saves (versions 1 and 2) and
+// Reads the Pixel format files PixelWriter saves (versions 1 to 3) and
 // shows the image.
 public class PixelReader
 {
@@ -12,10 +12,10 @@ public class PixelReader
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 2;   // 2 added the coding byte; 1 is read as Values, exact prediction
+	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte; older files are read with the defaults
 
-	int      xdim, ydim, pixel_shift, pixel_quant, block_size, coding;
-	byte[][] coded = new byte[3][];   // per channel, in PixelMapper.ORDER
+	int      xdim, ydim, pixel_shift, pixel_quant, block_size, coding, channels;
+	byte[][] coded = new byte[3][];   // per coded channel, in coding order
 
 	BufferedImage decoded_image = null;
 	ViewerSupport view;
@@ -48,7 +48,7 @@ public class PixelReader
 
 			start = System.nanoTime();
 			int[]   size    = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
-			int[][] channel = PixelMapper.decode(coded, size[0], size[1], 255 >> pixel_shift, pixel_shift, block_size, coding);
+			int[][] channel = PixelMapper.decode(coded, size[0], size[1], 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
 			System.out.println("Channels decoded in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
 
 			start = System.nanoTime();
@@ -79,8 +79,11 @@ public class PixelReader
 		pixel_quant = in.readByte();
 		block_size  = in.readUnsignedShort();
 		coding      = (version >= 2) ? in.readByte() : PixelMapper.VALUES;
-		if(pixel_shift < 0 || pixel_shift > 7 || pixel_quant < 0 || pixel_quant > 10 || block_size < 1 || coding < 0 || coding >= PixelMapper.CODING_NAMES.length)
-			throw new IOException(filename + ": bad header (Color Resolution " + pixel_shift + ", Pixel Resolution " + pixel_quant + ", block size " + block_size + ", coding " + coding + ").");
+		channels    = (version >= 3) ? in.readByte() : PixelMapper.PRIMARY;
+		if(pixel_shift < 0 || pixel_shift > 7 || pixel_quant < 0 || pixel_quant > 10 || block_size < 1
+			|| coding < 0 || coding >= PixelMapper.CODING_NAMES.length || channels < 0 || channels >= PixelMapper.CHANNEL_SET_NAMES.length)
+			throw new IOException(filename + ": bad header (Color Resolution " + pixel_shift + ", Pixel Resolution " + pixel_quant
+				+ ", block size " + block_size + ", coding " + coding + ", channels " + channels + ").");
 		for(int i = 0; i < 3; i++)
 		{
 			coded[i] = new byte[in.readInt()];
@@ -92,6 +95,7 @@ public class PixelReader
 		System.out.println("Color Resolution: " + pixel_shift);
 		System.out.println("Block size:       " + block_size);
 		System.out.println("Coding:           " + PixelMapper.CODING_NAMES[coding]);
+		System.out.println("Channels:         " + PixelMapper.CHANNEL_SET_NAMES[channels]);
 		System.out.println();
 	}
 }

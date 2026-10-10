@@ -5,22 +5,23 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// PixelWriter version 1.1
+// PixelWriter version 1.2
 //
 // Codes the red, green and blue channels block by block with context-
 // adaptive arithmetic coding (see PixelMapper). Menus: File, View,
 // Quantization (Pixel Resolution and Color Resolution) and Block (Block
-// Size, and Coding: the pixel values with an exact prediction or with
-// brightness bands as context, or the prediction errors). At start-up,
-// init() finds the block size that codes the image smallest; changing the
-// coding finds it again. Save writes the file "foo", which PixelReader reads.
+// Size; Coding: the pixel values with an exact prediction or with
+// brightness bands as context, or the prediction errors; and Channels: red,
+// green and blue, or green and the differences red - green and blue -
+// green). At start-up, init() finds the block size that codes the image
+// smallest; changing the coding or the channels finds it again. Save writes the file "foo", which PixelReader reads.
 public class PixelWriter
 {
 	// File format: every file starts with FORMAT_ID ('P' = Pixel format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 2;   // 2 added the coding byte
+	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -36,9 +37,11 @@ public class PixelWriter
 	int pixel_shift = 3;
 	int block_size  = 64;   // replaced by init()
 	int coding      = PixelMapper.VALUES;
+	int channels    = PixelMapper.PRIMARY;
 
 	JSlider pquant_slider, pshift_slider, block_slider;
-	JRadioButton[] coding_button = new JRadioButton[PixelMapper.CODING_NAMES.length];
+	JRadioButton[] coding_button  = new JRadioButton[PixelMapper.CODING_NAMES.length];
+	JRadioButton[] channel_button = new JRadioButton[PixelMapper.CHANNEL_SET_NAMES.length];
 	boolean updating = false;   // set while the program moves a slider
 
 	// ---- Results of the last Apply (read by Save) ---------------------------
@@ -107,14 +110,16 @@ public class PixelWriter
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; if(!updating) apply(); }, ss)); pquant_slider = ss[0];
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; if(!updating) apply(); }, ss)); pshift_slider = ss[0];
 
-		// Block size and coding: the coded size changes, the picture doesn't.
-		// A new coding has its own best block size, so choosing one runs the
-		// block size search again.
+		// Block size, coding and channels: the coded size changes, the picture
+		// doesn't. A new coding or channel choice has its own best block size,
+		// so choosing one runs the block size search again.
 		JMenu block_menu = new JMenu("Block");
 		block_menu.add(ViewerSupport.makeSliderDialog(frame, "Block Size", PixelMapper.BLOCK_MIN, PixelMapper.BLOCK_MAX, block_size,
 			v -> { block_size = v; if(!updating) apply(); }, ss)); block_slider = ss[0];
 		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Coding", PixelMapper.CODING_NAMES, coding,
 			v -> { if(v != coding) { coding = v; findBlockSize(); } }, coding_button));
+		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Channels", PixelMapper.CHANNEL_SET_NAMES, channels,
+			v -> { if(v != channels) { channels = v; findBlockSize(); } }, channel_button));
 
 		menu_bar.add(file_menu); menu_bar.add(view.makeViewMenu()); menu_bar.add(quant_menu); menu_bar.add(block_menu);
 
@@ -158,8 +163,9 @@ public class PixelWriter
 	{
 		long t0 = System.nanoTime();
 		ArrayList<int[]> tried = new ArrayList<int[]>();
-		block_size = PixelMapper.findBestBlock(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, coding, tried);
-		System.out.println("Block sizes tried (" + PixelMapper.CODING_NAMES[coding] + ", Pixel Resolution " + pixel_quant + ", Color Resolution " + pixel_shift + "):");
+		block_size = PixelMapper.findBestBlock(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, coding, channels, tried);
+		System.out.println("Block sizes tried (" + PixelMapper.CODING_NAMES[coding] + "; " + PixelMapper.CHANNEL_SET_NAMES[channels]
+			+ "; Pixel Resolution " + pixel_quant + ", Color Resolution " + pixel_shift + "):");
 		System.out.println("bytes for the 3 channels.");
 		System.out.println("<= marks the size chosen.");
 		for(int[] t : tried)
@@ -178,11 +184,11 @@ public class PixelWriter
 		{
 			quantize();
 			long t0 = System.nanoTime();
-			coded = PixelMapper.encode(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding);
+			coded = PixelMapper.encode(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
 			long bytes = 0;
 			for(byte[] c : coded) bytes += c.length;
-			System.out.println(String.format("%s, Pixel Resolution %d, Color Resolution %d, block size %d: %,d bytes coded (%.4f of the raw size) in %s",
-				PixelMapper.CODING_NAMES[coding], pixel_quant, pixel_shift, block_size, bytes, (double) bytes / (3.0 * image_xdim * image_ydim), ViewerSupport.formatDuration(System.nanoTime() - t0)));
+			System.out.println(String.format("%s; %s; Pixel Resolution %d, Color Resolution %d, block size %d: %,d bytes coded (%.4f of the raw size) in %s",
+				PixelMapper.CODING_NAMES[coding], PixelMapper.CHANNEL_SET_NAMES[channels], pixel_quant, pixel_shift, block_size, bytes, (double) bytes / (3.0 * image_xdim * image_ydim), ViewerSupport.formatDuration(System.nanoTime() - t0)));
 			showPreview();
 			applied = true;
 		}
@@ -219,16 +225,16 @@ public class PixelWriter
 
 	// Writes "foo": FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 	// shorts), pixel_shift, pixel_quant (bytes), block size (short), coding
-	// (byte), then for each channel in PixelMapper.ORDER (green, red, blue):
-	// its coded length (int) and coded bytes. Checks the channels decode back
-	// first.
+	// and channels (bytes), then for each coded channel in order (green, then
+	// red and blue or their differences from green): its coded length (int)
+	// and coded bytes. Checks the channels decode back first.
 	void save()
 	{
 		if(!applied) apply();
 		if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 
 		long t0 = System.nanoTime();
-		int[][] back = PixelMapper.decode(coded, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding);
+		int[][] back = PixelMapper.decode(coded, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
 		for(int i = 0; i < 3; i++)
 			if(!Arrays.equals(back[i], quantized[i]))
 			{
@@ -245,6 +251,7 @@ public class PixelWriter
 			out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 			out.writeShort(block_size);
 			out.writeByte(coding);
+			out.writeByte(channels);
 			for(int i = 0; i < 3; i++) { out.writeInt(coded[i].length); out.write(coded[i]); }
 		}
 		catch(Exception e)
