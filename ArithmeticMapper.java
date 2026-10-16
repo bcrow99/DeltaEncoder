@@ -480,7 +480,7 @@ public class ArithmeticMapper
 	private static final long RANGE_TOP    = 1L << 40;
 	private static final long RANGE_BOTTOM = 1L << 32;
 
-	private static final class RangeEncoder
+	static final class RangeEncoder
 	{
 		byte[] out;
 		int    size = 0;
@@ -534,7 +534,7 @@ public class ArithmeticMapper
 		}
 	}
 
-	private static final class RangeDecoder
+	static final class RangeDecoder
 	{
 		final byte[] in;
 		int  pos = 1;             // the first byte written is always the initial cache
