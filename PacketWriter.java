@@ -7,14 +7,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// PacketWriter version 1.0
+// PacketWriter version 1.1
 public class PacketWriter
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;

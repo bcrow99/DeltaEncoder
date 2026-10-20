@@ -4,14 +4,14 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockReader version 1.0
+// BlockReader version 1.1
 //
 // Reads BlockWriter's files: block map deltas (delta type 13), Context
 // coded. See BlockWriter.SaveHandler.save for the layout.
 public class BlockReader
 {
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids; version 1 files are still read
 
 	int xdim, ydim, pixel_shift, pixel_quant, set_id;
 	int[]    min   = new int[3], init = new int[3];
@@ -76,10 +76,10 @@ public class BlockReader
 	private void read(DataInputStream in, String filename) throws IOException
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		if(id != FORMAT_ID || version < 1 || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Block Writer file."
-				: filename + " is Block format version " + version + "; this reader reads version " + FORMAT_VERSION + ".");
+				: filename + " is Block format version " + version + "; this reader reads versions 1 to " + FORMAT_VERSION + ".");
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -91,12 +91,12 @@ public class BlockReader
 		{
 			min[i]   = in.readInt();
 			init[i]  = in.readInt();
-			map[i]   = DeltaMapper.readMap(in, 13, (i > 0) ? map[i - 1] : null, size[0]);
+			map[i]   = DeltaMapper.readMap(in, 13, (i > 0) ? map[i - 1] : null, size[0], version == 1);
 			delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
 		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
-		System.out.println("Block map:    size " + map[0][0] + ", " + DeltaMapper.BLOCK_SET_NAMES[map[0][1]]);
+		System.out.println("Block map:    size " + map[0][0] + "; predictors " + DeltaMapper.describeMapSet(map[0]) + ", " + DeltaMapper.describeMapSet(map[1]) + ", " + DeltaMapper.describeMapSet(map[2]));
 		System.out.println();
 	}
 }

@@ -5,21 +5,25 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 1.0
+// BlockWriter version 1.3
 //
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with Context-coded deltas (DeltaMapper.packContextDeltas) and a
-// context-coded map. Its startup analysis picks the channel set, then the
-// block size and predictor set by coding with each candidate and keeping
-// the smallest -- actual sizes, not estimates. Files are read by
-// BlockReader.
+// coded map. Each block uses one predictor from its channel's set, and a
+// set can be any of the 253 predictors DeltaMapper has ids for. The
+// startup analysis (and Find Best) picks the channel set, then surveys the
+// sets (DeltaMapper.surveyBlockSets: per channel, predictors added in
+// greedy order by estimated coded bits, blocks assigned by the estimate,
+// and the real coded size measured), and also codes with each
+// named set (DeltaMapper.findBestBlock); it keeps whichever is smallest --
+// actual sizes, not estimates. Files are read by BlockReader.
 public class BlockWriter
 {
 	// File format: every file starts with FORMAT_ID ('B' = Block format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -35,11 +39,13 @@ public class BlockWriter
 	int correction  = 0;
 	int min_set_id  = 0;
 	int block_size  = DeltaMapper.BLOCK_DEFAULT;
-	int block_set   = 0;
+	int block_set   = 0;          // a named set (DeltaMapper.BLOCK_SET_NAMES), or SURVEYED
+	int[][] survey_ids = null;    // each channel's surveyed predictor ids (the last analysis)
+	static final int SURVEYED = -1;
 
 	JSlider        pquant_slider, pshift_slider, corr_slider;
 	JSpinner       block_spinner;
-	JRadioButton[] set_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length];
+	JRadioButton[] set_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length + 1];   // [0] = Surveyed
 
 	// ---- Results of the last Apply (read by Save) ---------------------------
 	int[]    set_sum = new int[10], channel_sum = new int[6];
@@ -113,13 +119,19 @@ public class BlockWriter
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Error Correction", 0, 10, correction, v -> { correction = v; apply(); }, ss)); corr_slider = ss[0];
 
 		// Block menu: the settings, and Find Best to rerun the analysis
-		// (worth doing after changing the quantization).
+		// (worth doing after changing the quantization: the surveyed sets
+		// are kept until then). Block Predictors offers the surveyed sets
+		// (available once an analysis has run) and the named sets.
 		JMenu block_menu = new JMenu("Block");
 		JSpinner[] sp = new JSpinner[1];
 		block_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
 			v -> { block_size = v; if(!updating) apply(); }, sp)); block_spinner = sp[0];
-		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", DeltaMapper.BLOCK_SET_NAMES, block_set,
-			v -> { block_set = v; if(!updating) apply(); }, set_button));
+		String[] set_names = new String[DeltaMapper.BLOCK_SET_NAMES.length + 1];
+		set_names[0] = "Surveyed (per channel)";
+		System.arraycopy(DeltaMapper.BLOCK_SET_NAMES, 0, set_names, 1, DeltaMapper.BLOCK_SET_NAMES.length);
+		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", set_names, block_set + 1,
+			v -> { block_set = v - 1; if(!updating) apply(); }, set_button));
+		set_button[0].setEnabled(false);   // until the first analysis
 		block_menu.addSeparator();
 		JMenuItem find_item = new JMenuItem("Find Best");
 		find_item.addActionListener(e -> runAnalysis());
@@ -150,7 +162,8 @@ public class BlockWriter
 					int[] best = get();
 					updating = true;
 					block_spinner.setValue(best[0]);
-					set_button[best[1]].setSelected(true);
+					set_button[best[1] + 1].setSelected(true);
+					set_button[0].setEnabled(survey_ids != null);
 					block_size = best[0]; block_set = best[1];
 					updating = false;
 				}
@@ -163,8 +176,9 @@ public class BlockWriter
 	}
 
 	// Picks the channel set with the smallest entropy estimate, then the
-	// block size and predictor set that code smallest (see
-	// DeltaMapper.findBestBlock). Returns {block size, predictor set}.
+	// block size and predictor sets that code smallest: the surveyed sets
+	// (DeltaMapper.surveyBlockSets, kept in survey_ids) or a named set
+	// (DeltaMapper.findBestBlock). Returns {block size, named set or SURVEYED}.
 	public int[] init()
 	{
 		long    start = System.nanoTime();
@@ -180,9 +194,21 @@ public class BlockWriter
 		int[]    best  = DeltaMapper.findBestBlock(ch, size[0], size[1], bytes);
 		System.out.println("Channel set: " + DeltaMapper.SET_NAMES[set_id]);
 		System.out.print(DeltaMapper.getBlockTable(bytes, best));
+		long named = bytes[best[1]][Arrays.binarySearch(DeltaMapper.BLOCK_SEARCH_SIZES, best[0])];
+		System.out.println("Named sets took " + ViewerSupport.formatDuration(System.nanoTime() - start));
+		System.out.println();
+
+		long t0 = System.nanoTime();
+		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1]);
+		survey_ids = survey.ids;
+		System.out.print(survey.report);
+		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
+		boolean use_survey = survey.bytes <= named;
+		System.out.println(String.format("Surveyed sets %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.",
+			survey.bytes, DeltaMapper.BLOCK_SET_NAMES[best[1]], best[0], named, use_survey ? "surveyed sets" : "named set"));
 		System.out.println("Analysis took " + ViewerSupport.formatDuration(System.nanoTime() - start));
 		System.out.println();
-		return best;
+		return use_survey ? new int[] {survey.block, SURVEYED} : best;
 	}
 
 	// The six candidate channels after quantizing (see
@@ -234,10 +260,17 @@ public class BlockWriter
 
 		int[]   channel_id = DeltaMapper.getChannels(min_set_id);
 		int[][] dc = new int[3][];
+		// Surveyed sets: blocks assigned by estimated coded size, as the
+		// survey does (channels in order). Named sets: by smallest |delta|.
+		ArrayList[] by_cost = null;
+		if(block_set == SURVEYED && survey_ids != null)
+			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block_size, survey_ids);
+		final ArrayList[] surveyed = by_cost;
 		ViewerSupport.parallel(3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, 13, 0, block_size, block_set);
+			ArrayList result = (surveyed != null) ? surveyed[i]
+				: DeltaMapper.getBlockDeltasFromValues(qc[j], new_xdim, new_ydim, block_size, DeltaMapper.getSetIds(Math.max(0, block_set)));
 			delta_list[i] = (int[]) result.get(1);
 			map_list[i]   = (byte[]) result.get(2);
 			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0);
@@ -288,7 +321,8 @@ public class BlockWriter
 				return;
 			}
 			int raw = image_xdim * image_ydim * 3;
-			System.out.println("Block size " + block_size + ", " + DeltaMapper.BLOCK_SET_NAMES[block_set] + ": " + file.length() + " bytes");
+			System.out.println("Block size " + block_size + ", predictors " + DeltaMapper.describeMapSet(map_list[0]) + ", "
+				+ DeltaMapper.describeMapSet(map_list[1]) + ", " + DeltaMapper.describeMapSet(map_list[2]) + ": " + file.length() + " bytes");
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
@@ -297,7 +331,7 @@ public class BlockWriter
 		// Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 		// shorts), pixel_shift, pixel_quant, channel set. Then per channel:
 		// int min, int init, the block map (DeltaMapper.writeMap, type 13;
-		// it carries the block size and predictor set), then the deltas
+		// it carries the block size and the channel's predictor ids), then the deltas
 		// (DeltaMapper.packContextDeltas). Channels 1 and 2 use the ones
 		// before them as context, so the reader decodes in order.
 		private void save(DataOutputStream out) throws IOException

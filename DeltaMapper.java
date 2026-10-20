@@ -4214,7 +4214,11 @@ public class DeltaMapper
 	// squares, and each uses the predictor from its set (BLOCK_SETS) with
 	// the smallest sum of |delta| over the square. Row 0 is horizontal,
 	// column 0 vertical and the last column horizontal, as in frame map 2.
-	// The map is [block size, set, then one entry per block, row by row].
+	// The map is [block size, n, n predictor ids (see "Predictor ids" below),
+	// then one entry per block, row by row: an index 0..n-1 into the ids].
+	// Each channel's map carries its own ids, so the channels may use
+	// different predictors. (Format version 1 files had [block size, set
+	// number] instead of the ids; readMap reads both.)
 	// Measured with FrameTest and BlockSetTest: 1-3% smaller than scanline
 	// 4 on most images; block sizes 8-16 do about equally well, and the
 	// Scanline 16 and Neighbours 8 sets best (a set without the plain
@@ -4293,6 +4297,78 @@ public class DeltaMapper
 	}
 
 	public static int blockSetSize(int set) { return BLOCK_SETS[set].length; }
+
+	// ---- Predictor ids --------------------------------------------------------
+	//
+	// Every predictor a block can use has an id, 0..PREDICTORS-1 (one byte):
+	//   0..21    the predictors of blockPredictor, in its numbering;
+	//   22..252  the average of two of them, (P_i + P_j + 1) / 2 with i > j,
+	//            in the order (1,0), (2,0), (2,1), (3,0), (3,1), (3,2), ...
+	// That is every predictor and every average of two -- the 253 SetSearch
+	// chooses from. Inside DeltaMapper the predictors are also written as set
+	// entries (see setPredictor); predictorEntry and predictorId convert.
+
+	public static final int PRIMITIVES = 22;
+	public static final int PREDICTORS = PRIMITIVES + PRIMITIVES * (PRIMITIVES - 1) / 2;   // 253
+
+	public static final String[] PRIMITIVE_NAMES = {
+		"a", "b", "c", "d", "(a+b)/2", "(b+c)/2", "(a+c)/2", "(b+d)/2",
+		"(c+d)/2", "(a+b+c+d)/4", "a+b-c", "MED", "(3a+b)/4", "(a+3b)/4", "(3a+d)/4", "(3b+a)/4",
+		"(a+d)/2", "a+(b-c)/2", "b+(a-c)/2", "a+d-b", "(a+b+d)/3", "b+(d-c)/2" };
+
+	// The set entry (for setPredictor) of a predictor id.
+	public static int predictorEntry(int id)
+	{
+		if(id < PRIMITIVES) return id;
+		int k = id - PRIMITIVES, i = 1;
+		while(k >= i) { k -= i; i++; }
+		return 32 * (i + 1) + k;
+	}
+
+	// The predictor id of a set entry (either order of an average's pair).
+	public static int predictorId(int entry)
+	{
+		if(entry < 32) return entry;
+		int p = entry / 32 - 1, q = entry % 32;
+		if(p == q) return p;
+		int i = Math.max(p, q), j = Math.min(p, q);
+		return PRIMITIVES + i * (i - 1) / 2 + j;
+	}
+
+	// A readable name: "MED", or "avg(MED, a)" for an average.
+	public static String predictorName(int id)
+	{
+		int e = predictorEntry(id);
+		if(e < 32) return PRIMITIVE_NAMES[e];
+		return "avg(" + PRIMITIVE_NAMES[e / 32 - 1] + ", " + PRIMITIVE_NAMES[e % 32] + ")";
+	}
+
+	// The predictor ids of a named set (BLOCK_SET_NAMES).
+	public static int[] getSetIds(int set)
+	{
+		int[] ids = new int[BLOCK_SETS[set].length];
+		for(int p = 0; p < ids.length; p++) ids[p] = predictorId(BLOCK_SETS[set][p]);
+		return ids;
+	}
+
+	// The predictor ids a block map uses (map[2..1+n]).
+	public static int[] getMapIds(byte[] map)
+	{
+		int[] ids = new int[map[1] & 0xFF];
+		for(int p = 0; p < ids.length; p++) ids[p] = map[2 + p] & 0xFF;
+		return ids;
+	}
+
+	// Where a block map's entries start: after the block size, n and the n ids.
+	public static int mapHeaderLength(byte[] map) { return 2 + (map[1] & 0xFF); }
+
+	// A block map's predictors described: the named set they match, or "n predictors".
+	public static String describeMapSet(byte[] map)
+	{
+		int[] ids = getMapIds(map);
+		for(int set = 0; set < BLOCK_SET_NAMES.length; set++) if(Arrays.equals(ids, getSetIds(set))) return BLOCK_SET_NAMES[set];
+		return ids.length + " predictors";
+	}
 
 	// ---- Choosing the block size and predictor set -----------------------
 
@@ -4375,15 +4451,355 @@ public class DeltaMapper
 		return t.toString();
 	}
 
+	// ---- Surveying predictor sets ----------------------------------------------
+	//
+	// Any of the PREDICTORS can be in a block map's set, and each channel has
+	// its own set. surveyBlockSets picks the block size and the sets, ranking
+	// predictors by an estimate of their coded size rather than by |delta|:
+	//
+	//   1. A cost per delta value (DeltaCost): -log2 of its frequency in the
+	//      deltas a reference set (Blends 32) gives, per coding context
+	//      (getContext, with the deltas already chosen for the channels
+	//      before as context). In 1/256 bits.
+	//   2. For a block size, each predictor's estimated bits in each block
+	//      (blockCostTable): the sum of the costs of its deltas.
+	//   3. Per channel, predictors in greedy order (greedyCostOrder): first
+	//      the one with the smallest total, then each time the one that
+	//      saves the most estimated bits when every block uses its cheapest
+	//      predictor so far -- less what it adds to the map (the entropy of
+	//      the block counts, and a byte for its id). The order stops when no
+	//      predictor saves anything.
+	//   4. The real coded size -- Context-coded deltas plus the map
+	//      (writeMap) -- for the first n of that order, at n = SURVEY_COUNTS
+	//      and the whole order, until two in a row are larger than the best.
+	//      Blocks use their cheapest predictor by the estimate
+	//      (assignByCost), not the smallest |delta|.
+	//   5. Block sizes 4, 8 and 16, then the untried sizes next to the best.
+	//
+	// The block size is shared by the channels (a map's context coding uses
+	// the previous channel's map, entry for entry). getBlockDeltasByCost
+	// makes the same deltas and maps from the surveyed ids, so a writer can
+	// redo them without surveying again.
+
+	public static final int[] SURVEY_COUNTS = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 253};
+	static final int SURVEY_REFERENCE_SET = 4;          // Blends 32
+	static final int SURVEY_ID_COST       = 8 * 256;    // a predictor id in the map header, 1/256 bits
+
+	// floor(x + 0.5) of 256 * log2(r), as the survey's costs are rounded.
+	private static int cost256(double r) { return (int) Math.floor(256 * Math.log(r) / Math.log(2) + 0.5); }
+
+	// Estimated cost of each delta value of a channel in each coding
+	// context, from the reference deltas ref (1/256 bits; adaptive counts
+	// start at 1 and go up by 32, as the Context coder's do).
+	public static final class DeltaCost
+	{
+		final int     lo, range;
+		final int[][] cost;      // [context][delta - lo]
+		final int[]   context;   // each pixel's context
+
+		public DeltaCost(int[] src, int[] ref, int[][] previous, int xdim, int ydim)
+		{
+			int min = Integer.MAX_VALUE, max = Integer.MIN_VALUE;
+			for(int v : src) { if(v < min) min = v; if(v > max) max = v; }
+			int span = max - min;
+			lo    = -2 * span - 2;
+			range = 4 * span + 5;
+			context = new int[src.length];
+			long[][] count = new long[CONTEXTS][range];
+			long[]   total = new long[CONTEXTS];
+			for(int y = 1; y < ydim; y++)
+				for(int x = 1; x < xdim - 1; x++)
+				{
+					int k = y * xdim + x, c = getContext(ref, previous, k, xdim);
+					context[k] = c;
+					count[c][index(ref[k])]++;
+					total[c]++;
+				}
+			cost = new int[CONTEXTS][range];
+			for(int c = 0; c < CONTEXTS; c++)
+				for(int v = 0; v < range; v++)
+					cost[c][v] = cost256((32.0 * total[c] + range) / (32.0 * count[c][v] + 1));
+		}
+
+		int index(int delta) { return Math.max(0, Math.min(range - 1, delta - lo)); }
+	}
+
+	// Estimated bits (1/256) of each predictor in each block, as
+	// [block * n + q] for the ids given (n of them), or for every id
+	// (ids == null, n = PREDICTORS); blocks row by row as in the map.
+	public static int[] blockCostTable(int[] src, int xdim, int ydim, int block, DeltaCost dc, int[] ids)
+	{
+		int   n  = (ids == null) ? PREDICTORS : ids.length;
+		int[] entry = new int[n];
+		for(int q = 0; q < n; q++) entry[q] = predictorEntry((ids == null) ? q : ids[q]);
+		int   bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
+		int[] est = new int[bw * bh * n];
+		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
+		{
+			int[] prim = new int[PRIMITIVES];
+			int   y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+			for(int y = y0; y < y1; y++)
+				for(int x = 1; x < xdim - 1; x++)
+				{
+					int   k = y * xdim + x, s = src[k];
+					int[] cc = dc.cost[dc.context[k]];
+					for(int q = 0; q < PRIMITIVES; q++) prim[q] = blockPredictor(q, src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+					int base = (by * bw + (x - 1) / block) * n;
+					for(int q = 0; q < n; q++)
+					{
+						int e = entry[q];
+						int v = (e < 32) ? prim[e] : (prim[e / 32 - 1] + prim[e % 32] + 1) >> 1;
+						est[base + q] += cc[dc.index(s - v)];
+					}
+				}
+		});
+		return est;
+	}
+
+	// round(256 * c * log2 c) for c = 0..n: n log2 n - sum c log2 c is the
+	// map's size (bits) when n blocks are split into groups of size c.
+	private static long[] nlog2nTable(int n)
+	{
+		long[] t = new long[n + 1];
+		for(int c = 2; c <= n; c++) t[c] = (long) Math.floor(256.0 * c * Math.log(c) / Math.log(2) + 0.5);
+		return t;
+	}
+
+	// Predictor ids in greedy order over a blockCostTable of every id (see
+	// the section comment); stops when no predictor saves anything.
+	public static int[] greedyCostOrder(int[] est, int blocks)
+	{
+		final int P = PREDICTORS;
+		long[] NL = nlog2nTable(blocks);
+		long[] total = new long[P];
+		for(int b = 0; b < blocks; b++) for(int p = 0; p < P; p++) total[p] += est[b * P + p];
+		int first = 0;
+		for(int p = 1; p < P; p++) if(total[p] < total[first]) first = p;
+
+		ArrayList<Integer> order = new ArrayList<Integer>();
+		order.add(first);
+		boolean[] chosen = new boolean[P]; chosen[first] = true;
+		int[]  cur = new int[blocks], assign = new int[blocks];
+		for(int b = 0; b < blocks; b++) cur[b] = est[b * P + first];
+		long[] count = new long[P]; count[0] = blocks;
+		while(order.size() < P)
+		{
+			final int n = order.size();
+			long map = NL[blocks];
+			for(int q = 0; q < n; q++) map -= NL[(int) count[q]];
+			final long map_old = map;
+			long[] gain = new long[P];
+			java.util.stream.IntStream.range(0, P).parallel().forEach(p ->
+			{
+				if(chosen[p]) return;
+				long[] moved_from = new long[n];
+				long   save = 0;
+				int    moved = 0;
+				for(int b = 0; b < blocks; b++)
+				{
+					int e = est[b * P + p];
+					if(e < cur[b]) { save += cur[b] - e; moved_from[assign[b]]++; moved++; }
+				}
+				long map_new = NL[blocks] - NL[moved];
+				for(int q = 0; q < n; q++) map_new -= NL[(int) (count[q] - moved_from[q])];
+				gain[p] = save - (map_new - map_old) - SURVEY_ID_COST;
+			});
+			int best = -1;
+			for(int p = 0; p < P; p++) if(!chosen[p] && (best < 0 || gain[p] > gain[best])) best = p;
+			if(gain[best] <= 0) break;
+			chosen[best] = true;
+			order.add(best);
+			for(int b = 0; b < blocks; b++)
+			{
+				int e = est[b * P + best];
+				if(e < cur[b]) { cur[b] = e; count[assign[b]]--; assign[b] = n; count[n]++; }
+			}
+		}
+		int[] ids = new int[order.size()];
+		for(int k = 0; k < ids.length; k++) ids[k] = order.get(k);
+		return ids;
+	}
+
+	// A block map for the ids: each block uses the first of them with the
+	// smallest estimate in est (a blockCostTable; stride PREDICTORS with
+	// all = true, else ids.length).
+	private static byte[] assignByCost(int[] est, boolean all, int[] ids, int xdim, int ydim, int block)
+	{
+		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		int    stride = all ? PREDICTORS : n, head = 2 + n;
+		byte[] map = new byte[head + bw * bh];
+		map[0] = (byte) block; map[1] = (byte) n;
+		for(int q = 0; q < n; q++) map[2 + q] = (byte) ids[q];
+		for(int b = 0; b < bw * bh; b++)
+		{
+			int best = 0;
+			for(int q = 1; q < n; q++)
+				if(est[b * stride + (all ? ids[q] : q)] < est[b * stride + (all ? ids[best] : best)]) best = q;
+			map[head + b] = (byte) best;
+		}
+		return map;
+	}
+
+	// The block deltas for a given block map (its block size, ids and
+	// choices); the same list as getBlockDeltasFromValues.
+	public static ArrayList getBlockDeltasFromMap(int[] src, int xdim, int ydim, byte[] map)
+	{
+		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int[] ids   = getMapIds(map);
+		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(ids[p]);
+		int[] dst = new int[xdim * ydim];
+		blockEdges(src, dst, xdim, ydim);
+		for(int y = 1; y < ydim; y++)
+		{
+			int row = head + (y - 1) / block * bw;
+			for(int x = 1; x < xdim - 1; x++)
+			{
+				int k = y * xdim + x;
+				dst[k] = src[k] - setPredictor(ids[map[row + (x - 1) / block] & 0xFF], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+			}
+		}
+		int sum = 0;
+		for(int v : dst) sum += Math.abs(v);
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(map);
+		result.add(src[0]);
+		return result;
+	}
+
+	// The cost model for channel i at a block size: reference deltas from
+	// SURVEY_REFERENCE_SET, context from the chosen deltas of the channels
+	// before.
+	private static DeltaCost channelCost(int[] src, int xdim, int ydim, int block, int[][] chosen_before)
+	{
+		int[] ref = (int[]) getBlockDeltasFromValues(src, xdim, ydim, block, SURVEY_REFERENCE_SET).get(1);
+		return new DeltaCost(src, ref, chosen_before, xdim, ydim);
+	}
+
+	// Each channel's block deltas (lists as getBlockDeltasFromValues) for
+	// its predictor ids, blocks assigned by estimated cost as the survey
+	// does. Channels in order: each one's costs use the deltas of the ones
+	// before.
+	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids)
+	{
+		ArrayList[] result = new ArrayList[channel.length];
+		int[][] delta = new int[channel.length][];
+		for(int i = 0; i < channel.length; i++)
+		{
+			DeltaCost dc  = channelCost(channel[i], xdim, ydim, block, Arrays.copyOf(delta, i));
+			int[]     est = blockCostTable(channel[i], xdim, ydim, block, dc, ids[i]);
+			result[i] = getBlockDeltasFromMap(channel[i], xdim, ydim, assignByCost(est, false, ids[i], xdim, ydim, block));
+			delta[i]  = (int[]) result[i].get(1);
+		}
+		return result;
+	}
+
+	// The result of surveyBlockSets: the block size, each channel's predictor
+	// ids, the coded bytes, and a printable report.
+	public static final class BlockSurvey
+	{
+		public int     block;
+		public int[][] ids = new int[3][];
+		public long    bytes;
+		public String  report;
+	}
+
+	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim)
+	{
+		TreeMap<Integer, BlockSurvey> tried = new TreeMap<Integer, BlockSurvey>();
+		StringBuilder log = new StringBuilder();
+		for(int b : new int[] {4, 8, 16}) tried.put(b, surveyBlockSize(channel, xdim, ydim, b, log));
+		int best = bestSurvey(tried);
+		int s = Arrays.binarySearch(BLOCK_SEARCH_SIZES, best);
+		for(int t : new int[] {s - 1, s + 1})
+			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t]))
+				tried.put(BLOCK_SEARCH_SIZES[t], surveyBlockSize(channel, xdim, ydim, BLOCK_SEARCH_SIZES[t], log));
+		BlockSurvey result = tried.get(bestSurvey(tried));
+
+		StringBuilder r = new StringBuilder("Predictor survey: bytes coded (Context-coded deltas + maps) for the first n predictors\n");
+		r.append("in each channel's greedy order (by estimated bits); * marks the n kept for the channel.\n");
+		r.append(log);
+		r.append("Block size:");
+		for(Map.Entry<Integer, BlockSurvey> e : tried.entrySet()) r.append(String.format("  %d -> %,d", e.getKey(), e.getValue().bytes));
+		r.append(String.format("   chose %d (%,d bytes)\n", result.block, result.bytes));
+		for(int i = 0; i < 3; i++)
+		{
+			r.append(String.format("Channel %d, %d predictors:", i, result.ids[i].length));
+			for(int k = 0; k < result.ids[i].length; k++) r.append((k % 6 == 0) ? "\n    " : ", ").append(predictorName(result.ids[i][k]));
+			r.append('\n');
+		}
+		result.report = r.toString();
+		return result;
+	}
+
+	private static int bestSurvey(TreeMap<Integer, BlockSurvey> tried)
+	{
+		int best = -1;
+		for(Map.Entry<Integer, BlockSurvey> e : tried.entrySet()) if(best < 0 || e.getValue().bytes < tried.get(best).bytes) best = e.getKey();
+		return best;
+	}
+
+	private static BlockSurvey surveyBlockSize(int[][] channel, int xdim, int ydim, int block, StringBuilder log)
+	{
+		try
+		{
+			BlockSurvey result = new BlockSurvey();
+			result.block = block;
+			int[][]  delta = new int[3][];
+			byte[][] map   = new byte[3][];
+			int      blocks = blocksAcross(xdim, block) * ((ydim - 1 + block - 1) / block);
+			log.append(String.format("  block %d:\n", block));
+			for(int i = 0; i < 3; i++)
+			{
+				DeltaCost dc    = channelCost(channel[i], xdim, ydim, block, Arrays.copyOf(delta, i));
+				int[]     est   = blockCostTable(channel[i], xdim, ydim, block, dc, null);
+				int[]     order = greedyCostOrder(est, blocks);
+				ArrayList<Integer> counts = new ArrayList<Integer>();
+				for(int c : SURVEY_COUNTS) if(c < order.length) counts.add(c);
+				counts.add(order.length);
+
+				long best_bytes = Long.MAX_VALUE; int worse = 0;
+				StringBuilder line = new StringBuilder(String.format("    channel %d (order %d):", i, order.length));
+				for(int n : counts)
+				{
+					int[]     ids = Arrays.copyOf(order, n);
+					ArrayList r   = getBlockDeltasFromMap(channel[i], xdim, ydim, assignByCost(est, true, ids, xdim, ydim, block));
+					int[]  d = (int[]) r.get(1);
+					byte[] m = (byte[]) r.get(2);
+					java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+					writeMap(new java.io.DataOutputStream(bytes), 13, m, (i > 0) ? map[i - 1] : null, xdim);
+					long size = bytes.size() + packContextDeltas(d, Arrays.copyOf(delta, i), xdim).length;
+					line.append(String.format(" %d:%,d", n, size));
+					if(size < best_bytes) { best_bytes = size; result.ids[i] = ids; delta[i] = d; map[i] = m; worse = 0; line.append('*'); }
+					else if(++worse == 2) break;
+				}
+				result.bytes += best_bytes;
+				log.append(line).append('\n');
+			}
+			return result;
+		}
+		catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+	}
+
 	private static int blocksAcross(int xdim, int block) { return (xdim - 2 + block - 1) / block; }
 
 	public static ArrayList getBlockDeltasFromValues(int[] src, int xdim, int ydim, int block, int set)
 	{
+		return getBlockDeltasFromValues(src, xdim, ydim, block, getSetIds(set));
+	}
+
+	// As above, with the predictors given by their ids (1..PREDICTORS of them).
+	public static ArrayList getBlockDeltasFromValues(int[] src, int xdim, int ydim, int block, int[] set_ids)
+	{
 		int[]  dst = new int[xdim * ydim];
-		int[]  ids = BLOCK_SETS[set];
+		int[]  ids = new int[set_ids.length];
+		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(set_ids[p]);
 		int    bw  = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
-		byte[] map = new byte[2 + bw * bh];
-		map[0] = (byte) block; map[1] = (byte) set;
+		int    head = 2 + ids.length;
+		byte[] map = new byte[head + bw * bh];
+		map[0] = (byte) block; map[1] = (byte) ids.length;
+		for(int p = 0; p < ids.length; p++) map[2 + p] = (byte) set_ids[p];
 		boolean blends = false;
 		for(int e : ids) if(e >= 32) blends = true;
 		int[] prim = new int[22];
@@ -4414,7 +4830,7 @@ public class DeltaMapper
 					}
 				int best = 0;
 				for(int p = 1; p < ids.length; p++) if(sums[p] < sums[best]) best = p;
-				map[2 + by * bw + bx] = (byte) best;
+				map[head + by * bw + bx] = (byte) best;
 				for(int y = y0; y < y1; y++)
 					for(int x = x0; x < x1; x++)
 					{
@@ -4435,8 +4851,9 @@ public class DeltaMapper
 
 	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map)
 	{
-		int   block = map[0], bw = blocksAcross(xdim, block);
-		int[] ids   = BLOCK_SETS[map[1]];
+		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int[] ids   = getMapIds(map);
+		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(ids[p]);
 		int[] dst   = new int[xdim * ydim];
 		dst[0] = init_value;
 		for(int x = 1; x < xdim; x++) dst[x] = dst[x - 1] + delta[x];
@@ -4444,11 +4861,11 @@ public class DeltaMapper
 		{
 			int k = y * xdim;
 			dst[k] = dst[k - xdim] + delta[k];
-			int row = 2 + (y - 1) / block * bw;
+			int row = head + (y - 1) / block * bw;
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				k++;
-				int id = ids[map[row + (x - 1) / block]];
+				int id = ids[map[row + (x - 1) / block] & 0xFF];
 				dst[k] = delta[k] + setPredictor(id, dst[k - 1], dst[k - xdim], dst[k - xdim - 1], dst[k - xdim + 1]);
 			}
 			k++;
@@ -4636,9 +5053,12 @@ public class DeltaMapper
 	//   1: an arithmetic-coded map -- int length, short K, K pairs of (value
 	//      byte, int count), int coded length, coded bytes;
 	//   2: a context-coded map (see mapContext) -- int length, byte K (values
-	//      are 0..K-1), int coded length, coded bytes.
-	// A block map (type 13) starts with its block size and predictor set
-	// bytes (map[0], map[1]); the rest is coded as above.
+	//      are 0..K-1), int coded length, coded bytes (only for K <= 32);
+	//   3: a neighbour-coded map (see mapToNeighbours; format version 2) --
+	//      int length, short K, int coded length, coded bytes.
+	// A block map (type 13) starts with its block size, the number of
+	// predictors n and their n ids (map[0..1+n], one byte each); the entries
+	// after them are coded as above.
 	// The writer keeps whichever is smallest. previous is the map of the
 	// channel before (null for the first channel) and xdim the row width of
 	// the deltas; the reader must pass the same.
@@ -4655,20 +5075,29 @@ public class DeltaMapper
 		int width = mapWidth(delta_type, xdim);
 		if(delta_type == 13)
 		{
-			// Block size and predictor set, then the entries.
-			out.writeByte(map[0]); out.writeByte(map[1]);
+			// Block size, n, the n predictor ids, then the entries.
+			int head = mapHeaderLength(map);
+			out.write(map, 0, head);
 			width    = blocksAcross(xdim, map[0]);
-			map      = Arrays.copyOfRange(map, 2, map.length);
-			previous = (previous == null) ? null : Arrays.copyOfRange(previous, 2, previous.length);
+			map      = Arrays.copyOfRange(map, head, map.length);
+			previous = (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length);
 		}
-		byte[][] form = {mapToString(map), mapToArithmetic(map), mapToContext(map, previous, width)};
+		byte[][] form = {mapToString(map), mapToArithmetic(map), mapToContext(map, previous, width), mapToNeighbours(map, previous, width)};
 		int best = 0;
-		for(int f = 1; f < 3; f++) if(form[f].length < form[best].length) best = f;
+		for(int f = 1; f < form.length; f++) if(form[f] != null && form[f].length < form[best].length) best = f;
 		out.writeByte(best);
 		out.write(form[best]);
 	}
 
 	public static byte[] readMap(java.io.DataInputStream in, int delta_type, byte[] previous, int xdim) throws java.io.IOException
+	{
+		return readMap(in, delta_type, previous, xdim, false);
+	}
+
+	// As above; with version1 true, a block map is in the format version 1
+	// layout, [block size, set number] (BLOCK_SET_NAMES), and is returned in
+	// the current one.
+	public static byte[] readMap(java.io.DataInputStream in, int delta_type, byte[] previous, int xdim, boolean version1) throws java.io.IOException
 	{
 		if(delta_type <= 8)
 		{
@@ -4681,13 +5110,36 @@ public class DeltaMapper
 		}
 		if(delta_type == 13)
 		{
-			byte block = in.readByte(), set = in.readByte();
-			if(set < 0 || set >= BLOCK_SET_NAMES.length || block < BLOCK_MIN || block > BLOCK_MAX)
-				throw new java.io.IOException("Block map with predictor set " + set + " and block size " + block + ": not one this version reads.");
-			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, 2, previous.length), blocksAcross(xdim, block));
-			byte[] map  = new byte[body.length + 2];
-			map[0] = block; map[1] = set;
-			System.arraycopy(body, 0, map, 2, body.length);
+			int   block = in.readByte();
+			int[] ids;
+			if(version1)
+			{
+				int set = in.readByte();
+				if(set < 0 || set >= BLOCK_SET_NAMES.length)
+					throw new java.io.IOException("Block map with predictor set " + set + ": not one this version reads.");
+				ids = getSetIds(set);
+			}
+			else
+			{
+				int n = in.readUnsignedByte();
+				if(n < 1 || n > PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
+				ids = new int[n];
+				for(int p = 0; p < n; p++)
+				{
+					ids[p] = in.readUnsignedByte();
+					if(ids[p] >= PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
+				}
+			}
+			if(block < BLOCK_MIN || block > BLOCK_MAX)
+				throw new java.io.IOException("Block map with block size " + block + ": not one this version reads.");
+			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length), blocksAcross(xdim, block));
+			int    head = 2 + ids.length;
+			byte[] map  = new byte[body.length + head];
+			map[0] = (byte) block; map[1] = (byte) ids.length;
+			for(int p = 0; p < ids.length; p++) map[2 + p] = (byte) ids[p];
+			System.arraycopy(body, 0, map, head, body.length);
+			for(int q = head; q < map.length; q++)
+				if((map[q] & 0xFF) >= ids.length) throw new java.io.IOException("Block map entry " + (map[q] & 0xFF) + " with " + ids.length + " predictors.");
 			return map;
 		}
 		return readMapForms(in, previous, mapWidth(delta_type, xdim));
@@ -4697,6 +5149,27 @@ public class DeltaMapper
 	{
 		int coding = in.readByte();
 		int n      = in.readInt();
+		if(coding == 3)
+		{
+			int    K     = in.readShort();
+			byte[] coded = new byte[in.readInt()];
+			in.readFully(coded);
+			int[]  value = new int[n];
+			// Each context needs the values before it, so the token before
+			// is turned into its value first (the decoder asks in order).
+			int[] token = ArithmeticMapper.getArithmeticValuesContext(coded, n, K + 3, NEIGHBOUR_CONTEXTS, (k, t) ->
+			{
+				if(k > 0) value[k - 1] = neighbourValue(t[k - 1], value, previous, k - 1, width);
+				return neighbourContext(value, previous, k, width);
+			});
+			byte[] map = new byte[n];
+			for(int q = 0; q < n; q++)
+			{
+				if(q == n - 1) value[q] = neighbourValue(token[q], value, previous, q, width);
+				map[q] = (byte) value[q];
+			}
+			return map;
+		}
 		if(coding == 2)
 		{
 			int    K     = in.readUnsignedByte();
@@ -4769,9 +5242,70 @@ public class DeltaMapper
 		int left  = (x > 0) ? m[k - 1] : 0;
 		int up    = (k >= width) ? m[k - width] : 0;
 		int ul    = (x > 0 && k >= width) ? m[k - width - 1] : 0;
-		int prev  = (previous != null) ? previous[k] : 0;
+		int prev  = (previous != null) ? previous[k] & 0xFF : 0;
 		int shape = (ul == left) ? 0 : (ul == up) ? 1 : 2;
 		return ((left * K + up) * K + prev) * 3 + shape;
+	}
+
+	private static final int CONTEXT_MAP_MAX = 32;
+
+	// Form 3, the neighbour form: each entry coded as "same as the left
+	// entry" (0), "same as the one above" (1), "same as the previous
+	// channel's map here" (2), or 3 + its value, the first that applies.
+	// The context (NEIGHBOUR_CONTEXTS) is which of those neighbours, and the
+	// upper-left one, agree with each other. Any number of values works, so
+	// it suits large predictor sets; it measured 0.05-0.3% smaller than the
+	// other forms on block maps (MapIdeaTest). Missing neighbours never match.
+	private static final int NEIGHBOUR_CONTEXTS = 32;
+
+	private static int neighbour(int[] v, byte[] previous, int k, int width, int which)
+	{
+		int x = k % width;
+		switch(which)
+		{
+			case 0:  return (x > 0) ? v[k - 1] : -1;
+			case 1:  return (k >= width) ? v[k - width] : -1;
+			case 2:  return (previous != null) ? previous[k] & 0xFF : -1;
+			default: return (x > 0 && k >= width) ? v[k - width - 1] : -1;
+		}
+	}
+
+	private static int neighbourContext(int[] v, byte[] previous, int k, int width)
+	{
+		int L = neighbour(v, previous, k, width, 0), U = neighbour(v, previous, k, width, 1);
+		int V = neighbour(v, previous, k, width, 2), D = neighbour(v, previous, k, width, 3);
+		int c = 0;
+		if(L >= 0 && L == U) c |= 1;
+		if(V >= 0 && V == L) c |= 2;
+		if(V >= 0 && V == U) c |= 4;
+		if(D >= 0 && D == L) c |= 8;
+		if(D >= 0 && D == U) c |= 16;
+		return c;
+	}
+
+	private static int neighbourValue(int token, int[] v, byte[] previous, int k, int width)
+	{
+		return (token < 3) ? neighbour(v, previous, k, width, token) : token - 3;
+	}
+
+	private static byte[] mapToNeighbours(byte[] map, byte[] previous, int width) throws java.io.IOException
+	{
+		int n = map.length, K = 1;
+		int[] v = new int[n];
+		for(int q = 0; q < n; q++) { v[q] = map[q] & 0xFF; K = Math.max(K, v[q] + 1); }
+		int[] token = new int[n], context = new int[n];
+		for(int k = 0; k < n; k++)
+		{
+			int s = v[k];
+			int L = neighbour(v, previous, k, width, 0), U = neighbour(v, previous, k, width, 1), V = neighbour(v, previous, k, width, 2);
+			token[k]   = (L >= 0 && s == L) ? 0 : (U >= 0 && s == U) ? 1 : (V >= 0 && s == V) ? 2 : 3 + s;
+			context[k] = neighbourContext(v, previous, k, width);
+		}
+		byte[] coded = ArithmeticMapper.getIntervalValueContext(token, K + 3, context, NEIGHBOUR_CONTEXTS);
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		java.io.DataOutputStream out = new java.io.DataOutputStream(bytes);
+		out.writeInt(n); out.writeShort(K); out.writeInt(coded.length); out.write(coded);
+		return bytes.toByteArray();
 	}
 
 	private static byte[] mapToContext(byte[] map, byte[] previous, int width) throws java.io.IOException
@@ -4779,8 +5313,12 @@ public class DeltaMapper
 		int K = 1;
 		for(byte b : map) K = Math.max(K, (b & 0xFF) + 1);
 		if(previous != null) for(byte b : previous) K = Math.max(K, (b & 0xFF) + 1);
+		// Its K^3 x 3 contexts, each with K counts, are all set up at once
+		// (ArithmeticMapper.getIntervalValueContext), so it is only offered
+		// for up to CONTEXT_MAP_MAX values; larger sets use the other forms.
+		if(K > CONTEXT_MAP_MAX) return null;
 		int[] symbol  = new int[map.length];
-		for(int q = 0; q < map.length; q++) symbol[q] = map[q];
+		for(int q = 0; q < map.length; q++) symbol[q] = map[q] & 0xFF;
 		int[] context = new int[map.length];
 		for(int q = 0; q < map.length; q++) context[q] = mapContext(symbol, previous, q, width, K);
 		byte[] coded = ArithmeticMapper.getIntervalValueContext(symbol, K, context, K * K * K * 3);

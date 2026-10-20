@@ -4,14 +4,14 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import javax.swing.*;
 
-// PacketReader version 1.0
+// PacketReader version 1.1
 public class PacketReader
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids; version 1 files are still read
 
 	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)","Adaptive","Adaptive (per packet)","Context"};
 
@@ -97,10 +97,10 @@ public class PacketReader
 	private void read(DataInputStream in, String filename) throws Exception
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		if(id != FORMAT_ID || version < 1 || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Packet Writer file."
-				: filename + " is Packet format version " + version + "; this reader reads version " + FORMAT_VERSION + ".");
+				: filename + " is Packet format version " + version + "; this reader reads versions 1 to " + FORMAT_VERSION + ".");
 		xdim              = in.readUnsignedShort();
 		ydim              = in.readUnsignedShort();
 		pixel_shift       = in.readByte();
@@ -124,7 +124,7 @@ public class PacketReader
 			init[i]      = in.readInt();
 			delta_min[i] = in.readInt();
 			length[i]    = in.readInt();
-			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0]);
+			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0], version == 1);
 			if(entropy_type == 7)        // Context: decoded here, in channel order
 			{
 				int[] size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);

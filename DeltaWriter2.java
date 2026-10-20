@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// DeltaWriter2 version 1.0
+// DeltaWriter2 version 1.1
 //
 // A streamlined DeltaWriter. Files it saves are read by the regular
 // DeltaReader -- the header and per-channel layout are the same, with
@@ -26,7 +26,7 @@ public class DeltaWriter2
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'D';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
 
 	// compress_type written to the header: String* (strings that don't
 	// compress enough come back uncompressed from getStringList).
