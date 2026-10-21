@@ -4870,7 +4870,9 @@ public class DeltaMapper
 		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
 		int[] dst = new int[xdim * ydim];
 		blockEdges(src, dst, xdim, ydim);
-		for(int y = 1; y < ydim; y++)
+		// Rows in parallel: the predictions read only the source (and bias
+		// corrections computed up front).
+		java.util.stream.IntStream.range(1, ydim).parallel().forEach(y ->
 		{
 			int row = head + (y - 1) / block * bw;
 			for(int x = 1; x < xdim - 1; x++)
@@ -4878,7 +4880,7 @@ public class DeltaMapper
 				int k = y * xdim + x;
 				dst[k] = src[k] - ps.predict(table, ids[map[row + (x - 1) / block] & 0xFF], k);
 			}
-		}
+		});
 		int sum = 0;
 		for(int v : dst) sum += Math.abs(v);
 		ArrayList result = new ArrayList();
@@ -4943,12 +4945,22 @@ public class DeltaMapper
 	{
 		TreeMap<Integer, BlockSurvey> tried = new TreeMap<Integer, BlockSurvey>();
 		StringBuilder log = new StringBuilder();
-		for(int b : new int[] {4, 8, 16}) tried.put(b, surveyBlockSize(channel, xdim, ydim, b, table, log));
+		// The block sizes are independent: surveyed at the same time (each
+		// ends with a long serial stretch of real coding).
+		int[] first = {4, 8, 16};
+		BlockSurvey[] got = new BlockSurvey[first.length];
+		StringBuilder[] logs = new StringBuilder[first.length];
+		java.util.stream.IntStream.range(0, first.length).parallel().forEach(t -> { logs[t] = new StringBuilder(); got[t] = surveyBlockSize(channel, xdim, ydim, first[t], table, logs[t]); });
+		for(int t = 0; t < first.length; t++) { tried.put(first[t], got[t]); log.append(logs[t]); }
 		int best = bestSurvey(tried);
 		int s = Arrays.binarySearch(BLOCK_SEARCH_SIZES, best);
+		ArrayList<Integer> next = new ArrayList<Integer>();
 		for(int t : new int[] {s - 1, s + 1})
-			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t]))
-				tried.put(BLOCK_SEARCH_SIZES[t], surveyBlockSize(channel, xdim, ydim, BLOCK_SEARCH_SIZES[t], table, log));
+			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t])) next.add(BLOCK_SEARCH_SIZES[t]);
+		BlockSurvey[] more = new BlockSurvey[next.size()];
+		StringBuilder[] more_log = new StringBuilder[next.size()];
+		java.util.stream.IntStream.range(0, next.size()).parallel().forEach(t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(channel, xdim, ydim, next.get(t), table, more_log[t]); });
+		for(int t = 0; t < more.length; t++) { tried.put(next.get(t), more[t]); log.append(more_log[t]); }
 		BlockSurvey result = tried.get(bestSurvey(tried));
 
 		StringBuilder r = new StringBuilder("Predictor survey: bytes coded (Context-coded deltas + maps) for the first n predictors\n");
@@ -5085,15 +5097,23 @@ public class DeltaMapper
 		byte[] map = new byte[2 + n + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) n;
 		for(int p = 0; p < n; p++) map[2 + p] = (byte) ids[p];
+		// Each primitive the set uses, once per pixel.
+		boolean[] need = new boolean[PREDICTOR_TABLE.primitives];
+		for(int id : ids) { need[PREDICTOR_TABLE.first(id)] = true; need[PREDICTOR_TABLE.second(id)] = true; }
+		int m = 0; for(boolean b : need) if(b) m++;
+		int[] used = new int[m]; m = 0;
+		for(int q = 0; q < need.length; q++) if(need[q]) used[m++] = q;
 		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
 		{
 			long[] sums = new long[bw * n];
+			int[]  prim = new int[PREDICTOR_TABLE.primitives];
 			int    y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
 			for(int y = y0; y < y1; y++)
 				for(int x = 1; x < xdim - 1; x++)
 				{
 					int k = y * xdim + x, base = (x - 1) / block * n;
-					for(int p = 0; p < n; p++) sums[base + p] += Math.abs(src[k] - ps.predict(PREDICTOR_TABLE, ids[p], k));
+					for(int q : used) prim[q] = ps.primitive(q, k);
+					for(int p = 0; p < n; p++) sums[base + p] += Math.abs(src[k] - PREDICTOR_TABLE.predict(ids[p], prim));
 				}
 			for(int bx = 0; bx < bw; bx++)
 			{
