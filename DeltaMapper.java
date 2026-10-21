@@ -4211,61 +4211,27 @@ public class DeltaMapper
 
 	// =========================================================================
 	// Block map (delta type 13): the interior is split into block x block
-	// squares, and each uses the predictor from its set (BLOCK_SETS) with
-	// the smallest sum of |delta| over the square. Row 0 is horizontal,
-	// column 0 vertical and the last column horizontal, as in frame map 2.
-	// The map is [block size, n, n predictor ids (see "Predictor ids" below),
-	// then one entry per block, row by row: an index 0..n-1 into the ids].
-	// Each channel's map carries its own ids, so the channels may use
-	// different predictors. (Format version 1 files had [block size, set
-	// number] instead of the ids; readMap reads both.)
-	// Measured with FrameTest and BlockSetTest: 1-3% smaller than scanline
-	// 4 on most images; block sizes 8-16 do about equally well, and the
-	// Scanline 16 and Neighbours 8 sets best (a set without the plain
-	// neighbours, and one of gradients only, both did worse). The Blends 32
-	// set (SetSearch) adds another 0.5% lossless, 1% at Colour Resolution 3.
+	// squares, and each uses one predictor from its channel's set. Row 0 is
+	// horizontal, column 0 vertical and the last column horizontal, as in
+	// frame map 2. The map is [block size, n, n predictor ids (PREDICTOR_TABLE,
+	// see "Predictor tables" below), then one entry per block, row by row:
+	// an index 0..n-1 into the ids]. Each channel's map carries its own ids,
+	// so the channels may use different predictors. Some predictors use the
+	// previous channel (in coding order) at the same pixel, so a channel is
+	// coded and decoded with the one before it: see PixelSource.
+	// With a named set (BLOCK_SET_NAMES) a block takes the predictor with
+	// the smallest sum of |delta|; surveyBlockSets chooses sets and blocks
+	// by estimated coded size instead.
 	// =========================================================================
 
 	public static final int BLOCK_MIN = 4, BLOCK_MAX = 32, BLOCK_DEFAULT = 8;
 
-	public static final String[] BLOCK_SET_NAMES = {"Scanline 16", "No Neighbours 16", "Neighbours 8", "Basic 4", "Blends 32"};
-
-	// Predictors, as ids for blockPredictor (a = left, b = above,
-	// c = above-left, d = above-right):
-	//   0 a            1 b            2 c            3 d
-	//   4 (a+b)/2      5 (b+c)/2      6 (a+c)/2      7 (b+d)/2
-	//   8 (c+d)/2      9 (a+b+c+d)/4 10 a+b-c       11 MED(a,b,c)
-	//  12 (3a+b)/4    13 (a+3b)/4    14 (3a+d)/4    15 (3b+a)/4
-	//  16 (a+d)/2     17 a+(b-c)/2   18 b+(a-c)/2   19 a+d-b
-	//  20 (a+b+d)/3   21 b+(d-c)/2
-	// A set entry of 32 or more is the average of two of these:
-	// 32 * (i + 1) + j means (P_i + P_j + 1) / 2 (see setPredictor).
-	private static final int[][] BLOCK_SETS = {
-		// Scanline 16: the scanline 4 set (pred16).
-		{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
-		// No Neighbours 16: only averages, blends and gradients -- no plain
-		// neighbour, which a flat or smoothly varying block rarely wants.
-		{ 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
-		// Neighbours 8: the four neighbours, MED, gradient and two averages
-		// about as good as Scanline 16 with a cheaper map.
-		{ 0, 1, 2, 3, 11, 4, 10, 9 },
-		// Basic 4: MED, gradient, and two averages -- a cheap map.
-		{ 11, 10, 4, 9 },
-		// Blends 32: picked by SetSearch from all 253 predictors and
-		// averages of two, greedily, on 7 test images at Colour Resolution
-		// 0 and 3 (tested leave-one-out: 0.5% smaller than the best of the
-		// sets above lossless, 1.1% at Colour Resolution 3; a few
-		// flat, synthetic images do better with the sets above).
-		{ 11, 564, 37, 275, 1, 165, 46, 267, 102, 169, 368, 7, 178, 3, 0, 176,
-		  66, 75, 6, 145, 50, 69, 168, 403, 307, 181, 101, 38, 80, 561, 231, 4 },
-	};
-
-	// Prediction for a set entry: a predictor, or the average of two.
-	public static int setPredictor(int entry, int a, int b, int c, int d)
-	{
-		if(entry < 32) return blockPredictor(entry, a, b, c, d);
-		return (blockPredictor(entry / 32 - 1, a, b, c, d) + blockPredictor(entry % 32, a, b, c, d) + 1) >> 1;
-	}
+	// Named sets, as PREDICTOR_TABLE ids: the first 4, 8, 16 and 32 of one
+	// greedy order (by estimated coded size, with the map's cost) over every
+	// block of 7 test images at Colour Resolution 0 and 3, block size 8.
+	public static final String[] BLOCK_SET_NAMES = {"Top 4", "Top 8", "Top 16", "Top 32"};
+	private static final int[] BLOCK_ORDER = { 243, 21, 167, 127, 209, 37, 0, 231, 171, 1, 39, 149, 141, 172, 205, 28, 44, 173, 122, 206, 208, 184, 177, 86, 213, 67, 182, 150, 27, 137, 30, 121 };
+	private static final int[] BLOCK_SET_SIZES = {4, 8, 16, 32};
 
 	public static int blockPredictor(int id, int a, int b, int c, int d)
 	{
@@ -4292,64 +4258,40 @@ public class DeltaMapper
 			case 18: return b + ((a - c) >> 1);
 			case 19: return a + d - b;
 			case 20: return (a + b + d + 1) / 3;
+			case 21: return b + ((d - c) >> 1);
+			// 22-27: selection predictors.
+			case 22: { int p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+			           return (pa <= pb && pa <= pc) ? a : (pb <= pc) ? b : c; }                 // Paeth (PNG)
+			case 23: return median(a, b, c);
+			case 24: return median(a, b, d);
+			case 25: return median(a, d, a + d - b);                                           // MED along the up-right diagonal
+			case 26: return (Math.abs(b - c) <= Math.abs(a - c)) ? a : b;                     // the flatter direction
+			case 27: { int h = Math.abs(b - c), v = Math.abs(a - c), g = Math.abs(a - b);     // ... of three: left, up, up-right
+			           return (h <= v && h <= g) ? a : (v <= g) ? b : d; }
 			default: return b + ((d - c) >> 1);
 		}
 	}
 
-	public static int blockSetSize(int set) { return BLOCK_SETS[set].length; }
+	private static int median(int x, int y, int z) { return Math.max(Math.min(x, y), Math.min(Math.max(x, y), z)); }
+
+	public static int blockSetSize(int set) { return BLOCK_SET_SIZES[set]; }
 
 	// ---- Predictor ids --------------------------------------------------------
 	//
-	// Every predictor a block can use has an id, 0..PREDICTORS-1 (one byte):
-	//   0..21    the predictors of blockPredictor, in its numbering;
-	//   22..252  the average of two of them, (P_i + P_j + 1) / 2 with i > j,
-	//            in the order (1,0), (2,0), (2,1), (3,0), (3,1), (3,2), ...
-	// That is every predictor and every average of two -- the 253 SetSearch
-	// chooses from. Inside DeltaMapper the predictors are also written as set
-	// entries (see setPredictor); predictorEntry and predictorId convert.
+	// A predictor id (one byte) is an index into PREDICTOR_TABLE, below.
 
-	public static final int PRIMITIVES = 22;
-	public static final int PREDICTORS = PRIMITIVES + PRIMITIVES * (PRIMITIVES - 1) / 2;   // 253
+	public static final int PRIMITIVES = 22;   // the primitives with only a, b, c, d (blockPredictor 0-21)
 
 	public static final String[] PRIMITIVE_NAMES = {
 		"a", "b", "c", "d", "(a+b)/2", "(b+c)/2", "(a+c)/2", "(b+d)/2",
 		"(c+d)/2", "(a+b+c+d)/4", "a+b-c", "MED", "(3a+b)/4", "(a+3b)/4", "(3a+d)/4", "(3b+a)/4",
 		"(a+d)/2", "a+(b-c)/2", "b+(a-c)/2", "a+d-b", "(a+b+d)/3", "b+(d-c)/2" };
 
-	// The set entry (for setPredictor) of a predictor id.
-	public static int predictorEntry(int id)
-	{
-		if(id < PRIMITIVES) return id;
-		int k = id - PRIMITIVES, i = 1;
-		while(k >= i) { k -= i; i++; }
-		return 32 * (i + 1) + k;
-	}
-
-	// The predictor id of a set entry (either order of an average's pair).
-	public static int predictorId(int entry)
-	{
-		if(entry < 32) return entry;
-		int p = entry / 32 - 1, q = entry % 32;
-		if(p == q) return p;
-		int i = Math.max(p, q), j = Math.min(p, q);
-		return PRIMITIVES + i * (i - 1) / 2 + j;
-	}
-
 	// A readable name: "MED", or "avg(MED, a)" for an average.
-	public static String predictorName(int id)
-	{
-		int e = predictorEntry(id);
-		if(e < 32) return PRIMITIVE_NAMES[e];
-		return "avg(" + PRIMITIVE_NAMES[e / 32 - 1] + ", " + PRIMITIVE_NAMES[e % 32] + ")";
-	}
+	public static String predictorName(int id) { return PREDICTOR_TABLE.name(id); }
 
 	// The predictor ids of a named set (BLOCK_SET_NAMES).
-	public static int[] getSetIds(int set)
-	{
-		int[] ids = new int[BLOCK_SETS[set].length];
-		for(int p = 0; p < ids.length; p++) ids[p] = predictorId(BLOCK_SETS[set][p]);
-		return ids;
-	}
+	public static int[] getSetIds(int set) { return Arrays.copyOf(BLOCK_ORDER, BLOCK_SET_SIZES[set]); }
 
 	// The predictor ids a block map uses (map[2..1+n]).
 	public static int[] getMapIds(byte[] map)
@@ -4384,7 +4326,7 @@ public class DeltaMapper
 			int[][] d = new int[3][]; byte[][] m = new byte[3][];
 			for(int i = 0; i < 3; i++)
 			{
-				ArrayList result = getDeltas(channel[i], xdim, ydim, 13, 0, block, set);
+				ArrayList result = getBlockDeltasFromValues(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, getSetIds(set));
 				d[i] = (int[]) result.get(1); m[i] = (byte[]) result.get(2);
 			}
 			long total = 0;
@@ -4451,6 +4393,271 @@ public class DeltaMapper
 		return t.toString();
 	}
 
+	// ---- Predictor tables -------------------------------------------------------
+	//
+	// A block map's ids index PREDICTOR_TABLE: 255 predictors, each a
+	// primitive or the average of two, (P_i + P_j + 1) >> 1 (see
+	// predictor.txt for each one and how they were chosen). Primitives 0-21
+	// are blockPredictor's on a, b, c, d; the rest are:
+	//
+	//   selection   22 Paeth, 23 median(a,b,c), 24 median(a,b,d),
+	//               25 median(a,d,a+d-b), 26 switch(a,b), 27 switch(a,b,d)
+	//               (blockPredictor);
+	//   cross       28-35: a predictor plus the previous channel's error
+	//               under it, P + (R - P_R), R the previous channel (coded
+	//               first) at the same pixel: P = a, b, d, MED, (a+b)/2,
+	//               a+b-c; then MED and (a+b)/2 with half the error. On the
+	//               first channel they are just P;
+	//   reach       36 2a-aa, 37 2b-bb (aa two to the left, bb two up),
+	//               38 GAP (CALIC's gradient-adjusted predictor), 39 GAP with
+	//               thresholds an eighth as large (for coarser colour);
+	//   clamped     40 a+b-c and 41 a+d-b, clamped to the range of a, b, c, d;
+	//   bias        42-45: MED, (a+b)/2, a and b plus their mean error so far
+	//               in the pixel's gradient context (as JPEG-LS corrects
+	//               bias; 729 contexts, counts halved at 64). The mean is of
+	//               every earlier pixel in raster order, whatever predictor
+	//               it was coded with, so the decoder keeps the same counts.
+	//
+	// Beyond a, b, c and d these need the channel's earlier pixels and the
+	// previous channel: see PixelSource.
+
+	public static final int SELECTION_FIRST = 22, CROSS_FIRST = 28, REACH_FIRST = 36, CLAMP_FIRST = 40, BIAS_FIRST = 42, ALL_PRIMITIVES = 46;
+	public static final String[] GROUP_NAMES = {"selection", "cross-channel", "longer reach", "clamped", "bias-corrected"};
+	public static final int[] GROUP_FIRST = {SELECTION_FIRST, CROSS_FIRST, REACH_FIRST, CLAMP_FIRST, BIAS_FIRST, ALL_PRIMITIVES};
+	public static final String[] EXTRA_PRIMITIVE_NAMES = {
+		"Paeth", "median(a,b,c)", "median(a,b,d)", "median(a,d,a+d-b)", "switch(a,b)", "switch(a,b,d)",
+		"a+(R-Ra)", "b+(R-Rb)", "d+(R-Rd)", "MED+(R-MED_R)", "(a+b)/2+(R-..)", "a+b-c+(R-..)", "MED+(R-MED_R)/2", "(a+b)/2+(R-..)/2",
+		"2a-aa", "2b-bb", "GAP", "GAP/8",
+		"clamp(a+b-c)", "clamp(a+d-b)",
+		"MED+bias", "(a+b)/2+bias", "a+bias", "b+bias"};
+	private static final int[] CROSS_BASE = {0, 1, 3, 11, 4, 10, 11, 4};   // the last two with half the error
+	private static final int[] BIAS_BASE  = {11, 4, 0, 1};
+
+	public static String primitiveName(int p) { return (p < PRIMITIVES) ? PRIMITIVE_NAMES[p] : EXTRA_PRIMITIVE_NAMES[p - PRIMITIVES]; }
+
+	public static final class PredictorTable
+	{
+		public  final String name;
+		private final int[]  first, second;   // primitives; first == second for a primitive alone
+		public  final int    primitives;      // primitives its entries use: 0..primitives-1
+
+		PredictorTable(String name, int[] first, int[] second)
+		{
+			this.name   = name;
+			this.first  = first;
+			this.second = second;
+			int m = 0;
+			for(int k = 0; k < first.length; k++) m = Math.max(m, Math.max(first[k], second[k]));
+			primitives = m + 1;
+		}
+
+		public int size() { return first.length; }
+		public int first(int id)  { return first[id]; }
+		public int second(int id) { return second[id]; }
+		public boolean alone(int id) { return first[id] == second[id]; }
+		public String name(int id)
+		{
+			return alone(id) ? primitiveName(first[id]) : "avg(" + primitiveName(first[id]) + ", " + primitiveName(second[id]) + ")";
+		}
+		// Whether id is primitive p or an average with p.
+		public boolean uses(int id, int p) { return first[id] == p || second[id] == p; }
+		// This table without the given primitives (alone or in averages), ids in the same order.
+		public PredictorTable without(String name, int... primitives)
+		{
+			ArrayList<Integer> keep = new ArrayList<Integer>();
+			for(int id = 0; id < size(); id++)
+			{
+				boolean drop = false;
+				for(int p : primitives) drop |= uses(id, p);
+				if(!drop) keep.add(id);
+			}
+			int[] i = new int[keep.size()], j = new int[keep.size()];
+			for(int k = 0; k < i.length; k++) { i[k] = first[keep.get(k)]; j[k] = second[keep.get(k)]; }
+			return new PredictorTable(name, i, j);
+		}
+		// Its prediction from the primitives' values.
+		int predict(int id, int[] prim) { int i = first[id], j = second[id]; return (i == j) ? prim[i] : (prim[i] + prim[j] + 1) >> 1; }
+	}
+
+	public static PredictorTable pairTable(String name, int[] pairs)
+	{
+		int[] i = new int[pairs.length / 2], j = new int[pairs.length / 2];
+		for(int k = 0; k < i.length; k++) { i[k] = pairs[2 * k]; j[k] = pairs[2 * k + 1]; }
+		return new PredictorTable(name, i, j);
+	}
+
+	// PREDICTOR_TABLE, as pairs of primitives (equal for a primitive alone),
+	// 255 of them (ids are one byte), chosen by measurement on 7 test images
+	// at Colour Resolution 0 and 3 (see predictor.txt):
+	//   - 31 primitives. Of the 44 tried, 13 were dropped together because
+	//     removing them (alone and in averages) cost under 0.03%: 10 a+b-c,
+	//     12 (3a+b)/4, 14 (3a+d)/4, 17 a+(b-c)/2, 20 (a+b+d)/3, 22 Paeth,
+	//     26 and 27 the switches, 33 a+b-c+(R-..), 38 GAP, 41 clamp(a+d-b),
+	//     43 (a+b)/2+bias and 44 a+bias (15 and 21 were already out);
+	//   - 224 averages of two of them: the most used (share of blocks) of
+	//     all 465 in a survey over every pair, 97% of their use.
+	static final int[] PREDICTOR_PAIRS = {
+		0,0, 1,1, 2,2, 3,3, 4,4, 5,5, 6,6, 7,7, 8,8, 9,9, 11,11, 13,13,
+		16,16, 18,18, 19,19, 23,23, 24,24, 25,25, 28,28, 29,29, 30,30, 31,31, 32,32, 34,34,
+		35,35, 36,36, 37,37, 39,39, 40,40, 42,42, 45,45, 2,0, 2,1, 3,0, 3,1, 4,0,
+		4,3, 5,0, 5,1, 5,2, 5,3, 5,4, 6,0, 6,1, 6,2, 6,3, 6,4, 7,0,
+		7,1, 7,4, 7,5, 7,6, 8,0, 8,1, 8,4, 9,4, 9,6, 11,0, 11,1, 11,7,
+		11,8, 13,0, 16,0, 16,1, 16,3, 16,4, 16,5, 16,6, 16,7, 16,8, 16,9, 16,11,
+		18,0, 18,1, 18,3, 18,4, 18,5, 18,6, 18,7, 18,8, 18,9, 18,13, 18,16, 19,3,
+		19,5, 19,6, 19,7, 19,8, 19,18, 23,0, 23,1, 23,2, 23,3, 23,4, 23,5, 23,6,
+		24,0, 24,1, 24,4, 24,5, 24,6, 24,7, 24,9, 24,18, 24,23, 25,1, 25,3, 25,5,
+		25,6, 28,0, 28,5, 28,6, 28,7, 28,8, 28,16, 29,1, 29,4, 29,5, 29,6, 29,7,
+		29,8, 29,16, 29,28, 30,6, 30,7, 30,16, 30,25, 30,28, 30,29, 31,0, 31,5, 31,6,
+		31,7, 31,11, 31,16, 32,4, 32,5, 32,6, 32,7, 32,8, 32,9, 32,16, 32,28, 32,29,
+		32,30, 34,0, 34,2, 34,3, 34,6, 34,7, 34,8, 34,16, 34,23, 34,25, 34,28, 34,29,
+		34,30, 34,31, 35,0, 35,1, 35,2, 35,3, 35,4, 35,5, 35,6, 35,7, 35,8, 35,9,
+		35,16, 35,23, 35,24, 35,28, 35,29, 35,30, 35,32, 36,2, 36,4, 36,6, 36,11, 36,16,
+		36,25, 37,5, 37,7, 37,8, 37,9, 37,13, 37,16, 37,18, 37,19, 37,25, 39,0, 39,1,
+		39,2, 39,3, 39,4, 39,5, 39,6, 39,7, 39,8, 39,9, 39,11, 39,13, 39,16, 39,18,
+		39,19, 39,23, 39,24, 39,25, 39,28, 39,29, 39,30, 39,31, 39,32, 39,34, 39,35, 39,36,
+		39,37, 40,0, 40,1, 40,3, 40,7, 40,11, 40,16, 40,19, 40,25, 40,34, 40,36, 40,37,
+		40,39, 42,0, 42,1, 42,3, 42,4, 42,6, 42,7, 42,16, 42,18, 42,23, 42,29, 42,34,
+		42,35, 42,36, 42,37, 42,39, 42,40, 45,0, 45,3, 45,4, 45,5, 45,6, 45,7, 45,16,
+		45,23, 45,34, 45,39 };
+
+	public static final PredictorTable PREDICTOR_TABLE = pairTable("predictors", PREDICTOR_PAIRS);
+	public static final int PREDICTORS = PREDICTOR_TABLE.size();   // 255
+
+	// The values a table's primitives are computed from at pixel k: the
+	// channel v (the encoder's source, or the decoder's output so far), the
+	// previous channel ref (null for the first), and the bias counts.
+	// prepare(k) must be called for each interior pixel in raster order
+	// before its prediction, and commit(k) once v[k] is known; the encoder
+	// does this for the whole channel up front (the constructor), the
+	// decoder as it goes.
+	public static final class PixelSource
+	{
+		final int[]   v, ref;
+		final int     xdim;
+		final int[][] corr;            // bias primitives' corrections, [s][k]
+		final int[]   context;         // each pixel's bias context
+		final int[][] sum, count;      // [s][context]
+
+		// Encoder: v is the whole channel.
+		public PixelSource(int[] v, int[] ref, int xdim, int ydim, PredictorTable table)
+		{
+			this(v, ref, xdim, table, true);
+			if(corr != null)
+				for(int y = 1; y < ydim; y++)
+					for(int x = 1; x < xdim - 1; x++) { prepare(y * xdim + x); commit(y * xdim + x); }
+		}
+
+		// Decoder: v fills in as it decodes.
+		PixelSource(int[] v, int[] ref, int xdim, PredictorTable table, boolean unused)
+		{
+			this.v = v; this.ref = ref; this.xdim = xdim;
+			boolean bias = table.primitives > BIAS_FIRST;
+			corr    = bias ? new int[BIAS_BASE.length][v.length] : null;
+			context = bias ? new int[v.length] : null;
+			sum     = bias ? new int[BIAS_BASE.length][729] : null;
+			count   = bias ? new int[BIAS_BASE.length][729] : null;
+		}
+
+		void prepare(int k)
+		{
+			if(corr == null) return;
+			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
+			int t = (gradientLevel(d - b) + 4) * 81 + (gradientLevel(b - c) + 4) * 9 + gradientLevel(c - a) + 4;
+			context[k] = t;
+			for(int s = 0; s < BIAS_BASE.length; s++)
+			{
+				int n = count[s][t], e = sum[s][t];
+				corr[s][k] = (n == 0) ? 0 : (e >= 0) ? (e + n / 2) / n : -((-e + n / 2) / n);
+			}
+		}
+
+		void commit(int k)
+		{
+			if(corr == null) return;
+			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1], t = context[k];
+			for(int s = 0; s < BIAS_BASE.length; s++)
+			{
+				sum[s][t] += v[k] - blockPredictor(BIAS_BASE[s], a, b, c, d);
+				if(++count[s][t] == 64) { sum[s][t] /= 2; count[s][t] = 32; }
+			}
+		}
+
+		// Primitive q (>= CROSS_FIRST) at interior pixel k with neighbours a, b, c, d.
+		int extended(int q, int k, int a, int b, int c, int d)
+		{
+			if(q < REACH_FIRST)
+			{
+				int s = q - CROSS_FIRST, base = CROSS_BASE[s], p = blockPredictor(base, a, b, c, d);
+				if(ref == null) return p;
+				int e = ref[k] - blockPredictor(base, ref[k - 1], ref[k - xdim], ref[k - xdim - 1], ref[k - xdim + 1]);
+				return (s >= 6) ? p + (e >> 1) : p + e;
+			}
+			if(q < CLAMP_FIRST)
+			{
+				int x = k % xdim, y = k / xdim;
+				int aa = (x >= 2) ? v[k - 2] : a, bb = (y >= 2) ? v[k - 2 * xdim] : b;
+				if(q == REACH_FIRST)     return 2 * a - aa;
+				if(q == REACH_FIRST + 1) return 2 * b - bb;
+				int nne = (y >= 2) ? v[k - 2 * xdim + 1] : d;
+				return (q == REACH_FIRST + 2) ? gap(a, aa, b, bb, c, d, nne, 80, 32, 8) : gap(a, aa, b, bb, c, d, nne, 10, 4, 1);
+			}
+			if(q < BIAS_FIRST)
+			{
+				int lo = Math.min(Math.min(a, b), Math.min(c, d)), hi = Math.max(Math.max(a, b), Math.max(c, d));
+				int p = (q == CLAMP_FIRST) ? a + b - c : a + d - b;
+				return Math.max(lo, Math.min(hi, p));
+			}
+			int s = q - BIAS_FIRST;
+			return blockPredictor(BIAS_BASE[s], a, b, c, d) + corr[s][k];
+		}
+
+		// The table's primitives at interior pixel k, into prim.
+		void primitives(int k, int np, int[] prim)
+		{
+			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
+			int m = Math.min(np, CROSS_FIRST);
+			for(int q = 0; q < m; q++) prim[q] = blockPredictor(q, a, b, c, d);
+			for(int q = m; q < np; q++) prim[q] = extended(q, k, a, b, c, d);
+		}
+
+		// One primitive at interior pixel k.
+		int primitive(int q, int k)
+		{
+			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
+			return (q < CROSS_FIRST) ? blockPredictor(q, a, b, c, d) : extended(q, k, a, b, c, d);
+		}
+
+		// Prediction of table id at interior pixel k.
+		int predict(PredictorTable table, int id, int k)
+		{
+			int i = table.first(id), j = table.second(id), p = primitive(i, k);
+			return (i == j) ? p : (p + primitive(j, k) + 1) >> 1;
+		}
+	}
+
+	// JPEG-LS gradient levels: 0, then +-1 for 1-2, +-2 for 3-6, +-3 for 7-20, +-4 beyond.
+	private static int gradientLevel(int g)
+	{
+		int m = Math.abs(g), l = (m == 0) ? 0 : (m < 3) ? 1 : (m < 7) ? 2 : (m < 21) ? 3 : 4;
+		return (g < 0) ? -l : l;
+	}
+
+	// CALIC's GAP from W = a, WW = aa, N = b, NN = bb, NW = c, NE = d, NNE,
+	// with the thresholds t1 > t2 > t3 (80, 32, 8 for 8-bit values).
+	private static int gap(int w, int ww, int n, int nn, int nw, int ne, int nne, int t1, int t2, int t3)
+	{
+		int dh = Math.abs(w - ww) + Math.abs(n - nw) + Math.abs(n - ne);
+		int dv = Math.abs(w - nw) + Math.abs(n - nn) + Math.abs(ne - nne);
+		if(dv - dh > t1) return w;
+		if(dh - dv > t1) return n;
+		int p = (2 * (w + n) + ne - nw) >> 2;
+		if(dv - dh > t2)      p = (p + w) >> 1;
+		else if(dv - dh > t3) p = (3 * p + w) >> 2;
+		else if(dh - dv > t2) p = (p + n) >> 1;
+		else if(dh - dv > t3) p = (3 * p + n) >> 2;
+		return p;
+	}
+
 	// ---- Surveying predictor sets ----------------------------------------------
 	//
 	// Any of the PREDICTORS can be in a block map's set, and each channel has
@@ -4458,7 +4665,7 @@ public class DeltaMapper
 	// predictors by an estimate of their coded size rather than by |delta|:
 	//
 	//   1. A cost per delta value (DeltaCost): -log2 of its frequency in the
-	//      deltas a reference set (Blends 32) gives, per coding context
+	//      deltas a reference set (Top 32) gives, per coding context
 	//      (getContext, with the deltas already chosen for the channels
 	//      before as context). In 1/256 bits.
 	//   2. For a block size, each predictor's estimated bits in each block
@@ -4481,8 +4688,8 @@ public class DeltaMapper
 	// makes the same deltas and maps from the surveyed ids, so a writer can
 	// redo them without surveying again.
 
-	public static final int[] SURVEY_COUNTS = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 253};
-	static final int SURVEY_REFERENCE_SET = 4;          // Blends 32
+	public static final int[] SURVEY_COUNTS = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 255};
+	static final int SURVEY_REFERENCE_SET = 3;          // Top 32
 	static final int SURVEY_ID_COST       = 8 * 256;    // a predictor id in the map header, 1/256 bits
 
 	// floor(x + 0.5) of 256 * log2(r), as the survey's costs are rounded.
@@ -4527,30 +4734,29 @@ public class DeltaMapper
 	// Estimated bits (1/256) of each predictor in each block, as
 	// [block * n + q] for the ids given (n of them), or for every id
 	// (ids == null, n = PREDICTORS); blocks row by row as in the map.
-	public static int[] blockCostTable(int[] src, int xdim, int ydim, int block, DeltaCost dc, int[] ids)
+	// The channel and what its primitives need are in ps.
+	public static int[] blockCostTable(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids)
 	{
-		int   n  = (ids == null) ? PREDICTORS : ids.length;
-		int[] entry = new int[n];
-		for(int q = 0; q < n; q++) entry[q] = predictorEntry((ids == null) ? q : ids[q]);
+		int[] src = ps.v;
+		int   xdim = ps.xdim;
+		int   n  = (ids == null) ? table.size() : ids.length;
+		int[] pid = new int[n];
+		for(int q = 0; q < n; q++) pid[q] = (ids == null) ? q : ids[q];
+		int   np = table.primitives;
 		int   bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
 		int[] est = new int[bw * bh * n];
 		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
 		{
-			int[] prim = new int[PRIMITIVES];
+			int[] prim = new int[np];
 			int   y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
 			for(int y = y0; y < y1; y++)
 				for(int x = 1; x < xdim - 1; x++)
 				{
 					int   k = y * xdim + x, s = src[k];
 					int[] cc = dc.cost[dc.context[k]];
-					for(int q = 0; q < PRIMITIVES; q++) prim[q] = blockPredictor(q, src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+					ps.primitives(k, np, prim);
 					int base = (by * bw + (x - 1) / block) * n;
-					for(int q = 0; q < n; q++)
-					{
-						int e = entry[q];
-						int v = (e < 32) ? prim[e] : (prim[e / 32 - 1] + prim[e % 32] + 1) >> 1;
-						est[base + q] += cc[dc.index(s - v)];
-					}
+					for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
 				}
 		});
 		return est;
@@ -4569,7 +4775,12 @@ public class DeltaMapper
 	// the section comment); stops when no predictor saves anything.
 	public static int[] greedyCostOrder(int[] est, int blocks)
 	{
-		final int P = PREDICTORS;
+		return greedyCostOrder(est, blocks, PREDICTORS);
+	}
+
+	// As above, over a table of P predictors.
+	public static int[] greedyCostOrder(int[] est, int blocks, final int P)
+	{
 		long[] NL = nlog2nTable(blocks);
 		long[] total = new long[P];
 		for(int b = 0; b < blocks; b++) for(int p = 0; p < P; p++) total[p] += est[b * P + p];
@@ -4582,7 +4793,7 @@ public class DeltaMapper
 		int[]  cur = new int[blocks], assign = new int[blocks];
 		for(int b = 0; b < blocks; b++) cur[b] = est[b * P + first];
 		long[] count = new long[P]; count[0] = blocks;
-		while(order.size() < P)
+		while(order.size() < Math.min(P, 255))   // a set has at most 255 ids
 		{
 			final int n = order.size();
 			long map = NL[blocks];
@@ -4621,12 +4832,12 @@ public class DeltaMapper
 	}
 
 	// A block map for the ids: each block uses the first of them with the
-	// smallest estimate in est (a blockCostTable; stride PREDICTORS with
-	// all = true, else ids.length).
-	private static byte[] assignByCost(int[] est, boolean all, int[] ids, int xdim, int ydim, int block)
+	// smallest estimate in est (a blockCostTable of every id of the table,
+	// stride = its size, with all = true; else of the ids, stride ids.length).
+	private static byte[] assignByCost(int[] est, boolean all, int stride, int[] ids, int xdim, int ydim, int block)
 	{
 		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
-		int    stride = all ? PREDICTORS : n, head = 2 + n;
+		int    head = 2 + n;
 		byte[] map = new byte[head + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) n;
 		for(int q = 0; q < n; q++) map[2 + q] = (byte) ids[q];
@@ -4642,11 +4853,21 @@ public class DeltaMapper
 
 	// The block deltas for a given block map (its block size, ids and
 	// choices); the same list as getBlockDeltasFromValues.
-	public static ArrayList getBlockDeltasFromMap(int[] src, int xdim, int ydim, byte[] map)
+	// The block deltas for a given block map (its block size, ids and
+	// choices), with the map's ids in the given table and the channel (and
+	// what its primitives need) in ps; the same list as getBlockDeltasFromValues.
+	public static ArrayList getBlockDeltasFromMap(PixelSource ps, int ydim, byte[] map, PredictorTable table)
 	{
+		return getBlockDeltasFromMap(ps, ydim, map, table, getMapIds(map));
+	}
+
+	// As above, with the set's ids given (tables over 256 ids, for research,
+	// can't be read back from the map's one-byte ids).
+	static ArrayList getBlockDeltasFromMap(PixelSource ps, int ydim, byte[] map, PredictorTable table, int[] ids)
+	{
+		int[] src = ps.v;
+		int   xdim = ps.xdim;
 		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
-		int[] ids   = getMapIds(map);
-		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(ids[p]);
 		int[] dst = new int[xdim * ydim];
 		blockEdges(src, dst, xdim, ydim);
 		for(int y = 1; y < ydim; y++)
@@ -4655,7 +4876,7 @@ public class DeltaMapper
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				int k = y * xdim + x;
-				dst[k] = src[k] - setPredictor(ids[map[row + (x - 1) / block] & 0xFF], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
+				dst[k] = src[k] - ps.predict(table, ids[map[row + (x - 1) / block] & 0xFF], k);
 			}
 		}
 		int sum = 0;
@@ -4671,9 +4892,9 @@ public class DeltaMapper
 	// The cost model for channel i at a block size: reference deltas from
 	// SURVEY_REFERENCE_SET, context from the chosen deltas of the channels
 	// before.
-	private static DeltaCost channelCost(int[] src, int xdim, int ydim, int block, int[][] chosen_before)
+	static DeltaCost channelCost(int[] src, int[] previous_channel, int xdim, int ydim, int block, int[][] chosen_before)
 	{
-		int[] ref = (int[]) getBlockDeltasFromValues(src, xdim, ydim, block, SURVEY_REFERENCE_SET).get(1);
+		int[] ref = (int[]) getBlockDeltasFromValues(src, previous_channel, xdim, ydim, block, getSetIds(SURVEY_REFERENCE_SET)).get(1);
 		return new DeltaCost(src, ref, chosen_before, xdim, ydim);
 	}
 
@@ -4683,13 +4904,20 @@ public class DeltaMapper
 	// before.
 	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids)
 	{
+		return getBlockDeltasByCost(channel, xdim, ydim, block, ids, PREDICTOR_TABLE);
+	}
+
+	// As above, with the ids in the given table.
+	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids, PredictorTable table)
+	{
 		ArrayList[] result = new ArrayList[channel.length];
 		int[][] delta = new int[channel.length][];
 		for(int i = 0; i < channel.length; i++)
 		{
-			DeltaCost dc  = channelCost(channel[i], xdim, ydim, block, Arrays.copyOf(delta, i));
-			int[]     est = blockCostTable(channel[i], xdim, ydim, block, dc, ids[i]);
-			result[i] = getBlockDeltasFromMap(channel[i], xdim, ydim, assignByCost(est, false, ids[i], xdim, ydim, block));
+			DeltaCost   dc  = channelCost(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, Arrays.copyOf(delta, i));
+			PixelSource ps  = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table);
+			int[]       est = blockCostTable(ps, ydim, block, dc, table, ids[i]);
+			result[i] = getBlockDeltasFromMap(ps, ydim, assignByCost(est, false, ids[i].length, ids[i], xdim, ydim, block), table, ids[i]);
 			delta[i]  = (int[]) result[i].get(1);
 		}
 		return result;
@@ -4707,14 +4935,20 @@ public class DeltaMapper
 
 	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim)
 	{
+		return surveyBlockSets(channel, xdim, ydim, PREDICTOR_TABLE);
+	}
+
+	// As above, choosing from the ids of the given table.
+	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, PredictorTable table)
+	{
 		TreeMap<Integer, BlockSurvey> tried = new TreeMap<Integer, BlockSurvey>();
 		StringBuilder log = new StringBuilder();
-		for(int b : new int[] {4, 8, 16}) tried.put(b, surveyBlockSize(channel, xdim, ydim, b, log));
+		for(int b : new int[] {4, 8, 16}) tried.put(b, surveyBlockSize(channel, xdim, ydim, b, table, log));
 		int best = bestSurvey(tried);
 		int s = Arrays.binarySearch(BLOCK_SEARCH_SIZES, best);
 		for(int t : new int[] {s - 1, s + 1})
 			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t]))
-				tried.put(BLOCK_SEARCH_SIZES[t], surveyBlockSize(channel, xdim, ydim, BLOCK_SEARCH_SIZES[t], log));
+				tried.put(BLOCK_SEARCH_SIZES[t], surveyBlockSize(channel, xdim, ydim, BLOCK_SEARCH_SIZES[t], table, log));
 		BlockSurvey result = tried.get(bestSurvey(tried));
 
 		StringBuilder r = new StringBuilder("Predictor survey: bytes coded (Context-coded deltas + maps) for the first n predictors\n");
@@ -4726,11 +4960,67 @@ public class DeltaMapper
 		for(int i = 0; i < 3; i++)
 		{
 			r.append(String.format("Channel %d, %d predictors:", i, result.ids[i].length));
-			for(int k = 0; k < result.ids[i].length; k++) r.append((k % 6 == 0) ? "\n    " : ", ").append(predictorName(result.ids[i][k]));
+			for(int k = 0; k < result.ids[i].length; k++) r.append((k % 6 == 0) ? "\n    " : ", ").append(table.name(result.ids[i][k]));
 			r.append('\n');
 		}
 		result.report = r.toString();
 		return result;
+	}
+
+	// The survey at one block size only (for measuring tables).
+	public static BlockSurvey surveyAtBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table)
+	{
+		return surveyBlockSize(channel, xdim, ydim, block, table, new StringBuilder());
+	}
+
+	// Which of the primitives past 21 a survey's sets use, by group
+	// (GROUP_NAMES): for each primitive, the ids chosen (alone
+	// or averaged) and the share of blocks using them; then each group's
+	// share of blocks and the primitives nobody chose.
+	public static String describeGroupUse(BlockSurvey survey, ArrayList[] coded)
+	{
+		PredictorTable table = PREDICTOR_TABLE;
+		long total = 0;
+		long[][] blocks = new long[3][table.size()];
+		for(int i = 0; i < 3; i++)
+		{
+			byte[] map = (byte[]) coded[i].get(2);
+			for(int k = mapHeaderLength(map); k < map.length; k++) { blocks[i][survey.ids[i][map[k] & 0xFF]]++; total++; }
+		}
+		StringBuilder r = new StringBuilder("Predictors past the basic 22 in the surveyed sets (share of all blocks):\n");
+		for(int g = 0; g < GROUP_NAMES.length; g++)
+		{
+			int lo = GROUP_FIRST[g], hi = GROUP_FIRST[g + 1];
+			long any = 0;
+			for(int i = 0; i < 3; i++)
+				for(int pid : survey.ids[i])
+					for(int p = lo; p < hi; p++) if(table.uses(pid, p)) { any += blocks[i][pid]; break; }
+			StringBuilder used = new StringBuilder(), unused = new StringBuilder();
+			for(int p = lo; p < hi; p++)
+			{
+				boolean in_table = false;
+				for(int id = 0; id < table.size(); id++) in_table |= table.uses(id, p);
+				if(!in_table) continue;
+				long alone = 0, avg = 0; int chosen = 0;
+				for(int i = 0; i < 3; i++)
+					for(int pid : survey.ids[i])
+						if(table.uses(pid, p))
+						{
+							chosen++;
+							if(table.alone(pid)) alone += blocks[i][pid]; else avg += blocks[i][pid];
+						}
+				String name = primitiveName(p);
+				if(chosen == 0) unused.append(unused.length() == 0 ? "" : ", ").append(name);
+				else used.append(String.format("      %-20s %2d ids chosen, %5.2f%% alone, %5.2f%% in averages%n", name, chosen, 100.0 * alone / total, 100.0 * avg / total));
+			}
+			if(used.length() == 0) r.append(String.format("  %s: unused.%n", GROUP_NAMES[g]));
+			else
+			{
+				r.append(String.format("  %s: used, in %.2f%% of blocks.%n", GROUP_NAMES[g], 100.0 * any / total)).append(used);
+				if(unused.length() > 0) r.append("      unused: ").append(unused).append('\n');
+			}
+		}
+		return r.toString();
 	}
 
 	private static int bestSurvey(TreeMap<Integer, BlockSurvey> tried)
@@ -4740,7 +5030,7 @@ public class DeltaMapper
 		return best;
 	}
 
-	private static BlockSurvey surveyBlockSize(int[][] channel, int xdim, int ydim, int block, StringBuilder log)
+	private static BlockSurvey surveyBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table, StringBuilder log)
 	{
 		try
 		{
@@ -4752,9 +5042,10 @@ public class DeltaMapper
 			log.append(String.format("  block %d:\n", block));
 			for(int i = 0; i < 3; i++)
 			{
-				DeltaCost dc    = channelCost(channel[i], xdim, ydim, block, Arrays.copyOf(delta, i));
-				int[]     est   = blockCostTable(channel[i], xdim, ydim, block, dc, null);
-				int[]     order = greedyCostOrder(est, blocks);
+				DeltaCost   dc    = channelCost(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, Arrays.copyOf(delta, i));
+				PixelSource ps    = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table);
+				int[]       est   = blockCostTable(ps, ydim, block, dc, table, null);
+				int[]     order = greedyCostOrder(est, blocks, table.size());
 				ArrayList<Integer> counts = new ArrayList<Integer>();
 				for(int c : SURVEY_COUNTS) if(c < order.length) counts.add(c);
 				counts.add(order.length);
@@ -4764,7 +5055,7 @@ public class DeltaMapper
 				for(int n : counts)
 				{
 					int[]     ids = Arrays.copyOf(order, n);
-					ArrayList r   = getBlockDeltasFromMap(channel[i], xdim, ydim, assignByCost(est, true, ids, xdim, ydim, block));
+					ArrayList r   = getBlockDeltasFromMap(ps, ydim, assignByCost(est, true, table.size(), ids, xdim, ydim, block), table, ids);
 					int[]  d = (int[]) r.get(1);
 					byte[] m = (byte[]) r.get(2);
 					java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
@@ -4784,77 +5075,46 @@ public class DeltaMapper
 
 	private static int blocksAcross(int xdim, int block) { return (xdim - 2 + block - 1) / block; }
 
-	public static ArrayList getBlockDeltasFromValues(int[] src, int xdim, int ydim, int block, int set)
+	// Block deltas with a set of predictor ids: each block takes the one
+	// with the smallest sum of |delta|. ref is the previous channel (null
+	// for the first). Returns [sum, deltas, map, init value].
+	public static ArrayList getBlockDeltasFromValues(int[] src, int[] ref, int xdim, int ydim, int block, int[] ids)
 	{
-		return getBlockDeltasFromValues(src, xdim, ydim, block, getSetIds(set));
-	}
-
-	// As above, with the predictors given by their ids (1..PREDICTORS of them).
-	public static ArrayList getBlockDeltasFromValues(int[] src, int xdim, int ydim, int block, int[] set_ids)
-	{
-		int[]  dst = new int[xdim * ydim];
-		int[]  ids = new int[set_ids.length];
-		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(set_ids[p]);
-		int    bw  = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
-		int    head = 2 + ids.length;
-		byte[] map = new byte[head + bw * bh];
-		map[0] = (byte) block; map[1] = (byte) ids.length;
-		for(int p = 0; p < ids.length; p++) map[2 + p] = (byte) set_ids[p];
-		boolean blends = false;
-		for(int e : ids) if(e >= 32) blends = true;
-		int[] prim = new int[22];
-		blockEdges(src, dst, xdim, ydim);
-		for(int by = 0; by < bh; by++)
+		PixelSource ps = new PixelSource(src, ref, xdim, ydim, PREDICTOR_TABLE);
+		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		byte[] map = new byte[2 + n + bw * bh];
+		map[0] = (byte) block; map[1] = (byte) n;
+		for(int p = 0; p < n; p++) map[2 + p] = (byte) ids[p];
+		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
+		{
+			long[] sums = new long[bw * n];
+			int    y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+			for(int y = y0; y < y1; y++)
+				for(int x = 1; x < xdim - 1; x++)
+				{
+					int k = y * xdim + x, base = (x - 1) / block * n;
+					for(int p = 0; p < n; p++) sums[base + p] += Math.abs(src[k] - ps.predict(PREDICTOR_TABLE, ids[p], k));
+				}
 			for(int bx = 0; bx < bw; bx++)
 			{
-				int  y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
-				int  x0 = 1 + bx * block, x1 = Math.min(xdim - 1, x0 + block);
-				long[] sums = new long[ids.length];
-				for(int y = y0; y < y1; y++)
-					for(int x = x0; x < x1; x++)
-					{
-						int k = y * xdim + x, a = src[k - 1], b = src[k - xdim], c = src[k - xdim - 1], d = src[k - xdim + 1];
-						if(blends)
-						{
-							// Each primitive once, then the set's entries from them.
-							for(int q = 0; q < 22; q++) prim[q] = blockPredictor(q, a, b, c, d);
-							for(int p = 0; p < ids.length; p++)
-							{
-								int e = ids[p];
-								int v = (e < 32) ? prim[e] : (prim[e / 32 - 1] + prim[e % 32] + 1) >> 1;
-								sums[p] += Math.abs(src[k] - v);
-							}
-						}
-						else
-							for(int p = 0; p < ids.length; p++) sums[p] += Math.abs(src[k] - blockPredictor(ids[p], a, b, c, d));
-					}
 				int best = 0;
-				for(int p = 1; p < ids.length; p++) if(sums[p] < sums[best]) best = p;
-				map[head + by * bw + bx] = (byte) best;
-				for(int y = y0; y < y1; y++)
-					for(int x = x0; x < x1; x++)
-					{
-						int k = y * xdim + x;
-						dst[k] = src[k] - setPredictor(ids[best], src[k - 1], src[k - xdim], src[k - xdim - 1], src[k - xdim + 1]);
-					}
+				for(int p = 1; p < n; p++) if(sums[bx * n + p] < sums[bx * n + best]) best = p;
+				map[2 + n + by * bw + bx] = (byte) best;
 			}
-		int sum = 0;
-		for(int v : dst) sum += Math.abs(v);
-
-		ArrayList result = new ArrayList();
-		result.add(sum);
-		result.add(dst);
-		result.add(map);
-		result.add(src[0]);
-		return result;
+		});
+		return getBlockDeltasFromMap(ps, ydim, map, PREDICTOR_TABLE, ids);
 	}
 
-	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map)
+	// Inverse of getBlockDeltasFromValues (and of the survey's deltas): ref
+	// is the previous channel's values (as decoded, before any minimum is
+	// added back), or null for the first channel.
+	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref)
 	{
+		PredictorTable table = PREDICTOR_TABLE;
 		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
 		int[] ids   = getMapIds(map);
-		for(int p = 0; p < ids.length; p++) ids[p] = predictorEntry(ids[p]);
 		int[] dst   = new int[xdim * ydim];
+		PixelSource ps = new PixelSource(dst, ref, xdim, table, false);
 		dst[0] = init_value;
 		for(int x = 1; x < xdim; x++) dst[x] = dst[x - 1] + delta[x];
 		for(int y = 1; y < ydim; y++)
@@ -4865,8 +5125,9 @@ public class DeltaMapper
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				k++;
-				int id = ids[map[row + (x - 1) / block] & 0xFF];
-				dst[k] = delta[k] + setPredictor(id, dst[k - 1], dst[k - xdim], dst[k - xdim - 1], dst[k - xdim + 1]);
+				ps.prepare(k);
+				dst[k] = delta[k] + ps.predict(table, ids[map[row + (x - 1) / block] & 0xFF], k);
+				ps.commit(k);
 			}
 			k++;
 			dst[k] = dst[k - 1] + delta[k];
@@ -4932,13 +5193,9 @@ public class DeltaMapper
 
 	// Deltas for delta_type 0-13. Returns the encoder's list: [sum, deltas,
 	// map, init_value] for types 6-13, [sum, deltas, init_value] otherwise.
-	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant)
-	{
-		return getDeltas(src, xdim, ydim, delta_type, variant, BLOCK_DEFAULT, 0);
-	}
-
-	// block and block_set are used by the block map (13) only.
-	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant, int block, int block_set)
+	// block, block_set and ref (the previous channel, null for the first)
+	// are used by the block map (13) only.
+	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant, int block, int block_set, int[] ref)
 	{
 		switch(delta_type)
 		{
@@ -4955,15 +5212,17 @@ public class DeltaMapper
 			case 10: return getMixedDeltasFromValues8Rows(src, xdim, ydim, variant);
 			case 11: return getIdealDeltasFromValues8(src, xdim, ydim);
 			case 12: return getIdealDeltasFromValues16(src, xdim, ydim);
-			case 13: return getBlockDeltasFromValues(src, xdim, ydim, block, block_set);
+			case 13: return getBlockDeltasFromValues(src, ref, xdim, ydim, block, getSetIds(block_set));
 			default: throw new IllegalArgumentException("delta_type " + delta_type);
 		}
 	}
 
 	public static boolean hasMap(int delta_type) { return delta_type >= 6; }
 
-	// Inverse of getDeltas. map is ignored for types 0-5.
-	public static int[] getValuesFromDeltas(int[] delta, int xdim, int ydim, int init_value, int delta_type, byte[] map, int variant)
+	// Inverse of getDeltas. map is ignored for types 0-5; ref (the previous
+	// channel as decoded, before any minimum is added back; null for the
+	// first) is used by the block map only, so its channels decode in order.
+	public static int[] getValuesFromDeltas(int[] delta, int xdim, int ydim, int init_value, int delta_type, byte[] map, int variant, int[] ref)
 	{
 		switch(delta_type)
 		{
@@ -4980,7 +5239,7 @@ public class DeltaMapper
 			case 10: return getValuesFromMixedDeltas8Rows(delta, xdim, ydim, init_value, map, variant);
 			case 11: return getValuesFromIdealDeltas8(delta, xdim, ydim, init_value, map);
 			case 12: return getValuesFromIdealDeltas16(delta, xdim, ydim, init_value, map);
-			case 13: return getValuesFromBlockDeltas(delta, xdim, ydim, init_value, map);
+			case 13: return getValuesFromBlockDeltas(delta, xdim, ydim, init_value, map, ref);
 			default: throw new IllegalArgumentException("delta_type " + delta_type);
 		}
 	}
@@ -5091,14 +5350,6 @@ public class DeltaMapper
 
 	public static byte[] readMap(java.io.DataInputStream in, int delta_type, byte[] previous, int xdim) throws java.io.IOException
 	{
-		return readMap(in, delta_type, previous, xdim, false);
-	}
-
-	// As above; with version1 true, a block map is in the format version 1
-	// layout, [block size, set number] (BLOCK_SET_NAMES), and is returned in
-	// the current one.
-	public static byte[] readMap(java.io.DataInputStream in, int delta_type, byte[] previous, int xdim, boolean version1) throws java.io.IOException
-	{
 		if(delta_type <= 8)
 		{
 			int    n      = in.readInt();
@@ -5111,24 +5362,13 @@ public class DeltaMapper
 		if(delta_type == 13)
 		{
 			int   block = in.readByte();
-			int[] ids;
-			if(version1)
+			int   n     = in.readUnsignedByte();
+			if(n < 1 || n > PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
+			int[] ids = new int[n];
+			for(int p = 0; p < n; p++)
 			{
-				int set = in.readByte();
-				if(set < 0 || set >= BLOCK_SET_NAMES.length)
-					throw new java.io.IOException("Block map with predictor set " + set + ": not one this version reads.");
-				ids = getSetIds(set);
-			}
-			else
-			{
-				int n = in.readUnsignedByte();
-				if(n < 1 || n > PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
-				ids = new int[n];
-				for(int p = 0; p < n; p++)
-				{
-					ids[p] = in.readUnsignedByte();
-					if(ids[p] >= PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
-				}
+				ids[p] = in.readUnsignedByte();
+				if(ids[p] >= PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
 			}
 			if(block < BLOCK_MIN || block > BLOCK_MAX)
 				throw new java.io.IOException("Block map with block size " + block + ": not one this version reads.");

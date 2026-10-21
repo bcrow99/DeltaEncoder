@@ -17,7 +17,7 @@ import javax.imageio.stream.*;
 //
 // JPEG: Java's ImageIO writer at qualities 5-95.
 // Delta coder: Color Resolution 0-6 x Pixel Resolution 0-10, block map
-// (size 12, Scanline 16) with Context coding, sized as BlockWriter saves it.
+// (size 12, Top 32) with Context coding, sized as BlockWriter saves it.
 public class Comparison
 {
 	static final String GUIDE =
@@ -287,7 +287,7 @@ public class Comparison
 		for(int s = 0; s < 10; s++) { int[] c = DeltaMapper.getChannels(s); int t = sum[c[0]] + sum[c[1]] + sum[c[2]]; if(t < best_sum) { best_sum = t; best = s; } }
 		int[] id = DeltaMapper.getChannels(best);
 		int[][] ch = { qc[id[0]], qc[id[1]], qc[id[2]] };
-		return 9 + 3 * 8 + DeltaMapper.getBlockMapBytes(ch, size[0], size[1], 12, 0);   // + BlockWriter's header
+		return 9 + 3 * 8 + DeltaMapper.getBlockMapBytes(ch, size[0], size[1], 12, 3);   // Top 32; + BlockWriter's header
 	}
 
 	// What the reader shows: the coding is lossless, so the channels come

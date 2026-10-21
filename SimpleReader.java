@@ -4,14 +4,14 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleReader version 1.1
+// SimpleReader version 2.0
 public class SimpleReader
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids; version 1 files are still read
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; older files are not read
 
 	static final String[] ENTROPY_NAMES = {"LZ77", "Huffman", "Arithmetic", "Adaptive", "Context"};
 
@@ -19,6 +19,7 @@ public class SimpleReader
 	// There is no compress_type: SimpleWriter always writes unary strings.
 	int xdim, ydim;
 	int pixel_shift, pixel_quant, set_id, delta_type, entropy_type, scanline5_variant;
+	int[][] raw = new int[3][];   // each channel as decoded, before its minimum is added back
 
 	// ---- Per channel, as read -----------------------------------------------
 	int[]      min = new int[3], init = new int[3], delta_min = new int[3], length = new int[3], compressed_length = new int[3];
@@ -61,7 +62,13 @@ public class SimpleReader
 
 			start = System.nanoTime();
 			int[][] channel = new int[3][];
-			ViewerSupport.parallel(3, i -> channel[i] = decodeChannel(i));
+			int[]   qsize   = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
+			int[][] deltas  = new int[3][];
+			ViewerSupport.parallel(3, i -> deltas[i] = decodeDeltas(i));
+			// The block map predicts from the previous channel, so its
+			// channels are rebuilt in order.
+			if(delta_type == 13) for(int i = 0; i < 3; i++) channel[i] = toChannel(i, deltas[i], qsize);
+			else ViewerSupport.parallel(3, i -> channel[i] = toChannel(i, deltas[i], qsize));
 			System.out.println("Channels processed in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
 
 			start = System.nanoTime();
@@ -81,10 +88,10 @@ public class SimpleReader
 	private void read(DataInputStream in, String filename) throws Exception
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version < 1 || version > FORMAT_VERSION)
+		if(id != FORMAT_ID || version != FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Simple Writer file."
-				: filename + " is Simple format version " + version + "; this reader reads versions 1 to " + FORMAT_VERSION + ".");
+				: filename + " is Simple format version " + version + "; this reader reads version " + FORMAT_VERSION + " only (the block predictors changed in it).");
 		xdim              = in.readUnsignedShort();
 		ydim              = in.readUnsignedShort();
 		pixel_shift       = in.readByte();
@@ -108,7 +115,7 @@ public class SimpleReader
 			length[i]            = in.readInt();
 			compressed_length[i] = in.readInt();
 			in.readByte();   // iterations (the string carries them too)
-			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0], version == 1);
+			if(DeltaMapper.hasMap(delta_type)) map[i] = DeltaMapper.readMap(in, delta_type, (i > 0) ? map[i - 1] : null, DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[0]);
 			if(entropy_type != 4) table[i] = DeltaMapper.readTable(in);
 
 			if(entropy_type == 0)        // LZ77: payload length, Deflated length, Deflated bytes
@@ -150,12 +157,12 @@ public class SimpleReader
 	}
 
 	// Entropy decode -> unary strings -> deltas -> channel values.
-	private int[] decodeChannel(int i)
+	private int[] decodeDeltas(int i)
 	{
 		try
 		{
 			int[]  size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
-			if(entropy_type == 4) return toChannel(i, delta[i], size);
+			if(entropy_type == 4) return delta[i];
 			int    payload_length = StringMapper.getBytelength(compressed_length[i]);
 			byte[] payload;
 			if(entropy_type == 0)      payload = coded[i];
@@ -175,14 +182,15 @@ public class SimpleReader
 			delta[0] = 0;
 			for(int k = 1; k < delta.length; k++) delta[k] += delta_min[i];
 
-			return toChannel(i, delta, size);
+			return delta;
 		}
 		catch(Exception e) { throw new RuntimeException("channel " + i + ": " + e, e); }
 	}
 
 	private int[] toChannel(int i, int[] delta, int[] size)
 	{
-		int[] channel = DeltaMapper.getValuesFromDeltas(delta, size[0], size[1], init[i], delta_type, map[i], scanline5_variant);
+		int[] channel = DeltaMapper.getValuesFromDeltas(delta, size[0], size[1], init[i], delta_type, map[i], scanline5_variant, (i > 0) ? raw[i - 1] : null);
+		raw[i] = channel.clone();   // as decoded: the next channel's reference (block map)
 		if(DeltaMapper.getChannels(set_id)[i] > 2)
 			for(int k = 0; k < channel.length; k++) channel[k] += min[i];
 		return channel;

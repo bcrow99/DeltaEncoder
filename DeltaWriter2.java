@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// DeltaWriter2 version 1.1
+// DeltaWriter2 version 2.0
 //
 // A streamlined DeltaWriter. Files it saves are read by the regular
 // DeltaReader -- the header and per-channel layout are the same, with
@@ -26,7 +26,7 @@ public class DeltaWriter2
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'D';
-	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
 
 	// compress_type written to the header: String* (strings that don't
 	// compress enough come back uncompressed from getStringList).
@@ -115,7 +115,7 @@ public class DeltaWriter2
 			for(int t = 0; t < N_DELTA_TYPES; t++)
 			{
 				int    type   = FIRST_DELTA_TYPE + t;
-				ArrayList result = DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, type, scanline5_variant, block_size, block_set);
+				ArrayList result = DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
 				byte[] m      = (byte[]) result.get(2);
 
 				byte[] delta_bytes = DeltaWriter.packAndCompress((int[]) result.get(1));
@@ -566,10 +566,11 @@ public class DeltaWriter2
 		byte[][] new_map    = new byte[3][];
 		int[][]  new_delta  = new int[3][];
 		int[][]  dc         = new int[3][];
-		ViewerSupport.parallel(3, i ->
+		int[][]  raw        = new int[3][];   // decoded, before the minimum: the next channel's reference
+		ViewerSupport.channels(delta_type == 13, 3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set);
+			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
 			new_map[i] = (byte[]) result.get(2);
 			new_delta[i] = ((int[]) result.get(1)).clone();
 
@@ -582,7 +583,8 @@ public class DeltaWriter2
 			byte[] str   = StringMapper.decompressStrings(new_string[i]);
 			int[]  delta = StringMapper.unpackStrings(str, new_table[i], new_xdim * new_ydim, channel_length[j]);
 			delta[0] = 0; for(int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, new_map[i], scanline5_variant);
+			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, new_map[i], scanline5_variant, (i > 0) ? raw[i - 1] : null);
+			raw[i] = dc[i].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		});
 		table = new_table; string = new_string; map = new_map;

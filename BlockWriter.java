@@ -5,12 +5,12 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 1.3
+// BlockWriter version 2.0
 //
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with Context-coded deltas (DeltaMapper.packContextDeltas) and a
 // coded map. Each block uses one predictor from its channel's set, and a
-// set can be any of the 253 predictors DeltaMapper has ids for. The
+// set can be any of the 255 predictors in DeltaMapper.PREDICTOR_TABLE. The
 // startup analysis (and Find Best) picks the channel set, then surveys the
 // sets (DeltaMapper.surveyBlockSets: per channel, predictors added in
 // greedy order by estimated coded bits, blocks assigned by the estimate,
@@ -23,7 +23,7 @@ public class BlockWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -202,6 +202,7 @@ public class BlockWriter
 		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1]);
 		survey_ids = survey.ids;
 		System.out.print(survey.report);
+		System.out.print(DeltaMapper.describeGroupUse(survey, DeltaMapper.getBlockDeltasByCost(ch, size[0], size[1], survey.block, survey.ids)));
 		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
 		boolean use_survey = survey.bytes <= named;
 		System.out.println(String.format("Surveyed sets %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.",
@@ -266,14 +267,16 @@ public class BlockWriter
 		if(block_set == SURVEYED && survey_ids != null)
 			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block_size, survey_ids);
 		final ArrayList[] surveyed = by_cost;
-		ViewerSupport.parallel(3, i ->
+		int[][] raw = new int[3][];   // decoded, before the minimum: the next channel's reference
+		ViewerSupport.channels(true, 3, i ->
 		{
 			int j = channel_id[i];
 			ArrayList result = (surveyed != null) ? surveyed[i]
-				: DeltaMapper.getBlockDeltasFromValues(qc[j], new_xdim, new_ydim, block_size, DeltaMapper.getSetIds(Math.max(0, block_set)));
+				: DeltaMapper.getBlockDeltasFromValues(qc[j], (i > 0) ? qc[channel_id[i - 1]] : null, new_xdim, new_ydim, block_size, DeltaMapper.getSetIds(Math.max(0, block_set)));
 			delta_list[i] = (int[]) result.get(1);
 			map_list[i]   = (byte[]) result.get(2);
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0);
+			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0, (i > 0) ? raw[i - 1] : null);
+			raw[i] = dc[i].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		});
 		delta_xdim = new_xdim;

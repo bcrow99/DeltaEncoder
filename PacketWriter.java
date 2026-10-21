@@ -7,14 +7,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// PacketWriter version 1.1
+// PacketWriter version 2.0
 public class PacketWriter
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -335,10 +335,11 @@ public class PacketWriter
 		int[][]  tables  = new int[3][];
 		byte[][] strings = new byte[3][], maps = new byte[3][];
 		int[][]  dc      = new int[3][];
-		ViewerSupport.parallel(3, i ->
+		int[][]  raw     = new int[3][];   // decoded, before the minimum: the next channel's reference
+		ViewerSupport.channels(delta_type == 13, 3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set);
+			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
 			if(DeltaMapper.hasMap(delta_type)) maps[i] = (byte[]) result.get(2);
 			delta_list[i] = ((int[]) result.get(1)).clone();
 			ArrayList dsl = StringMapper.getStringList((int[]) result.get(1), false);
@@ -349,7 +350,8 @@ public class PacketWriter
 			byte[] str   = StringMapper.decompressStrings(strings[i]);
 			int[]  delta = StringMapper.unpackStrings(str, tables[i], new_xdim * new_ydim, channel_length[j]);
 			delta[0] = 0; for(int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, maps[i], scanline5_variant);
+			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, maps[i], scanline5_variant, (i > 0) ? raw[i - 1] : null);
+			raw[i] = dc[i].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		});
 		table_list.clear(); string_list.clear(); map_list.clear();

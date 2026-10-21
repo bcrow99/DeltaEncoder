@@ -6,14 +6,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// SimpleWriter version 1.1
+// SimpleWriter version 2.0
 public class SimpleWriter
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 2;   // 2: block maps carry their predictor ids (DeltaMapper.writeMap)
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -264,7 +264,7 @@ public class SimpleWriter
 		for(int i = 0; i < 3; i++)
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set);
+			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
 			if(DeltaMapper.hasMap(delta_type)) map_list.add((byte[]) result.get(2));
 			delta_list[i] = ((int[]) result.get(1)).clone();
 			// Always unary strings; StringMapper applies its own
@@ -278,7 +278,7 @@ public class SimpleWriter
 		}
 
 		// Decode what Save will write, as SimpleReader does.
-		int[][] dc = new int[3][];
+		int[][] dc = new int[3][], raw = new int[3][];   // raw: decoded, before the minimum (the next channel's reference)
 		for(int i = 0; i < 3; i++)
 		{
 			int j = channel_id[i];
@@ -286,7 +286,8 @@ public class SimpleWriter
 			int[]  delta = StringMapper.unpackStrings(str, table_list.get(i), new_xdim * new_ydim, channel_length[j]);
 			delta[0] = 0; for(int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 			byte[] map = DeltaMapper.hasMap(delta_type) ? map_list.get(i) : null;
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, map, scanline5_variant);
+			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, map, scanline5_variant, (i > 0) ? raw[i - 1] : null);
+			raw[i] = dc[i].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		}
 		// Like SimpleReader: recombine the channels first, then resize, then
