@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// DeltaWriter version 2.0
+// DeltaWriter version 2.1
 public class DeltaWriter
 {
 	// File format: every file starts with FORMAT_ID ('D' = Delta format) and
@@ -36,9 +36,11 @@ public class DeltaWriter
 	int smooth2_level = 0;
 	byte scanline5_variant = 0;
 	int  block_size = DeltaMapper.BLOCK_DEFAULT;   // block map (delta type 13): block width/height
-	int  block_set  = 0;                           // block map: predictor set (DeltaMapper.BLOCK_SET_NAMES)
+	int  block_set  = 0;                           // block map: a named set (DeltaMapper.BLOCK_SET_NAMES), or SURVEYED
+	int[][] survey_ids = null;                     // each channel's surveyed predictor ids (the last block search)
+	static final int SURVEYED = -1;
 	JSpinner       block_spinner;
-	JRadioButton[] block_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length];
+	JRadioButton[] block_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length + 1];   // [0] = Surveyed
 	boolean        updating = false;               // set while the program moves the block controls
 
 	JSlider smooth_slider, smooth2_slider, pquant_slider, pshift_slider, corr_slider, segment_slider;
@@ -95,7 +97,7 @@ public class DeltaWriter
 		{
 			for(int t = 0; t < DeltaMapper.DELTA_TYPES; t++)
 			{
-				ArrayList result = DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, t, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
+				ArrayList result = DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, t, scanline5_variant, block_size, Math.max(0, block_set), (i > 0) ? qc[channel_id[i - 1]] : null);
 				byte[] delta_bytes = packAndCompress((int[]) result.get(1));
 				per_channel_delta_bits[i][t]       = StringMapper.getBitlength(delta_bytes);
 				per_channel_delta_compressed[i][t] = (StringMapper.getIterations(delta_bytes) & 15) > 0;
@@ -149,7 +151,7 @@ public class DeltaWriter
 		int[] str_bits = new int[3], str_star_bits = new int[3];
 		ViewerSupport.parallel(3, i ->
 		{
-			int[] delta = (int[]) DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null).get(1);
+			int[] delta = (int[]) DeltaMapper.getDeltas(qc[channel_id[i]], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, Math.max(0, block_set), (i > 0) ? qc[channel_id[i - 1]] : null).get(1);
 			str_bits[i]      = StringMapper.getBitlength((byte[]) StringMapper.getStringList(delta.clone(), false).get(3));
 			str_star_bits[i] = StringMapper.getBitlength((byte[]) StringMapper.getStringList(delta.clone(), true).get(3));
 		});
@@ -196,6 +198,21 @@ public class DeltaWriter
 		int[]    best  = DeltaMapper.findBestBlock(ch, size[0], size[1], bytes);
 		block_size = best[0]; block_set = best[1];
 		System.out.print(DeltaMapper.getBlockTable(bytes, best));
+		long named = bytes[best[1]][Arrays.binarySearch(DeltaMapper.BLOCK_SEARCH_SIZES, best[0])];
+
+		// Then BlockWriter's survey: each channel's own set from all the
+		// predictors, blocks assigned by estimated coded size. Kept if it
+		// codes smaller (both are Context-coded sizes; with another entropy
+		// type the comparison is only a guide).
+		long t0 = System.nanoTime();
+		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1]);
+		survey_ids = survey.ids;
+		System.out.print(survey.report);
+		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
+		boolean use_survey = survey.bytes <= named;
+		System.out.println(String.format("Surveyed sets %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.",
+			survey.bytes, DeltaMapper.BLOCK_SET_NAMES[best[1]], best[0], named, use_survey ? "surveyed sets" : "named set"));
+		if(use_survey) { block_size = survey.block; block_set = SURVEYED; }
 		System.out.println("Block search took " + ViewerSupport.formatDuration(System.nanoTime() - start));
 		System.out.println();
 	}
@@ -206,7 +223,8 @@ public class DeltaWriter
 	{
 		updating = true;
 		block_spinner.setValue(block_size);
-		block_button[block_set].setSelected(true);
+		block_button[0].setEnabled(survey_ids != null);
+		block_button[block_set + 1].setSelected(true);
 		updating = false;
 	}
 
@@ -325,8 +343,12 @@ public class DeltaWriter
 		JSpinner[] sp = new JSpinner[1];
 		delta_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
 			v -> { block_size = v; if(delta_type == 13 && !updating) apply(); }, sp)); block_spinner = sp[0];
-		delta_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", DeltaMapper.BLOCK_SET_NAMES, block_set,
-			v -> { block_set = v; if(delta_type == 13 && !updating) apply(); }, block_button));
+		String[] set_names = new String[DeltaMapper.BLOCK_SET_NAMES.length + 1];
+		set_names[0] = "Surveyed (per channel)";
+		System.arraycopy(DeltaMapper.BLOCK_SET_NAMES, 0, set_names, 1, DeltaMapper.BLOCK_SET_NAMES.length);
+		delta_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", set_names, block_set + 1,
+			v -> { block_set = v - 1; if(delta_type == 13 && !updating) apply(); }, block_button));
+		block_button[0].setEnabled(false);   // until a block search has run
 		JMenuItem find_item = new JMenuItem("Find Best Block Settings");
 		find_item.addActionListener(e -> findBlockSettings());
 		delta_menu.add(find_item);
@@ -494,11 +516,16 @@ public class DeltaWriter
 		int[][]  new_delta   = new int[3][];
 		int[][]  dc          = new int[3][];
 		int[][]  raw         = new int[3][];   // decoded, before the minimum: the next channel's reference
+		// Surveyed sets: blocks assigned by estimated coded size, as the
+		// survey does (channels in order); named sets by smallest |delta|.
+		final ArrayList[] surveyed = (delta_type == 13 && block_set == SURVEYED && survey_ids != null)
+			? DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block_size, survey_ids)
+			: null;
 		ViewerSupport.channels(delta_type == 13, 3, i ->
 		{
 			int   j = channel_id[i];
 			int[] c = qc[j];
-			ArrayList result = DeltaMapper.getDeltas(c, new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
+			ArrayList result = (surveyed != null) ? surveyed[i] : DeltaMapper.getDeltas(c, new_xdim, new_ydim, delta_type, scanline5_variant, block_size, Math.max(0, block_set), (i > 0) ? qc[channel_id[i - 1]] : null);
 			int[] delta = (int[]) result.get(1);
 			new_delta[i] = delta.clone();
 			if(DeltaMapper.hasMap(delta_type)) new_map[i] = (byte[]) result.get(2);
