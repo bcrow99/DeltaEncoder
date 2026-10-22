@@ -4226,6 +4226,35 @@ public class DeltaMapper
 
 	public static final int BLOCK_MIN = 4, BLOCK_MAX = 32, BLOCK_DEFAULT = 8;
 
+	// Block shapes, a block map's first byte: BLOCK_MIN..BLOCK_MAX is a
+	// square of that size; SHAPE_FIRST + i is BLOCK_SHAPES[i], width x height
+	// (width 0: the whole row). Rows of pixels -- "lines" -- are the 1-high
+	// ones. Blocks are numbered row by row either way.
+	public static final int SHAPE_FIRST = 64;
+	public static final int[][] BLOCK_SHAPES = { {16, 4}, {32, 2}, {64, 1}, {256, 1}, {0, 1}, {4, 16}, {1, 64} };
+
+	public static int blockWidth(int block, int xdim)
+	{
+		if(block < SHAPE_FIRST) return block;
+		int w = BLOCK_SHAPES[block - SHAPE_FIRST][0];
+		return (w == 0) ? Math.max(1, xdim - 2) : w;
+	}
+
+	public static int blockHeight(int block) { return (block < SHAPE_FIRST) ? block : BLOCK_SHAPES[block - SHAPE_FIRST][1]; }
+
+	public static boolean validShape(int block)
+	{
+		return (block >= BLOCK_MIN && block <= BLOCK_MAX) || (block >= SHAPE_FIRST && block < SHAPE_FIRST + BLOCK_SHAPES.length);
+	}
+
+	// "8" for a square, "16x4", "row" for a whole-row line.
+	public static String shapeName(int block)
+	{
+		if(block < SHAPE_FIRST) return String.valueOf(block);
+		int[] s = BLOCK_SHAPES[block - SHAPE_FIRST];
+		return (s[0] == 0) ? "row" : s[0] + "x" + s[1];
+	}
+
 	// Named sets, as PREDICTOR_TABLE ids: the first 4, 8, 16 and 32 of one
 	// greedy order (by estimated coded size, with the map's cost) over every
 	// block of 7 test images at Colour Resolution 0 and 3, block size 8.
@@ -4783,7 +4812,7 @@ public class DeltaMapper
 	// The channel and what its primitives need are in ps.
 	public static int[] blockCostTable(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids)
 	{
-		int bh = (ydim - 1 + block - 1) / block;
+		int bh = blocksDown(ydim, block);
 		int[] rows = new int[bh];
 		for(int by = 0; by < bh; by++) rows[by] = by;
 		return blockCostRows(ps, ydim, block, dc, table, ids, rows);
@@ -4808,14 +4837,15 @@ public class DeltaMapper
 	{
 		int[] src = ps.v;
 		int   xdim = ps.xdim, n = pid.length, np = table.primitives;
-		int   y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
+		int   y0 = 1 + by * bh_, y1 = Math.min(ydim, y0 + bh_);
 		for(int y = y0; y < y1; y++)
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				int   k = y * xdim + x, s = src[k];
 				int[] cc = dc.cost[dc.context[k]];
 				ps.primitives(k, np, prim);
-				int base = offset + (x - 1) / block * n;
+				int base = offset + (x - 1) / bw_ * n;
 				for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
 			}
 	}
@@ -4826,7 +4856,7 @@ public class DeltaMapper
 	// estimates at a time, so large images don't need the whole table.
 	static byte[][] prefixMaps(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids, int[] counts)
 	{
-		int bw = blocksAcross(ps.xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		int bw = blocksAcross(ps.xdim, block), bh = blocksDown(ydim, block), n = ids.length;
 		byte[][] map = new byte[counts.length][];
 		for(int c = 0; c < counts.length; c++)
 		{
@@ -4933,7 +4963,7 @@ public class DeltaMapper
 	// stride = its size, with all = true; else of the ids, stride ids.length).
 	private static byte[] assignByCost(int[] est, boolean all, int stride, int[] ids, int xdim, int ydim, int block)
 	{
-		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		int    bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), n = ids.length;
 		int    head = 2 + n;
 		byte[] map = new byte[head + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) n;
@@ -4964,18 +4994,19 @@ public class DeltaMapper
 	{
 		int[] src = ps.v;
 		int   xdim = ps.xdim;
-		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int   block = map[0] & 0xFF, bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 		int[] dst = new int[xdim * ydim];
 		blockEdges(src, dst, xdim, ydim);
 		// Rows in parallel: the predictions read only the source (and bias
 		// corrections computed up front).
 		java.util.stream.IntStream.range(1, ydim).parallel().forEach(y ->
 		{
-			int row = head + (y - 1) / block * bw;
+			int row = head + (y - 1) / bh_ * bw;
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				int k = y * xdim + x;
-				dst[k] = src[k] - ps.predict(table, ids[map[row + (x - 1) / block] & 0xFF], k);
+				dst[k] = src[k] - ps.predict(table, ids[map[row + (x - 1) / bw_] & 0xFF], k);
 			}
 		});
 		int sum = 0;
@@ -5037,8 +5068,19 @@ public class DeltaMapper
 		return surveyBlockSets(channel, xdim, ydim, PREDICTOR_TABLE);
 	}
 
+	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, boolean survey_shapes)
+	{
+		return surveyBlockSets(channel, xdim, ydim, PREDICTOR_TABLE, survey_shapes);
+	}
+
 	// As above, choosing from the ids of the given table.
 	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, PredictorTable table)
+	{
+		return surveyBlockSets(channel, xdim, ydim, table, false);
+	}
+
+	// As above; survey_shapes also tries the rectangles and lines.
+	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, PredictorTable table, boolean survey_shapes)
 	{
 		TreeMap<Integer, BlockSurvey> tried = new TreeMap<Integer, BlockSurvey>();
 		StringBuilder log = new StringBuilder();
@@ -5060,14 +5102,24 @@ public class DeltaMapper
 		StringBuilder[] more_log = new StringBuilder[next.size()];
 		boundedParallel(next.size(), task, t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(ps, ydim, next.get(t), table, more_log[t]); });
 		for(int t = 0; t < more.length; t++) { tried.put(next.get(t), more[t]); log.append(more_log[t]); }
+		// Then the rectangles and lines (BLOCK_SHAPES), if asked for.
+		if(survey_shapes)
+		{
+			int[] shape = new int[BLOCK_SHAPES.length];
+			for(int t = 0; t < shape.length; t++) shape[t] = SHAPE_FIRST + t;
+			BlockSurvey[] sg = new BlockSurvey[shape.length];
+			StringBuilder[] sl = new StringBuilder[shape.length];
+			boundedParallel(shape.length, task, t -> { sl[t] = new StringBuilder(); sg[t] = surveyBlockSize(ps, ydim, shape[t], table, sl[t]); });
+			for(int t = 0; t < shape.length; t++) { tried.put(shape[t], sg[t]); log.append(sl[t]); }
+		}
 		BlockSurvey result = tried.get(bestSurvey(tried));
 
 		StringBuilder r = new StringBuilder("Predictor survey: bytes coded (Context-coded deltas + maps) for the first n predictors\n");
 		r.append("in each channel's greedy order (by estimated bits); * marks the n kept for the channel.\n");
 		r.append(log);
 		r.append("Block size:");
-		for(Map.Entry<Integer, BlockSurvey> e : tried.entrySet()) r.append(String.format("  %d -> %,d", e.getKey(), e.getValue().bytes));
-		r.append(String.format("   chose %d (%,d bytes)\n", result.block, result.bytes));
+		for(Map.Entry<Integer, BlockSurvey> e : tried.entrySet()) r.append(String.format("  %s -> %,d", shapeName(e.getKey()), e.getValue().bytes));
+		r.append(String.format("   chose %s (%,d bytes)\n", shapeName(result.block), result.bytes));
 		for(int i = 0; i < 3; i++)
 		{
 			r.append(String.format("Channel %d, %d predictors:", i, result.ids[i].length));
@@ -5150,7 +5202,7 @@ public class DeltaMapper
 			result.block = block;
 			int[][]  delta = new int[3][];
 			byte[][] map   = new byte[3][];
-			int      bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, blocks = bw * bh;
+			int      bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), blocks = bw * bh;
 			// Big images: the greedy order is found on every step-th block row
 			// (at most SURVEY_SAMPLE_BLOCKS blocks), with the id's cost scaled to
 			// match; the maps are then made over every block.
@@ -5158,7 +5210,7 @@ public class DeltaMapper
 			int[] rows = new int[(bh + step - 1) / step];
 			for(int r = 0; r < rows.length; r++) rows[r] = r * step;
 			int   sampled = rows.length * bw;
-			log.append(String.format("  block %d%s:\n", block, (step > 1) ? String.format(" (order from %,d of %,d blocks)", sampled, blocks) : ""));
+			log.append(String.format("  block %s%s:\n", shapeName(block), (step > 1) ? String.format(" (order from %,d of %,d blocks)", sampled, blocks) : ""));
 			for(int i = 0; i < 3; i++)
 			{
 				DeltaCost dc    = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i));
@@ -5199,7 +5251,10 @@ public class DeltaMapper
 		catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
 	}
 
-	private static int blocksAcross(int xdim, int block) { return (xdim - 2 + block - 1) / block; }
+	// Blocks across the interior (columns 1..xdim-2) and down it (rows
+	// 1..ydim-1) for a block shape (see BLOCK_SHAPES).
+	private static int blocksAcross(int xdim, int block) { int w = blockWidth(block, xdim); return (xdim - 2 + w - 1) / w; }
+	private static int blocksDown(int ydim, int block)   { int h = blockHeight(block);      return (ydim - 1 + h - 1) / h; }
 
 	// Block deltas with a set of predictor ids: each block takes the one
 	// with the smallest sum of |delta|. ref is the previous channel (null
@@ -5214,7 +5269,7 @@ public class DeltaMapper
 	{
 		int[]  src = ps.v;
 		int    xdim = ps.xdim;
-		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		int    bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), n = ids.length;
 		byte[] map = new byte[2 + n + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) n;
 		for(int p = 0; p < n; p++) map[2 + p] = (byte) ids[p];
@@ -5228,11 +5283,12 @@ public class DeltaMapper
 		{
 			long[] sums = new long[bw * n];
 			int[]  prim = new int[PREDICTOR_TABLE.primitives];
-			int    y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+			int    bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
+			int    y0 = 1 + by * bh_, y1 = Math.min(ydim, y0 + bh_);
 			for(int y = y0; y < y1; y++)
 				for(int x = 1; x < xdim - 1; x++)
 				{
-					int k = y * xdim + x, base = (x - 1) / block * n;
+					int k = y * xdim + x, base = (x - 1) / bw_ * n;
 					for(int q : used) prim[q] = ps.primitive(q, k);
 					for(int p = 0; p < n; p++) sums[base + p] += Math.abs(src[k] - PREDICTOR_TABLE.predict(ids[p], prim));
 				}
@@ -5252,7 +5308,8 @@ public class DeltaMapper
 	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref)
 	{
 		PredictorTable table = PREDICTOR_TABLE;
-		int   block = map[0], bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int   block = map[0] & 0xFF, bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
+		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 		int[] ids   = getMapIds(map);
 		int[] dst   = new int[xdim * ydim];
 		PixelSource ps = new PixelSource(dst, ref, xdim, table, false);
@@ -5262,12 +5319,12 @@ public class DeltaMapper
 		{
 			int k = y * xdim;
 			dst[k] = dst[k - xdim] + delta[k];
-			int row = head + (y - 1) / block * bw;
+			int row = head + (y - 1) / bh_ * bw;
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				k++;
 				ps.prepare(k);
-				dst[k] = delta[k] + ps.predict(table, ids[map[row + (x - 1) / block] & 0xFF], k);
+				dst[k] = delta[k] + ps.predict(table, ids[map[row + (x - 1) / bw_] & 0xFF], k);
 				ps.commit(k);
 			}
 			k++;
@@ -5478,7 +5535,7 @@ public class DeltaMapper
 			// Block size, n, the n predictor ids, then the entries.
 			int head = mapHeaderLength(map);
 			out.write(map, 0, head);
-			width    = blocksAcross(xdim, map[0]);
+			width    = blocksAcross(xdim, map[0] & 0xFF);
 			map      = Arrays.copyOfRange(map, head, map.length);
 			previous = (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length);
 		}
@@ -5502,7 +5559,7 @@ public class DeltaMapper
 		}
 		if(delta_type == 13)
 		{
-			int   block = in.readByte();
+			int   block = in.readUnsignedByte();
 			int   n     = in.readUnsignedByte();
 			if(n < 1 || n > PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
 			int[] ids = new int[n];
@@ -5511,8 +5568,8 @@ public class DeltaMapper
 				ids[p] = in.readUnsignedByte();
 				if(ids[p] >= PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
 			}
-			if(block < BLOCK_MIN || block > BLOCK_MAX)
-				throw new java.io.IOException("Block map with block size " + block + ": not one this version reads.");
+			if(!validShape(block))
+				throw new java.io.IOException("Block map with block shape " + block + ": not one this version reads.");
 			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length), blocksAcross(xdim, block));
 			int    head = 2 + ids.length;
 			byte[] map  = new byte[body.length + head];

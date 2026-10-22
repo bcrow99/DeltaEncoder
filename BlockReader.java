@@ -97,7 +97,7 @@ public class BlockReader
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
 		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
-		System.out.println("Block map:    size " + map[0][0] + "; predictors " + DeltaMapper.describeMapSet(map[0]) + ", " + DeltaMapper.describeMapSet(map[1]) + ", " + DeltaMapper.describeMapSet(map[2]));
+		System.out.println("Block map:    block " + DeltaMapper.shapeName(map[0][0] & 0xFF) + "; predictors " + DeltaMapper.describeMapSet(map[0]) + ", " + DeltaMapper.describeMapSet(map[1]) + ", " + DeltaMapper.describeMapSet(map[2]));
 		System.out.println();
 	}
 }

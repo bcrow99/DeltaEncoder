@@ -38,7 +38,9 @@ public class BlockWriter
 	int pixel_shift = 3;
 	int correction  = 0;
 	int min_set_id  = 0;
-	int block_size  = DeltaMapper.BLOCK_DEFAULT;
+	int block_size  = DeltaMapper.BLOCK_DEFAULT;   // the square's size
+	int block_shape = 0;          // 0: square (block_size); i + 1: DeltaMapper.BLOCK_SHAPES[i]
+	boolean survey_shapes = true; // Find Best also tries the rectangles and lines
 	int block_set   = 0;          // a named set (DeltaMapper.BLOCK_SET_NAMES), or SURVEYED
 	int[][] survey_ids = null;    // each channel's surveyed predictor ids (the last analysis)
 	static final int SURVEYED = -1;
@@ -46,6 +48,10 @@ public class BlockWriter
 	JSlider        pquant_slider, pshift_slider, corr_slider;
 	JSpinner       block_spinner;
 	JRadioButton[] set_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length + 1];   // [0] = Surveyed
+	JRadioButton[] shape_button = new JRadioButton[DeltaMapper.BLOCK_SHAPES.length + 1];   // [0] = Square
+
+	// The block map's shape code (DeltaMapper.blockWidth/blockHeight).
+	int block() { return (block_shape == 0) ? block_size : DeltaMapper.SHAPE_FIRST + block_shape - 1; }
 
 	// ---- Results of the last Apply (read by Save) ---------------------------
 	int[]    set_sum = new int[10], channel_sum = new int[6];
@@ -126,6 +132,16 @@ public class BlockWriter
 		JSpinner[] sp = new JSpinner[1];
 		block_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
 			v -> { block_size = v; if(!updating) apply(); }, sp)); block_spinner = sp[0];
+		// Block Shape: squares (of Block Size), or a rectangle or line.
+		String[] shape_names = new String[DeltaMapper.BLOCK_SHAPES.length + 1];
+		shape_names[0] = "Square (Block Size)";
+		for(int i = 0; i < DeltaMapper.BLOCK_SHAPES.length; i++)
+		{
+			int code = DeltaMapper.SHAPE_FIRST + i;
+			shape_names[i + 1] = DeltaMapper.shapeName(code) + ((DeltaMapper.blockHeight(code) == 1) ? " (line)" : "");
+		}
+		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Shape", shape_names, block_shape,
+			v -> { block_shape = v; if(!updating) apply(); }, shape_button));
 		String[] set_names = new String[DeltaMapper.BLOCK_SET_NAMES.length + 1];
 		set_names[0] = "Surveyed (per channel)";
 		System.arraycopy(DeltaMapper.BLOCK_SET_NAMES, 0, set_names, 1, DeltaMapper.BLOCK_SET_NAMES.length);
@@ -133,6 +149,9 @@ public class BlockWriter
 			v -> { block_set = v - 1; if(!updating) apply(); }, set_button));
 		set_button[0].setEnabled(false);   // until the first analysis
 		block_menu.addSeparator();
+		JCheckBoxMenuItem shapes_item = new JCheckBoxMenuItem("Find Best Tries Rectangles", survey_shapes);
+		shapes_item.addActionListener(e -> survey_shapes = shapes_item.isSelected());
+		block_menu.add(shapes_item);
 		JMenuItem find_item = new JMenuItem("Find Best");
 		find_item.addActionListener(e -> runAnalysis());
 		block_menu.add(find_item);
@@ -161,10 +180,12 @@ public class BlockWriter
 				{
 					int[] best = get();
 					updating = true;
-					block_spinner.setValue(best[0]);
+					if(best[0] < DeltaMapper.SHAPE_FIRST) { block_spinner.setValue(best[0]); block_size = best[0]; block_shape = 0; }
+					else block_shape = best[0] - DeltaMapper.SHAPE_FIRST + 1;
+					shape_button[block_shape].setSelected(true);
 					set_button[best[1] + 1].setSelected(true);
 					set_button[0].setEnabled(survey_ids != null);
-					block_size = best[0]; block_set = best[1];
+					block_set = best[1];
 					updating = false;
 				}
 				catch(Exception e) { System.out.println("init: " + e); }
@@ -199,13 +220,13 @@ public class BlockWriter
 		System.out.println();
 
 		long t0 = System.nanoTime();
-		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1]);
+		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1], survey_shapes);
 		survey_ids = survey.ids;
 		System.out.print(survey.report);
 		System.out.print(DeltaMapper.describeGroupUse(survey, DeltaMapper.getBlockDeltasByCost(ch, size[0], size[1], survey.block, survey.ids)));
 		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
 		boolean use_survey = survey.bytes <= named;
-		System.out.println(String.format("Surveyed sets %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.",
+		System.out.println(String.format("Surveyed sets (block %s) %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.", DeltaMapper.shapeName(survey.block),
 			survey.bytes, DeltaMapper.BLOCK_SET_NAMES[best[1]], best[0], named, use_survey ? "surveyed sets" : "named set"));
 		System.out.println("Analysis took " + ViewerSupport.formatDuration(System.nanoTime() - start));
 		System.out.println();
@@ -265,14 +286,14 @@ public class BlockWriter
 		// survey does (channels in order). Named sets: by smallest |delta|.
 		ArrayList[] by_cost = null;
 		if(block_set == SURVEYED && survey_ids != null)
-			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block_size, survey_ids);
+			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block(), survey_ids);
 		final ArrayList[] surveyed = by_cost;
 		int[][] raw = new int[3][];   // decoded, before the minimum: the next channel's reference
 		ViewerSupport.channels(true, 3, i ->
 		{
 			int j = channel_id[i];
 			ArrayList result = (surveyed != null) ? surveyed[i]
-				: DeltaMapper.getBlockDeltasFromValues(qc[j], (i > 0) ? qc[channel_id[i - 1]] : null, new_xdim, new_ydim, block_size, DeltaMapper.getSetIds(Math.max(0, block_set)));
+				: DeltaMapper.getBlockDeltasFromValues(qc[j], (i > 0) ? qc[channel_id[i - 1]] : null, new_xdim, new_ydim, block(), DeltaMapper.getSetIds(Math.max(0, block_set)));
 			delta_list[i] = (int[]) result.get(1);
 			map_list[i]   = (byte[]) result.get(2);
 			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0, (i > 0) ? raw[i - 1] : null);
@@ -324,7 +345,7 @@ public class BlockWriter
 				return;
 			}
 			int raw = image_xdim * image_ydim * 3;
-			System.out.println("Block size " + block_size + ", predictors " + DeltaMapper.describeMapSet(map_list[0]) + ", "
+			System.out.println("Block " + DeltaMapper.shapeName(block()) + ", predictors " + DeltaMapper.describeMapSet(map_list[0]) + ", "
 				+ DeltaMapper.describeMapSet(map_list[1]) + ", " + DeltaMapper.describeMapSet(map_list[2]) + ": " + file.length() + " bytes");
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
