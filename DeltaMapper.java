@@ -4321,12 +4321,18 @@ public class DeltaMapper
 	// packContextDeltas) plus maps (writeMap), as the writers save them.
 	public static long getBlockMapBytes(int[][] channel, int xdim, int ydim, int block, int set)
 	{
+		return getBlockMapBytes(pixelSources(channel, xdim, ydim, PREDICTOR_TABLE), ydim, block, set);
+	}
+
+	private static long getBlockMapBytes(PixelSource[] ps, int ydim, int block, int set)
+	{
 		try
 		{
+			int xdim = ps[0].xdim;
 			int[][] d = new int[3][]; byte[][] m = new byte[3][];
 			for(int i = 0; i < 3; i++)
 			{
-				ArrayList result = getBlockDeltasFromValues(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, getSetIds(set));
+				ArrayList result = getBlockDeltasFromValues(ps[i], ydim, block, getSetIds(set));
 				d[i] = (int[]) result.get(1); m[i] = (byte[]) result.get(2);
 			}
 			long total = 0;
@@ -4346,16 +4352,19 @@ public class DeltaMapper
 	// smallest (actual sizes): every set at sizes 4, 8 and 16, then the best
 	// set at the untried sizes next to its best. Returns {block size, set};
 	// bytes[set][index in BLOCK_SEARCH_SIZES] gets the sizes tried (-1 for
-	// the others). Runs the trials in parallel.
+	// the others). Runs the trials in parallel, as many at once as memory
+	// allows.
 	public static int[] findBestBlock(int[][] channel, int xdim, int ydim, long[][] bytes)
 	{
+		PixelSource[] ps = pixelSources(channel, xdim, ydim, PREDICTOR_TABLE);
+		long  task   = 28L * xdim * ydim;   // deltas, maps and the Context coder's arrays for 3 channels
 		int   n_sets = BLOCK_SET_NAMES.length;
 		int[] first  = {0, 2, 4};   // 4, 8, 16
 		for(long[] row : bytes) Arrays.fill(row, -1);
-		java.util.stream.IntStream.range(0, n_sets * first.length).parallel().forEach(t ->
+		boundedParallel(n_sets * first.length, task, t ->
 		{
 			int set = t / first.length, s = first[t % first.length];
-			bytes[set][s] = getBlockMapBytes(channel, xdim, ydim, BLOCK_SEARCH_SIZES[s], set);
+			bytes[set][s] = getBlockMapBytes(ps, ydim, BLOCK_SEARCH_SIZES[s], set);
 		});
 		int best_set = 0, best_s = first[0];
 		for(int set = 0; set < n_sets; set++)
@@ -4363,14 +4372,51 @@ public class DeltaMapper
 
 		final int bs = best_set;
 		int[] next = {best_s - 1, best_s + 1};
-		java.util.stream.IntStream.range(0, 2).parallel().forEach(t ->
+		boundedParallel(2, task, t ->
 		{
 			int s = next[t];
 			if(s >= 0 && s < BLOCK_SEARCH_SIZES.length && bytes[bs][s] < 0)
-				bytes[bs][s] = getBlockMapBytes(channel, xdim, ydim, BLOCK_SEARCH_SIZES[s], bs);
+				bytes[bs][s] = getBlockMapBytes(ps, ydim, BLOCK_SEARCH_SIZES[s], bs);
 		});
 		for(int s = 0; s < BLOCK_SEARCH_SIZES.length; s++) if(bytes[bs][s] >= 0 && bytes[bs][s] < bytes[bs][best_s]) best_s = s;
 		return new int[] {BLOCK_SEARCH_SIZES[best_s], bs};
+	}
+
+	// body(0..n-1) on up to as many threads as there are cores and as the
+	// free heap allows, each task needing about task_bytes. Big images run
+	// fewer tasks at once instead of running out of memory.
+	static void boundedParallel(int n, long task_bytes, java.util.function.IntConsumer body)
+	{
+		Runtime rt   = Runtime.getRuntime();
+		long    free = rt.maxMemory() - (rt.totalMemory() - rt.freeMemory());
+		int     p    = (int) Math.max(1, Math.min(Math.min(n, rt.availableProcessors()), (long) (free * 0.6) / Math.max(1, task_bytes)));
+		if(p == 1) { for(int i = 0; i < n; i++) body.accept(i); return; }
+		java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+		Throwable[] failed = new Throwable[1];
+		Thread[] worker = new Thread[p];
+		for(int w = 0; w < p; w++)
+		{
+			worker[w] = new Thread(() ->
+			{
+				try { for(int i; (i = next.getAndIncrement()) < n && failed[0] == null; ) body.accept(i); }
+				catch(Throwable e) { synchronized(failed) { if(failed[0] == null) failed[0] = e; } }
+			});
+			worker[w].start();
+		}
+		for(Thread t : worker)
+			try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+		if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+		if(failed[0] instanceof Error) throw (Error) failed[0];
+		if(failed[0] != null) throw new RuntimeException(failed[0]);
+	}
+
+	// Each channel's PixelSource, with the channel before it as reference.
+	static PixelSource[] pixelSources(int[][] channel, int xdim, int ydim, PredictorTable table)
+	{
+		PixelSource[] ps = new PixelSource[channel.length];
+		java.util.stream.IntStream.range(0, channel.length).parallel().forEach(i ->
+			ps[i] = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table));
+		return ps;
 	}
 
 	// findBestBlock's results as a table, the chosen one marked *.
@@ -4532,11 +4578,11 @@ public class DeltaMapper
 	// decoder as it goes.
 	public static final class PixelSource
 	{
-		final int[]   v, ref;
-		final int     xdim;
-		final int[][] corr;            // bias primitives' corrections, [s][k]
-		final int[]   context;         // each pixel's bias context
-		final int[][] sum, count;      // [s][context]
+		final int[]     v, ref;
+		final int       xdim;
+		final short[][] corr;          // bias primitives' corrections, [s][k] (|corr| <= the channel's range)
+		final int[][]   sum, count;    // [s][context]
+		int             context;       // the bias context of the pixel between prepare and commit
 
 		// Encoder: v is the whole channel.
 		public PixelSource(int[] v, int[] ref, int xdim, int ydim, PredictorTable table)
@@ -4552,8 +4598,7 @@ public class DeltaMapper
 		{
 			this.v = v; this.ref = ref; this.xdim = xdim;
 			boolean bias = table.primitives > BIAS_FIRST;
-			corr    = bias ? new int[BIAS_BASE.length][v.length] : null;
-			context = bias ? new int[v.length] : null;
+			corr    = bias ? new short[BIAS_BASE.length][v.length] : null;
 			sum     = bias ? new int[BIAS_BASE.length][729] : null;
 			count   = bias ? new int[BIAS_BASE.length][729] : null;
 		}
@@ -4563,18 +4608,18 @@ public class DeltaMapper
 			if(corr == null) return;
 			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
 			int t = (gradientLevel(d - b) + 4) * 81 + (gradientLevel(b - c) + 4) * 9 + gradientLevel(c - a) + 4;
-			context[k] = t;
+			context = t;
 			for(int s = 0; s < BIAS_BASE.length; s++)
 			{
 				int n = count[s][t], e = sum[s][t];
-				corr[s][k] = (n == 0) ? 0 : (e >= 0) ? (e + n / 2) / n : -((-e + n / 2) / n);
+				corr[s][k] = (short) ((n == 0) ? 0 : (e >= 0) ? (e + n / 2) / n : -((-e + n / 2) / n));
 			}
 		}
 
 		void commit(int k)
 		{
 			if(corr == null) return;
-			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1], t = context[k];
+			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1], t = context;
 			for(int s = 0; s < BIAS_BASE.length; s++)
 			{
 				sum[s][t] += v[k] - blockPredictor(BIAS_BASE[s], a, b, c, d);
@@ -4691,6 +4736,7 @@ public class DeltaMapper
 	public static final int[] SURVEY_COUNTS = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 255};
 	static final int SURVEY_REFERENCE_SET = 3;          // Top 32
 	static final int SURVEY_ID_COST       = 8 * 256;    // a predictor id in the map header, 1/256 bits
+	static final int SURVEY_SAMPLE_BLOCKS = 1 << 17;    // blocks the greedy order is found on, at most
 
 	// floor(x + 0.5) of 256 * log2(r), as the survey's costs are rounded.
 	private static int cost256(double r) { return (int) Math.floor(256 * Math.log(r) / Math.log(2) + 0.5); }
@@ -4737,29 +4783,73 @@ public class DeltaMapper
 	// The channel and what its primitives need are in ps.
 	public static int[] blockCostTable(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids)
 	{
-		int[] src = ps.v;
-		int   xdim = ps.xdim;
+		int bh = (ydim - 1 + block - 1) / block;
+		int[] rows = new int[bh];
+		for(int by = 0; by < bh; by++) rows[by] = by;
+		return blockCostRows(ps, ydim, block, dc, table, ids, rows);
+	}
+
+	// As above, for the given block rows only: est[(r * bw + bx) * n + q]
+	// for rows[r].
+	static int[] blockCostRows(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids, int[] rows)
+	{
 		int   n  = (ids == null) ? table.size() : ids.length;
 		int[] pid = new int[n];
 		for(int q = 0; q < n; q++) pid[q] = (ids == null) ? q : ids[q];
-		int   np = table.primitives;
-		int   bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block;
-		int[] est = new int[bw * bh * n];
+		int   bw = blocksAcross(ps.xdim, block);
+		int[] est = new int[rows.length * bw * n];
+		java.util.stream.IntStream.range(0, rows.length).parallel().forEach(r ->
+			blockCostRow(ps, ydim, block, dc, table, pid, rows[r], est, r * bw * n, new int[table.primitives]));
+		return est;
+	}
+
+	// One block row's estimates, [bx * n + q] from offset.
+	private static void blockCostRow(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] pid, int by, int[] est, int offset, int[] prim)
+	{
+		int[] src = ps.v;
+		int   xdim = ps.xdim, n = pid.length, np = table.primitives;
+		int   y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
+		for(int y = y0; y < y1; y++)
+			for(int x = 1; x < xdim - 1; x++)
+			{
+				int   k = y * xdim + x, s = src[k];
+				int[] cc = dc.cost[dc.context[k]];
+				ps.primitives(k, np, prim);
+				int base = offset + (x - 1) / block * n;
+				for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
+			}
+	}
+
+	// Block maps for prefixes of ids (the first counts[c] of them), each
+	// block taking the first id of the prefix with the smallest estimate,
+	// as assignByCost does. One pass over the block rows, holding one row's
+	// estimates at a time, so large images don't need the whole table.
+	static byte[][] prefixMaps(PixelSource ps, int ydim, int block, DeltaCost dc, PredictorTable table, int[] ids, int[] counts)
+	{
+		int bw = blocksAcross(ps.xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
+		byte[][] map = new byte[counts.length][];
+		for(int c = 0; c < counts.length; c++)
+		{
+			int m = counts[c];
+			map[c] = new byte[2 + m + bw * bh];
+			map[c][0] = (byte) block; map[c][1] = (byte) m;
+			for(int q = 0; q < m; q++) map[c][2 + q] = (byte) ids[q];
+		}
 		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
 		{
-			int[] prim = new int[np];
-			int   y0 = 1 + by * block, y1 = Math.min(ydim, y0 + block);
-			for(int y = y0; y < y1; y++)
-				for(int x = 1; x < xdim - 1; x++)
+			int[] est = new int[bw * n];
+			blockCostRow(ps, ydim, block, dc, table, ids, by, est, 0, new int[table.primitives]);
+			for(int bx = 0; bx < bw; bx++)
+			{
+				int best = 0, c = 0;
+				for(int q = 0; q < n && c < counts.length; q++)
 				{
-					int   k = y * xdim + x, s = src[k];
-					int[] cc = dc.cost[dc.context[k]];
-					ps.primitives(k, np, prim);
-					int base = (by * bw + (x - 1) / block) * n;
-					for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
+					if(est[bx * n + q] < est[bx * n + best]) best = q;
+					while(c < counts.length && counts[c] == q + 1) { map[c][2 + counts[c] + by * bw + bx] = (byte) best; c++; }
 				}
+			}
 		});
-		return est;
+		return map;
 	}
 
 	// round(256 * c * log2 c) for c = 0..n: n log2 n - sum c log2 c is the
@@ -4780,6 +4870,13 @@ public class DeltaMapper
 
 	// As above, over a table of P predictors.
 	public static int[] greedyCostOrder(int[] est, int blocks, final int P)
+	{
+		return greedyCostOrder(est, blocks, P, SURVEY_ID_COST);
+	}
+
+	// As above, with the cost of an id in the map header given (scaled down
+	// when est covers only a sample of the blocks).
+	public static int[] greedyCostOrder(int[] est, int blocks, final int P, final long id_cost)
 	{
 		long[] NL = nlog2nTable(blocks);
 		long[] total = new long[P];
@@ -4813,7 +4910,7 @@ public class DeltaMapper
 				}
 				long map_new = NL[blocks] - NL[moved];
 				for(int q = 0; q < n; q++) map_new -= NL[(int) (count[q] - moved_from[q])];
-				gain[p] = save - (map_new - map_old) - SURVEY_ID_COST;
+				gain[p] = save - (map_new - map_old) - id_cost;
 			});
 			int best = -1;
 			for(int p = 0; p < P; p++) if(!chosen[p] && (best < 0 || gain[p] > gain[best])) best = p;
@@ -4894,10 +4991,10 @@ public class DeltaMapper
 	// The cost model for channel i at a block size: reference deltas from
 	// SURVEY_REFERENCE_SET, context from the chosen deltas of the channels
 	// before.
-	static DeltaCost channelCost(int[] src, int[] previous_channel, int xdim, int ydim, int block, int[][] chosen_before)
+	static DeltaCost channelCost(PixelSource ps, int ydim, int block, int[][] chosen_before)
 	{
-		int[] ref = (int[]) getBlockDeltasFromValues(src, previous_channel, xdim, ydim, block, getSetIds(SURVEY_REFERENCE_SET)).get(1);
-		return new DeltaCost(src, ref, chosen_before, xdim, ydim);
+		int[] ref = (int[]) getBlockDeltasFromValues(ps, ydim, block, getSetIds(SURVEY_REFERENCE_SET)).get(1);
+		return new DeltaCost(ps.v, ref, chosen_before, ps.xdim, ydim);
 	}
 
 	// Each channel's block deltas (lists as getBlockDeltasFromValues) for
@@ -4914,12 +5011,12 @@ public class DeltaMapper
 	{
 		ArrayList[] result = new ArrayList[channel.length];
 		int[][] delta = new int[channel.length][];
+		PixelSource[] ps = pixelSources(channel, xdim, ydim, table);
 		for(int i = 0; i < channel.length; i++)
 		{
-			DeltaCost   dc  = channelCost(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, Arrays.copyOf(delta, i));
-			PixelSource ps  = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table);
-			int[]       est = blockCostTable(ps, ydim, block, dc, table, ids[i]);
-			result[i] = getBlockDeltasFromMap(ps, ydim, assignByCost(est, false, ids[i].length, ids[i], xdim, ydim, block), table, ids[i]);
+			DeltaCost dc  = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i));
+			byte[]    map = prefixMaps(ps[i], ydim, block, dc, table, ids[i], new int[] {ids[i].length})[0];
+			result[i] = getBlockDeltasFromMap(ps[i], ydim, map, table, ids[i]);
 			delta[i]  = (int[]) result[i].get(1);
 		}
 		return result;
@@ -4947,10 +5044,12 @@ public class DeltaMapper
 		StringBuilder log = new StringBuilder();
 		// The block sizes are independent: surveyed at the same time (each
 		// ends with a long serial stretch of real coding).
+		PixelSource[] ps = pixelSources(channel, xdim, ydim, table);
+		long task = 44L * xdim * ydim + 4L * table.size() * Math.min(SURVEY_SAMPLE_BLOCKS, blocksAcross(xdim, 4) * ((ydim - 1 + 3) / 4));
 		int[] first = {4, 8, 16};
 		BlockSurvey[] got = new BlockSurvey[first.length];
 		StringBuilder[] logs = new StringBuilder[first.length];
-		java.util.stream.IntStream.range(0, first.length).parallel().forEach(t -> { logs[t] = new StringBuilder(); got[t] = surveyBlockSize(channel, xdim, ydim, first[t], table, logs[t]); });
+		boundedParallel(first.length, task, t -> { logs[t] = new StringBuilder(); got[t] = surveyBlockSize(ps, ydim, first[t], table, logs[t]); });
 		for(int t = 0; t < first.length; t++) { tried.put(first[t], got[t]); log.append(logs[t]); }
 		int best = bestSurvey(tried);
 		int s = Arrays.binarySearch(BLOCK_SEARCH_SIZES, best);
@@ -4959,7 +5058,7 @@ public class DeltaMapper
 			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t])) next.add(BLOCK_SEARCH_SIZES[t]);
 		BlockSurvey[] more = new BlockSurvey[next.size()];
 		StringBuilder[] more_log = new StringBuilder[next.size()];
-		java.util.stream.IntStream.range(0, next.size()).parallel().forEach(t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(channel, xdim, ydim, next.get(t), table, more_log[t]); });
+		boundedParallel(next.size(), task, t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(ps, ydim, next.get(t), table, more_log[t]); });
 		for(int t = 0; t < more.length; t++) { tried.put(next.get(t), more[t]); log.append(more_log[t]); }
 		BlockSurvey result = tried.get(bestSurvey(tried));
 
@@ -4982,7 +5081,7 @@ public class DeltaMapper
 	// The survey at one block size only (for measuring tables).
 	public static BlockSurvey surveyAtBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table)
 	{
-		return surveyBlockSize(channel, xdim, ydim, block, table, new StringBuilder());
+		return surveyBlockSize(pixelSources(channel, xdim, ydim, table), ydim, block, table, new StringBuilder());
 	}
 
 	// Which of the primitives past 21 a survey's sets use, by group
@@ -5042,32 +5141,47 @@ public class DeltaMapper
 		return best;
 	}
 
-	private static BlockSurvey surveyBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table, StringBuilder log)
+	private static BlockSurvey surveyBlockSize(PixelSource[] ps, int ydim, int block, PredictorTable table, StringBuilder log)
 	{
 		try
 		{
+			int xdim = ps[0].xdim;
 			BlockSurvey result = new BlockSurvey();
 			result.block = block;
 			int[][]  delta = new int[3][];
 			byte[][] map   = new byte[3][];
-			int      blocks = blocksAcross(xdim, block) * ((ydim - 1 + block - 1) / block);
-			log.append(String.format("  block %d:\n", block));
+			int      bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, blocks = bw * bh;
+			// Big images: the greedy order is found on every step-th block row
+			// (at most SURVEY_SAMPLE_BLOCKS blocks), with the id's cost scaled to
+			// match; the maps are then made over every block.
+			int   step = (blocks > SURVEY_SAMPLE_BLOCKS) ? (blocks + SURVEY_SAMPLE_BLOCKS - 1) / SURVEY_SAMPLE_BLOCKS : 1;
+			int[] rows = new int[(bh + step - 1) / step];
+			for(int r = 0; r < rows.length; r++) rows[r] = r * step;
+			int   sampled = rows.length * bw;
+			log.append(String.format("  block %d%s:\n", block, (step > 1) ? String.format(" (order from %,d of %,d blocks)", sampled, blocks) : ""));
 			for(int i = 0; i < 3; i++)
 			{
-				DeltaCost   dc    = channelCost(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, block, Arrays.copyOf(delta, i));
-				PixelSource ps    = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table);
-				int[]       est   = blockCostTable(ps, ydim, block, dc, table, null);
-				int[]     order = greedyCostOrder(est, blocks, table.size());
+				DeltaCost dc    = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i));
+				int[]     est   = blockCostRows(ps[i], ydim, block, dc, table, null, rows);
+				int[]     order = greedyCostOrder(est, sampled, table.size(), (long) SURVEY_ID_COST * sampled / blocks);
 				ArrayList<Integer> counts = new ArrayList<Integer>();
 				for(int c : SURVEY_COUNTS) if(c < order.length) counts.add(c);
 				counts.add(order.length);
+				byte[][] prefix = null;
+				if(step > 1)
+				{
+					est = null;
+					prefix = prefixMaps(ps[i], ydim, block, dc, table, order, counts.stream().mapToInt(Integer::intValue).toArray());
+				}
 
 				long best_bytes = Long.MAX_VALUE; int worse = 0;
 				StringBuilder line = new StringBuilder(String.format("    channel %d (order %d):", i, order.length));
-				for(int n : counts)
+				for(int c = 0; c < counts.size(); c++)
 				{
+					int       n   = counts.get(c);
 					int[]     ids = Arrays.copyOf(order, n);
-					ArrayList r   = getBlockDeltasFromMap(ps, ydim, assignByCost(est, true, table.size(), ids, xdim, ydim, block), table, ids);
+					byte[]    mp  = (prefix != null) ? prefix[c] : assignByCost(est, true, table.size(), ids, xdim, ydim, block);
+					ArrayList r   = getBlockDeltasFromMap(ps[i], ydim, mp, table, ids);
 					int[]  d = (int[]) r.get(1);
 					byte[] m = (byte[]) r.get(2);
 					java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
@@ -5092,7 +5206,14 @@ public class DeltaMapper
 	// for the first). Returns [sum, deltas, map, init value].
 	public static ArrayList getBlockDeltasFromValues(int[] src, int[] ref, int xdim, int ydim, int block, int[] ids)
 	{
-		PixelSource ps = new PixelSource(src, ref, xdim, ydim, PREDICTOR_TABLE);
+		return getBlockDeltasFromValues(new PixelSource(src, ref, xdim, ydim, PREDICTOR_TABLE), ydim, block, ids);
+	}
+
+	// As above, with the channel (and what its primitives need) in ps.
+	static ArrayList getBlockDeltasFromValues(PixelSource ps, int ydim, int block, int[] ids)
+	{
+		int[]  src = ps.v;
+		int    xdim = ps.xdim;
 		int    bw = blocksAcross(xdim, block), bh = (ydim - 1 + block - 1) / block, n = ids.length;
 		byte[] map = new byte[2 + n + bw * bh];
 		map[0] = (byte) block; map[1] = (byte) n;
