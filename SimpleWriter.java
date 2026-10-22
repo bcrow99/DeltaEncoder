@@ -6,14 +6,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// SimpleWriter version 1.0
+// SimpleWriter version 2.0
 public class SimpleWriter
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -254,41 +254,47 @@ public class SimpleWriter
 		int[]   size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
 		int     new_xdim = size[0], new_ydim = size[1];
 		int[][] qc = quantizedChannels(size);
-		for(int i = 0; i < 6; i++)
-			channel_sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], new_xdim, new_ydim)));
+		ViewerSupport.parallel(6, i ->
+			channel_sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], new_xdim, new_ydim))));
 		computeSetSums();
 
 		int[] channel_id = DeltaMapper.getChannels(min_set_id);
 		delta_xdim = new_xdim;
-		table_list.clear(); string_list.clear(); map_list.clear();
-		for(int i = 0; i < 3; i++)
+		// The channels are coded in parallel (the block map's reference, the
+		// previous channel's source values, is known up front).
+		int[][]  tables  = new int[3][];
+		byte[][] strings = new byte[3][], maps = new byte[3][];
+		ViewerSupport.parallel(3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set);
-			if(DeltaMapper.hasMap(delta_type)) map_list.add((byte[]) result.get(2));
+			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
+			if(DeltaMapper.hasMap(delta_type)) maps[i] = (byte[]) result.get(2);
 			delta_list[i] = ((int[]) result.get(1)).clone();
 			// Always unary strings; StringMapper applies its own
 			// compression only when it gets below its threshold.
 			ArrayList dsl = StringMapper.getStringList((int[]) result.get(1), true);
 			byte[] str = (byte[]) dsl.get(3);
 			channel_delta_min[j] = (int) dsl.get(0); channel_length[j] = (int) dsl.get(1);
-			table_list.add((int[]) dsl.get(2)); string_list.add(str);
+			tables[i] = (int[]) dsl.get(2); strings[i] = str;
 			channel_compressed_length[j] = StringMapper.getBitlength(str);
 			channel_iterations[i] = StringMapper.getIterations(str);
-		}
+		});
+		table_list.clear(); string_list.clear(); map_list.clear();
+		for(int i = 0; i < 3; i++) { table_list.add(tables[i]); string_list.add(strings[i]); if(maps[i] != null) map_list.add(maps[i]); }
 
 		// Decode what Save will write, as SimpleReader does.
-		int[][] dc = new int[3][];
-		for(int i = 0; i < 3; i++)
+		int[][] dc = new int[3][], raw = new int[3][];   // raw: decoded, before the minimum (the next channel's reference)
+		ViewerSupport.channels(delta_type == 13, 3, i ->
 		{
 			int j = channel_id[i];
 			byte[] str   = StringMapper.decompressStrings(string_list.get(i));
 			int[]  delta = StringMapper.unpackStrings(str, table_list.get(i), new_xdim * new_ydim, channel_length[j]);
 			delta[0] = 0; for(int k = 1; k < delta.length; k++) delta[k] += channel_delta_min[j];
 			byte[] map = DeltaMapper.hasMap(delta_type) ? map_list.get(i) : null;
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, map, scanline5_variant);
+			dc[i] = DeltaMapper.getValuesFromDeltas(delta, new_xdim, new_ydim, channel_init[j], delta_type, map, scanline5_variant, (i > 0) ? raw[i - 1] : null);
+			raw[i] = dc[i].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
-		}
+		});
 		// Like SimpleReader: recombine the channels first, then resize, then
 		// shift. Resizing each channel before recombining gives different
 		// results (ResizeMapper rounds down).

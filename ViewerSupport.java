@@ -176,6 +176,14 @@ public class ViewerSupport
 		java.util.stream.IntStream.range(0, n).parallel().forEach(body);
 	}
 
+	// body(0..n-1): in order when in_order (e.g. block-map channels, which
+	// predict from the one before), else in parallel.
+	public static void channels(boolean in_order, int n, java.util.function.IntConsumer body)
+	{
+		if(in_order) for(int i = 0; i < n; i++) body.accept(i);
+		else parallel(n, body);
+	}
+
 	// A menu item that opens a small dialog with a slider (lo..hi) and its
 	// value. onChange gets every new value. If ref is given, ref[0] is set to
 	// the slider so the caller can move it.

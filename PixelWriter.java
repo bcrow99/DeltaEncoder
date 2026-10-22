@@ -5,7 +5,7 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// PixelWriter version 1.2
+// PixelWriter version 1.3
 //
 // Codes the red, green and blue channels block by block with context-
 // adaptive arithmetic coding (see PixelMapper). Menus: File, View,
@@ -17,10 +17,11 @@ import javax.swing.*;
 // smallest; changing the coding or the channels finds it again. Save writes the file "foo", which PixelReader reads.
 public class PixelWriter
 {
-	// File format: every file starts with FORMAT_ID ('P' = Pixel format) and
+	// File format: every file starts with FORMAT_ID ('X'; it was 'P' until
+	// that turned out to be the Packet format's id too) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
-	static final char FORMAT_ID      = 'P';
+	static final char FORMAT_ID      = 'X';
 	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte
 
 	// ---- Image state --------------------------------------------------------

@@ -2,16 +2,17 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// PixelReader version 1.2
+// PixelReader version 1.3
 //
 // Reads the Pixel format files PixelWriter saves (versions 1 to 3) and
 // shows the image.
 public class PixelReader
 {
-	// File format: every file starts with FORMAT_ID ('P' = Pixel format) and
+	// File format: every file starts with FORMAT_ID ('X'; it was 'P' until
+	// that turned out to be the Packet format's id too) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
-	static final char FORMAT_ID      = 'P';
+	static final char FORMAT_ID      = 'X';
 	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte; older files are read with the defaults
 
 	int      xdim, ydim, pixel_shift, pixel_quant, block_size, coding, channels;
@@ -69,6 +70,9 @@ public class PixelReader
 	private void read(DataInputStream in, String filename) throws IOException
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
+		if(id == 'P')
+			throw new IOException(filename + " starts with 'P': a Packet Writer file (open it with PacketReader), or a Pixel Writer file"
+				+ " saved before the Pixel format's id changed from 'P' to 'X' (save the image again with PixelWriter).");
 		if(id != FORMAT_ID || version < 1 || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Pixel Writer file."
