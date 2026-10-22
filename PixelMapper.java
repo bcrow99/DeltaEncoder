@@ -1,6 +1,6 @@
 import java.util.*;
 
-// PixelMapper version 1.2
+// PixelMapper version 1.3
 //
 // Codes the pixels of the red, green and blue channels with context-
 // adaptive arithmetic coding, for PixelWriter and PixelReader.
@@ -311,6 +311,97 @@ public class PixelMapper
 	}
 
 	static int clamp(int v) { return (v < 0) ? 0 : (v > 255) ? 255 : v; }
+
+	// ---- Averaging pyramid (the Quantization menu's Average) -------------------
+	//
+	// Each level halves the width and height: every 2 x 2 square becomes its
+	// rounded average (ImageMapper.shrinkAvg), and only the smallest level is
+	// coded. To expand, each level is predicted from the one below it by a
+	// gradient fit (ImageMapper.expandGradient, or expandGradientSaddle with
+	// the cross term), then corrected with one sign bit per pixel: whether
+	// the pixel was >= its square's average (ImageMapper.buildGeqBits /
+	// refineWithSignBits). This is the same scheme DeltaWriter used, applied
+	// here to the red, green and blue channels themselves (values
+	// 0..max_value), never to difference channels. The image is first padded
+	// (edge pixels repeated) to a multiple of 2^levels.
+
+	public static final int PYRAMID_MAX = 2;
+
+	// Size of the top level, the size the pixels are coded at.
+	public static int[] pyramidSize(int xdim, int ydim, int levels)
+	{
+		if(levels == 0) return new int[] {xdim, ydim};
+		int mult = 1 << levels;
+		return new int[] {ImageMapper.padTo(xdim, mult) >> levels, ImageMapper.padTo(ydim, mult) >> levels};
+	}
+
+	// Shrinks c (xdim x ydim) levels times; sign_bits[lvl] (levels of them)
+	// gets level lvl's bits against level lvl+1. Returns the top level.
+	public static int[] shrinkPyramid(int[] c, int xdim, int ydim, boolean[][] sign_bits)
+	{
+		int   levels = sign_bits.length, mult = 1 << levels;
+		int   level_xdim = ImageMapper.padTo(xdim, mult);
+		int[] level = ImageMapper.padEdgeReplicate(c, xdim, ydim, level_xdim, ImageMapper.padTo(ydim, mult));
+		for(int lvl = 0; lvl < levels; lvl++)
+		{
+			int[] next = ImageMapper.shrinkAvg(level, level_xdim);
+			sign_bits[lvl] = ImageMapper.buildGeqBits(level, next, level_xdim);
+			level = next;
+			level_xdim /= 2;
+		}
+		return level;
+	}
+
+	// Inverse of shrinkPyramid, as close as the sign bits allow: expands the
+	// top level back to xdim x ydim, correcting each level with its sign bits.
+	public static int[] expandPyramid(int[] top, int xdim, int ydim, boolean[][] sign_bits, int max_value, boolean saddle)
+	{
+		int   levels = sign_bits.length, mult = 1 << levels;
+		int[] level = top;
+		int   level_xdim = ImageMapper.padTo(xdim, mult) >> levels;
+		for(int lvl = levels - 1; lvl >= 0; lvl--)
+		{
+			int[] predicted = saddle ? ImageMapper.expandGradientSaddle(level, level_xdim, max_value) : ImageMapper.expandGradient(level, level_xdim, max_value);
+			level = ImageMapper.refineWithSignBits(level, predicted, sign_bits[lvl], level_xdim * 2, max_value);
+			level_xdim *= 2;
+		}
+		return ImageMapper.crop(level, ImageMapper.padTo(xdim, mult), ImageMapper.padTo(ydim, mult), xdim, ydim);
+	}
+
+	// Sign bits, one bitmap per level: int length, then (length + 7) / 8
+	// bytes, bit q in byte q >> 3 at bit q & 7.
+	public static void writeSignBits(java.io.DataOutputStream out, boolean[][] sign_bits) throws java.io.IOException
+	{
+		for(boolean[] bits : sign_bits)
+		{
+			byte[] packed = new byte[(bits.length + 7) / 8];
+			for(int q = 0; q < bits.length; q++) if(bits[q]) packed[q >> 3] |= (byte) (1 << (q & 7));
+			out.writeInt(bits.length);
+			out.write(packed);
+		}
+	}
+
+	public static boolean[][] readSignBits(java.io.DataInputStream in, int levels) throws java.io.IOException
+	{
+		boolean[][] sign_bits = new boolean[levels][];
+		for(int lvl = 0; lvl < levels; lvl++)
+		{
+			int    n      = in.readInt();
+			byte[] packed = new byte[(n + 7) / 8];
+			in.readFully(packed);
+			sign_bits[lvl] = new boolean[n];
+			for(int q = 0; q < n; q++) sign_bits[lvl][q] = (packed[q >> 3] & (1 << (q & 7))) != 0;
+		}
+		return sign_bits;
+	}
+
+	// Bytes the sign bits take in the file.
+	public static long signBitBytes(boolean[][] sign_bits)
+	{
+		long n = 0;
+		for(boolean[] bits : sign_bits) n += 4 + (bits.length + 7) / 8;
+		return n;
+	}
 
 	// ---- Models -------------------------------------------------------------------
 
