@@ -5,7 +5,7 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// PixelWriter version 1.3
+// PixelWriter version 1.4
 //
 // Codes the red, green and blue channels block by block with context-
 // adaptive arithmetic coding (see PixelMapper). Menus: File, View,
@@ -13,8 +13,14 @@ import javax.swing.*;
 // Size; Coding: the pixel values with an exact prediction or with
 // brightness bands as context, or the prediction errors; and Channels: red,
 // green and blue, or green and the differences red - green and blue -
-// green). At start-up, init() finds the block size that codes the image
-// smallest; changing the coding or the channels finds it again. Save writes the file "foo", which PixelReader reads.
+// green). Quantization > Average shrinks the red, green and blue channels
+// by averaging 2 x 2 squares (1 or 2 levels) and codes only the smallest
+// level, plus one sign bit per pixel per level to restore detail when
+// expanding (PixelMapper's averaging pyramid; DeltaWriter's old scheme, but
+// on the primary channels only). At start-up, init() finds the block size
+// that codes the image smallest; changing the coding, the channels or the
+// averaging finds it again. Save writes the file "foo", which PixelReader
+// reads.
 public class PixelWriter
 {
 	// File format: every file starts with FORMAT_ID ('X'; it was 'P' until
@@ -22,7 +28,7 @@ public class PixelWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
 	static final char FORMAT_ID      = 'X';
-	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte
+	static final int  FORMAT_VERSION = 4;   // 2 added the coding byte, 3 the channels byte, 4 the averaging pyramid
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -39,6 +45,8 @@ public class PixelWriter
 	int block_size  = 64;   // replaced by init()
 	int coding      = PixelMapper.VALUES;
 	int channels    = PixelMapper.PRIMARY;
+	int     pixel_pyramid = 0;       // Average: levels of 2 x 2 averaging (0..PixelMapper.PYRAMID_MAX)
+	boolean use_saddle    = false;   // expand with the cross-derivative term too
 
 	JSlider pquant_slider, pshift_slider, block_slider;
 	JRadioButton[] coding_button  = new JRadioButton[PixelMapper.CODING_NAMES.length];
@@ -48,6 +56,10 @@ public class PixelWriter
 	// ---- Results of the last Apply (read by Save) ---------------------------
 	int[][]  quantized;          // red, green, blue at the quantized size
 	int      qxdim, qydim;
+	int[][]  top;                // the coded channels: quantized, or its averaged top level
+	int      txdim, tydim;
+	boolean[][][] sign_bits = new boolean[3][][];   // per channel, per level (Average)
+	int[][]  shown;              // what the reader will show, at the quantized size
 	byte[][] coded;              // per channel, in PixelMapper.ORDER
 	boolean  applied = false;    // the last Apply finished; Save needs it
 
@@ -110,6 +122,7 @@ public class PixelWriter
 		JMenu quant_menu = new JMenu("Quantization");
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; if(!updating) apply(); }, ss)); pquant_slider = ss[0];
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; if(!updating) apply(); }, ss)); pshift_slider = ss[0];
+		quant_menu.add(makePyramidDialog(frame));
 
 		// Block size, coding and channels: the coded size changes, the picture
 		// doesn't. A new coding or channel choice has its own best block size,
@@ -127,6 +140,35 @@ public class PixelWriter
 		view.setImage(original_image);
 		view.show();
 		SwingUtilities.invokeLater(() -> showInitialImage());
+	}
+
+	// Quantization > Average: the number of averaging levels (- / +) and
+	// Use Saddle. A new number of levels finds the block size again, since
+	// the coded image changes size.
+	private JMenuItem makePyramidDialog(JFrame parent)
+	{
+		JMenuItem item   = new JMenuItem("Average");
+		JDialog   dialog = new JDialog(parent, "Average");
+		JTextField field = new JTextField(3);
+		field.setText(" " + pixel_pyramid + " "); field.setEditable(false); field.setHorizontalAlignment(JTextField.CENTER);
+		JButton minus = new JButton("-"), plus = new JButton("+");
+		java.util.function.IntConsumer set = v ->
+		{
+			if(v == pixel_pyramid) return;
+			pixel_pyramid = v; field.setText(" " + v + " ");
+			findBlockSize();
+		};
+		minus.addActionListener(e -> { if(pixel_pyramid > 0) set.accept(pixel_pyramid - 1); });
+		plus.addActionListener(e -> { if(pixel_pyramid < PixelMapper.PYRAMID_MAX) set.accept(pixel_pyramid + 1); });
+		JCheckBox saddle = new JCheckBox("Use Saddle", use_saddle);
+		saddle.addActionListener(e -> { use_saddle = saddle.isSelected(); if(pixel_pyramid > 0) apply(); });
+		JPanel field_panel = new JPanel(); field_panel.add(new JLabel("Levels")); field_panel.add(field);
+		JPanel button_panel = new JPanel(); button_panel.add(minus); button_panel.add(plus);
+		JPanel panel = new JPanel(new GridLayout(3, 1));
+		panel.add(field_panel); panel.add(button_panel); panel.add(saddle);
+		dialog.add(panel);
+		item.addActionListener(e -> { Point p = parent.getLocation(); dialog.setLocation(p.x, p.y - 100); dialog.pack(); dialog.setVisible(true); });
+		return item;
 	}
 
 	// Shows the default quantization, then finds the block size.
@@ -164,9 +206,9 @@ public class PixelWriter
 	{
 		long t0 = System.nanoTime();
 		ArrayList<int[]> tried = new ArrayList<int[]>();
-		block_size = PixelMapper.findBestBlock(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, coding, channels, tried);
+		block_size = PixelMapper.findBestBlock(top, txdim, tydim, 255 >> pixel_shift, pixel_shift, coding, channels, tried);
 		System.out.println("Block sizes tried (" + PixelMapper.CODING_NAMES[coding] + "; " + PixelMapper.CHANNEL_SET_NAMES[channels]
-			+ "; Pixel Resolution " + pixel_quant + ", Color Resolution " + pixel_shift + "):");
+			+ "; Pixel Resolution " + pixel_quant + ", Color Resolution " + pixel_shift + ", Average " + pixel_pyramid + "):");
 		System.out.println("bytes for the 3 channels.");
 		System.out.println("<= marks the size chosen.");
 		for(int[] t : tried)
@@ -185,11 +227,15 @@ public class PixelWriter
 		{
 			quantize();
 			long t0 = System.nanoTime();
-			coded = PixelMapper.encode(quantized, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
-			long bytes = 0;
+			coded = PixelMapper.encode(top, txdim, tydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+			long bytes = 0, sign = 0;
 			for(byte[] c : coded) bytes += c.length;
-			System.out.println(String.format("%s; %s; Pixel Resolution %d, Color Resolution %d, block size %d: %,d bytes coded (%.4f of the raw size) in %s",
-				PixelMapper.CODING_NAMES[coding], PixelMapper.CHANNEL_SET_NAMES[channels], pixel_quant, pixel_shift, block_size, bytes, (double) bytes / (3.0 * image_xdim * image_ydim), ViewerSupport.formatDuration(System.nanoTime() - t0)));
+			for(int i = 0; i < 3; i++) if(pixel_pyramid > 0) sign += PixelMapper.signBitBytes(sign_bits[i]);
+			System.out.println(String.format("%s; %s; Pixel Resolution %d, Color Resolution %d, Average %d%s, block size %d: %,d bytes coded%s (%.4f of the raw size) in %s",
+				PixelMapper.CODING_NAMES[coding], PixelMapper.CHANNEL_SET_NAMES[channels], pixel_quant, pixel_shift, pixel_pyramid, (pixel_pyramid > 0 && use_saddle) ? " (saddle)" : "",
+				block_size, bytes + sign, (pixel_pyramid > 0) ? String.format(" (%,d pixels + %,d sign bits)", bytes, sign) : "",
+				(double) (bytes + sign) / (3.0 * image_xdim * image_ydim), ViewerSupport.formatDuration(System.nanoTime() - t0)));
+			if(pixel_pyramid > 0) System.out.println(averageError());
 			showPreview();
 			applied = true;
 		}
@@ -212,12 +258,45 @@ public class PixelWriter
 			q[i] = DeltaMapper.quantizeChannel(ch, pixel_shift);
 		});
 		quantized = q; qxdim = size[0]; qydim = size[1];
+
+		// Average: shrink each channel, keeping its sign bits, and expand it
+		// back as the reader will.
+		int max_value = 255 >> pixel_shift;
+		int[] t = PixelMapper.pyramidSize(qxdim, qydim, pixel_pyramid);
+		int[][] tp = new int[3][], sh = new int[3][];
+		boolean[][][] bits = new boolean[3][][];
+		ViewerSupport.parallel(3, i ->
+		{
+			if(pixel_pyramid == 0) { tp[i] = q[i]; sh[i] = q[i]; return; }
+			bits[i] = new boolean[pixel_pyramid][];
+			tp[i]   = PixelMapper.shrinkPyramid(q[i], qxdim, qydim, bits[i]);
+			sh[i]   = PixelMapper.expandPyramid(tp[i], qxdim, qydim, bits[i], max_value, use_saddle);
+		});
+		top = tp; txdim = t[0]; tydim = t[1]; sign_bits = bits; shown = sh;
+	}
+
+	// How far the averaged and expanded channels are from the quantized ones
+	// (on the 0-255 scale).
+	private String averageError()
+	{
+		StringBuilder r = new StringBuilder("  Average error (expanded vs. quantized, 0-255 scale):");
+		for(int i = 0; i < 3; i++)
+		{
+			double sq = 0; int worst = 0;
+			for(int k = 0; k < quantized[i].length; k++)
+			{
+				int e = Math.abs(shown[i][k] - quantized[i][k]) << pixel_shift;
+				sq += (double) e * e; worst = Math.max(worst, e);
+			}
+			r.append(String.format("  %s RMS %.2f, max %d", PixelMapper.CHANNEL_NAMES[i], Math.sqrt(sq / quantized[i].length), worst));
+		}
+		return r.toString();
 	}
 
 	// The quantized image as PixelReader will show it.
 	private void showPreview()
 	{
-		int[] rgb = PixelMapper.getRGB(quantized, qxdim, image_xdim, image_ydim, pixel_quant, pixel_shift);
+		int[] rgb = PixelMapper.getRGB(shown, qxdim, image_xdim, image_ydim, pixel_quant, pixel_shift);
 		working_image.setRGB(0, 0, image_xdim, image_ydim, rgb, 0, image_xdim);
 		view.setImage(working_image);
 	}
@@ -226,18 +305,20 @@ public class PixelWriter
 
 	// Writes "foo": FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 	// shorts), pixel_shift, pixel_quant (bytes), block size (short), coding
-	// and channels (bytes), then for each coded channel in order (green, then
-	// red and blue or their differences from green): its coded length (int)
-	// and coded bytes. Checks the channels decode back first.
+	// and channels (bytes), Average levels and saddle (bytes), then for each
+	// coded channel in order (green, then red and blue or their differences
+	// from green): its coded length (int) and coded bytes; then with Average,
+	// the sign bits of red, green and blue (PixelMapper.writeSignBits).
+	// Checks the channels decode back first.
 	void save()
 	{
 		if(!applied) apply();
 		if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 
 		long t0 = System.nanoTime();
-		int[][] back = PixelMapper.decode(coded, qxdim, qydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+		int[][] back = PixelMapper.decode(coded, txdim, tydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
 		for(int i = 0; i < 3; i++)
-			if(!Arrays.equals(back[i], quantized[i]))
+			if(!Arrays.equals(back[i], top[i]))
 			{
 				ViewerSupport.showError(view.frame, "Nothing saved: the " + PixelMapper.CHANNEL_NAMES[i] + " channel does not decode back.");
 				return;
@@ -253,7 +334,9 @@ public class PixelWriter
 			out.writeShort(block_size);
 			out.writeByte(coding);
 			out.writeByte(channels);
+			out.writeByte(pixel_pyramid); out.writeByte(use_saddle ? 1 : 0);
 			for(int i = 0; i < 3; i++) { out.writeInt(coded[i].length); out.write(coded[i]); }
+			if(pixel_pyramid > 0) for(int i = 0; i < 3; i++) PixelMapper.writeSignBits(out, sign_bits[i]);
 		}
 		catch(Exception e)
 		{

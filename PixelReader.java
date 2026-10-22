@@ -2,10 +2,11 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// PixelReader version 1.3
+// PixelReader version 1.4
 //
-// Reads the Pixel format files PixelWriter saves (versions 1 to 3) and
-// shows the image.
+// Reads the Pixel format files PixelWriter saves (versions 1 to 4) and
+// shows the image. Version 4 adds Average: the coded image is the averaged
+// top level, expanded with the sign bits (PixelMapper.expandPyramid).
 public class PixelReader
 {
 	// File format: every file starts with FORMAT_ID ('X'; it was 'P' until
@@ -13,9 +14,11 @@ public class PixelReader
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
 	static final char FORMAT_ID      = 'X';
-	static final int  FORMAT_VERSION = 3;   // 2 added the coding byte, 3 the channels byte; older files are read with the defaults
+	static final int  FORMAT_VERSION = 4;   // 2 added the coding byte, 3 the channels byte, 4 the averaging pyramid; older files are read with the defaults
 
-	int      xdim, ydim, pixel_shift, pixel_quant, block_size, coding, channels;
+	int      xdim, ydim, pixel_shift, pixel_quant, block_size, coding, channels, pixel_pyramid;
+	boolean  use_saddle;
+	boolean[][][] sign_bits = new boolean[3][][];   // per channel (red, green, blue), per level
 	byte[][] coded = new byte[3][];   // per coded channel, in coding order
 
 	BufferedImage decoded_image = null;
@@ -49,7 +52,10 @@ public class PixelReader
 
 			start = System.nanoTime();
 			int[]   size    = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
-			int[][] channel = PixelMapper.decode(coded, size[0], size[1], 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+			int[]   top     = PixelMapper.pyramidSize(size[0], size[1], pixel_pyramid);
+			int[][] channel = PixelMapper.decode(coded, top[0], top[1], 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+			if(pixel_pyramid > 0)
+				ViewerSupport.parallel(3, i -> channel[i] = PixelMapper.expandPyramid(channel[i], size[0], size[1], sign_bits[i], 255 >> pixel_shift, use_saddle));
 			System.out.println("Channels decoded in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
 
 			start = System.nanoTime();
@@ -84,8 +90,11 @@ public class PixelReader
 		block_size  = in.readUnsignedShort();
 		coding      = (version >= 2) ? in.readByte() : PixelMapper.VALUES;
 		channels    = (version >= 3) ? in.readByte() : PixelMapper.PRIMARY;
+		pixel_pyramid = (version >= 4) ? in.readByte() : 0;
+		use_saddle    = (version >= 4) && in.readByte() != 0;
 		if(pixel_shift < 0 || pixel_shift > 7 || pixel_quant < 0 || pixel_quant > 10 || block_size < 1
-			|| coding < 0 || coding >= PixelMapper.CODING_NAMES.length || channels < 0 || channels >= PixelMapper.CHANNEL_SET_NAMES.length)
+			|| coding < 0 || coding >= PixelMapper.CODING_NAMES.length || channels < 0 || channels >= PixelMapper.CHANNEL_SET_NAMES.length
+			|| pixel_pyramid < 0 || pixel_pyramid > PixelMapper.PYRAMID_MAX)
 			throw new IOException(filename + ": bad header (Color Resolution " + pixel_shift + ", Pixel Resolution " + pixel_quant
 				+ ", block size " + block_size + ", coding " + coding + ", channels " + channels + ").");
 		for(int i = 0; i < 3; i++)
@@ -93,6 +102,7 @@ public class PixelReader
 			coded[i] = new byte[in.readInt()];
 			in.readFully(coded[i]);
 		}
+		if(pixel_pyramid > 0) for(int i = 0; i < 3; i++) sign_bits[i] = PixelMapper.readSignBits(in, pixel_pyramid);
 
 		System.out.println("Image:            " + xdim + " x " + ydim);
 		System.out.println("Pixel Resolution: " + pixel_quant);
@@ -100,6 +110,7 @@ public class PixelReader
 		System.out.println("Block size:       " + block_size);
 		System.out.println("Coding:           " + PixelMapper.CODING_NAMES[coding]);
 		System.out.println("Channels:         " + PixelMapper.CHANNEL_SET_NAMES[channels]);
+		System.out.println("Average:          " + pixel_pyramid + ((pixel_pyramid > 0 && use_saddle) ? " (saddle)" : ""));
 		System.out.println();
 	}
 }
