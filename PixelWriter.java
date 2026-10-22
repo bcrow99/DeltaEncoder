@@ -144,7 +144,10 @@ public class PixelWriter
 
 	// Quantization > Average: the number of averaging levels (- / +) and
 	// Use Saddle. A new number of levels finds the block size again, since
-	// the coded image changes size.
+	// the coded image changes size.  The main reason for adding this to
+	// PixelWriter was to determine if speckling from shrink averaging
+	// was related to difference channels, and it was. No speckling when
+	// using only primary channels.
 	private JMenuItem makePyramidDialog(JFrame parent)
 	{
 		JMenuItem item   = new JMenuItem("Average");
