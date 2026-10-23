@@ -3640,6 +3640,11 @@ public class DeltaMapper
 		 * A printable report of the survey.
 		 */
 		public String  report;
+		/**
+		 * Every shape the full survey tried, by shape, the chosen one
+		 * included (null for a survey at one shape).
+		 */
+		public TreeMap<Integer, BlockSurvey> tried;
 	}
 
 	/**
@@ -3745,11 +3750,13 @@ public class DeltaMapper
 			r.append('\n');
 		}
 		result.report = r.toString();
+		result.tried  = tried;
 		return result;
 	}
 
 	/**
-	 * The survey at one block shape only (for measuring tables).
+	 * The survey at one block shape only: the same sets the full survey
+	 * would choose for that shape.
 	 *
 	 * @param channel the three channels, in coding order
 	 * @param xdim    the width

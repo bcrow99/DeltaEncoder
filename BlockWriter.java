@@ -16,7 +16,9 @@ import javax.swing.*;
 // greedy order by estimated coded bits, blocks assigned by the estimate,
 // and the real coded size measured), and also codes with each
 // named set (DeltaMapper.findBestBlock); it keeps whichever is smallest --
-// actual sizes, not estimates. Files are read by BlockReader.
+// actual sizes, not estimates. The sets are surveyed per block shape: a
+// shape picked by hand uses its own (see update). Files are read by
+// BlockReader.
 public class BlockWriter
 {
 	// File format: every file starts with FORMAT_ID ('B' = Block format) and
@@ -42,7 +44,9 @@ public class BlockWriter
 	int block_shape = 0;          // 0: square (block_size); i + 1: DeltaMapper.BLOCK_SHAPES[i]
 	boolean survey_shapes = true; // Find Best also tries the rectangles and lines
 	int block_set   = 0;          // a named set (DeltaMapper.BLOCK_SET_NAMES), or SURVEYED
-	int[][] survey_ids = null;    // each channel's surveyed predictor ids (the last analysis)
+	// Each channel's surveyed predictor ids, by block shape: every shape the
+	// last analysis tried, plus any surveyed since (see update).
+	TreeMap<Integer, int[][]> survey_sets = null;
 	static final int SURVEYED = -1;
 
 	JSlider        pquant_slider, pshift_slider, corr_slider;
@@ -126,12 +130,13 @@ public class BlockWriter
 
 		// Block menu: the settings, and Find Best to rerun the analysis
 		// (worth doing after changing the quantization: the surveyed sets
-		// are kept until then). Block Predictors offers the surveyed sets
+		// are kept until then). A shape picked by hand gets its own surveyed
+		// sets, from the analysis or surveyed when picked. Block Predictors offers the surveyed sets
 		// (available once an analysis has run) and the named sets.
 		JMenu block_menu = new JMenu("Block");
 		JSpinner[] sp = new JSpinner[1];
 		block_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
-			v -> { block_size = v; if(!updating) apply(); }, sp)); block_spinner = sp[0];
+			v -> { block_size = v; if(!updating) update(); }, sp)); block_spinner = sp[0];
 		// Block Shape: squares (of Block Size), or a rectangle or line.
 		String[] shape_names = new String[DeltaMapper.BLOCK_SHAPES.length + 1];
 		shape_names[0] = "Square (Block Size)";
@@ -141,12 +146,12 @@ public class BlockWriter
 			shape_names[i + 1] = DeltaMapper.shapeName(code) + ((DeltaMapper.blockHeight(code) == 1) ? " (line)" : "");
 		}
 		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Shape", shape_names, block_shape,
-			v -> { block_shape = v; if(!updating) apply(); }, shape_button));
+			v -> { block_shape = v; if(!updating) update(); }, shape_button));
 		String[] set_names = new String[DeltaMapper.BLOCK_SET_NAMES.length + 1];
 		set_names[0] = "Surveyed (per channel)";
 		System.arraycopy(DeltaMapper.BLOCK_SET_NAMES, 0, set_names, 1, DeltaMapper.BLOCK_SET_NAMES.length);
 		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", set_names, block_set + 1,
-			v -> { block_set = v - 1; if(!updating) apply(); }, set_button));
+			v -> { block_set = v - 1; if(!updating) update(); }, set_button));
 		set_button[0].setEnabled(false);   // until the first analysis
 		block_menu.addSeparator();
 		JCheckBoxMenuItem shapes_item = new JCheckBoxMenuItem("Find Best Tries Rectangles", survey_shapes);
@@ -184,7 +189,7 @@ public class BlockWriter
 					else block_shape = best[0] - DeltaMapper.SHAPE_FIRST + 1;
 					shape_button[block_shape].setSelected(true);
 					set_button[best[1] + 1].setSelected(true);
-					set_button[0].setEnabled(survey_ids != null);
+					set_button[0].setEnabled(survey_sets != null);
 					block_set = best[1];
 					updating = false;
 				}
@@ -198,7 +203,7 @@ public class BlockWriter
 
 	// Picks the channel set with the smallest entropy estimate, then the
 	// block size and predictor sets that code smallest: the surveyed sets
-	// (DeltaMapper.surveyBlockSets, kept in survey_ids) or a named set
+	// (DeltaMapper.surveyBlockSets, kept in survey_sets) or a named set
 	// (DeltaMapper.findBestBlock). Returns {block size, named set or SURVEYED}.
 	public int[] init()
 	{
@@ -221,7 +226,9 @@ public class BlockWriter
 
 		long t0 = System.nanoTime();
 		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1], survey_shapes);
-		survey_ids = survey.ids;
+		TreeMap<Integer, int[][]> sets = new TreeMap<Integer, int[][]>();
+		for(Map.Entry<Integer, DeltaMapper.BlockSurvey> e : survey.tried.entrySet()) sets.put(e.getKey(), e.getValue().ids);
+		survey_sets = sets;
 		System.out.print(survey.report);
 		System.out.print(DeltaMapper.describeGroupUse(survey, DeltaMapper.getBlockDeltasByCost(ch, size[0], size[1], survey.block, survey.ids)));
 		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
@@ -231,6 +238,46 @@ public class BlockWriter
 		System.out.println("Analysis took " + ViewerSupport.formatDuration(System.nanoTime() - start));
 		System.out.println();
 		return use_survey ? new int[] {survey.block, SURVEYED} : best;
+	}
+
+	// After a change to the block settings: with the surveyed sets chosen and
+	// none yet for this shape, surveys them first (in the background, as the
+	// analysis runs), so a shape picked by hand gets the sets that suit it;
+	// otherwise just applies.
+	private void update()
+	{
+		if(block_set != SURVEYED || survey_sets == null || survey_sets.containsKey(block())) { apply(); return; }
+		final int block = block();
+		view.setMenusEnabled(false);
+		view.setStatus("surveying block " + DeltaMapper.shapeName(block) + "...");
+		new SwingWorker<int[][],Void>()
+		{
+			@Override protected int[][] doInBackground() { return surveyShape(block); }
+			@Override protected void done()
+			{
+				try { survey_sets.put(block, get()); }
+				catch(Exception e) { System.out.println("survey: " + e); }
+				view.setMenusEnabled(true);
+				view.setStatus(null);
+				apply();
+			}
+		}.execute();
+	}
+
+	// Each channel's surveyed predictor ids at one block shape, for the
+	// current quantization and channel set (DeltaMapper.surveyAtBlockSize).
+	public int[][] surveyShape(int block)
+	{
+		long    start = System.nanoTime();
+		int[]   size  = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+		int[][] qc    = quantizedChannels(size, new int[6], new int[6]);
+		int[]   sum   = new int[6];
+		ViewerSupport.parallel(6, i -> sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], size[0], size[1]))));
+		int[] id = DeltaMapper.getChannels(bestSet(sum));
+		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyAtBlockSize(new int[][] { qc[id[0]], qc[id[1]], qc[id[2]] }, size[0], size[1], block, DeltaMapper.PREDICTOR_TABLE);
+		System.out.println(String.format("Surveyed sets for block %s: %,d bytes, %d, %d and %d predictors (took %s)", DeltaMapper.shapeName(block), survey.bytes,
+			survey.ids[0].length, survey.ids[1].length, survey.ids[2].length, ViewerSupport.formatDuration(System.nanoTime() - start)));
+		return survey.ids;
 	}
 
 	// The six candidate channels after quantizing (see
@@ -285,6 +332,7 @@ public class BlockWriter
 		// Surveyed sets: blocks assigned by estimated coded size, as the
 		// survey does (channels in order). Named sets: by smallest |delta|.
 		ArrayList[] by_cost = null;
+		int[][] survey_ids = (survey_sets != null) ? survey_sets.get(block()) : null;
 		if(block_set == SURVEYED && survey_ids != null)
 			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block(), survey_ids);
 		final ArrayList[] surveyed = by_cost;
