@@ -1,365 +1,48 @@
 import java.util.ArrayList;
 
 /**
- * Merged image-processing utility class.
- *
- * Combines two originally separate ImageMapper.java files that happened to
- * share a name:
- *
- *  1) The shrink/expand pyramid demo's operators (shrinkAvg, expandGradient,
- *     expandGradientSaddle, refineWithSignBits, the not-divisible-by-4
- *     boundary handling, and error measurement) -- used by ShrinkExpander.java.
- *  2) A separate, larger image-dilation / area-resampling / registration
- *     utility class (smooth, dilateImage family, avgArea*Transform,
- *     getGradient/getVariance, getTranslation, expandX, contract, etc.).
- *
- * NOTE ON A NAME COLLISION: both source files independently defined
- * shrinkAvg(int[][]) with slightly different behavior -- the pyramid
- * version rounds ((sum + 2) / 4), the utility version truncates (sum / 4).
- * Since ShrinkExpander.java (and the pyramid error-analysis work earlier in
- * this project) specifically depends on the *rounding* behavior, that
- * version was kept as the single shrinkAvg(int[][]). The utility file's
- * truncating int[][] overload was dropped as redundant; its shrinkAvg(double[][])
- * overload doesn't collide (different erasure) and was kept unchanged.
- *
- * The dilation-utility methods below also had 4 confirmed bugs fixed
- * (verified by compiling and testing against the pre-fix behavior):
- *   - dilateImage(): location_type==3 read src[k-1] instead of src[k+xdim]
- *     for its second neighbor check.
- *   - dilateImageVertical(): same location_type==3 wrong-variable bug.
- *   - dilateImageDiagonal(): location_type==5's fourth diagonal neighbor
- *     check (isInterpolated[k+xdim+1]) incorrectly re-read
- *     src[k-xdim-1] instead of src[k+xdim+1].
- *   - dilateImageDiagonal(): location_type==4 used '=' instead of '+=' for
- *     its first neighbor accumulation (tested harmless in isolation, but
- *     fixed for consistency/robustness against future edits).
- *   - expandX(double[][], int iterations) returned a throwaway new
- *     double[1][1] instead of the source array when iterations <= 0;
- *     now returns src unchanged in that case.
- *
- * version 2.0: added flat int[]/boolean[] (single-array-plus-width)
- * overloads of the pyramid operators, for consistency with how
- * DeltaWriter/DeltaReader/DeltaMapper/StringMapper/ResizeMapper represent
- * images everywhere else in that project (a flat array plus a separate
- * width, rather than int[][]) -- see the "Pyramid demo operators, flat-
- * array overloads" section. Genuine standalone implementations, not thin
- * wrappers that round-trip through the int[][] versions, so no per-call
- * conversion overhead when chaining many pyramid levels. Also promoted
- * padTo() from private to public, since DeltaWriter/DeltaReader need to
- * compute padded dimensions directly.
+ * Image operators on single channels: the averaging pyramid used by
+ * PixelMapper, and older utilities for smoothing, dilation, area
+ * resampling, gradients and registration.
+ * <p>
+ * The averaging pyramid halves an image by 2 x 2 rounded averages
+ * ({@link #shrinkAvg(int[], int)}) and expands it back by fitting a plane
+ * to each block from its neighbours ({@link #expandGradient(int[], int, int)},
+ * or {@link #expandGradientSaddle(int[], int, int)} with a cross term),
+ * then corrects the expansion with one sign bit per pixel: whether the
+ * pixel was &gt;= its block's average ({@link #buildGeqBits(int[], int[], int)},
+ * {@link #refineWithSignBits(int[], int[], boolean[], int, int)}). Images
+ * are padded to a multiple of 2^levels first ({@link #padTo},
+ * {@link #padEdgeReplicate(int[], int, int, int, int)}) and cropped after.
+ * The flat-array versions (an int[] plus a width) are the ones in use. The
+ * int[][] versions came from a stand-alone demo; they clamp to 255 and
+ * refine from the prediction as it is, so they differ slightly.
+ * <p>
+ * In source order: the pyramid on flat arrays; the pyramid on int[][];
+ * smoothing and dilation; area-average resampling; gradients and
+ * variance; registration (sub-pixel translation); and widening and
+ * shrinking double arrays.
+ * <p>
+ * Version 3.0.
  */
-public class ImageMapper {
+public class ImageMapper
+{
+	/** Not used: all of this class's methods are static. */
+	public ImageMapper() {}
 
-    // ===================================================================
-    // Pyramid demo operators (used by ShrinkExpander.java)
-    // ===================================================================
-
-
-    // ---- pyramid operators ----
-
-    public static int[][] shrinkAvg(int[][] src) {
-        int ydim = src.length;
-        int xdim = src[0].length;
-        int _xdim = xdim / 2;
-        int _ydim = ydim / 2;
-        int[][] dst = new int[_ydim][_xdim];
-        for (int i = 0; i < ydim - 1; i += 2) {
-            int k = i / 2;
-            for (int j = 0; j < xdim - 1; j += 2) {
-                int m = j / 2;
-                dst[k][m] = (src[i][j] + src[i][j + 1] + src[i + 1][j] + src[i + 1][j + 1] + 2) / 4;
-            }
-        }
-        return dst;
-    }
-
-    public static int[][] expandGradient(int[][] avg) {
-        int _ydim = avg.length;
-        int _xdim = avg[0].length;
-        int ydim = _ydim * 2;
-        int xdim = _xdim * 2;
-        int[][] dst = new int[ydim][xdim];
-
-        for (int k = 0; k < _ydim; k++) {
-            for (int m = 0; m < _xdim; m++) {
-                double A  = avg[k][m];
-                double gx = horizGrad(avg, k, m);
-                double gy = vertGrad(avg, k, m);
-
-                double tl = A - 0.5 * gy - 0.5 * gx;
-                double tr = A - 0.5 * gy + 0.5 * gx;
-                double bl = A + 0.5 * gy - 0.5 * gx;
-                double br = A + 0.5 * gy + 0.5 * gx;
-
-                int i = 2 * k, j = 2 * m;
-                dst[i][j]         = clamp(Math.round(tl));
-                dst[i][j + 1]     = clamp(Math.round(tr));
-                dst[i + 1][j]     = clamp(Math.round(bl));
-                dst[i + 1][j + 1] = clamp(Math.round(br));
-            }
-        }
-        return dst;
-    }
-
-    private static double horizGrad(int[][] avg, int k, int m) {
-        int _xdim = avg[0].length;
-        int m0 = Math.max(m - 1, 0);
-        int m1 = Math.min(m + 1, _xdim - 1);
-        if (m0 == m1) return 0.0;
-        return (avg[k][m1] - avg[k][m0]) / (2.0 * (m1 - m0));
-    }
-
-    private static double vertGrad(int[][] avg, int k, int m) {
-        int _ydim = avg.length;
-        int k0 = Math.max(k - 1, 0);
-        int k1 = Math.min(k + 1, _ydim - 1);
-        if (k0 == k1) return 0.0;
-        return (avg[k1][m] - avg[k0][m]) / (2.0 * (k1 - k0));
-    }
+    // ======================================================================
+    // Averaging pyramid, flat arrays (used by PixelMapper)
+    // ======================================================================
 
     /**
-     * Saddle-capable variant of expandGradient: adds one more Taylor term,
-     * the mixed partial (cross) derivative gxy, estimated from the four
-     * DIAGONAL neighboring block averages. A plane (A + gy*r + gx*c) can
-     * only tilt; it can't represent a block sitting at a saddle point,
-     * where the surface curves opposite ways along the two diagonals (e.g.
-     * neighbors arranged low/high/high/low in a checkerboard). Adding
-     * gxy*r*c captures that.
+     * Halves a flat image: each 2 x 2 square becomes its rounded average,
+     * (sum + 2) / 4. An odd last row or column is dropped (pad first with
+     * {@link #padEdgeReplicate(int[], int, int, int, int)}).
      *
-     * Uses no information beyond what's already in avg[][] -- no new
-     * bits, no side channel, just a higher-order read of the same
-     * neighbor data expandGradient already has. The four correction terms
-     * (+,-,-,+) still sum to zero, so the block mean is still preserved
-     * exactly, same as the plane-only version.
+     * @param src  the image, row by row
+     * @param xdim its width
+     * @return the (xdim / 2) x (ydim / 2) image of averages
      */
-    public static int[][] expandGradientSaddle(int[][] avg) {
-        int _ydim = avg.length;
-        int _xdim = avg[0].length;
-        int ydim = _ydim * 2;
-        int xdim = _xdim * 2;
-        int[][] dst = new int[ydim][xdim];
-
-        for (int k = 0; k < _ydim; k++) {
-            for (int m = 0; m < _xdim; m++) {
-                double A   = avg[k][m];
-                double gx  = horizGrad(avg, k, m);
-                double gy  = vertGrad(avg, k, m);
-                double gxy = crossGrad(avg, k, m);
-
-                double tl = A - 0.5 * gy - 0.5 * gx + 0.25 * gxy;
-                double tr = A - 0.5 * gy + 0.5 * gx - 0.25 * gxy;
-                double bl = A + 0.5 * gy - 0.5 * gx - 0.25 * gxy;
-                double br = A + 0.5 * gy + 0.5 * gx + 0.25 * gxy;
-
-                int i = 2 * k, j = 2 * m;
-                dst[i][j]         = clamp(Math.round(tl));
-                dst[i][j + 1]     = clamp(Math.round(tr));
-                dst[i + 1][j]     = clamp(Math.round(bl));
-                dst[i + 1][j + 1] = clamp(Math.round(br));
-            }
-        }
-        return dst;
-    }
-
-    // Mixed second difference from the four diagonal block-average
-    // neighbors -- same clamp-to-edge boundary handling as horizGrad/
-    // vertGrad, generalized to two axes at once.
-    private static double crossGrad(int[][] avg, int k, int m) {
-        int _ydim = avg.length, _xdim = avg[0].length;
-        int k0 = Math.max(k - 1, 0);
-        int k1 = Math.min(k + 1, _ydim - 1);
-        int m0 = Math.max(m - 1, 0);
-        int m1 = Math.min(m + 1, _xdim - 1);
-        if (k0 == k1 || m0 == m1) return 0.0;
-        double num = avg[k1][m1] - avg[k1][m0] - avg[k0][m1] + avg[k0][m0];
-        double denom = (2.0 * (k1 - k0)) * (2.0 * (m1 - m0));
-        return num / denom;
-    }
-
-    /**
-     * Optional refinement pass using one side-information bit per pixel.
-     *
-     * geq[i][j] == true  means the ORIGINAL pixel at (i,j) was >= the
-     *                    average of the block it came from (avg[i/2][j/2]).
-     * geq[i][j] == false means it was strictly less than that average.
-     *
-     * (Always satisfiable: since avg = round(sum/4) now rather than floor,
-     * this no longer guarantees at least one pixel is >= avg the way the
-     * un-rounded version did, but the four true pixel values and their
-     * exact mean are still mutually consistent by construction, so the
-     * constraint set below is always feasible for them.)
-     *
-     * Alternates two projections until the four predicted values are
-     * consistent with both the bits and the exact block mean -- a small
-     * instance of POCS (alternating projection onto convex sets).
-     */
-    public static int[][] refineWithSignBits(int[][] avg, int[][] predicted, boolean[][] geq) {
-        int ydim = predicted.length;
-        int xdim = predicted[0].length;
-        int[][] dst = new int[ydim][xdim];
-
-        for (int i = 0; i < ydim - 1; i += 2) {
-            int k = i / 2;
-            for (int j = 0; j < xdim - 1; j += 2) {
-                int m = j / 2;
-                double A = avg[k][m];
-
-                double[] p = {
-                    predicted[i][j],     predicted[i][j + 1],
-                    predicted[i + 1][j], predicted[i + 1][j + 1]
-                };
-                boolean[] bit = {
-                    geq[i][j],     geq[i][j + 1],
-                    geq[i + 1][j], geq[i + 1][j + 1]
-                };
-
-                for (int iter = 0; iter < 10; iter++) {
-                    for (int t = 0; t < 4; t++) {
-                        boolean predGeq = p[t] >= A;
-                        if (predGeq != bit[t]) {
-                            p[t] = bit[t] ? A : A - 1;
-                        }
-                    }
-                    double sum  = p[0] + p[1] + p[2] + p[3];
-                    double corr = (sum - 4 * A) / 4.0;
-                    for (int t = 0; t < 4; t++) p[t] -= corr;
-                }
-
-                dst[i][j]         = clamp(Math.round(p[0]));
-                dst[i][j + 1]     = clamp(Math.round(p[1]));
-                dst[i + 1][j]     = clamp(Math.round(p[2]));
-                dst[i + 1][j + 1] = clamp(Math.round(p[3]));
-            }
-        }
-        return dst;
-    }
-
-    private static int clamp(long v) {
-        if (v < 0) return 0;
-        if (v > 255) return 255;
-        return (int) v;
-    }
-
-    // Parameterized clamp, used only by the flat-array pyramid methods
-    // below -- DeltaWriter/DeltaReader can legitimately hand these a
-    // DIFFERENCE channel (blue-green, red-green, red-blue), which gets
-    // shifted by its own observed minimum to become non-negative but is
-    // never rescaled, so its values can genuinely run up to 510 (two
-    // [0,255] channels differing by as much as 255 in either direction)
-    // -- not just 255. The int[][] methods above stay hardcoded to 255,
-    // since ShrinkExpander only ever feeds them genuine, always-in-range
-    // RGB channels.
-    private static int clamp(long v, int maxValue) {
-        if (v < 0) return 0;
-        if (v > maxValue) return maxValue;
-        return (int) v;
-    }
-
-    // Damping factor for a set of raw offsets from a center value: the
-    // LARGEST s in [0,1] such that center + s*offset stays within
-    // [0,maxValue] for every offset given. Used instead of clamping each
-    // predicted corner independently -- independent clamping breaks the
-    // exact mean-preservation the unclamped plane-fit formula otherwise
-    // guarantees (the offset terms cancel exactly across the four
-    // corners), which is what turns a graceful falloff into visible
-    // hard-edged noise once pyramid levels chain without correction.
-    // Scaling every offset down by the SAME factor keeps that
-    // cancellation intact -- the corners just converge smoothly toward
-    // the center (blur) instead of individual corners hitting a wall.
-    private static double computeDampingFactor(double center, double[] rawOffsets, int maxValue) {
-        double s = 1.0;
-        for (double off : rawOffsets) {
-            if (off > 0) s = Math.min(s, (maxValue - center) / off);
-            else if (off < 0) s = Math.min(s, center / (-off));
-        }
-        return Math.max(0.0, s);
-    }
-
-    // geq[i][j] == true means the original pixel at (i,j) was >= the
-    // (rounded) average of the block it came from; false means it was
-    // strictly less than that average. This is the one bit of side
-    // information refineWithSignBits uses per pixel.
-    public static boolean[][] buildGeqBits(int[][] orig, int[][] avg) {
-        int h = orig.length, w = orig[0].length;
-        boolean[][] geq = new boolean[h][w];
-        for (int i = 0; i < h; i++) {
-            int k = i / 2;
-            for (int j = 0; j < w; j++) {
-                int m = j / 2;
-                geq[i][j] = orig[i][j] >= avg[k][m];
-            }
-        }
-        return geq;
-    }
-
-    // ---- boundary handling for dimensions not divisible by a pyramid's PAD_MULTIPLE ----
-
-    // Pads out to the next multiple of `multiple` by replicating the last
-    // real row/column. shrinkAvg's loops start at 0 and step by 2, so a
-    // leftover row/column can only ever occur at the bottom/right edge --
-    // that's the only side that ever needs padding. Replication keeps the
-    // local gradient at the seam at ~zero, a neutral assumption, rather
-    // than the fake dark edge zero-padding would introduce right where the
-    // gradient estimate can least afford it.
-    public static int[][] padEdgeReplicate(int[][] src, int multiple) {
-        int h = src.length, w = src[0].length;
-        int newH = padTo(h, multiple);
-        int newW = padTo(w, multiple);
-        if (newH == h && newW == w) return src;
-        int[][] dst = new int[newH][newW];
-        for (int y = 0; y < newH; y++) {
-            int sy = Math.min(y, h - 1);
-            for (int x = 0; x < newW; x++) {
-                dst[y][x] = src[sy][Math.min(x, w - 1)];
-            }
-        }
-        return dst;
-    }
-
-    public static int padTo(int dim, int multiple) {
-        int rem = dim % multiple;
-        return rem == 0 ? dim : dim + (multiple - rem);
-    }
-
-    // Crops back down to the original, unpadded dimensions (top-left
-    // aligned, since padding was only ever added at the bottom/right).
-    public static int[][] crop(int[][] src, int h, int w) {
-        int[][] dst = new int[h][w];
-        for (int y = 0; y < h; y++) {
-            System.arraycopy(src[y], 0, dst[y], 0, w);
-        }
-        return dst;
-    }
-
-    // ---- error measurement ----
-
-    // Returns { meanSignedError, meanAbsError, pixelCount } for one channel.
-    public static double[] errorStats(int[][] orig, int[][] recon) {
-        int h = orig.length, w = orig[0].length;
-        long n = (long) h * w;
-        double sumErr = 0, sumAbs = 0;
-        for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                int e = recon[y][x] - orig[y][x];
-                sumErr += e;
-                sumAbs += Math.abs(e);
-            }
-        }
-        return new double[]{ sumErr / n, sumAbs / n, n };
-    }
-
-    // ===================================================================
-    // Pyramid demo operators, FLAT-ARRAY overloads (version 2.0)
-    //
-    // Genuine standalone implementations operating on a flat int[]/
-    // boolean[] plus a separate width, matching how images are
-    // represented everywhere else in the DeltaWriter/DeltaReader project
-    // (as opposed to int[][] above, used only by ShrinkExpander's demo).
-    // Same algorithms as the int[][] versions above; verified against
-    // them directly (see the accompanying test harness) rather than
-    // assumed identical from a mechanical transcription.
-    // ===================================================================
-
     public static int[] shrinkAvg(int[] src, int xdim) {
         int ydim = src.length / xdim;
         int _xdim = xdim / 2;
@@ -376,35 +59,20 @@ public class ImageMapper {
         return dst;
     }
 
-    private static double horizGradFlat(int[] avg, int xdim, int k, int m) {
-        int m0 = Math.max(m - 1, 0);
-        int m1 = Math.min(m + 1, xdim - 1);
-        if (m0 == m1) return 0.0;
-        return (avg[k * xdim + m1] - avg[k * xdim + m0]) / (2.0 * (m1 - m0));
-    }
-
-    private static double vertGradFlat(int[] avg, int xdim, int ydim, int k, int m) {
-        int k0 = Math.max(k - 1, 0);
-        int k1 = Math.min(k + 1, ydim - 1);
-        if (k0 == k1) return 0.0;
-        return (avg[k1 * xdim + m] - avg[k0 * xdim + m]) / (2.0 * (k1 - k0));
-    }
-
-    private static double crossGradFlat(int[] avg, int xdim, int ydim, int k, int m) {
-        int k0 = Math.max(k - 1, 0);
-        int k1 = Math.min(k + 1, ydim - 1);
-        int m0 = Math.max(m - 1, 0);
-        int m1 = Math.min(m + 1, xdim - 1);
-        if (k0 == k1 || m0 == m1) return 0.0;
-        double num = avg[k1 * xdim + m1] - avg[k1 * xdim + m0] - avg[k0 * xdim + m1] + avg[k0 * xdim + m0];
-        double denom = (2.0 * (k1 - k0)) * (2.0 * (m1 - m0));
-        return num / denom;
-    }
-
-    // xdim here is avg's width (the SMALLER, pre-expand width). maxValue
-    // is the legitimate upper bound for THIS channel's values -- 255 for
-    // a raw RGB channel, up to 510 for a shifted difference channel; see
-    // clamp(long,int)'s comment for why this can't just be hardcoded.
+    /**
+     * Doubles a flat image of block averages by fitting a plane to each block:
+     * the gradients come from the neighbouring blocks (central differences,
+     * one-sided at the edges), and the four pixels are A -+ gy/2 -+ gx/2.
+     * Instead of clamping each pixel, the four offsets are scaled down by the
+     * same factor until all fit in [0, maxValue], so the block mean is kept and
+     * the corners fade toward the mean rather than hitting a wall.
+     *
+     * @param avg      the block averages, row by row
+     * @param xdim     avg's width (the smaller one)
+     * @param maxValue the largest legal value: 255 for a colour channel, up to
+     *                 510 for a shifted difference channel
+     * @return the 2 xdim x 2 ydim prediction
+     */
     public static int[] expandGradient(int[] avg, int xdim, int maxValue) {
         int _xdim = xdim;
         int _ydim = avg.length / xdim;
@@ -431,6 +99,17 @@ public class ImageMapper {
         return dst;
     }
 
+    /**
+     * {@link #expandGradient(int[], int, int)} plus the cross term: the mixed
+     * derivative gxy, from the four diagonal neighbouring blocks, adds +-gxy/4
+     * to the corners, so a block at a saddle (neighbours low/high/high/low)
+     * can be represented. The four corrections cancel, so the mean is kept.
+     *
+     * @param avg      the block averages, row by row
+     * @param xdim     avg's width (the smaller one)
+     * @param maxValue the largest legal value
+     * @return the 2 xdim x 2 ydim prediction
+     */
     public static int[] expandGradientSaddle(int[] avg, int xdim, int maxValue) {
         int _xdim = xdim;
         int _ydim = avg.length / xdim;
@@ -461,7 +140,69 @@ public class ImageMapper {
         return dst;
     }
 
-    // origXdim is orig's (the LARGER array's) width; avg is half that width.
+    /**
+     * {@link #horizGrad} on a flat array.
+     *
+     * @param avg  the block averages
+     * @param xdim their width
+     * @param k    the block row
+     * @param m    the block column
+     * @return the gradient
+     */
+    private static double horizGradFlat(int[] avg, int xdim, int k, int m) {
+        int m0 = Math.max(m - 1, 0);
+        int m1 = Math.min(m + 1, xdim - 1);
+        if (m0 == m1) return 0.0;
+        return (avg[k * xdim + m1] - avg[k * xdim + m0]) / (2.0 * (m1 - m0));
+    }
+
+    /**
+     * {@link #vertGrad} on a flat array.
+     *
+     * @param avg  the block averages
+     * @param xdim their width
+     * @param ydim their height
+     * @param k    the block row
+     * @param m    the block column
+     * @return the gradient
+     */
+    private static double vertGradFlat(int[] avg, int xdim, int ydim, int k, int m) {
+        int k0 = Math.max(k - 1, 0);
+        int k1 = Math.min(k + 1, ydim - 1);
+        if (k0 == k1) return 0.0;
+        return (avg[k1 * xdim + m] - avg[k0 * xdim + m]) / (2.0 * (k1 - k0));
+    }
+
+    /**
+     * {@link #crossGrad} on a flat array.
+     *
+     * @param avg  the block averages
+     * @param xdim their width
+     * @param ydim their height
+     * @param k    the block row
+     * @param m    the block column
+     * @return the cross derivative
+     */
+    private static double crossGradFlat(int[] avg, int xdim, int ydim, int k, int m) {
+        int k0 = Math.max(k - 1, 0);
+        int k1 = Math.min(k + 1, ydim - 1);
+        int m0 = Math.max(m - 1, 0);
+        int m1 = Math.min(m + 1, xdim - 1);
+        if (k0 == k1 || m0 == m1) return 0.0;
+        double num = avg[k1 * xdim + m1] - avg[k1 * xdim + m0] - avg[k0 * xdim + m1] + avg[k0 * xdim + m0];
+        double denom = (2.0 * (k1 - k0)) * (2.0 * (m1 - m0));
+        return num / denom;
+    }
+
+    /**
+     * The sign bits for {@link #refineWithSignBits(int[], int[], boolean[], int, int)}:
+     * whether each pixel is &gt;= the average of its 2 x 2 square.
+     *
+     * @param orig     the image before shrinking
+     * @param avg      its {@link #shrinkAvg(int[], int)}
+     * @param origXdim orig's width (the larger one)
+     * @return one bit per pixel of orig
+     */
     public static boolean[] buildGeqBits(int[] orig, int[] avg, int origXdim) {
         int h = orig.length / origXdim;
         int w = origXdim;
@@ -477,7 +218,23 @@ public class ImageMapper {
         return geq;
     }
 
-    // predictedXdim is predicted's (the LARGER array's) width; avg is half that width.
+    /**
+     * Corrects a predicted level with its sign bits. Per 2 x 2 block: if the
+     * prediction disagrees with any bit, the block restarts flat (all four at
+     * the average A), since the plane fit is evidently wrong there; then ten
+     * rounds of alternating projection (POCS) move each pixel to the side of
+     * A its bit says and restore the exact mean 4A. The deviations from A are
+     * finally damped by one common factor to fit in [0, maxValue], which keeps
+     * both the mean and every pixel's side of A.
+     *
+     * @param avg           the block averages
+     * @param predicted     the prediction from {@link #expandGradient(int[], int, int)}
+     *                      or {@link #expandGradientSaddle(int[], int, int)}
+     * @param geq           the sign bits from {@link #buildGeqBits(int[], int[], int)}
+     * @param predictedXdim predicted's width (the larger one)
+     * @param maxValue      the largest legal value
+     * @return the refined level
+     */
     public static int[] refineWithSignBits(int[] avg, int[] predicted, boolean[] geq, int predictedXdim, int maxValue) {
         int xdim = predictedXdim;
         int ydim = predicted.length / predictedXdim;
@@ -547,6 +304,65 @@ public class ImageMapper {
         return dst;
     }
 
+    /**
+     * Clamps to [0, maxValue]: the flat-array methods may be given a shifted
+     * difference channel, whose values run to 510.
+     *
+     * @param v        the value
+     * @param maxValue the largest legal value
+     * @return the clamped value
+     */
+    private static int clamp(long v, int maxValue) {
+        if (v < 0) return 0;
+        if (v > maxValue) return maxValue;
+        return (int) v;
+    }
+
+    /**
+     * The largest s in [0, 1] such that center + s * offset is in
+     * [0, maxValue] for every offset. Scaling all the offsets by one factor
+     * keeps their sum, and so the block mean, where clamping each corner on
+     * its own would not.
+     *
+     * @param center     the block average
+     * @param rawOffsets the corners' offsets from it
+     * @param maxValue   the largest legal value
+     * @return the factor
+     */
+    private static double computeDampingFactor(double center, double[] rawOffsets, int maxValue) {
+        double s = 1.0;
+        for (double off : rawOffsets) {
+            if (off > 0) s = Math.min(s, (maxValue - center) / off);
+            else if (off < 0) s = Math.min(s, center / (-off));
+        }
+        return Math.max(0.0, s);
+    }
+
+    /**
+     * Rounds a dimension up to a multiple.
+     *
+     * @param dim      the dimension
+     * @param multiple the multiple
+     * @return the smallest multiple of multiple that is &gt;= dim
+     */
+    public static int padTo(int dim, int multiple) {
+        int rem = dim % multiple;
+        return rem == 0 ? dim : dim + (multiple - rem);
+    }
+
+    /**
+     * Pads a flat image at the bottom and right by repeating its last row and
+     * column. (Shrinking only leaves rows and columns over at those edges, and
+     * repeating keeps the gradient there near zero, where zero padding would
+     * add a false dark edge.)
+     *
+     * @param src     the image
+     * @param xdim    its width
+     * @param ydim    its height
+     * @param newXdim the padded width
+     * @param newYdim the padded height
+     * @return the padded image, or src itself if the size is unchanged
+     */
     public static int[] padEdgeReplicate(int[] src, int xdim, int ydim, int newXdim, int newYdim) {
         if (newXdim == xdim && newYdim == ydim) return src;
         int[] dst = new int[newXdim * newYdim];
@@ -559,6 +375,16 @@ public class ImageMapper {
         return dst;
     }
 
+    /**
+     * The top-left newXdim x newYdim corner of a flat image (undoes the padding).
+     *
+     * @param src     the image
+     * @param xdim    its width
+     * @param ydim    its height
+     * @param newXdim the cropped width
+     * @param newYdim the cropped height
+     * @return the cropped image
+     */
     public static int[] crop(int[] src, int xdim, int ydim, int newXdim, int newYdim) {
         int[] dst = new int[newXdim * newYdim];
         for (int y = 0; y < newYdim; y++) {
@@ -567,10 +393,325 @@ public class ImageMapper {
         return dst;
     }
 
-    // ===================================================================
-    // Image dilation / area-resampling / registration utility methods
-    // ===================================================================
+    // ======================================================================
+    // Averaging pyramid, int[][] (the original demo's versions)
+    // ======================================================================
 
+    /**
+     * Halves an image: each 2 x 2 square becomes its rounded average,
+     * (sum + 2) / 4. An odd last row or column is dropped.
+     *
+     * @param src the image
+     * @return the averages
+     */
+    public static int[][] shrinkAvg(int[][] src) {
+        int ydim = src.length;
+        int xdim = src[0].length;
+        int _xdim = xdim / 2;
+        int _ydim = ydim / 2;
+        int[][] dst = new int[_ydim][_xdim];
+        for (int i = 0; i < ydim - 1; i += 2) {
+            int k = i / 2;
+            for (int j = 0; j < xdim - 1; j += 2) {
+                int m = j / 2;
+                dst[k][m] = (src[i][j] + src[i][j + 1] + src[i + 1][j] + src[i + 1][j + 1] + 2) / 4;
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * Doubles an image of block averages by fitting a plane to each block, as
+     * {@link #expandGradient(int[], int, int)}, but clamping each pixel to
+     * [0, 255] on its own (so the block mean may shift at the extremes).
+     *
+     * @param avg the block averages
+     * @return the prediction, twice the size
+     */
+    public static int[][] expandGradient(int[][] avg) {
+        int _ydim = avg.length;
+        int _xdim = avg[0].length;
+        int ydim = _ydim * 2;
+        int xdim = _xdim * 2;
+        int[][] dst = new int[ydim][xdim];
+
+        for (int k = 0; k < _ydim; k++) {
+            for (int m = 0; m < _xdim; m++) {
+                double A  = avg[k][m];
+                double gx = horizGrad(avg, k, m);
+                double gy = vertGrad(avg, k, m);
+
+                double tl = A - 0.5 * gy - 0.5 * gx;
+                double tr = A - 0.5 * gy + 0.5 * gx;
+                double bl = A + 0.5 * gy - 0.5 * gx;
+                double br = A + 0.5 * gy + 0.5 * gx;
+
+                int i = 2 * k, j = 2 * m;
+                dst[i][j]         = clamp(Math.round(tl));
+                dst[i][j + 1]     = clamp(Math.round(tr));
+                dst[i + 1][j]     = clamp(Math.round(bl));
+                dst[i + 1][j + 1] = clamp(Math.round(br));
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * {@link #expandGradient(int[][])} plus the cross term gxy (see
+     * {@link #expandGradientSaddle(int[], int, int)}). Uses nothing beyond
+     * avg itself: no extra bits, just a higher-order read of the same
+     * neighbours.
+     *
+     * @param avg the block averages
+     * @return the prediction, twice the size
+     */
+    public static int[][] expandGradientSaddle(int[][] avg) {
+        int _ydim = avg.length;
+        int _xdim = avg[0].length;
+        int ydim = _ydim * 2;
+        int xdim = _xdim * 2;
+        int[][] dst = new int[ydim][xdim];
+
+        for (int k = 0; k < _ydim; k++) {
+            for (int m = 0; m < _xdim; m++) {
+                double A   = avg[k][m];
+                double gx  = horizGrad(avg, k, m);
+                double gy  = vertGrad(avg, k, m);
+                double gxy = crossGrad(avg, k, m);
+
+                double tl = A - 0.5 * gy - 0.5 * gx + 0.25 * gxy;
+                double tr = A - 0.5 * gy + 0.5 * gx - 0.25 * gxy;
+                double bl = A + 0.5 * gy - 0.5 * gx - 0.25 * gxy;
+                double br = A + 0.5 * gy + 0.5 * gx + 0.25 * gxy;
+
+                int i = 2 * k, j = 2 * m;
+                dst[i][j]         = clamp(Math.round(tl));
+                dst[i][j + 1]     = clamp(Math.round(tr));
+                dst[i + 1][j]     = clamp(Math.round(bl));
+                dst[i + 1][j + 1] = clamp(Math.round(br));
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * Horizontal gradient at block (k, m): a central difference, one-sided
+     * at the edges, 0 for a one-block-wide image.
+     *
+     * @param avg the block averages
+     * @param k   the block row
+     * @param m   the block column
+     * @return the gradient per pixel of the expanded image
+     */
+    private static double horizGrad(int[][] avg, int k, int m) {
+        int _xdim = avg[0].length;
+        int m0 = Math.max(m - 1, 0);
+        int m1 = Math.min(m + 1, _xdim - 1);
+        if (m0 == m1) return 0.0;
+        return (avg[k][m1] - avg[k][m0]) / (2.0 * (m1 - m0));
+    }
+
+    /**
+     * Vertical gradient at block (k, m), as {@link #horizGrad}.
+     *
+     * @param avg the block averages
+     * @param k   the block row
+     * @param m   the block column
+     * @return the gradient per pixel of the expanded image
+     */
+    private static double vertGrad(int[][] avg, int k, int m) {
+        int _ydim = avg.length;
+        int k0 = Math.max(k - 1, 0);
+        int k1 = Math.min(k + 1, _ydim - 1);
+        if (k0 == k1) return 0.0;
+        return (avg[k1][m] - avg[k0][m]) / (2.0 * (k1 - k0));
+    }
+
+    /**
+     * Mixed second difference at block (k, m) from its four diagonal
+     * neighbours, with the same clamp-to-edge handling as {@link #horizGrad}.
+     *
+     * @param avg the block averages
+     * @param k   the block row
+     * @param m   the block column
+     * @return the cross derivative
+     */
+    private static double crossGrad(int[][] avg, int k, int m) {
+        int _ydim = avg.length, _xdim = avg[0].length;
+        int k0 = Math.max(k - 1, 0);
+        int k1 = Math.min(k + 1, _ydim - 1);
+        int m0 = Math.max(m - 1, 0);
+        int m1 = Math.min(m + 1, _xdim - 1);
+        if (k0 == k1 || m0 == m1) return 0.0;
+        double num = avg[k1][m1] - avg[k1][m0] - avg[k0][m1] + avg[k0][m0];
+        double denom = (2.0 * (k1 - k0)) * (2.0 * (m1 - m0));
+        return num / denom;
+    }
+
+    /**
+     * The sign bits: whether each pixel is &gt;= the average of its 2 x 2 square.
+     *
+     * @param orig the image before shrinking
+     * @param avg  its {@link #shrinkAvg(int[][])}
+     * @return one bit per pixel of orig
+     */
+    public static boolean[][] buildGeqBits(int[][] orig, int[][] avg) {
+        int h = orig.length, w = orig[0].length;
+        boolean[][] geq = new boolean[h][w];
+        for (int i = 0; i < h; i++) {
+            int k = i / 2;
+            for (int j = 0; j < w; j++) {
+                int m = j / 2;
+                geq[i][j] = orig[i][j] >= avg[k][m];
+            }
+        }
+        return geq;
+    }
+
+    /**
+     * Corrects a predicted level with its sign bits by ten rounds of
+     * alternating projection: each pixel goes to the side of the block average
+     * its bit says, then the four are shifted to restore the exact mean. Unlike
+     * {@link #refineWithSignBits(int[], int[], boolean[], int, int)} it starts
+     * from the prediction even where it disagrees with the bits, and clamps
+     * each pixel to [0, 255].
+     *
+     * @param avg       the block averages
+     * @param predicted the prediction
+     * @param geq       the sign bits
+     * @return the refined level
+     */
+    public static int[][] refineWithSignBits(int[][] avg, int[][] predicted, boolean[][] geq) {
+        int ydim = predicted.length;
+        int xdim = predicted[0].length;
+        int[][] dst = new int[ydim][xdim];
+
+        for (int i = 0; i < ydim - 1; i += 2) {
+            int k = i / 2;
+            for (int j = 0; j < xdim - 1; j += 2) {
+                int m = j / 2;
+                double A = avg[k][m];
+
+                double[] p = {
+                    predicted[i][j],     predicted[i][j + 1],
+                    predicted[i + 1][j], predicted[i + 1][j + 1]
+                };
+                boolean[] bit = {
+                    geq[i][j],     geq[i][j + 1],
+                    geq[i + 1][j], geq[i + 1][j + 1]
+                };
+
+                for (int iter = 0; iter < 10; iter++) {
+                    for (int t = 0; t < 4; t++) {
+                        boolean predGeq = p[t] >= A;
+                        if (predGeq != bit[t]) {
+                            p[t] = bit[t] ? A : A - 1;
+                        }
+                    }
+                    double sum  = p[0] + p[1] + p[2] + p[3];
+                    double corr = (sum - 4 * A) / 4.0;
+                    for (int t = 0; t < 4; t++) p[t] -= corr;
+                }
+
+                dst[i][j]         = clamp(Math.round(p[0]));
+                dst[i][j + 1]     = clamp(Math.round(p[1]));
+                dst[i + 1][j]     = clamp(Math.round(p[2]));
+                dst[i + 1][j + 1] = clamp(Math.round(p[3]));
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * Clamps to [0, 255].
+     *
+     * @param v the value
+     * @return the clamped value
+     */
+    private static int clamp(long v) {
+        if (v < 0) return 0;
+        if (v > 255) return 255;
+        return (int) v;
+    }
+
+    /**
+     * Pads an image at the bottom and right to multiples of multiple by
+     * repeating its last row and column.
+     *
+     * @param src      the image
+     * @param multiple the multiple
+     * @return the padded image, or src itself if no padding is needed
+     */
+    public static int[][] padEdgeReplicate(int[][] src, int multiple) {
+        int h = src.length, w = src[0].length;
+        int newH = padTo(h, multiple);
+        int newW = padTo(w, multiple);
+        if (newH == h && newW == w) return src;
+        int[][] dst = new int[newH][newW];
+        for (int y = 0; y < newH; y++) {
+            int sy = Math.min(y, h - 1);
+            for (int x = 0; x < newW; x++) {
+                dst[y][x] = src[sy][Math.min(x, w - 1)];
+            }
+        }
+        return dst;
+    }
+
+    /**
+     * The top-left h x w corner of an image (undoes the padding).
+     *
+     * @param src the image
+     * @param h   the cropped height
+     * @param w   the cropped width
+     * @return the cropped image
+     */
+    public static int[][] crop(int[][] src, int h, int w) {
+        int[][] dst = new int[h][w];
+        for (int y = 0; y < h; y++) {
+            System.arraycopy(src[y], 0, dst[y], 0, w);
+        }
+        return dst;
+    }
+
+    /**
+     * Error of a reconstruction against the original.
+     *
+     * @param orig  the original channel
+     * @param recon the reconstruction
+     * @return {mean signed error, mean absolute error, pixel count}
+     */
+    public static double[] errorStats(int[][] orig, int[][] recon) {
+        int h = orig.length, w = orig[0].length;
+        long n = (long) h * w;
+        double sumErr = 0, sumAbs = 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int e = recon[y][x] - orig[y][x];
+                sumErr += e;
+                sumAbs += Math.abs(e);
+            }
+        }
+        return new double[]{ sumErr / n, sumAbs / n, n };
+    }
+
+	// ======================================================================
+	// Smoothing and dilation
+	// ======================================================================
+
+	/**
+	 * Edge-preserving smoothing: each pass replaces a pixel with the weighted
+	 * mean of its 3 x 3 neighbourhood, a neighbour's weight being
+	 * exp(-|gradient|^2 / (2 smooth_factor^2)), so pixels on strong edges
+	 * count for little. The two outermost rows and columns are left as they
+	 * are.
+	 *
+	 * @param src                  the image, row by row
+	 * @param xdim                 its width
+	 * @param ydim                 its height
+	 * @param smooth_factor        the gradient scale; larger smooths across stronger edges
+	 * @param number_of_iterations the number of passes
+	 * @param dst                  receives the result, truncated to int
+	 */
 	public static void smooth(int src[], int xdim, int ydim, double smooth_factor, int number_of_iterations, int dst[])
 	{
 		double even[] = new double[xdim * ydim];
@@ -644,6 +785,18 @@ public class ImageMapper {
 			dst[i] = (int) current_dst[i];
 	}
 
+	/**
+	 * Where a pixel lies, as a type 1-9 laid out like a keypad from the top
+	 * left: 1 2 3 on the top row, 4 5 6 in the middle, 7 8 9 on the bottom
+	 * row; 1, 4 and 7 are the left column, 3, 6 and 9 the right. 5 is the
+	 * interior.
+	 *
+	 * @param xindex the column
+	 * @param yindex the row
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @return the location type, 1-9
+	 */
 	public static int getLocationType(int xindex, int yindex, int xdim, int ydim)
 	{
 		int location_type = 0;
@@ -687,7 +840,16 @@ public class ImageMapper {
 		return (location_type);
 	}
 
-	// This function assumes the sample density is greater in y than x.
+	/**
+	 * Fills the uninterpolated cells of an image by repeated dilation:
+	 * vertical passes until they stop making progress, then diagonal passes,
+	 * then full 8-neighbour passes. Assumes the samples are denser in y than
+	 * in x. Prints its progress to standard output.
+	 *
+	 * @param src            the image; only the interpolated cells are read
+	 * @param isInterpolated which cells hold data
+	 * @return the filled image
+	 */
 	public static double[][] getImageDilation(double src[][], boolean isInterpolated[][])
 	{
 		int ydim = src.length;
@@ -832,344 +994,123 @@ public class ImageMapper {
 		return dst;
 	}
 
-
-	// This function modifies values in isInterpolated and dst, and can be called
-	// multiple times until all the values in isInterpolated are true.
-	// Theoretically, it should complete even if only one pixel has been interpolated at the start.
-	// Also, using single index into image to keep low level code simple--will have
-	// to reformat data for processing.
+	/**
+	 * One dilation pass over the 8-neighbourhood. Each uninterpolated cell
+	 * with more than neighbor_threshold interpolated neighbours becomes their
+	 * weighted mean (orthogonal neighbours weigh 1, diagonal ones 0.7071); the
+	 * others are set to 0. Call repeatedly
+	 * until every cell is interpolated; it completes even from one cell.
+	 *
+	 * @param src                the image, row by row
+	 * @param isInterpolated     which cells hold data; updated in place
+	 * @param xdim               the width
+	 * @param ydim               the height
+	 * @param neighbor_threshold a cell needs more than this many interpolated neighbours
+	 * @param dst                receives the result
+	 */
 	public static void dilateImage(double src[], boolean isInterpolated[], int xdim, int ydim, int neighbor_threshold, double dst[])
 	{
-		boolean wasInterpolated[] = new boolean[xdim * ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < xdim; j++)
-			{
-				int k = i * xdim + j;
-				if(isInterpolated[k])
-				{
-					dst[k]             = src[k];
-					wasInterpolated[k] = true;
-				}
-				else
-				{
-					// Orthogonal weight is 1.
-					double diagonal_weight  = 0.7071;
-					double total_weight     = 0;
-					double value            = 0.;
-					int number_of_neighbors = 0;
-
-					int location_type = getLocationType(j, i, xdim, ydim);
-
-					if(location_type == 1)
-					{
-						// Orthogonal.
-						if (isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + 1];
-						}
-						if (isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim];
-						}
-
-						// Diagonal.
-						if (isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value        += diagonal_weight * src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 2)
-					{
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-						if(isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + 1];
-						}
-						if(isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + xdim];
-						}
-
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim - 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 3)
-					{
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-						if(isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + xdim];
-						}
-
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim - 1];
-						}
-					}
-					else if(location_type == 4)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + xdim];
-						}
-						if(isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + 1];
-						}
-
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim + 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 5)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + xdim];
-						}
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-						if(isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + 1];
-						}
-
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim - 1];
-						}
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim - 1];
-						}
-
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim + 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 6)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k + xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + xdim];
-						}
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim - 1];
-						}
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k + xdim - 1];
-						}
-					}
-					else if(location_type == 7)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + 1];
-						}
-
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim + 1];
-						}
-					}
-					else if(location_type == 8)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-						if(isInterpolated[k + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k + 1];
-						}
-
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim - 1];
-						}
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim + 1];
-						}
-					}
-					else if(location_type == 9)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - xdim];
-						}
-						if(isInterpolated[k - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value += src[k - 1];
-						}
-
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += diagonal_weight;
-							value += diagonal_weight * src[k - xdim - 1];
-						}
-					}
-
-					if(number_of_neighbors > neighbor_threshold)
-					{
-						// Found required number of neighbors this iteration, set value.
-						value /= total_weight;
-						dst[k] = (int) value;
-						wasInterpolated[k] = true;
-						// System.out.println("Number of neighbors was " + number_of_neighbors);
-					}
-					else
-					{
-						dst[k] = 0;
-						wasInterpolated[k] = false;
-						// No neighbors, set value to zero.
-					}
-				}
-			}
-		}
-
-		// We need to reset the boolean array that got passed into the function, since it gets reused.
-		for (int i = 0; i < xdim * ydim; i++)
-		{
-			isInterpolated[i] = wasInterpolated[i];
-		}
+		dilate(src, isInterpolated, xdim, ydim, neighbor_threshold, dst, ORTHOGONAL, DIAGONAL, 0.7071);
 	}
 
-	// This function is not guaranteed to complete, and returns an incomplete result after reaching a limit.
-	// The problem is if one column is completely unpopulated it will recurse endlessly.  Still useful--a combination
-	// of this and the regular dilateImage produces a better result than regular dilateImage alone.
+	/**
+	 * {@link #dilateImage} using only the cells above and below.
+	 *
+	 * @param src                the image, row by row
+	 * @param isInterpolated     which cells hold data; updated in place
+	 * @param xdim               the width
+	 * @param ydim               the height
+	 * @param neighbor_threshold a cell needs more than this many interpolated neighbours
+	 * @param dst                receives the result
+	 */
 	public static void dilateImageVertical(double src[], boolean isInterpolated[], int xdim, int ydim, int neighbor_threshold, double dst[])
+	{
+		dilate(src, isInterpolated, xdim, ydim, neighbor_threshold, dst, VERTICAL, NONE, 1.);
+	}
+
+	/**
+	 * {@link #dilateImage} using only the four diagonal cells, weighing 1.
+	 *
+	 * @param src                the image, row by row
+	 * @param isInterpolated     which cells hold data; updated in place
+	 * @param xdim               the width
+	 * @param ydim               the height
+	 * @param neighbor_threshold a cell needs more than this many interpolated neighbours
+	 * @param dst                receives the result
+	 */
+	public static void dilateImageDiagonal(double src[], boolean isInterpolated[], int xdim, int ydim, int neighbor_threshold, double dst[])
+	{
+		dilate(src, isInterpolated, xdim, ydim, neighbor_threshold, dst, NONE, DIAGONAL, 1.);
+	}
+
+	/**
+	 * The orthogonal neighbours {dy, dx} {@link #dilateImage} reads, indexed by
+	 * location type (see {@link #getLocationType}), in the order they are
+	 * summed. The order fixes the floating-point sums, so it is the order of
+	 * the original per-type code.
+	 */
+	private static final int[][][] ORTHOGONAL = {
+		{},
+		{{0, 1}, {1, 0}},
+		{{0, -1}, {0, 1}, {1, 0}},
+		{{0, -1}, {1, 0}},
+		{{-1, 0}, {1, 0}, {0, 1}},
+		{{-1, 0}, {1, 0}, {0, -1}, {0, 1}},
+		{{-1, 0}, {1, 0}, {0, -1}},
+		{{-1, 0}, {0, 1}},
+		{{-1, 0}, {0, -1}, {0, 1}},
+		{{-1, 0}, {0, -1}}
+	};
+
+	/**
+	 * The neighbours {@link #dilateImageVertical} reads, as {@link #ORTHOGONAL}.
+	 */
+	private static final int[][][] VERTICAL = {
+		{},
+		{{1, 0}}, {{1, 0}}, {{1, 0}},
+		{{-1, 0}, {1, 0}}, {{-1, 0}, {1, 0}}, {{-1, 0}, {1, 0}},
+		{{-1, 0}}, {{-1, 0}}, {{-1, 0}}
+	};
+
+	/**
+	 * The diagonal neighbours {@link #dilateImage} and
+	 * {@link #dilateImageDiagonal} read, as {@link #ORTHOGONAL}.
+	 */
+	private static final int[][][] DIAGONAL = {
+		{},
+		{{1, 1}},
+		{{1, -1}, {1, 1}},
+		{{1, -1}},
+		{{-1, 1}, {1, 1}},
+		{{-1, -1}, {1, -1}, {-1, 1}, {1, 1}},
+		{{-1, -1}, {1, -1}},
+		{{-1, 1}},
+		{{-1, -1}, {-1, 1}},
+		{{-1, -1}}
+	};
+
+	/**
+	 * No neighbours, for every location type.
+	 */
+	private static final int[][][] NONE = new int[10][0][];
+
+	/**
+	 * One dilation pass reading, per location type, the given orthogonal
+	 * neighbours (weight 1) and diagonal ones (weight diagonal_weight). See
+	 * {@link #dilateImage}.
+	 *
+	 * @param src                the image
+	 * @param isInterpolated     which cells hold data; updated in place
+	 * @param xdim               the width
+	 * @param ydim               the height
+	 * @param neighbor_threshold a cell needs more than this many interpolated neighbours
+	 * @param dst                receives the result
+	 * @param orthogonal         per location type, the {dy, dx} orthogonal neighbours
+	 * @param diagonal           per location type, the {dy, dx} diagonal neighbours
+	 * @param diagonal_weight    the diagonal neighbours' weight
+	 */
+	private static void dilate(double src[], boolean isInterpolated[], int xdim, int ydim, int neighbor_threshold, double dst[],
+	                           int[][][] orthogonal, int[][][] diagonal, double diagonal_weight)
 	{
 		boolean wasInterpolated[] = new boolean[xdim * ydim];
 		for (int i = 0; i < ydim; i++)
@@ -1181,798 +1122,293 @@ public class ImageMapper {
 				{
 					dst[k]             = src[k];
 					wasInterpolated[k] = true;
+					continue;
 				}
-				else
+				double total_weight     = 0;
+				double value            = 0.;
+				int number_of_neighbors = 0;
+				int location_type       = getLocationType(j, i, xdim, ydim);
+				for (int[] d : orthogonal[location_type])
 				{
-					//double diagonal_weight  = 0.7071;
-					double total_weight     = 0;
-					double value            = 0.;
-					int number_of_neighbors = 0;
-					int location_type       = getLocationType(j, i, xdim, ydim);
-
-					if(location_type == 1)
+					int n = k + d[0] * xdim + d[1];
+					if (isInterpolated[n])
 					{
-						if(isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 2)
-					{
-						if(isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 3)
-					{
-						if (isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 4)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-						if(isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 5)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-						if(isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 6)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-						if(isInterpolated[k + xdim])
-						{
-							total_weight += 1.;
-							value += src[k + xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 7)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 8)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-					}
-					else if(location_type == 9)
-					{
-						if(isInterpolated[k - xdim])
-						{
-							total_weight += 1.;
-							value += src[k - xdim];
-							number_of_neighbors++;
-						}
-					}
-
-					if(number_of_neighbors > neighbor_threshold)
-					{
-						value /= total_weight;
-						dst[k] = (int) value;
-						wasInterpolated[k] = true;
-					}
-					else
-					{
-						dst[k] = 0;
-						wasInterpolated[k] = false;
+						number_of_neighbors++;
+						total_weight += 1.;
+						value        += src[n];
 					}
 				}
-			}
-		}
-
-		// Reset the boolean array since it gets reused.
-		for (int i = 0; i < xdim * ydim; i++)
-		{
-			isInterpolated[i] = wasInterpolated[i];
-		}
-	}
-
-
-	public static void dilateImageDiagonal(double src[], boolean isInterpolated[], int xdim, int ydim, int neighbor_threshold, double dst[])
-	{
-		boolean wasInterpolated[] = new boolean[xdim * ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < xdim; j++)
-			{
-				int k = i * xdim + j;
-				if(isInterpolated[k])
+				for (int[] d : diagonal[location_type])
 				{
-					dst[k]             = src[k];
+					int n = k + d[0] * xdim + d[1];
+					if (isInterpolated[n])
+					{
+						number_of_neighbors++;
+						total_weight += diagonal_weight;
+						value        += diagonal_weight * src[n];
+					}
+				}
+				if (number_of_neighbors > neighbor_threshold)
+				{
+					value             /= total_weight;
+					dst[k]             = value;
 					wasInterpolated[k] = true;
 				}
 				else
 				{
-					double total_weight     = 0;
-					double value            = 0.;
-					int number_of_neighbors = 0;
-
-					int location_type = getLocationType(j, i, xdim, ydim);
-
-					if(location_type == 1)
-					{
-						if (isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 2)
-					{
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim - 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 3)
-					{
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim - 1];
-						}
-					}
-					else if(location_type == 4)
-					{
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim + 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 5)
-					{
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim - 1];
-						}
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim - 1];
-						}
-
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim + 1];
-						}
-						if(isInterpolated[k + xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim + 1];
-						}
-					}
-					else if(location_type == 6)
-					{
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value       += src[k - xdim - 1];
-						}
-						if(isInterpolated[k + xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k + xdim - 1];
-						}
-					}
-					else if(location_type == 7)
-					{
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim + 1];
-						}
-					}
-					else if(location_type == 8)
-					{
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim - 1];
-						}
-						if(isInterpolated[k - xdim + 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim + 1];
-						}
-					}
-					else if(location_type == 9)
-					{
-						if(isInterpolated[k - xdim - 1])
-						{
-							number_of_neighbors++;
-							total_weight += 1.;
-							value        += src[k - xdim - 1];
-						}
-					}
-
-					if(number_of_neighbors > neighbor_threshold)
-					{
-						value /= total_weight;
-						dst[k] = (int) value;
-						wasInterpolated[k] = true;
-					}
-					else
-					{
-						dst[k] = 0;
-						wasInterpolated[k] = false;
-					}
+					dst[k]             = 0;
+					wasInterpolated[k] = false;
 				}
 			}
 		}
-
 		for (int i = 0; i < xdim * ydim; i++)
-		{
 			isInterpolated[i] = wasInterpolated[i];
-		}
 	}
 
+	// ======================================================================
+	// Area-average resampling
+	// ======================================================================
+
+	/**
+	 * Resamples a flat image to a new width by area averaging: each output
+	 * pixel is the mean of the input pixels it covers, weighted by how much of
+	 * each it covers. Enlarging repeats or blends neighbouring pixels.
+	 *
+	 * @param source   the image, row by row
+	 * @param xdim     its width
+	 * @param ydim     its height
+	 * @param new_xdim the new width
+	 * @return the new_xdim x ydim image
+	 */
 	public static int[] avgAreaXTransform(int source[], int xdim, int ydim, int new_xdim)
 	{
-		double differential         = (double) xdim / (double) new_xdim;
-		int    weight               = (int)(differential * xdim) * 1000;
-		int    factor               = xdim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_xdim];
-		int [] end_fraction     = new int[new_xdim];
-		int [] number_of_pixels = new int[new_xdim];
-		for(int i = 0; i < new_xdim; i++)
-		{
-		    double  previous_position     = real_position;
-		    int     previous_whole_number = current_whole_number;
-
-		    real_position       += differential;
-		    current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		int[] dest = new int[ydim * new_xdim];
+		int[][] table = avgAreaTable(xdim, new_xdim);
+		int[]   dest  = new int[ydim * new_xdim];
 		for (int y = 0; y < ydim; y++)
-		{
-			int i = y * new_xdim;
-			int j = y * xdim;
-			for (int x = 0; x < new_xdim - 1; x++)
-			{
-				if (number_of_pixels[x] == 0)
-				{
-					dest[i] = source[j];
-					i++;
-				}
-				else
-				{
-					int total = start_fraction[x] * xdim * source[j];
-					j++;
-					int k = number_of_pixels[x] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j++;
-						k--;
-					}
-					total += end_fraction[x] * xdim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i++;
-				}
-			}
-
-			int x = new_xdim - 1;
-			if (number_of_pixels[x] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[x] * xdim * source[j];
-				j++;
-				int k = number_of_pixels[x] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j++;
-					k--;
-				}
-				total /= weight - end_fraction[x] * xdim;
-				dest[i] = total;
-			}
-		}
+			avgAreaLine(source, y * xdim, 1, dest, y * new_xdim, 1, xdim, new_xdim, table);
 		return(dest);
 	}
 
-	public static int[][] avgAreaXTransform(int src[][], int new_xdim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		int[][] dst = new int[ydim][new_xdim];
-
-		int [] source = new int[xdim * ydim];
-		int [] dest   = new int[new_xdim * ydim];
-
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < xdim; j++)
-			{
-				int k = i * xdim + j;
-				source[k] = src[i][j];
-			}
-		}
-
-		double differential         = (double) xdim / (double) new_xdim;
-		int    weight               = (int)(differential * xdim) * 1000;
-		int    factor               = xdim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_xdim];
-		int [] end_fraction     = new int[new_xdim];
-		int [] number_of_pixels = new int[new_xdim];
-
-		for(int i = 0; i < new_xdim; i++)
-		{
-		    double  previous_position     = real_position;
-		    int     previous_whole_number = current_whole_number;
-
-		    real_position       += differential;
-		    current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		for (int y = 0; y < ydim; y++)
-		{
-			int i = y * new_xdim;
-			int j = y * xdim;
-			for (int x = 0; x < new_xdim - 1; x++)
-			{
-				if (number_of_pixels[x] == 0)
-				{
-					dest[i] = source[j];
-					i++;
-				}
-				else
-				{
-					int total = start_fraction[x] * xdim * source[j];
-					j++;
-					int k = number_of_pixels[x] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j++;
-						k--;
-					}
-					total += end_fraction[x] * xdim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i++;
-				}
-			}
-
-			int x = new_xdim - 1;
-			if (number_of_pixels[x] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[x] * xdim * source[j];
-				j++;
-				int k = number_of_pixels[x] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j++;
-					k--;
-				}
-				total /= weight - end_fraction[x] * xdim;
-				dest[i] = total;
-			}
-		}
-
-		for (int i = 0; i < ydim; i++)
-		{
-			for (int j = 0; j < new_xdim; j++)
-			{
-				int k = i * new_xdim + j;
-				dst[i][j] = dest[k];
-			}
-		}
-		return(dst);
-	}
-
+	/**
+	 * Resamples a flat image to a new height by area averaging (see
+	 * {@link #avgAreaXTransform(int[], int, int, int)}).
+	 *
+	 * @param src      the image, row by row
+	 * @param xdim     its width
+	 * @param ydim     its height
+	 * @param new_ydim the new height
+	 * @return the xdim x new_ydim image
+	 */
 	public static int [] avgAreaYTransform(int src[], int xdim, int ydim, int new_ydim)
 	{
-		double differential         = (double) ydim / (double) new_ydim;
-		int    weight               = (int) (differential * ydim) * 1000;
-		int    factor               = ydim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_ydim];
-		int [] end_fraction     = new int[new_ydim];
-		int [] number_of_pixels = new int[new_ydim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			double previous_position     = real_position;
-			int    previous_whole_number = current_whole_number;
-
-			real_position       += differential;
-			current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		int [] dst = new int[xdim * new_ydim];
+		int[][] table = avgAreaTable(ydim, new_ydim);
+		int []  dst   = new int[xdim * new_ydim];
 		for (int x = 0; x < xdim; x++)
-		{
-			int i = x;
-			int j = x;
-			for (int y = 0; y < new_ydim - 1; y++)
-			{
-				if (number_of_pixels[y] == 0)
-				{
-					dst[i] = src[j];
-					i += xdim;
-				}
-				else
-				{
-					int total = start_fraction[y] * ydim * src[j];
-					j += xdim;
-					int k = number_of_pixels[y] - 1;
-					while (k > 0)
-					{
-						total += factor * src[j];
-						j += xdim;
-						k--;
-					}
-					total += end_fraction[y] * ydim * src[j];
-					total /= weight;
-					dst[i] = total;
-					i += xdim;
-				}
-			}
-			int y = new_ydim - 1;
-			if (number_of_pixels[y] == 0)
-				dst[i] = src[j];
-			else
-			{
-				int total = start_fraction[y] * ydim * src[j];
-				j += xdim;
-				int k = number_of_pixels[y] - 1;
-				while (k > 0)
-				{
-					total += factor * src[j];
-					j += xdim;
-					k--;
-				}
-				total /= weight - end_fraction[y] * ydim;
-				dst[i] = total;
-			}
-		}
+			avgAreaLine(src, x, xdim, dst, x, xdim, ydim, new_ydim, table);
 		return(dst);
 	}
 
-	public static int[][] avgAreaYTransform(int src[][], int new_ydim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-
-		int [] source = new int[xdim * ydim];
-		int [] dest   = new int[xdim * new_ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				source[k] = src[i][j];
-				k++;
-			}
-		}
-
-		double differential         = (double) ydim / (double) new_ydim;
-		int    weight               = (int) (differential * ydim) * 1000;
-		int    factor               = ydim * 1000;
-		double real_position        = 0.;
-		int    current_whole_number = 0;
-
-		int [] start_fraction   = new int[new_ydim];
-		int [] end_fraction     = new int[new_ydim];
-		int [] number_of_pixels = new int[new_ydim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			double previous_position     = real_position;
-			int    previous_whole_number = current_whole_number;
-
-			real_position       += differential;
-			current_whole_number = (int) (real_position);
-			number_of_pixels[i]  = current_whole_number - previous_whole_number;
-			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
-			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
-		}
-
-		for (int x = 0; x < xdim; x++)
-		{
-			int i = x;
-			int j = x;
-			for (int y = 0; y < new_ydim - 1; y++)
-			{
-				if (number_of_pixels[y] == 0)
-				{
-					dest[i] = source[j];
-					i += xdim;
-				}
-				else
-				{
-					int total = start_fraction[y] * ydim * source[j];
-					j += xdim;
-					int k = number_of_pixels[y] - 1;
-					while (k > 0)
-					{
-						total += factor * source[j];
-						j += xdim;
-						k--;
-					}
-					total += end_fraction[y] * ydim * source[j];
-					total /= weight;
-					dest[i] = total;
-					i += xdim;
-				}
-			}
-			int y = new_ydim - 1;
-			if (number_of_pixels[y] == 0)
-				dest[i] = source[j];
-			else
-			{
-				int total = start_fraction[y] * ydim * source[j];
-				j += xdim;
-				int k = number_of_pixels[y] - 1;
-				while (k > 0)
-				{
-					total += factor * source[j];
-					j += xdim;
-					k--;
-				}
-				total /= weight - end_fraction[y] * ydim;
-				dest[i] = total;
-			}
-		}
-
-		int[][] dst = new int[new_ydim][xdim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				dst[i][j] = dest[k];
-				k++;
-			}
-		}
-
-		return(dst);
-
-	}
-
+	/**
+	 * Resamples a flat image to a new size by area averaging, x then y.
+	 *
+	 * @param src      the image, row by row
+	 * @param xdim     its width
+	 * @param ydim     its height
+	 * @param new_xdim the new width
+	 * @param new_ydim the new height
+	 * @return the new_xdim x new_ydim image
+	 */
 	public static int [] avgAreaTransform(int src[], int xdim, int ydim, int new_xdim, int new_ydim)
 	{
 		int [] intermediate = avgAreaXTransform(src, xdim, ydim, new_xdim);
-	    int [] dst          = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
-	    return(dst);
-	}
-
-	public static int [][] avgAreaTransform(int src[][], int new_xdim, int new_ydim)
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-
-		int [] source = new int[xdim * ydim];
-		for (int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				source[k] = src[i][j];
-				k++;
-			}
-		}
-		int [] intermediate = avgAreaXTransform(source, xdim, ydim, new_xdim);
-		int [] dest         = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
-
-		int[][] dst = new int[new_ydim][new_xdim];
-		for (int i = 0; i < new_ydim; i++)
-		{
-			int k = 0;
-			for (int j = 0; j < xdim; j++)
-			{
-				dst[i][j] = dest[k];
-				k++;
-			}
-		}
-
+		int [] dst          = avgAreaYTransform(intermediate, new_xdim, ydim, new_ydim);
 		return(dst);
 	}
 
+	/**
+	 * Where each output sample falls when resampling dim samples to new_dim:
+	 * sample x covers input positions [x dim / new_dim, (x + 1) dim / new_dim).
+	 *
+	 * @param dim     the input length
+	 * @param new_dim the output length
+	 * @return {start_fraction, end_fraction, number_of_pixels}, the fractions of
+	 *         the first and last input samples covered being in thousandths
+	 */
+	private static int[][] avgAreaTable(int dim, int new_dim)
+	{
+		double differential         = (double) dim / (double) new_dim;
+		double real_position        = 0.;
+		int    current_whole_number = 0;
+
+		int [] start_fraction   = new int[new_dim];
+		int [] end_fraction     = new int[new_dim];
+		int [] number_of_pixels = new int[new_dim];
+		for (int i = 0; i < new_dim; i++)
+		{
+			double previous_position     = real_position;
+			int    previous_whole_number = current_whole_number;
+
+			real_position       += differential;
+			current_whole_number = (int) (real_position);
+			number_of_pixels[i]  = current_whole_number - previous_whole_number;
+			start_fraction[i]    = (int) (1000. * (1. - (previous_position - (double) (previous_whole_number))));
+			end_fraction[i]      = (int) (1000. * (real_position - (double) (current_whole_number)));
+		}
+		return new int[][] {start_fraction, end_fraction, number_of_pixels};
+	}
+
+	/**
+	 * Resamples one row (strides 1) or column (strides xdim). The sums are
+	 * long: in int they overflowed once 255 dim^2 / new_dim passed about 2.1
+	 * million (a 2000-pixel row shrunk by 4).
+	 *
+	 * @param src        the input
+	 * @param j          the row's or column's first input index
+	 * @param stride_in  the input stride
+	 * @param dst        the output
+	 * @param i          the first output index
+	 * @param stride_out the output stride
+	 * @param dim        the input length
+	 * @param new_dim    the output length
+	 * @param table      from {@link #avgAreaTable}
+	 */
+	private static void avgAreaLine(int[] src, int j, int stride_in, int[] dst, int i, int stride_out, int dim, int new_dim, int[][] table)
+	{
+		int[] start_fraction   = table[0];
+		int[] end_fraction     = table[1];
+		int[] number_of_pixels = table[2];
+		double differential    = (double) dim / (double) new_dim;
+		long   weight          = (long) (int) (differential * dim) * 1000;
+		long   factor          = (long) dim * 1000;
+
+		for (int x = 0; x < new_dim; x++)
+		{
+			if (number_of_pixels[x] == 0)
+				dst[i] = src[j];
+			else
+			{
+				long total = (long) start_fraction[x] * dim * src[j];
+				j += stride_in;
+				for (int k = number_of_pixels[x] - 1; k > 0; k--)
+				{
+					total += factor * src[j];
+					j += stride_in;
+				}
+				if (x < new_dim - 1)
+				{
+					total += (long) end_fraction[x] * dim * src[j];
+					total /= weight;
+				}
+				else
+					total /= weight - (long) end_fraction[x] * dim;
+				dst[i] = (int) total;
+			}
+			i += stride_out;
+		}
+	}
+
+	/**
+	 * {@link #avgAreaXTransform(int[], int, int, int)} for an int[][] image.
+	 *
+	 * @param src      the image
+	 * @param new_xdim the new width
+	 * @return the resampled image
+	 */
+	public static int[][] avgAreaXTransform(int src[][], int new_xdim)
+	{
+		int ydim = src.length, xdim = src[0].length;
+		return unflatten(avgAreaXTransform(flatten(src), xdim, ydim, new_xdim), new_xdim, ydim);
+	}
+
+	/**
+	 * {@link #avgAreaYTransform(int[], int, int, int)} for an int[][] image.
+	 *
+	 * @param src      the image
+	 * @param new_ydim the new height
+	 * @return the resampled image
+	 */
+	public static int[][] avgAreaYTransform(int src[][], int new_ydim)
+	{
+		int ydim = src.length, xdim = src[0].length;
+		return unflatten(avgAreaYTransform(flatten(src), xdim, ydim, new_ydim), xdim, new_ydim);
+	}
+
+	/**
+	 * {@link #avgAreaTransform(int[], int, int, int, int)} for an int[][] image.
+	 *
+	 * @param src      the image
+	 * @param new_xdim the new width
+	 * @param new_ydim the new height
+	 * @return the resampled image
+	 */
+	public static int [][] avgAreaTransform(int src[][], int new_xdim, int new_ydim)
+	{
+		int ydim = src.length, xdim = src[0].length;
+		return unflatten(avgAreaTransform(flatten(src), xdim, ydim, new_xdim, new_ydim), new_xdim, new_ydim);
+	}
+
+	/**
+	 * Copies an int[][] image into a flat array, row by row.
+	 *
+	 * @param src the image
+	 * @return the flat image
+	 */
+	private static int[] flatten(int[][] src)
+	{
+		int ydim = src.length, xdim = src[0].length;
+		int[] dst = new int[xdim * ydim];
+		for (int i = 0; i < ydim; i++)
+			System.arraycopy(src[i], 0, dst, i * xdim, xdim);
+		return dst;
+	}
+
+	/**
+	 * Copies a flat image into an int[][].
+	 *
+	 * @param src  the flat image
+	 * @param xdim its width
+	 * @param ydim its height
+	 * @return the image
+	 */
+	private static int[][] unflatten(int[] src, int xdim, int ydim)
+	{
+		int[][] dst = new int[ydim][xdim];
+		for (int i = 0; i < ydim; i++)
+			System.arraycopy(src, i * xdim, dst[i], 0, xdim);
+		return dst;
+	}
+
+	// ======================================================================
+	// Gradients and variance
+	// ======================================================================
+
+	/**
+	 * {@link #getGradient(double[][])} of an int image.
+	 *
+	 * @param src the image
+	 * @return per pixel, a list {xgradient, ygradient} of Doubles
+	 */
 	public static ArrayList[][] getGradient(int src[][])
 	{
 		int ydim = src.length;
 		int xdim = src[0].length;
-		ArrayList[][] dst = new ArrayList[ydim][xdim];
-
+		double[][] s = new double[ydim][xdim];
 		for (int i = 0; i < ydim; i++)
-		{
 			for (int j = 0; j < xdim; j++)
-			{
-				int type = getLocationType(j, i, xdim, ydim);
-				double xgradient = 0;
-				double ygradient = 0;
-				if (type == 1)
-				{
-					xgradient = Double.NaN;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 2)
-				{
-					xgradient = (src[i][j + 1] - src[i][j - 1]) + (src[i + 1][j + 1] - src[i + 1][j - 1]);
-					xgradient /= 2;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 3)
-				{
-					xgradient = Double.NaN;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 4)
-				{
-					xgradient = Double.NaN;
-					ygradient = (src[i + 1][j] - src[i - 1][j]) + (src[i + 1][j + 1] - src[i - 1][j + 1]);
-					ygradient /= 2;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 5)
-				{
-					xgradient = src[i - 1][j + 1] - src[i - 1][j - 1] + src[i][j + 1] - src[i][j - 1]
-							+ src[i + 1][j + 1] - src[i + 1][j - 1];
-					xgradient /= 3;
-					ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j]
-							+ src[i + 1][j + 1] - src[i - 1][j + 1];
-					ygradient /= 3;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 6)
-				{
-					xgradient = Double.NaN;
-					ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j];
-					ygradient /= 2;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 7)
-				{
-					xgradient = Double.NaN;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 8)
-				{
-					xgradient = (src[i - 1][j + 1] - src[i - 1][j - 1]) + (src[i][j + 1] - src[i][j - 1]);
-					xgradient /= 2;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				} else if (type == 9)
-				{
-					xgradient = Double.NaN;
-					ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
-				}
-			}
-		}
-		return (dst);
+				s[i][j] = src[i][j];
+		return getGradient(s);
 	}
 
+	/**
+	 * The gradient at each pixel: the mean of the central differences over
+	 * the three rows (for x) or columns (for y) around it, or the two that
+	 * exist at an edge. A gradient across an edge is NaN: the top and bottom
+	 * rows have only x, the left and right columns only y, and the corners
+	 * neither.
+	 *
+	 * @param src the image
+	 * @return per pixel, a list {xgradient, ygradient} of Doubles
+	 */
 	public static ArrayList[][] getGradient(double src[][])
 	{
 		int ydim = src.length;
@@ -1983,84 +1419,84 @@ public class ImageMapper {
 		{
 			for (int j = 0; j < xdim; j++)
 			{
-				int type = getLocationType(j, i, xdim, ydim);
-				double xgradient = 0;
-				double ygradient = 0;
-				if (type == 1) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 2) { xgradient = (src[i][j + 1] - src[i][j - 1]) + (src[i + 1][j + 1] - src[i + 1][j - 1]); xgradient /= 2; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 3) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 4) { xgradient = Double.NaN; ygradient = (src[i + 1][j] - src[i - 1][j]) + (src[i + 1][j + 1] - src[i - 1][j + 1]); ygradient /= 2; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 5) { xgradient = src[i - 1][j + 1] - src[i - 1][j - 1] + src[i][j + 1] - src[i][j - 1] + src[i + 1][j + 1] - src[i + 1][j - 1]; xgradient /= 3; ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j] + src[i + 1][j + 1] - src[i - 1][j + 1]; ygradient /= 3; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 6) { xgradient = Double.NaN; ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j]; ygradient /= 2; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 7) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 8) { xgradient = (src[i - 1][j + 1] - src[i - 1][j - 1]) + (src[i][j + 1] - src[i][j - 1]); xgradient /= 2; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 9) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
+				int    type      = getLocationType(j, i, xdim, ydim);
+				double xgradient = Double.NaN;
+				double ygradient = Double.NaN;
+				if (type == 2)
+					xgradient = ((src[i][j + 1] - src[i][j - 1]) + (src[i + 1][j + 1] - src[i + 1][j - 1])) / 2;
+				else if (type == 4)
+					ygradient = ((src[i + 1][j] - src[i - 1][j]) + (src[i + 1][j + 1] - src[i - 1][j + 1])) / 2;
+				else if (type == 5)
+				{
+					xgradient = (src[i - 1][j + 1] - src[i - 1][j - 1] + src[i][j + 1] - src[i][j - 1]
+					             + src[i + 1][j + 1] - src[i + 1][j - 1]) / 3;
+					ygradient = (src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j]
+					             + src[i + 1][j + 1] - src[i - 1][j + 1]) / 3;
+				}
+				else if (type == 6)
+					ygradient = (src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j]) / 2;
+				else if (type == 8)
+					xgradient = ((src[i - 1][j + 1] - src[i - 1][j - 1]) + (src[i][j + 1] - src[i][j - 1])) / 2;
+				dst[i][j] = gradientPair(xgradient, ygradient);
 			}
 		}
 		return (dst);
 	}
 
-	// This version checks to see if the direction of the
-	// gradient is the same across the pixel, and returns
-	// Nan if it isn't instead of doing a calculation.
-	// This does change the result of getTranslation.
+	/**
+	 * {@link #getGradient(int[][])}, except that an interior pixel's gradient
+	 * along an axis is NaN unless the pixel lies strictly between its two
+	 * neighbours on that axis. (This changes the results of getTranslation if
+	 * used there.)
+	 *
+	 * @param src the image
+	 * @return per pixel, a list {xgradient, ygradient} of Doubles
+	 */
 	public static ArrayList[][] getSmoothGradient(int src[][])
 	{
 		int ydim = src.length;
 		int xdim = src[0].length;
-		ArrayList[][] dst = new ArrayList[ydim][xdim];
-
-		for (int i = 0; i < ydim; i++)
+		ArrayList[][] dst = getGradient(src);
+		for (int i = 1; i < ydim - 1; i++)
 		{
-			for (int j = 0; j < xdim; j++)
+			for (int j = 1; j < xdim - 1; j++)
 			{
-				int type = getLocationType(j, i, xdim, ydim);
-				double xgradient = 0;
-				double ygradient = 0;
-				if (type == 1) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 2) { xgradient = (src[i][j + 1] - src[i][j - 1]) + (src[i + 1][j + 1] - src[i + 1][j - 1]); xgradient /= 2; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 3) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 4) { xgradient = Double.NaN; ygradient = (src[i + 1][j] - src[i - 1][j]) + (src[i + 1][j + 1] - src[i - 1][j + 1]); ygradient /= 2; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 5)
+				boolean xmonotone = (src[i][j + 1] < src[i][j] && src[i][j] < src[i][j - 1])
+				                 || (src[i][j + 1] > src[i][j] && src[i][j] > src[i][j - 1]);
+				boolean ymonotone = (src[i + 1][j] < src[i][j] && src[i][j] < src[i - 1][j])
+				                 || (src[i + 1][j] > src[i][j] && src[i][j] > src[i - 1][j]);
+				if (!xmonotone || !ymonotone)
 				{
-					if(((src[i][j + 1] < src[i][j]) && (src[i][j] < src[i][j - 1]))  ||
-					   ((src[i][j + 1] > src[i][j]) && (src[i][j] > src[i][j - 1])))
-					{
-					    xgradient = src[i - 1][j + 1] - src[i - 1][j - 1] +
-							        src[i][j + 1] - src[i][j - 1] +
-							        src[i + 1][j + 1] - src[i + 1][j - 1];
-					    xgradient /= 3;
-					}
-					else
-					{
-						xgradient = Double.NaN;
-					}
-
-					if(((src[i + 1][j] < src[i][j]) && (src[i][j] < src[i - 1][j]))  ||
-							   ((src[i + 1][j] > src[i][j]) && (src[i][j] > src[i - 1][j])))
-					{
-					    ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] +
-							    	src[i + 1][j] - src[i - 1][j] +
-							    	src[i + 1][j + 1] - src[i - 1][j + 1];
-					    ygradient /= 3;
-					}
-					else
-				        ygradient = Double.NaN;
-
-					ArrayList gradient_list = new ArrayList();
-					gradient_list.add(xgradient);
-					gradient_list.add(ygradient);
-					dst[i][j] = gradient_list;
+					ArrayList g = dst[i][j];
+					dst[i][j] = gradientPair(xmonotone ? (double) g.get(0) : Double.NaN, ymonotone ? (double) g.get(1) : Double.NaN);
 				}
-				else if (type == 6) { xgradient = Double.NaN; ygradient = src[i + 1][j - 1] - src[i - 1][j - 1] + src[i + 1][j] - src[i - 1][j]; ygradient /= 2; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 7) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 8) { xgradient = (src[i - 1][j + 1] - src[i - 1][j - 1]) + (src[i][j + 1] - src[i][j - 1]); xgradient /= 2; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
-				else if (type == 9) { xgradient = Double.NaN; ygradient = Double.NaN; ArrayList gradient_list = new ArrayList(); gradient_list.add(xgradient); gradient_list.add(ygradient); dst[i][j] = gradient_list; }
 			}
 		}
 		return (dst);
 	}
 
+	/**
+	 * A gradient as getGradient returns it.
+	 *
+	 * @param xgradient the x gradient
+	 * @param ygradient the y gradient
+	 * @return the list {xgradient, ygradient}
+	 */
+	private static ArrayList gradientPair(double xgradient, double ygradient)
+	{
+		ArrayList gradient_list = new ArrayList();
+		gradient_list.add(xgradient);
+		gradient_list.add(ygradient);
+		return gradient_list;
+	}
+
+	/**
+	 * The sum of absolute differences between each pixel and its neighbours
+	 * (the 3 to 8 that exist).
+	 *
+	 * @param src the image
+	 * @return the sums
+	 */
 	public static int[][] getVariance(int src[][])
 	{
 		int ydim = src.length;
@@ -2071,22 +1507,30 @@ public class ImageMapper {
 		{
 			for (int j = 0; j < xdim; j++)
 			{
-				int type = getLocationType(j, i, xdim, ydim);
 				int variance = 0;
-				if (type == 1) { variance += Math.abs(src[i][j] - src[i][j + 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j + 1]); dst[i][j] = variance; }
-				else if (type == 2) { variance += Math.abs(src[i][j] - src[i][j - 1]); variance += Math.abs(src[i][j] - src[i][j + 1]); variance += Math.abs(src[i][j] - src[i + 1][j - 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j + 1]); dst[i][j] = variance; }
-				else if (type == 3) { variance += Math.abs(src[i][j] - src[i][j - 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j - 1]); dst[i][j] = variance; }
-				else if (type == 4) { variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i - 1][j + 1]); variance += Math.abs(src[i][j] - src[i][j + 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j + 1]); dst[i][j] = variance; }
-				else if (type == 5) { variance += Math.abs(src[i][j] - src[i - 1][j - 1]); variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i - 1][j + 1]); variance += Math.abs(src[i][j] - src[i][j - 1]); variance += Math.abs(src[i][j] - src[i][j + 1]); variance += Math.abs(src[i][j] - src[i + 1][j - 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j + 1]); dst[i][j] = variance; }
-				else if (type == 6) { variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i - 1][j - 1]); variance += Math.abs(src[i][j] - src[i][j - 1]); variance += Math.abs(src[i][j] - src[i + 1][j]); variance += Math.abs(src[i][j] - src[i + 1][j - 1]); dst[i][j] = variance; }
-				else if (type == 7) { variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i - 1][j + 1]); variance += Math.abs(src[i][j] - src[i][j + 1]); dst[i][j] = variance; }
-				else if (type == 8) { variance += Math.abs(src[i][j] - src[i - 1][j - 1]); variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i - 1][j + 1]); variance += Math.abs(src[i][j] - src[i][j - 1]); variance += Math.abs(src[i][j] - src[i][j + 1]); dst[i][j] = variance; }
-				else if (type == 9) { variance += Math.abs(src[i][j] - src[i - 1][j - 1]); variance += Math.abs(src[i][j] - src[i - 1][j]); variance += Math.abs(src[i][j] - src[i][j - 1]); dst[i][j] = variance; }
+				for (int y = Math.max(i - 1, 0); y <= Math.min(i + 1, ydim - 1); y++)
+					for (int x = Math.max(j - 1, 0); x <= Math.min(j + 1, xdim - 1); x++)
+						variance += Math.abs(src[i][j] - src[y][x]);
+				dst[i][j] = variance;
 			}
 		}
 		return (dst);
 	}
 
+	// ======================================================================
+	// Registration
+	// ======================================================================
+
+	/**
+	 * A window of an image.
+	 *
+	 * @param source  the image
+	 * @param xoffset the window's left column
+	 * @param yoffset the window's top row
+	 * @param xdim    its width
+	 * @param ydim    its height
+	 * @return the window
+	 */
 	public static int[][] extract(int[][] source, int xoffset, int yoffset, int xdim, int ydim)
 	{
 	    int src_ydim = source.length;
@@ -2104,6 +1548,16 @@ public class ImageMapper {
 	    return(dest);
 	}
 
+	/**
+	 * Crops |x| columns and |y| rows: from the left or top when positive, from
+	 * the right or bottom when negative. Two images cropped by opposite shifts
+	 * line up at that offset.
+	 *
+	 * @param source the image
+	 * @param x      the columns to drop
+	 * @param y      the rows to drop
+	 * @return the cropped image
+	 */
 	public static int[][] shift(int[][] source, int x, int y)
 	{
 		int     ydim   = source.length;
@@ -2130,6 +1584,14 @@ public class ImageMapper {
         return dest;
 	}
 
+	/**
+	 * {@link #shift(int[][], int, int)} for a double image.
+	 *
+	 * @param source the image
+	 * @param x      the columns to drop
+	 * @param y      the rows to drop
+	 * @return the cropped image
+	 */
 	public static double[][] shift(double[][] source, int x, int y)
 	{
 		int        ydim   = source.length;
@@ -2156,7 +1618,13 @@ public class ImageMapper {
         return dest;
 	}
 
-	// This shrinks the source by one pixel in both dimensions.
+	/**
+	 * The (truncated) average of each 2 x 2 neighbourhood: the image shrinks
+	 * by one pixel each way, and its samples move half a pixel.
+	 *
+	 * @param source the image
+	 * @return the averages
+	 */
 	public static int[][] contract(int[][] source)
 	{
 		int ydim = source.length;
@@ -2178,7 +1646,17 @@ public class ImageMapper {
 		return(dest);
 	}
 
-	// x and y should be some number from 1 to -1
+	/**
+	 * Shifts an image by a fraction of a pixel by bilinear interpolation. The
+	 * result is one pixel smaller each way; x = y = 0 gives the rounded
+	 * {@link #contract} (a half-pixel shift), and -1 or 1 a shift of half a
+	 * pixel more or less.
+	 *
+	 * @param source the image
+	 * @param x      the x shift, from -1 to 1
+	 * @param y      the y shift, from -1 to 1
+	 * @return the shifted image
+	 */
 	public static int[][] translate(int[][] source, double x, double y)
 	{
 		int ydim = source.length;
@@ -2196,139 +1674,112 @@ public class ImageMapper {
 			{
 				double a = (double) source[i][j] * (1. - x) + (double) source[i][j + 1] * x;
 				double b = (double) source[i + 1][j] * (1. - x) + (double) source[i + 1][j + 1] * x;
-				dest[i][j] = (int) ((a * (1. - y) + b * y) * .5 + .5);
+				dest[i][j] = (int) (a * (1. - y) + b * y + .5);
 			}
 		}
 		return(dest);
 	}
 
-	// Simple version that only calculates subpixel translations.
+	/**
+	 * Estimates the sub-pixel translation of source2 against source1 by
+	 * iterated least squares on the gradients (at most ten estimates). The
+	 * images must be the same size.
+	 *
+	 * @param source1 the reference image
+	 * @param source2 the shifted image
+	 * @return {status, xtranslation, ytranslation}; status is 0 for no motion,
+	 *         1 converged, 2 oscillating (an increment changed sign), 3 out of
+	 *         iterations, 4 the translation reached a whole pixel
+	 */
 	public static double[] getTranslation(int[][] source1, int[][] source2)
 	{
-		//Assumes source1 and source2 are same size.
-		int ydim = source1.length;
-		int xdim = source1[0].length;
-
-		int[][] estimate = new int[ydim][xdim];
-		for (int i = 0; i < ydim; i++)
-			for (int j = 0; j < xdim; j++)
-				estimate[i][j] = source2[i][j];
-
-		double[] dest = new double[3];
-
-		double w  = 0;
-		double x  = 0;
-		double z  = 0;
-		double b1 = 0;
-		double b2 = 0;
-
-		ArrayList[][] gradient = getGradient(estimate);
-		for (int i = 1; i < ydim - 1; i++)
-		{
-			for (int j = 1; j < xdim - 1; j++)
-			{
-				ArrayList current_gradient = gradient[i][j];
-				double    xgradient        = (double) current_gradient.get(0);
-				double    ygradient        = (double) current_gradient.get(1);
-				if(!Double.isNaN(xgradient) && !Double.isNaN(ygradient))
-				{
-				    double xx     = xgradient * xgradient;
-				    double xy     = xgradient * ygradient;
-				    double yy     = ygradient * ygradient;
-				    double delta  = source1[i][j] - estimate[i][j];
-				    double xdelta = xgradient * delta;
-				    double ydelta = ygradient * delta;
-
-				    w += xx;
-				    x += xy;
-				    z += yy;
-				    b1 += xdelta;
-				    b2 += ydelta;
-				}
-			}
-		}
+		double[] s = normalEquations(source1, source2);
+		double w = s[0], x = s[1], z = s[2], b1 = s[3], b2 = s[4];
 		double xincrement = (b1 - x * b2 / z) / (w - x * x / z);
 		double yincrement = (b2 - x * b1 / w) / (z - x * x / w);
 
 		if (xincrement == 0. && yincrement == 0.)
-		{
-			dest[0] = 0; dest[1] = 0; dest[2] = 0;
-			return (dest);
-		}
+			return new double[] {0, 0, 0};
 
 		double xincrement_min = Math.abs(xincrement) / 100.;
 		double yincrement_min = Math.abs(yincrement) / 100.;
-
-		double previous_xincrement = xincrement;
-		double previous_yincrement = yincrement;
-		double xtranslation        = xincrement;
-		double ytranslation        = yincrement;
+		double xtranslation   = xincrement;
+		double ytranslation   = yincrement;
 
 		int [][] current_source = contract(source1);
-		estimate       = translate(source2, xtranslation, ytranslation);
-		int current_number_of_estimates = 1;
+		int [][] estimate       = translate(source2, xtranslation, ytranslation);
 		int maximum_number_of_estimates = 10;
 
-		while (current_number_of_estimates < maximum_number_of_estimates)
+		for (int current_number_of_estimates = 1; current_number_of_estimates < maximum_number_of_estimates; current_number_of_estimates++)
 		{
-			w = 0; x = 0; z = 0; b1 = 0; b2 = 0;
-            gradient = getGradient(estimate);
-			int _ydim = estimate.length;
-			int _xdim = estimate[0].length;
+			s  = normalEquations(current_source, estimate);
+			w  = s[0]; x = s[1]; z = s[2]; b1 = s[3]; b2 = s[4];
+			double previous_xincrement = xincrement;
+			double previous_yincrement = yincrement;
+			xincrement    = (b1 - x * b2 / z) / (w - x * x / z);
+			yincrement    = (b2 - x * b1 / w) / (z - x * x / w);
+			xtranslation += xincrement;
+			ytranslation += yincrement;
 
-			for (int i = 1; i < _ydim - 1; i++)
-			{
-				for (int j = 1; j < _xdim - 1; j++)
-				{
-					ArrayList current_gradient = gradient[i][j];
-					double    xgradient = (double) current_gradient.get(0);
-					double    ygradient = (double) current_gradient.get(1);
-					if(!Double.isNaN(xgradient) && !Double.isNaN(ygradient))
-					{
-					    double xx = xgradient * xgradient;
-					    double xy = xgradient * ygradient;
-					    double yy = ygradient * ygradient;
-					    double delta = current_source[i][j] - estimate[i][j];
-					    double xdelta = xgradient * delta;
-					    double ydelta = ygradient * delta;
-					    w += xx; x += xy; z += yy; b1 += xdelta; b2 += ydelta;
-					}
-				}
-			}
-
-			xincrement          = (b1 - x * b2 / z) / (w - x * x / z);
-			xtranslation       += xincrement;
-		    previous_xincrement = xincrement;
-			yincrement          = (b2 - x * b1 / w) / (z - x * x / w);
-			ytranslation       += yincrement;
-			previous_yincrement = yincrement;
-
-			if(Math.abs(xincrement) < xincrement_min || Math.abs(yincrement) < yincrement_min)
-			{
-				dest[0] = 1; dest[1] = xtranslation; dest[2] = ytranslation;
-				return dest;
-			}
-			else if((xincrement < 0 && previous_xincrement > 0) || (xincrement > 0 && previous_xincrement < 0)
-			|| (yincrement < 0 && previous_yincrement > 0) || (yincrement > 0 && previous_yincrement < 0))
-			{
-				dest[0] = 2; dest[1] = xtranslation; dest[2] = ytranslation;
-				return (dest);
-			}
-			else if(xtranslation >= 1. || ytranslation >= 1.)
-		    {
-		    	dest[0] = 4; dest[1] = xtranslation; dest[2] = ytranslation;
-				return (dest);
-		    }
-			else
-			{
-				estimate = translate(source2, xtranslation, ytranslation);
-				current_number_of_estimates++;
-			}
+			if (Math.abs(xincrement) < xincrement_min || Math.abs(yincrement) < yincrement_min)
+				return new double[] {1, xtranslation, ytranslation};
+			else if ((xincrement < 0 && previous_xincrement > 0) || (xincrement > 0 && previous_xincrement < 0)
+			      || (yincrement < 0 && previous_yincrement > 0) || (yincrement > 0 && previous_yincrement < 0))
+				return new double[] {2, xtranslation, ytranslation};
+			else if (Math.abs(xtranslation) >= 1. || Math.abs(ytranslation) >= 1.)
+				return new double[] {4, xtranslation, ytranslation};
+			estimate = translate(source2, xtranslation, ytranslation);
 		}
-		dest[0] = 3; dest[1] = xtranslation; dest[2] = ytranslation;
-		return dest;
+		return new double[] {3, xtranslation, ytranslation};
 	}
 
+	/**
+	 * The sums for the least-squares translation step, over the interior
+	 * pixels of estimate where both gradients are defined.
+	 *
+	 * @param source   the reference image
+	 * @param estimate the current estimate, the same size
+	 * @return {sum xx, sum xy, sum yy, sum x delta, sum y delta}, the
+	 *         gradients being estimate's and delta = source - estimate
+	 */
+	private static double[] normalEquations(int[][] source, int[][] estimate)
+	{
+		int ydim = estimate.length;
+		int xdim = estimate[0].length;
+		ArrayList[][] gradient = getGradient(estimate);
+		double w = 0, x = 0, z = 0, b1 = 0, b2 = 0;
+		for (int i = 1; i < ydim - 1; i++)
+		{
+			for (int j = 1; j < xdim - 1; j++)
+			{
+				double xgradient = (double) gradient[i][j].get(0);
+				double ygradient = (double) gradient[i][j].get(1);
+				if (!Double.isNaN(xgradient) && !Double.isNaN(ygradient))
+				{
+					double delta = source[i][j] - estimate[i][j];
+					w  += xgradient * xgradient;
+					x  += xgradient * ygradient;
+					z  += ygradient * ygradient;
+					b1 += xgradient * delta;
+					b2 += ygradient * delta;
+				}
+			}
+		}
+		return new double[] {w, x, z, b1, b2};
+	}
+
+	// ======================================================================
+	// Widening and shrinking
+	// ======================================================================
+
+	/**
+	 * Widens an image by inserting expand values between each pair of
+	 * horizontal neighbours, evenly spaced between them and rounded.
+	 *
+	 * @param src    the image
+	 * @param expand the values to insert between neighbours
+	 * @return the (xdim - 1) * (expand + 1) + 1 wide image
+	 */
 	public static int[][] expandX(int src[][], int expand)
 	{
 		int ydim = src.length;
@@ -2338,25 +1789,51 @@ public class ImageMapper {
 		for(int i = 0; i < ydim; i++)
 		{
 			int k = 0;
-			int end_value = 0;
 			for(int j = 0; j < xdim - 1; j++)
 			{
-				int start_value  = src[i][j];
-				end_value        = src[i][j + 1];
-				dst[i][k++]      = start_value;
-				double delta     = start_value - end_value;
-				double increment = delta / (expand + 1);
-				for(int m = 0; m < expand; m++)
-				{
-					start_value += increment;
-					dst[i][k++]  = start_value;
-				}
+				int start_value = src[i][j];
+				int end_value   = src[i][j + 1];
+				dst[i][k++]     = start_value;
+				for(int m = 1; m <= expand; m++)
+					dst[i][k++] = (int) Math.round(start_value + (double) (end_value - start_value) * m / (expand + 1));
 			}
-			dst[i][k] = end_value;
+			dst[i][k] = src[i][xdim - 1];
 		}
 		return(dst);
 	}
 
+	/**
+	 * Widens an image to 2 xdim - 1 by inserting the midpoint between each
+	 * pair of horizontal neighbours.
+	 *
+	 * @param src the image
+	 * @return the widened image
+	 */
+	public static double[][] expandX(double src[][])
+	{
+		int ydim = src.length;
+		int xdim = src[0].length;
+		double [][] dst = new double[ydim][2 * xdim - 1];
+		for(int i = 0; i < ydim; i++)
+		{
+			int k = 0;
+			for(int j = 0; j < xdim - 1; j++)
+			{
+				dst[i][k++] = src[i][j];
+				dst[i][k++] = (src[i][j] + src[i][j + 1]) / 2;
+			}
+			dst[i][k] = src[i][xdim - 1];
+		}
+		return(dst);
+	}
+
+	/**
+	 * {@link #expandX(double[][])} applied repeatedly.
+	 *
+	 * @param src        the image
+	 * @param iterations the number of times
+	 * @return the widened image, or src itself if iterations &lt;= 0
+	 */
 	public static double[][] expandX(double src[][], int iterations)
 	{
 		double[][] current_src = src;
@@ -2369,38 +1846,13 @@ public class ImageMapper {
 		return result;
 	}
 
-	public static double[][] expandX(double src[][])
-	{
-		int ydim = src.length;
-		int xdim = src[0].length;
-		int _xdim = 2 * xdim - 1;
-		double [][] dst = new double[ydim][_xdim];
-		double diagonal_weight  = 0.7071;
-		for(int i = 0; i < ydim; i++)
-		{
-			int k = 0;
-			for(int j = 0; j < xdim - 1; j++)
-			{
-				dst[i][k++]  = src[i][j];
-				double value = 0;
-				double weight = 0;
-				if(i == 0)
-				{
-					dst[i][k++] = (src[i][j] + src[i][j + 1]) / 2;
-				}
-				else if(i == ydim - 1)
-				{
-					dst[i][k++] = (src[i][j] + src[i][j + 1]) / 2;
-				}
-				else
-				{
-					dst[i][k++] = (src[i][j] + src[i][j + 1]) / 2;
-				}
-			}
-			dst[i][k] = src[i][xdim - 1];
-		}
-		return(dst);
-	}
+	/**
+	 * Halves an image: each 2 x 2 square becomes its (unrounded) average. An
+	 * odd last row or column is dropped.
+	 *
+	 * @param src the image
+	 * @return the averages
+	 */
 	public static double[][] shrinkAvg(double src[][])
 	{
 		int ydim = src.length;
