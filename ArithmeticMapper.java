@@ -23,9 +23,9 @@ import java.math.*;
  * It also has helpers the writers and readers share: splitting data into
  * blocks, and storing frequency tables.
  * <p>
- * The order-table coders ({@code getAscendingTable}, {@code getRandomOrderTable},
- * the order-table overloads of {@code getIntervalValue}/{@code getArithmeticValues},
- * etc.) live in {@code SteeredArithmeticMapper}.
+ * Order tables and the exact coders that use them (the order-table
+ * overloads of {@code getIntervalValue}/{@code getArithmeticValues}) live in
+ * {@link ProbabilisticMapper}.
  * <p>
  * Version 4.0.
  */
