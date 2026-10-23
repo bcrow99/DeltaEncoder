@@ -32,7 +32,7 @@ public class Comparison
 
 	public static void main(String[] args) throws Exception
 	{
-		BufferedImage image = ImageIO.read(new File(args[0]));
+		BufferedImage image = ViewerSupport.readImage(args[0]);
 		int scale   = (args.length > 1) ? Integer.parseInt(args[1]) : 1;
 		int display = (args.length > 2) ? Integer.parseInt(args[2]) : 1024;
 		Img orig = Img.from(image, scale);
