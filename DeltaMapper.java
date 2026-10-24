@@ -2936,11 +2936,11 @@ public class DeltaMapper
 		 */
 		final int[][]   sum, count;    // [s][context]
 		/**
-		 * The least-squares primitive at each pixel, and its predictor; null unless it is needed.
+		 * The least-squares primitive at each pixel; null unless it is needed.
 		 */
-		final short[]   ls;
+		short[]         ls;
 		/**
-		 * The least-squares predictor (see ls).
+		 * The decoder's least-squares predictor (see ls); the encoder computes ls up front.
 		 */
 		final LeastSquares lsq;
 		/**
@@ -2960,8 +2960,9 @@ public class DeltaMapper
 		 */
 		public PixelSource(int[] v, int[] ref, int xdim, int ydim, PredictorTable table)
 		{
-			this(v, ref, xdim, table, table.primitives > LS_FIRST);
-			if(corr != null || lsq != null)
+			this(v, ref, xdim, table, false);
+			ls = (table.primitives > LS_FIRST) ? leastSquaresPlane(v, ref, xdim, ydim) : null;
+			if(corr != null)
 				for(int y = 1; y < ydim; y++)
 					for(int x = 1; x < xdim - 1; x++) { prepare(y * xdim + x); commit(y * xdim + x); }
 		}
@@ -2993,9 +2994,18 @@ public class DeltaMapper
 		 *
 		 * @param k an interior pixel, in raster order
 		 */
-		void prepare(int k)
+		void prepare(int k) { prepare(k, true); }
+
+		/**
+		 * As {@link #prepare(int)}; the decoder fits the least-squares primitive
+		 * only where it is used.
+		 *
+		 * @param k  an interior pixel, in raster order
+		 * @param ls whether the pixel's predictor uses the least-squares primitive
+		 */
+		void prepare(int k, boolean ls)
 		{
-			if(lsq != null) ls[k] = (short) lsq.next(k);
+			if(lsq != null) this.ls[k] = (short) lsq.next(k, ls);
 			if(corr == null) return;
 			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
 			int t = (gradientLevel(d - b) + 4) * 81 + (gradientLevel(b - c) + 4) * 9 + gradientLevel(c - a) + 4;
@@ -3149,20 +3159,62 @@ public class DeltaMapper
 	}
 
 	/**
+	 * Recently computed least-squares planes, oldest first: {xdim, a copy of the
+	 * channel, a copy of the previous channel, the plane}.
+	 */
+	private static final java.util.LinkedList<Object[]> LS_CACHE = new java.util.LinkedList<Object[]>();
+
+	/**
+	 * How many planes LS_CACHE keeps: a channel set's three.
+	 */
+	private static final int LS_CACHE_SIZE = 3;
+
+	/**
+	 * The encoder's least-squares primitive for a channel ({@link LeastSquares#plane}),
+	 * reused if the same channel (and previous channel) was just done: the
+	 * analysis and Apply make several PixelSources for each channel.
+	 *
+	 * @param v    the channel
+	 * @param ref  the previous channel, or null for the first
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @return the primitive at each interior pixel
+	 */
+	static short[] leastSquaresPlane(int[] v, int[] ref, int xdim, int ydim)
+	{
+		synchronized(LS_CACHE)
+		{
+			for(Object[] e : LS_CACHE)
+				if((Integer) e[0] == xdim && Arrays.equals((int[]) e[1], v) && Arrays.equals((int[]) e[2], ref)) return (short[]) e[3];
+		}
+		short[] plane = LeastSquares.plane(v, ref, xdim, ydim);
+		synchronized(LS_CACHE)
+		{
+			LS_CACHE.addLast(new Object[] {xdim, v.clone(), (ref == null) ? null : ref.clone(), plane});
+			while(LS_CACHE.size() > LS_CACHE_SIZE) LS_CACHE.removeFirst();
+		}
+		return plane;
+	}
+
+	/**
 	 * The least-squares primitive (LS_FIRST): at each pixel, the linear
 	 * predictor (with a constant term) that best fits the pixels in a causal
 	 * window -- the LS_RADIUS rows above, LS_RADIUS columns either side, and
 	 * the LS_RADIUS pixels to the left -- from 8 neighbours (a, b, c, d, two
 	 * to the left, two up, two to the right one up, one to the right two up)
 	 * and, after the first channel, the previous channel at the pixel, to its
-	 * left and above. The window's sums are exact integers, kept as it slides;
-	 * the fit (ridge 1, Gaussian elimination with partial pivoting) is done in
-	 * a fixed order, so the decoder and the Python version get the same
-	 * values. The prediction is clamped to 2 beyond the range of a, b, c, d
-	 * and rounded; a until the window has twice as many pixels as unknowns.
+	 * left and above. The window's sums are exact integers, kept as it slides
+	 * (each pixel's products are computed once, and kept for the LS_RADIUS + 1
+	 * rows that use them); the fit (ridge 1, solved by L D L^T) is done in a
+	 * fixed order, so the decoder and the Python version get the same values.
+	 * The prediction is clamped to 2 beyond the range of a, b, c, d and
+	 * rounded; a until the window has twice as many pixels as unknowns (or if
+	 * the fit fails).
 	 * <p>
 	 * next(k) must be called for every interior pixel in raster order, once
-	 * the pixels before k are known.
+	 * the pixels before k are known, from row 1 or from a row given to start.
+	 * Because the sums are exact, the encoder can compute bands of rows
+	 * independently (see plane) and get the decoder's values.
 	 */
 	static final class LeastSquares
 	{
@@ -3181,6 +3233,11 @@ public class DeltaMapper
 		 */
 		final long[] col, win, cur;
 		/**
+		 * The products of each pixel of the last LS_RADIUS + 1 rows, by row modulo
+		 * LS_RADIUS + 1 (a product is at most about 520 * 520).
+		 */
+		final int[]  ring;
+		/**
 		 * The augmented vector of the pixel being added.
 		 */
 		final long[] z;
@@ -3189,9 +3246,9 @@ public class DeltaMapper
 		 */
 		final double[][] a;
 		/**
-		 * Their right-hand side, and the solution.
+		 * Their right-hand side, the solution, and D of L D L^T.
 		 */
-		final double[]   b, coef;
+		final double[]   b, coef, dg;
 		/**
 		 * The row of the last pixel.
 		 */
@@ -3207,17 +3264,72 @@ public class DeltaMapper
 		LeastSquares(int[] v, int[] ref, int xdim)
 		{
 			this.v = v; this.ref = ref; this.xdim = xdim;
-			nf  = (ref == null) ? 8 : 11;
-			m   = nf + 2;
-			nt  = m * (m + 1) / 2;
-			col = new long[xdim * nt];
-			win = new long[nt];
-			cur = new long[nt];
-			z   = new long[m];
-			a   = new double[nf + 1][nf + 1];
-			b   = new double[nf + 1];
+			nf   = (ref == null) ? 8 : 11;
+			m    = nf + 2;
+			nt   = m * (m + 1) / 2;
+			col  = new long[xdim * nt];
+			win  = new long[nt];
+			cur  = new long[nt];
+			ring = new int[(LS_RADIUS + 1) * xdim * nt];
+			z    = new long[m];
+			a    = new double[nf + 1][nf + 1];
+			b    = new double[nf + 1];
 			coef = new double[nf + 1];
+			dg   = new double[nf + 1];
 		}
+
+		/**
+		 * The encoder's least-squares primitive for a whole channel, in bands of
+		 * rows computed in parallel.
+		 *
+		 * @param v    the channel
+		 * @param ref  the previous channel, or null for the first
+		 * @param xdim the width
+		 * @param ydim the height
+		 * @return the primitive at each interior pixel (0 elsewhere)
+		 */
+		static short[] plane(int[] v, int[] ref, int xdim, int ydim)
+		{
+			short[] out = new short[v.length];
+			int threads = Runtime.getRuntime().availableProcessors();
+			int band = Math.max(4 * (LS_RADIUS + 1), (ydim - 1 + threads - 1) / threads);
+			int bands = (ydim - 1 + band - 1) / band;
+			java.util.stream.IntStream.range(0, bands).parallel().forEach(t ->
+			{
+				int y0 = 1 + t * band, y1 = Math.min(ydim, y0 + band);
+				LeastSquares ls = new LeastSquares(v, ref, xdim);
+				ls.start(y0);
+				for(int y = y0; y < y1; y++)
+					for(int x = 1; x < xdim - 1; x++) out[y * xdim + x] = (short) ls.next(y * xdim + x);
+			});
+			return out;
+		}
+
+		/**
+		 * Sets up the window as if the rows before y0 had been gone through.
+		 *
+		 * @param y0 the first row next will be called for
+		 */
+		void start(int y0)
+		{
+			int r = LS_RADIUS;
+			for(int ty = Math.max(1, y0 - 1 - r); ty <= y0 - 1; ty++)
+				for(int tx = 1; tx < xdim - 1; tx++)
+				{
+					products(ty, tx);
+					if(ty <= y0 - 2) for(int t = 0, c = tx * nt, s = slot(ty, tx); t < nt; t++) col[c + t] += ring[s + t];
+				}
+			row = y0 - 1;
+		}
+
+		/**
+		 * Where pixel (y, x)'s products are kept in ring.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 * @return the offset
+		 */
+		private int slot(int y, int x) { return ((y % (LS_RADIUS + 1)) * xdim + x) * nt; }
 
 		/**
 		 * The value at (y, x), clamped to the image.
@@ -3253,22 +3365,19 @@ public class DeltaMapper
 		}
 
 		/**
-		 * Adds (sign 1) or removes (sign -1) pixel (y, x)'s products to sum[off..off+nt).
+		 * Computes pixel (y, x)'s products into its slot in ring.
 		 *
-		 * @param sum  the sums
-		 * @param off  where they start
-		 * @param y    the row
-		 * @param x    the column
-		 * @param sign 1 or -1
+		 * @param y the row
+		 * @param x the column
 		 */
-		private void add(long[] sum, int off, int y, int x, int sign)
+		private void products(int y, int x)
 		{
 			features(y, x);
-			int t = off;
+			int t = slot(y, x);
 			for(int i = 0; i < m; i++)
 			{
-				long zi = sign * z[i];
-				for(int j = i; j < m; j++) sum[t++] += zi * z[j];
+				long zi = z[i];
+				for(int j = i; j < m; j++) ring[t++] = (int) (zi * z[j]);
 			}
 		}
 
@@ -3278,60 +3387,85 @@ public class DeltaMapper
 		 * @param k the pixel
 		 * @return the prediction
 		 */
-		int next(int k)
+		int next(int k) { return next(k, true); }
+
+		/**
+		 * Moves the window to interior pixel k, and fits there if asked: the
+		 * decoder fits only where a block uses the primitive.
+		 *
+		 * @param k   the pixel
+		 * @param fit whether to fit
+		 * @return the prediction (0 without a fit)
+		 */
+		int next(int k, boolean fit)
 		{
 			int y = k / xdim, x = k % xdim, r = LS_RADIUS;
 			if(y != row)
 			{
+				// The window's rows become y - r .. y - 1 (from 1): add row y - 1
+				// (its last pixel's products first), drop row y - 1 - r.
+				if(y - 1 >= 1)
+				{
+					products(y - 1, xdim - 2);
+					for(int tx = 1; tx < xdim - 1; tx++) for(int t = 0, c = tx * nt, s = slot(y - 1, tx); t < nt; t++) col[c + t] += ring[s + t];
+				}
+				if(y - 1 - r >= 1)
+					for(int tx = 1; tx < xdim - 1; tx++) for(int t = 0, c = tx * nt, s = slot(y - 1 - r, tx); t < nt; t++) col[c + t] -= ring[s + t];
 				row = y;
-				// The window's rows: y - r .. y - 1 (from 1).
-				if(y - 1 >= 1) for(int tx = 1; tx < xdim - 1; tx++) add(col, tx * nt, y - 1, tx, 1);
-				if(y - 1 - r >= 1) for(int tx = 1; tx < xdim - 1; tx++) add(col, tx * nt, y - 1 - r, tx, -1);
 				Arrays.fill(win, 0); Arrays.fill(cur, 0);
 				for(int tx = 1; tx <= Math.min(xdim - 2, 1 + r); tx++) for(int t = 0; t < nt; t++) win[t] += col[tx * nt + t];
 			}
 			else
 			{
-				if(x + r <= xdim - 2) for(int t = 0; t < nt; t++) win[t] += col[(x + r) * nt + t];
-				if(x - r - 1 >= 1)    for(int t = 0; t < nt; t++) win[t] -= col[(x - r - 1) * nt + t];
-				add(cur, 0, y, x - 1, 1);
-				if(x - 1 - r >= 1) add(cur, 0, y, x - 1 - r, -1);
+				if(x + r <= xdim - 2) for(int t = 0, c = (x + r) * nt; t < nt; t++) win[t] += col[c + t];
+				if(x - r - 1 >= 1)    for(int t = 0, c = (x - r - 1) * nt; t < nt; t++) win[t] -= col[c + t];
+				products(y, x - 1);
+				for(int t = 0, s = slot(y, x - 1); t < nt; t++) cur[t] += ring[s + t];
+				if(x - 1 - r >= 1) for(int t = 0, s = slot(y, x - 1 - r); t < nt; t++) cur[t] -= ring[s + t];
 			}
+			if(!fit) return 0;
 
 			int n = nf + 1;
 			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
 			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
 			long count = win[nf * m - nf * (nf - 1) / 2] + cur[nf * m - nf * (nf - 1) / 2];
 			if(count < 2 * n) return pa;
+			// The normal equations' lower triangle (ridge 1 on the diagonal), then
+			// L D L^T: L unit lower triangular (in a's lower triangle), D in dg.
 			for(int i = 0; i < n; i++)
 			{
 				int base = i * m - i * (i - 1) / 2;
-				for(int j = i; j < n; j++)
-				{
-					double s = (double) (win[base + j - i] + cur[base + j - i]);
-					a[i][j] = s; a[j][i] = s;
-				}
+				for(int j = i; j < n; j++) a[j][i] = (double) (win[base + j - i] + cur[base + j - i]);
 				b[i] = (double) (win[base + m - 1 - i] + cur[base + m - 1 - i]);
 				a[i][i] += 1.0;
 			}
-			for(int c = 0; c < n; c++)
+			for(int j = 0; j < n; j++)
 			{
-				int piv = c;
-				for(int q = c + 1; q < n; q++) if(Math.abs(a[q][c]) > Math.abs(a[piv][c])) piv = q;
-				if(Math.abs(a[piv][c]) < 1e-9) return pa;
-				if(piv != c) { double[] t = a[c]; a[c] = a[piv]; a[piv] = t; double u = b[c]; b[c] = b[piv]; b[piv] = u; }
-				for(int q = c + 1; q < n; q++)
+				double[] aj = a[j];
+				double s = aj[j];
+				for(int q = 0; q < j; q++) s -= aj[q] * aj[q] * dg[q];
+				if(s < 1e-9) return pa;
+				dg[j] = s;
+				for(int i = j + 1; i < n; i++)
 				{
-					double f = a[q][c] / a[c][c];
-					for(int j = c; j < n; j++) a[q][j] -= f * a[c][j];
-					b[q] -= f * b[c];
+					double[] ai = a[i];
+					double t = ai[j];
+					for(int q = 0; q < j; q++) t -= ai[q] * aj[q] * dg[q];
+					ai[j] = t / s;
 				}
 			}
-			for(int i = n - 1; i >= 0; i--)
+			for(int i = 0; i < n; i++)
 			{
 				double s = b[i];
-				for(int j = i + 1; j < n; j++) s -= a[i][j] * coef[j];
-				coef[i] = s / a[i][i];
+				for(int q = 0; q < i; q++) s -= a[i][q] * coef[q];
+				coef[i] = s;
+			}
+			for(int i = 0; i < n; i++) coef[i] /= dg[i];
+			for(int i = n - 1; i >= 0; i--)
+			{
+				double s = coef[i];
+				for(int q = i + 1; q < n; q++) s -= a[q][i] * coef[q];
+				coef[i] = s;
 			}
 			features(y, x);
 			double p = 0;
@@ -4244,8 +4378,9 @@ public class DeltaMapper
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				k++;
-				ps.prepare(k);
-				dst[k] = delta[k] + ps.predict(table, ids[map[row + (x - 1) / bw_] & 0xFF], k);
+				int id = ids[map[row + (x - 1) / bw_] & 0xFF];
+				ps.prepare(k, table.uses(id, LS_FIRST));
+				dst[k] = delta[k] + ps.predict(table, id, k);
 				ps.commit(k);
 			}
 			k++;
