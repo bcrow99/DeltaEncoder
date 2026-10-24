@@ -10,7 +10,8 @@ import javax.swing.*;
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with Context-coded deltas (DeltaMapper.packContextDeltas) and a
 // coded map. Each block uses one predictor from its channel's set, and a
-// set can be any of the 255 predictors in DeltaMapper.PREDICTOR_TABLE. The
+// set can be any of the 256 predictors in DeltaMapper.PREDICTOR_TABLE (id
+// 255 is the least-squares predictor, LS: see DeltaMapper.LeastSquares). The
 // startup analysis (and Find Best) picks the channel set, then surveys the
 // sets (DeltaMapper.surveyBlockSets: per channel, predictors added in
 // greedy order by estimated coded bits, blocks assigned by the estimate,

@@ -2654,7 +2654,7 @@ public class DeltaMapper
 
 	// ---- Predictor tables -------------------------------------------------------
 	//
-	// A block map's ids index PREDICTOR_TABLE: 255 predictors, each a
+	// A block map's ids index PREDICTOR_TABLE: 256 predictors, each a
 	// primitive or the average of two, (P_i + P_j + 1) >> 1 (see
 	// predictor.txt for each one and how they were chosen). Primitives 0-21
 	// are blockPredictor's on a, b, c, d; the rest are:
@@ -2675,7 +2675,10 @@ public class DeltaMapper
 	//               in the pixel's gradient context (as JPEG-LS corrects
 	//               bias; 729 contexts, counts halved at 64). The mean is of
 	//               every earlier pixel in raster order, whatever predictor
-	//               it was coded with, so the decoder keeps the same counts.
+	//               it was coded with, so the decoder keeps the same counts;
+	//   least       46 LS: a linear predictor fitted by least squares to the
+	//   squares     pixels just above and to the left, refitted at every
+	//               pixel (see LeastSquares). Id 255, alone.
 	//
 	// Beyond a, b, c and d these need the channel's earlier pixels and the
 	// previous channel: see PixelSource.
@@ -2683,27 +2686,34 @@ public class DeltaMapper
 	/**
 	 * Where each group of primitives past 21 starts (see the section comment above).
 	 */
-	public static final int SELECTION_FIRST = 22, CROSS_FIRST = 28, REACH_FIRST = 36, CLAMP_FIRST = 40, BIAS_FIRST = 42, ALL_PRIMITIVES = 46;
+	public static final int SELECTION_FIRST = 22, CROSS_FIRST = 28, REACH_FIRST = 36, CLAMP_FIRST = 40, BIAS_FIRST = 42, LS_FIRST = 46, ALL_PRIMITIVES = 47;
+
+	/**
+	 * The least-squares primitive's window: this many rows above, columns
+	 * either side, and pixels to the left (see LeastSquares).
+	 */
+	public static final int LS_RADIUS = 10;
 
 	/**
 	 * The groups' names.
 	 */
-	public static final String[] GROUP_NAMES = {"selection", "cross-channel", "longer reach", "clamped", "bias-corrected"};
+	public static final String[] GROUP_NAMES = {"selection", "cross-channel", "longer reach", "clamped", "bias-corrected", "least squares"};
 
 	/**
 	 * Where each group starts, and the end of the last.
 	 */
-	public static final int[] GROUP_FIRST = {SELECTION_FIRST, CROSS_FIRST, REACH_FIRST, CLAMP_FIRST, BIAS_FIRST, ALL_PRIMITIVES};
+	public static final int[] GROUP_FIRST = {SELECTION_FIRST, CROSS_FIRST, REACH_FIRST, CLAMP_FIRST, BIAS_FIRST, LS_FIRST, ALL_PRIMITIVES};
 
 	/**
-	 * Names of primitives 22-45.
+	 * Names of primitives 22-46.
 	 */
 	public static final String[] EXTRA_PRIMITIVE_NAMES = {
 		"Paeth", "median(a,b,c)", "median(a,b,d)", "median(a,d,a+d-b)", "switch(a,b)", "switch(a,b,d)",
 		"a+(R-Ra)", "b+(R-Rb)", "d+(R-Rd)", "MED+(R-MED_R)", "(a+b)/2+(R-..)", "a+b-c+(R-..)", "MED+(R-MED_R)/2", "(a+b)/2+(R-..)/2",
 		"2a-aa", "2b-bb", "GAP", "GAP/8",
 		"clamp(a+b-c)", "clamp(a+d-b)",
-		"MED+bias", "(a+b)/2+bias", "a+bias", "b+bias"};
+		"MED+bias", "(a+b)/2+bias", "a+bias", "b+bias",
+		"LS"};
 
 	/**
 	 * The cross-channel primitives' base predictors (the last two with half the error).
@@ -2850,9 +2860,9 @@ public class DeltaMapper
 	}
 
 	/**
-	 * PREDICTOR_TABLE, as pairs of primitives, 255 of them (ids are one byte),
-	 * chosen by measurement on 7 test images at Colour Resolution 0 and 3 (see
-	 * predictor.txt):
+	 * PREDICTOR_TABLE, as pairs of primitives, 256 of them (ids are one byte).
+	 * Ids 0-254 were chosen by measurement on 7 test images at Colour
+	 * Resolution 0 and 3 (see predictor.txt); id 255 is LS, alone:
 	 * <ul>
 	 * <li>31 primitives. Of the 44 tried, 13 were dropped together because
 	 *     removing them (alone and in averages) cost under 0.03%: 10 a+b-c,
@@ -2860,7 +2870,8 @@ public class DeltaMapper
 	 *     the switches, 33 a+b-c+(R-..), 38 GAP, 41 clamp(a+d-b), 43
 	 *     (a+b)/2+bias and 44 a+bias (15 and 21 were already out);</li>
 	 * <li>224 averages of two of them: the most used (share of blocks) of all 465
-	 *     in a survey over every pair, 97% of their use.</li>
+	 *     in a survey over every pair, 97% of their use;</li>
+	 * <li>255: the least-squares primitive (46), added later.</li>
 	 * </ul>
 	 */
 	static final int[] PREDICTOR_PAIRS = {
@@ -2885,7 +2896,7 @@ public class DeltaMapper
 		39,37, 40,0, 40,1, 40,3, 40,7, 40,11, 40,16, 40,19, 40,25, 40,34, 40,36, 40,37,
 		40,39, 42,0, 42,1, 42,3, 42,4, 42,6, 42,7, 42,16, 42,18, 42,23, 42,29, 42,34,
 		42,35, 42,36, 42,37, 42,39, 42,40, 45,0, 45,3, 45,4, 45,5, 45,6, 45,7, 45,16,
-		45,23, 45,34, 45,39 };
+		45,23, 45,34, 45,39, 46,46 };
 
 	/**
 	 * The predictor table block maps use.
@@ -2893,9 +2904,9 @@ public class DeltaMapper
 	public static final PredictorTable PREDICTOR_TABLE = pairTable("predictors", PREDICTOR_PAIRS);
 
 	/**
-	 * Its size, 255.
+	 * Its size, 256.
 	 */
-	public static final int PREDICTORS = PREDICTOR_TABLE.size();   // 255
+	public static final int PREDICTORS = PREDICTOR_TABLE.size();   // 256
 
 	/**
 	 * The values a table's primitives are computed from at pixel k: the channel
@@ -2925,6 +2936,14 @@ public class DeltaMapper
 		 */
 		final int[][]   sum, count;    // [s][context]
 		/**
+		 * The least-squares primitive at each pixel, and its predictor; null unless it is needed.
+		 */
+		final short[]   ls;
+		/**
+		 * The least-squares predictor (see ls).
+		 */
+		final LeastSquares lsq;
+		/**
 		 * The bias context of the pixel between prepare and commit.
 		 */
 		int             context;       // the bias context of the pixel between prepare and commit
@@ -2941,8 +2960,8 @@ public class DeltaMapper
 		 */
 		public PixelSource(int[] v, int[] ref, int xdim, int ydim, PredictorTable table)
 		{
-			this(v, ref, xdim, table, true);
-			if(corr != null)
+			this(v, ref, xdim, table, table.primitives > LS_FIRST);
+			if(corr != null || lsq != null)
 				for(int y = 1; y < ydim; y++)
 					for(int x = 1; x < xdim - 1; x++) { prepare(y * xdim + x); commit(y * xdim + x); }
 		}
@@ -2951,15 +2970,17 @@ public class DeltaMapper
 		 * For the decoder: v fills in as it decodes (call prepare and commit for each
 		 * pixel).
 		 *
-		 * @param v      the output channel, filled in as it decodes
-		 * @param ref    the previous channel, or null for the first
-		 * @param xdim   the width
-		 * @param table  the predictor table
-		 * @param unused tells this constructor from the encoder's
+		 * @param v             the output channel, filled in as it decodes
+		 * @param ref           the previous channel, or null for the first
+		 * @param xdim          the width
+		 * @param table         the predictor table
+		 * @param least_squares whether to compute the least-squares primitive
 		 */
-		PixelSource(int[] v, int[] ref, int xdim, PredictorTable table, boolean unused)
+		PixelSource(int[] v, int[] ref, int xdim, PredictorTable table, boolean least_squares)
 		{
 			this.v = v; this.ref = ref; this.xdim = xdim;
+			ls  = least_squares ? new short[v.length] : null;
+			lsq = least_squares ? new LeastSquares(v, ref, xdim) : null;
 			boolean bias = table.primitives > BIAS_FIRST;
 			corr    = bias ? new short[BIAS_BASE.length][v.length] : null;
 			sum     = bias ? new int[BIAS_BASE.length][729] : null;
@@ -2967,12 +2988,14 @@ public class DeltaMapper
 		}
 
 		/**
-		 * Computes pixel k's bias context and corrections (before its prediction).
+		 * Computes pixel k's bias context and corrections, and the least-squares
+		 * primitive (before its prediction).
 		 *
 		 * @param k an interior pixel, in raster order
 		 */
 		void prepare(int k)
 		{
+			if(lsq != null) ls[k] = (short) lsq.next(k);
 			if(corr == null) return;
 			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
 			int t = (gradientLevel(d - b) + 4) * 81 + (gradientLevel(b - c) + 4) * 9 + gradientLevel(c - a) + 4;
@@ -3035,6 +3058,7 @@ public class DeltaMapper
 				int p = (q == CLAMP_FIRST) ? a + b - c : a + d - b;
 				return Math.max(lo, Math.min(hi, p));
 			}
+			if(q >= LS_FIRST) return ls[k];
 			int s = q - BIAS_FIRST;
 			return blockPredictor(BIAS_BASE[s], a, b, c, d) + corr[s][k];
 		}
@@ -3122,6 +3146,201 @@ public class DeltaMapper
 		else if(dh - dv > t2) p = (p + n) >> 1;
 		else if(dh - dv > t3) p = (3 * p + n) >> 2;
 		return p;
+	}
+
+	/**
+	 * The least-squares primitive (LS_FIRST): at each pixel, the linear
+	 * predictor (with a constant term) that best fits the pixels in a causal
+	 * window -- the LS_RADIUS rows above, LS_RADIUS columns either side, and
+	 * the LS_RADIUS pixels to the left -- from 8 neighbours (a, b, c, d, two
+	 * to the left, two up, two to the right one up, one to the right two up)
+	 * and, after the first channel, the previous channel at the pixel, to its
+	 * left and above. The window's sums are exact integers, kept as it slides;
+	 * the fit (ridge 1, Gaussian elimination with partial pivoting) is done in
+	 * a fixed order, so the decoder and the Python version get the same
+	 * values. The prediction is clamped to 2 beyond the range of a, b, c, d
+	 * and rounded; a until the window has twice as many pixels as unknowns.
+	 * <p>
+	 * next(k) must be called for every interior pixel in raster order, once
+	 * the pixels before k are known.
+	 */
+	static final class LeastSquares
+	{
+		/**
+		 * The channel (filled in as it decodes), and the previous channel (null for the first).
+		 */
+		final int[]  v, ref;
+		/**
+		 * The width, the number of features, their augmented length (features, 1,
+		 * value) and the number of products of the augmented vector.
+		 */
+		final int    xdim, nf, m, nt;
+		/**
+		 * Per column, the window rows' sums of products; the window's sums; their
+		 * current-row part.
+		 */
+		final long[] col, win, cur;
+		/**
+		 * The augmented vector of the pixel being added.
+		 */
+		final long[] z;
+		/**
+		 * The normal equations' matrix.
+		 */
+		final double[][] a;
+		/**
+		 * Their right-hand side, and the solution.
+		 */
+		final double[]   b, coef;
+		/**
+		 * The row of the last pixel.
+		 */
+		int row = -1;
+
+		/**
+		 * The predictor for a channel.
+		 *
+		 * @param v    the channel
+		 * @param ref  the previous channel, or null for the first
+		 * @param xdim the width
+		 */
+		LeastSquares(int[] v, int[] ref, int xdim)
+		{
+			this.v = v; this.ref = ref; this.xdim = xdim;
+			nf  = (ref == null) ? 8 : 11;
+			m   = nf + 2;
+			nt  = m * (m + 1) / 2;
+			col = new long[xdim * nt];
+			win = new long[nt];
+			cur = new long[nt];
+			z   = new long[m];
+			a   = new double[nf + 1][nf + 1];
+			b   = new double[nf + 1];
+			coef = new double[nf + 1];
+		}
+
+		/**
+		 * The value at (y, x), clamped to the image.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 * @return the value
+		 */
+		private int at(int y, int x)
+		{
+			if(y < 0) y = 0;
+			if(x < 0) x = 0; else if(x > xdim - 1) x = xdim - 1;
+			return v[y * xdim + x];
+		}
+
+		/**
+		 * Sets z to the features of pixel (y, x), 1, and its value.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 */
+		private void features(int y, int x)
+		{
+			z[0] = at(y, x - 1); z[1] = at(y - 1, x); z[2] = at(y - 1, x - 1); z[3] = at(y - 1, x + 1);
+			z[4] = at(y, x - 2); z[5] = at(y - 2, x); z[6] = at(y - 1, x + 2); z[7] = at(y - 2, x + 1);
+			if(ref != null)
+			{
+				int k = y * xdim + x;
+				z[8] = ref[k]; z[9] = ref[k - 1]; z[10] = ref[k - xdim];
+			}
+			z[nf] = 1;
+			z[nf + 1] = v[y * xdim + x];
+		}
+
+		/**
+		 * Adds (sign 1) or removes (sign -1) pixel (y, x)'s products to sum[off..off+nt).
+		 *
+		 * @param sum  the sums
+		 * @param off  where they start
+		 * @param y    the row
+		 * @param x    the column
+		 * @param sign 1 or -1
+		 */
+		private void add(long[] sum, int off, int y, int x, int sign)
+		{
+			features(y, x);
+			int t = off;
+			for(int i = 0; i < m; i++)
+			{
+				long zi = sign * z[i];
+				for(int j = i; j < m; j++) sum[t++] += zi * z[j];
+			}
+		}
+
+		/**
+		 * The primitive at interior pixel k.
+		 *
+		 * @param k the pixel
+		 * @return the prediction
+		 */
+		int next(int k)
+		{
+			int y = k / xdim, x = k % xdim, r = LS_RADIUS;
+			if(y != row)
+			{
+				row = y;
+				// The window's rows: y - r .. y - 1 (from 1).
+				if(y - 1 >= 1) for(int tx = 1; tx < xdim - 1; tx++) add(col, tx * nt, y - 1, tx, 1);
+				if(y - 1 - r >= 1) for(int tx = 1; tx < xdim - 1; tx++) add(col, tx * nt, y - 1 - r, tx, -1);
+				Arrays.fill(win, 0); Arrays.fill(cur, 0);
+				for(int tx = 1; tx <= Math.min(xdim - 2, 1 + r); tx++) for(int t = 0; t < nt; t++) win[t] += col[tx * nt + t];
+			}
+			else
+			{
+				if(x + r <= xdim - 2) for(int t = 0; t < nt; t++) win[t] += col[(x + r) * nt + t];
+				if(x - r - 1 >= 1)    for(int t = 0; t < nt; t++) win[t] -= col[(x - r - 1) * nt + t];
+				add(cur, 0, y, x - 1, 1);
+				if(x - 1 - r >= 1) add(cur, 0, y, x - 1 - r, -1);
+			}
+
+			int n = nf + 1;
+			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
+			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
+			long count = win[nf * m - nf * (nf - 1) / 2] + cur[nf * m - nf * (nf - 1) / 2];
+			if(count < 2 * n) return pa;
+			for(int i = 0; i < n; i++)
+			{
+				int base = i * m - i * (i - 1) / 2;
+				for(int j = i; j < n; j++)
+				{
+					double s = (double) (win[base + j - i] + cur[base + j - i]);
+					a[i][j] = s; a[j][i] = s;
+				}
+				b[i] = (double) (win[base + m - 1 - i] + cur[base + m - 1 - i]);
+				a[i][i] += 1.0;
+			}
+			for(int c = 0; c < n; c++)
+			{
+				int piv = c;
+				for(int q = c + 1; q < n; q++) if(Math.abs(a[q][c]) > Math.abs(a[piv][c])) piv = q;
+				if(Math.abs(a[piv][c]) < 1e-9) return pa;
+				if(piv != c) { double[] t = a[c]; a[c] = a[piv]; a[piv] = t; double u = b[c]; b[c] = b[piv]; b[piv] = u; }
+				for(int q = c + 1; q < n; q++)
+				{
+					double f = a[q][c] / a[c][c];
+					for(int j = c; j < n; j++) a[q][j] -= f * a[c][j];
+					b[q] -= f * b[c];
+				}
+			}
+			for(int i = n - 1; i >= 0; i--)
+			{
+				double s = b[i];
+				for(int j = i + 1; j < n; j++) s -= a[i][j] * coef[j];
+				coef[i] = s / a[i][i];
+			}
+			features(y, x);
+			double p = 0;
+			for(int i = 0; i < n; i++) p += coef[i] * z[i];
+			int lo = Math.min(Math.min(pa, pb), Math.min(pc, pd)), hi = Math.max(Math.max(pa, pb), Math.max(pc, pd));
+			if(p < lo - 2) p = lo - 2;
+			if(p > hi + 2) p = hi + 2;
+			return (int) Math.floor(p + 0.5);
+		}
 	}
 
 	// ---- Surveying predictor sets ----------------------------------------------
@@ -4012,7 +4231,9 @@ public class DeltaMapper
 		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 		int[] ids   = getMapIds(map);
 		int[] dst   = new int[xdim * ydim];
-		PixelSource ps = new PixelSource(dst, ref, xdim, table, false);
+		boolean least_squares = false;
+		for(int id : ids) least_squares |= table.uses(id, LS_FIRST);
+		PixelSource ps = new PixelSource(dst, ref, xdim, table, least_squares);
 		dst[0] = init_value;
 		for(int x = 1; x < xdim; x++) dst[x] = dst[x - 1] + delta[x];
 		for(int y = 1; y < ydim; y++)
