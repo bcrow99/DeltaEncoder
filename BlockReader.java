@@ -4,19 +4,32 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockReader version 2.0
+// BlockReader version 2.1 (reads Block format 4, mixed context coding)
 //
 // Reads BlockWriter's files: block map deltas (delta type 13), Context
-// coded. See BlockWriter.SaveHandler.save for the layout.
+// coded (format version 3) or mixed-context coded (version 4). See
+// BlockWriter.SaveHandler.save for the layout.
 public class BlockReader
 {
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; older files are not read
+	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding
+	/**
+	 * The oldest format version read (the block predictors changed in version 3).
+	 */
+	static final int  OLDEST_VERSION = 3;
 
 	int xdim, ydim, pixel_shift, pixel_quant, set_id;
 	int[]    min   = new int[3], init = new int[3];
 	byte[][] map   = new byte[3][];
 	int[][]  delta = new int[3][];
+	/**
+	 * The file's format version.
+	 */
+	int      version;
+	/**
+	 * Version 4: each channel's deltas as read, decoded as the channel is rebuilt.
+	 */
+	DeltaMapper.MixedDeltas[] mixed = new DeltaMapper.MixedDeltas[3];
 
 	BufferedImage decoded_image = null;
 	ViewerSupport view;
@@ -54,7 +67,14 @@ public class BlockReader
 			// In order: each channel's predictors may use the one before it.
 			for(int i = 0; i < 3; i++)
 			{
-				channel[i] = DeltaMapper.getValuesFromDeltas(delta[i], size[0], size[1], init[i], 13, map[i], 0, (i > 0) ? channel[i - 1] : null);
+				int[] ref = (i > 0) ? channel[i - 1] : null;
+				if(version >= 4)
+				{
+					int[][] r = DeltaMapper.getValuesFromMixedDeltas(mixed[i], Arrays.copyOf(delta, i), size[0], size[1], init[i], map[i], ref);
+					delta[i]   = r[0];
+					channel[i] = r[1];
+				}
+				else channel[i] = DeltaMapper.getValuesFromDeltas(delta[i], size[0], size[1], init[i], 13, map[i], 0, ref);
 			}
 			for(int i = 0; i < 3; i++) if(id[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
 			int[][] bgr = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
@@ -76,11 +96,13 @@ public class BlockReader
 
 	private void read(DataInputStream in, String filename) throws IOException
 	{
-		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		int id = in.readUnsignedByte();
+		version = in.readUnsignedByte();
+		if(id != FORMAT_ID || version < OLDEST_VERSION || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Block Writer file."
-				: filename + " is Block format version " + version + "; this reader reads version " + FORMAT_VERSION + " only (the block predictors changed in it).");
+				: filename + " is Block format version " + version + "; this reader reads versions " + OLDEST_VERSION + " to " + FORMAT_VERSION
+				  + " (the block predictors changed in version " + OLDEST_VERSION + ").");
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -93,7 +115,8 @@ public class BlockReader
 			min[i]   = in.readInt();
 			init[i]  = in.readInt();
 			map[i]   = DeltaMapper.readMap(in, 13, (i > 0) ? map[i - 1] : null, size[0]);
-			delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
+			if(version >= 4) mixed[i] = DeltaMapper.readMixedDeltas(in);   // decoded as the channel is rebuilt
+			else             delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
 		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);

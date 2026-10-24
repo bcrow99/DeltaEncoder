@@ -5,11 +5,11 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.0
+// BlockWriter version 2.1 (writes Block format 4, mixed context coding)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
-// type 13) with Context-coded deltas (DeltaMapper.packContextDeltas) and a
-// coded map. Each block uses one predictor from its channel's set, and a
+// type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
+// and a coded map. Each block uses one predictor from its channel's set, and a
 // set can be any of the 256 predictors in DeltaMapper.PREDICTOR_TABLE (id
 // 255 is the least-squares predictor, LS: see DeltaMapper.LeastSquares). The
 // startup analysis (and Find Best) picks the channel set, then surveys the
@@ -18,15 +18,16 @@ import javax.swing.*;
 // and the real coded size measured), and also codes with each
 // named set (DeltaMapper.findBestBlock); it keeps whichever is smallest --
 // actual sizes, not estimates. The sets are surveyed per block shape: a
-// shape picked by hand uses its own (see update). Files are read by
-// BlockReader.
+// shape picked by hand uses its own (see update). The analysis measures
+// sizes with the Context coder (DeltaMapper.packContextDeltas); the file
+// uses the mixed coder, about 1% smaller. Files are read by BlockReader.
 public class BlockWriter
 {
 	// File format: every file starts with FORMAT_ID ('B' = Block format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
+	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -62,6 +63,11 @@ public class BlockWriter
 	int[]    set_sum = new int[10], channel_sum = new int[6];
 	int[]    channel_init = new int[6], channel_min = new int[6];
 	int[][]  delta_list = new int[3][];
+	/**
+	 * The channels as the reader rebuilds them (before any minimum is added
+	 * back): the mixed coder's contexts use them.
+	 */
+	int[][]  value_list = new int[3][];
 	byte[][] map_list   = new byte[3][];
 	int      delta_xdim;
 
@@ -347,6 +353,7 @@ public class BlockWriter
 			map_list[i]   = (byte[]) result.get(2);
 			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0, (i > 0) ? raw[i - 1] : null);
 			raw[i] = dc[i].clone();
+			value_list[i] = raw[i];
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		});
 		delta_xdim = new_xdim;
@@ -404,9 +411,9 @@ public class BlockWriter
 		// Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 		// shorts), pixel_shift, pixel_quant, channel set. Then per channel:
 		// int min, int init, the block map (DeltaMapper.writeMap, type 13;
-		// it carries the block size and the channel's predictor ids), then the deltas
-		// (DeltaMapper.packContextDeltas). Channels 1 and 2 use the ones
-		// before them as context, so the reader decodes in order.
+		// it carries the block size and the channel's predictor ids), then the deltas,
+		// mixed-context coded (DeltaMapper.packMixedDeltas). Channels 1 and 2
+		// use the ones before them as context, so the reader decodes in order.
 		private void save(DataOutputStream out) throws IOException
 		{
 			long t0 = System.nanoTime();
@@ -416,8 +423,8 @@ public class BlockWriter
 				try
 				{
 					int[][] previous = Arrays.copyOf(delta_list, i);
-					coded[i] = DeltaMapper.packContextDeltas(delta_list[i], previous, delta_xdim);
-					int[] back = DeltaMapper.readContextDeltas(new DataInputStream(new ByteArrayInputStream(coded[i])), delta_list[i].length, previous, delta_xdim);
+					coded[i] = DeltaMapper.packMixedDeltas(delta_list[i], value_list[i], previous, delta_xdim);
+					int[] back = DeltaMapper.unpackMixedDeltas(coded[i], value_list[i], previous, delta_xdim);
 					if(!Arrays.equals(back, delta_list[i])) System.out.println("WARNING: channel " + i + " deltas do not decode back.");
 				}
 				catch(IOException e) { throw new UncheckedIOException(e); }
