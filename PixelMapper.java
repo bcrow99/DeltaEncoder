@@ -39,8 +39,8 @@ import java.util.*;
 // whose total passes LIMIT has its counts halved.
 //
 // Measured with PixelTest and PixelTest2 on 7 photographs: total bytes with
-// blocks of 256 (the largest the slider allows, and the best size for all
-// three codings at both settings below):
+// blocks of 256 (the best size for all three codings at both settings
+// below, among sizes up to 256):
 //
 //                                  lossless    Color Resolution 3
 //   Values, exact prediction       5.19 MB          1.86 MB
@@ -89,9 +89,24 @@ public class PixelMapper
 	public static final int PRIMARY = 0, DIFFERENCE = 1;
 	public static final String[] CHANNEL_SET_NAMES = {"Red, green, blue (corrected)", "Green, red - green, blue - green"};
 
-	// The block sizes init() tries: powers of 2, then the steps halfway
-	// (by ratio) around the best of those.
+	// The block sizes init() tries: powers of 2, then (if the largest is the
+	// best) doubling up to the whole frame, then the steps halfway (by ratio)
+	// around the best of those.
 	public static final int[] SEARCH_SIZES = {8, 16, 32, 64, 128, 256};
+
+	/**
+	 * The largest block size worth having for an xdim x ydim image (the Block
+	 * Size slider's maximum): one block covering the whole frame, since any
+	 * larger size codes the same, but never less than BLOCK_MAX.
+	 *
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @return the block size
+	 */
+	public static int blockLimit(int xdim, int ydim)
+	{
+		return Math.max(BLOCK_MAX, Math.max(xdim, ydim));
+	}
 
 	// ---- Coding ---------------------------------------------------------------
 
@@ -255,19 +270,26 @@ public class PixelMapper
 
 	// ---- Choosing the block size -------------------------------------------------
 
-	// The block size (BLOCK_MIN..BLOCK_MAX) that codes the channels smallest:
-	// every size in SEARCH_SIZES, then the sizes halfway (by ratio) to each
+	// The block size (BLOCK_MIN..blockLimit) that codes the channels smallest:
+	// every size in SEARCH_SIZES; while the largest tried is the best and
+	// smaller than the frame, twice that (the last one the whole frame: the
+	// larger of xdim and ydim); then the sizes halfway (by ratio) to each
 	// neighbour of the best. tried, if not null, gets {size, coded bytes of
 	// the 3 channels} for every size tried, smallest size first.
 	public static int findBestBlock(int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, int channels, List<int[]> tried)
 	{
 		TreeMap<Integer, Long> bytes = new TreeMap<Integer, Long>();
 		measure(SEARCH_SIZES, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
-		int best = bestOf(bytes);
+		int best = bestOf(bytes), frame = Math.max(xdim, ydim);
+		for(int last = SEARCH_SIZES[SEARCH_SIZES.length - 1]; best == last && last < frame; best = bestOf(bytes))
+		{
+			last = Math.min(2 * last, frame);
+			measure(new int[] {last}, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
+		}
 		ArrayList<Integer> more = new ArrayList<Integer>();
-		int lower = (int) Math.round(best / Math.sqrt(2)), upper = (int) Math.round(best * Math.sqrt(2));
+		int lower = (int) Math.round(best / Math.sqrt(2)), upper = Math.min((int) Math.round(best * Math.sqrt(2)), blockLimit(xdim, ydim));
 		if(lower >= BLOCK_MIN && !bytes.containsKey(lower)) more.add(lower);
-		if(upper <= BLOCK_MAX && !bytes.containsKey(upper)) more.add(upper);
+		if(upper > best && !bytes.containsKey(upper)) more.add(upper);
 		int[] extra = new int[more.size()];
 		for(int k = 0; k < extra.length; k++) extra[k] = more.get(k);
 		measure(extra, channel, xdim, ydim, max_value, shift, coding, channels, bytes);

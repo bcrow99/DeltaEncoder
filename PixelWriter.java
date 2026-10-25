@@ -128,7 +128,7 @@ public class PixelWriter
 		// doesn't. A new coding or channel choice has its own best block size,
 		// so choosing one runs the block size search again.
 		JMenu block_menu = new JMenu("Block");
-		block_menu.add(ViewerSupport.makeSliderDialog(frame, "Block Size", PixelMapper.BLOCK_MIN, PixelMapper.BLOCK_MAX, block_size,
+		block_menu.add(ViewerSupport.makeSliderDialog(frame, "Block Size", PixelMapper.BLOCK_MIN, PixelMapper.blockLimit(image_xdim, image_ydim), block_size,
 			v -> { block_size = v; if(!updating) apply(); }, ss)); block_slider = ss[0];
 		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Coding", PixelMapper.CODING_NAMES, coding,
 			v -> { if(v != coding) { coding = v; findBlockSize(); } }, coding_button));
@@ -197,7 +197,7 @@ public class PixelWriter
 				try { get(); } catch(Exception e) { System.out.println("init: " + e); }
 				view.setStatus(null);
 				view.setMenusEnabled(true);
-				updating = true; block_slider.setValue(block_size); updating = false;
+				blockRange();
 				apply();
 			}
 		}.execute();
@@ -220,6 +220,24 @@ public class PixelWriter
 		System.out.println();
 	}
 
+	/**
+	 * Sets the Block Size slider's maximum, the whole frame of the image as
+	 * coded (PixelMapper.blockLimit) or the block size if that is larger, and
+	 * its value, the block size. The slider reports a new maximum as a change
+	 * of value, so the block size is kept and restored around it.
+	 */
+	private void blockRange()
+	{
+		if(block_slider == null) return;
+		int b = block_size;
+		boolean was = updating;
+		updating = true;
+		block_slider.setMaximum(Math.max(PixelMapper.blockLimit(txdim, tydim), b));
+		block_slider.setValue(b);
+		block_size = b;
+		updating = was;
+	}
+
 	// ---- Apply --------------------------------------------------------------
 
 	// Quantizes, codes (what Save writes) and shows the image the reader will show.
@@ -229,6 +247,7 @@ public class PixelWriter
 		try
 		{
 			quantize();
+			blockRange();
 			long t0 = System.nanoTime();
 			coded = PixelMapper.encode(top, txdim, tydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
 			long bytes = 0, sign = 0;
