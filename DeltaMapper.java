@@ -285,21 +285,19 @@ public class DeltaMapper
 	public static boolean hasMap(int delta_type) { return delta_type >= 6; }
 
 	/**
-	 * Deltas for delta_type 0-13 (see {@link #DELTA_TYPE_NAMES}).
+	 * Deltas for delta_type 0-12 (see {@link #DELTA_TYPE_NAMES}).
 	 *
 	 * @param src        the channel
 	 * @param xdim       the width
 	 * @param ydim       the height
-	 * @param delta_type 0 to 13
+	 * @param delta_type 0 to 12
 	 * @param variant    scanline 5's predictor set (type 10 only)
-	 * @param block      the block shape (type 13 only)
-	 * @param block_set  the named set (type 13 only)
-	 * @param ref        the previous channel, or null for the first (type 13 only)
-	 * @return [sum, deltas, map, first value] for types 6-13, [sum, deltas, first
+	 * @return [sum, deltas, map, first value] for types 6-12, [sum, deltas, first
 	 *         value] otherwise
-	 * @throws IllegalArgumentException for another delta_type
+	 * @throws IllegalArgumentException for another delta_type, or 13: the block
+	 *         map's predictors come from the survey ({@link #surveyedBlockMaps})
 	 */
-	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant, int block, int block_set, int[] ref)
+	public static ArrayList getDeltas(int[] src, int xdim, int ydim, int delta_type, int variant)
 	{
 		switch(delta_type)
 		{
@@ -316,7 +314,7 @@ public class DeltaMapper
 			case 10: return getMixedDeltasFromValues8Rows(src, xdim, ydim, variant);
 			case 11: return getIdealDeltasFromValues8(src, xdim, ydim);
 			case 12: return getIdealDeltasFromValues16(src, xdim, ydim);
-			case 13: return getBlockDeltasFromValues(src, ref, xdim, ydim, block, getSetIds(block_set));
+			case 13: throw new IllegalArgumentException("delta type 13: the block map's deltas come from the survey (surveyedBlockMaps)");
 			default: throw new IllegalArgumentException("delta_type " + delta_type);
 		}
 	}
@@ -2255,9 +2253,8 @@ public class DeltaMapper
 	// carries its own ids, so the channels may use different predictors. Some
 	// predictors use the previous channel (in coding order) at the same pixel,
 	// so a channel is coded and decoded with the one before it: see
-	// PixelSource. With a named set (BLOCK_SET_NAMES) a block takes the
-	// predictor with the smallest sum of |delta|; surveyBlockSets chooses sets
-	// and blocks by estimated coded size instead.
+	// PixelSource. The sets and the blocks' choices come from the survey
+	// (surveyChannels), from the whole table, by estimated coded size.
 
 	/**
 	 * Square block sizes (BLOCK_MIN to BLOCK_MAX), and the writers' default.
@@ -2323,23 +2320,6 @@ public class DeltaMapper
 	}
 
 	/**
-	 * The named predictor sets: the first 4, 8, 16 and 32 ids of one greedy
-	 * order (by estimated coded size, with the map's cost) over every block of 7
-	 * test images at Colour Resolution 0 and 3, block size 8.
-	 */
-	public static final String[] BLOCK_SET_NAMES = {"Top 4", "Top 8", "Top 16", "Top 32"};
-
-	/**
-	 * The greedy order the named sets are prefixes of.
-	 */
-	private static final int[] BLOCK_ORDER = { 243, 21, 167, 127, 209, 37, 0, 231, 171, 1, 39, 149, 141, 172, 205, 28, 44, 173, 122, 206, 208, 184, 177, 86, 213, 67, 182, 150, 27, 137, 30, 121 };
-
-	/**
-	 * The named sets' sizes.
-	 */
-	private static final int[] BLOCK_SET_SIZES = {4, 8, 16, 32};
-
-	/**
 	 * Primitives 0-27 from left a, above b, above-left c and above-right d (see
 	 * {@link #PRIMITIVE_NAMES} and {@link #EXTRA_PRIMITIVE_NAMES}); 22-27 are the
 	 * selection predictors.
@@ -2400,14 +2380,6 @@ public class DeltaMapper
 	 */
 	private static int median(int x, int y, int z) { return Math.max(Math.min(x, y), Math.min(Math.max(x, y), z)); }
 
-	/**
-	 * The size of a named set.
-	 *
-	 * @param set a named set
-	 * @return its size
-	 */
-	public static int blockSetSize(int set) { return BLOCK_SET_SIZES[set]; }
-
 	// ---- Predictor ids --------------------------------------------------------
 	//
 	// A predictor id (one byte) is an index into PREDICTOR_TABLE, below.
@@ -2434,14 +2406,6 @@ public class DeltaMapper
 	public static String predictorName(int id) { return PREDICTOR_TABLE.name(id); }
 
 	/**
-	 * The predictor ids of a named set.
-	 *
-	 * @param set 0 to 3 (see {@link #BLOCK_SET_NAMES})
-	 * @return its ids
-	 */
-	public static int[] getSetIds(int set) { return Arrays.copyOf(BLOCK_ORDER, BLOCK_SET_SIZES[set]); }
-
-	/**
 	 * The predictor ids a block map uses (map[2..1+n]).
 	 *
 	 * @param map a block map
@@ -2461,20 +2425,6 @@ public class DeltaMapper
 	 * @return 2 + n
 	 */
 	public static int mapHeaderLength(byte[] map) { return 2 + (map[1] & 0xFF); }
-
-	/**
-	 * A block map's predictors described: the named set they match, or "n
-	 * predictors".
-	 *
-	 * @param map a block map
-	 * @return the description
-	 */
-	public static String describeMapSet(byte[] map)
-	{
-		int[] ids = getMapIds(map);
-		for(int set = 0; set < BLOCK_SET_NAMES.length; set++) if(Arrays.equals(ids, getSetIds(set))) return BLOCK_SET_NAMES[set];
-		return ids.length + " predictors";
-	}
 
 	/**
 	 * A channel's name in a channel set: blue, green, red, blue-green,
@@ -2543,101 +2493,9 @@ public class DeltaMapper
 	// ---- Choosing the block size and predictor set -----------------------
 
 	/**
-	 * Block sizes findBestBlock may pick.
+	 * Block sizes surveyBlockSets (one shape for all the channels) may pick.
 	 */
 	public static final int[] BLOCK_SEARCH_SIZES = {4, 6, 8, 12, 16, 24, 32};
-
-	/**
-	 * Bytes the three channels take as block map deltas (Context coded,
-	 * {@link #packContextDeltas}) plus maps ({@link #writeMap}), as the writers
-	 * save them.
-	 *
-	 * @param channel the three channels, in coding order
-	 * @param xdim    the width
-	 * @param ydim    the height
-	 * @param block   the block shape
-	 * @param set     a named set
-	 * @return the bytes
-	 */
-	public static long getBlockMapBytes(int[][] channel, int xdim, int ydim, int block, int set)
-	{
-		return getBlockMapBytes(pixelSources(channel, xdim, ydim, PREDICTOR_TABLE), ydim, block, set);
-	}
-
-	/**
-	 * As {@link #getBlockMapBytes(int[][], int, int, int, int)}, with the
-	 * channels' PixelSources made already.
-	 *
-	 * @param ps    the channels' PixelSources
-	 * @param ydim  the height
-	 * @param block the block shape
-	 * @param set   a named set
-	 * @return the bytes
-	 */
-	private static long getBlockMapBytes(PixelSource[] ps, int ydim, int block, int set)
-	{
-		try
-		{
-			int xdim = ps[0].xdim;
-			int[][] d = new int[3][]; byte[][] m = new byte[3][];
-			for(int i = 0; i < 3; i++)
-			{
-				ArrayList result = getBlockDeltasFromValues(ps[i], ydim, block, getSetIds(set));
-				d[i] = (int[]) result.get(1); m[i] = (byte[]) result.get(2);
-			}
-			long total = 0;
-			for(int i = 0; i < 3; i++)
-			{
-				total += packContextDeltas(d[i], Arrays.copyOf(d, i), xdim).length;
-				java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
-				writeMap(new java.io.DataOutputStream(b), 13, m[i], (i > 0) ? m[i - 1] : null, xdim);
-				total += b.size();
-			}
-			return total;
-		}
-		catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
-	}
-
-	/**
-	 * The block size and named set that code the three channels smallest (actual
-	 * sizes): every set at sizes 4, 8 and 16, then the best set at the untried
-	 * sizes next to its best. Runs the trials in parallel, as many at once as
-	 * memory allows.
-	 *
-	 * @param channel the three channels, in coding order
-	 * @param xdim    the width
-	 * @param ydim    the height
-	 * @param bytes   [set][index in BLOCK_SEARCH_SIZES]: set to the bytes of each
-	 *                trial run (-1 for the others)
-	 * @return {block size, set}
-	 */
-	public static int[] findBestBlock(int[][] channel, int xdim, int ydim, long[][] bytes)
-	{
-		PixelSource[] ps = pixelSources(channel, xdim, ydim, PREDICTOR_TABLE);
-		long  task   = 28L * xdim * ydim;   // deltas, maps and the Context coder's arrays for 3 channels
-		int   n_sets = BLOCK_SET_NAMES.length;
-		int[] first  = {0, 2, 4};   // 4, 8, 16
-		for(long[] row : bytes) Arrays.fill(row, -1);
-		boundedParallel(n_sets * first.length, task, t ->
-		{
-			int set = t / first.length, s = first[t % first.length];
-			bytes[set][s] = getBlockMapBytes(ps, ydim, BLOCK_SEARCH_SIZES[s], set);
-		});
-		int best_set = 0, best_s = first[0];
-		for(int set = 0; set < n_sets; set++)
-			for(int s : first) if(bytes[set][s] < bytes[best_set][best_s]) { best_set = set; best_s = s; }
-
-		final int bs = best_set;
-		int[] next = {best_s - 1, best_s + 1};
-		boundedParallel(2, task, t ->
-		{
-			int s = next[t];
-			if(s >= 0 && s < BLOCK_SEARCH_SIZES.length && bytes[bs][s] < 0)
-				bytes[bs][s] = getBlockMapBytes(ps, ydim, BLOCK_SEARCH_SIZES[s], bs);
-		});
-		for(int s = 0; s < BLOCK_SEARCH_SIZES.length; s++) if(bytes[bs][s] >= 0 && bytes[bs][s] < bytes[bs][best_s]) best_s = s;
-		return new int[] {BLOCK_SEARCH_SIZES[best_s], bs};
-	}
 
 	/**
 	 * Runs body(0..n-1) on up to as many threads as there are cores and as the
@@ -2688,32 +2546,6 @@ public class DeltaMapper
 		java.util.stream.IntStream.range(0, channel.length).parallel().forEach(i ->
 			ps[i] = new PixelSource(channel[i], (i > 0) ? channel[i - 1] : null, xdim, ydim, table));
 		return ps;
-	}
-
-	/**
-	 * findBestBlock's results as a printable table, the chosen one marked *.
-	 *
-	 * @param bytes the bytes findBestBlock filled in
-	 * @param best  its result
-	 * @return the table
-	 */
-	public static String getBlockTable(long[][] bytes, int[] best)
-	{
-		StringBuilder t = new StringBuilder("Block map, bytes coded (Context-coded deltas + maps, 3 channels):\n");
-		t.append(String.format("  %-18s", "set \\ block"));
-		for(int b : BLOCK_SEARCH_SIZES) t.append(String.format(" %9d ", b));
-		t.append('\n');
-		for(int set = 0; set < BLOCK_SET_NAMES.length; set++)
-		{
-			t.append(String.format("  %-18s", BLOCK_SET_NAMES[set]));
-			for(int s = 0; s < BLOCK_SEARCH_SIZES.length; s++)
-			{
-				boolean chosen = set == best[1] && BLOCK_SEARCH_SIZES[s] == best[0];
-				t.append((bytes[set][s] < 0) ? String.format(" %9s ", "-") : String.format(" %9d", bytes[set][s]) + (chosen ? "*" : " "));
-			}
-			t.append('\n');
-		}
-		return t.toString();
 	}
 
 	// ---- Predictor tables -------------------------------------------------------
@@ -3544,13 +3376,14 @@ public class DeltaMapper
 	// ---- Surveying predictor sets ----------------------------------------------
 	//
 	// Any of the PREDICTORS can be in a block map's set, and each channel has
-	// its own set. surveyBlockSets picks the block size and the sets, ranking
-	// predictors by an estimate of their coded size rather than by |delta|:
+	// its own set, chosen from the whole table: the survey ranks predictors
+	// by an estimate of their coded size rather than by |delta|:
 	//
 	//   1. A cost per delta value (DeltaCost): -log2 of its frequency in the
-	//      deltas a reference set (Top 32) gives, per coding context
-	//      (getContext, with the deltas already chosen for the channels
-	//      before as context). In 1/256 bits.
+	//      reference deltas -- each block's best of the whole table by sum of
+	//      |delta| (tableReferenceDeltas) -- per coding context (getContext,
+	//      with the deltas already chosen for the channels before as
+	//      context). In 1/256 bits.
 	//   2. For a block size, each predictor's estimated bits in each block
 	//      (blockCostTable): the sum of the costs of its deltas.
 	//   3. Per channel, predictors in greedy order (greedyCostOrder): first
@@ -3564,22 +3397,22 @@ public class DeltaMapper
 	//      and the whole order, until two in a row are larger than the best.
 	//      Blocks use their cheapest predictor by the estimate
 	//      (assignByCost), not the smallest |delta|.
-	//   5. Block sizes 4, 8 and 16, then the untried sizes next to the best.
+	//   5. surveyChannels (what the writers use): each channel in turn at
+	//      every size in SURVEY_CHANNEL_SIZES, keeping the one that codes it
+	//      smallest, so each channel has its own block size (a map's context
+	//      lines up the previous channel's map: alignMap). surveyBlockSets
+	//      instead finds one size for all the channels: 4, 8 and 16, then the
+	//      untried sizes next to the best.
 	//
-	// The block size is shared by the channels (a map's context coding uses
-	// the previous channel's map, entry for entry). getBlockDeltasByCost
-	// makes the same deltas and maps from the surveyed ids, so a writer can
-	// redo them without surveying again.
+	// getBlockDeltasByCost makes the same deltas and maps from the surveyed
+	// sizes and ids, so a writer can redo them without surveying again;
+	// surveyedBlockMaps keeps the last survey, for writers that ask for the
+	// same channels' block maps several times.
 
 	/**
 	 * The prefix lengths whose real coded size the survey measures.
 	 */
 	public static final int[] SURVEY_COUNTS = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 255};
-
-	/**
-	 * The named set whose deltas give the survey's cost model (Top 32).
-	 */
-	static final int SURVEY_REFERENCE_SET = 3;          // Top 32
 
 	/**
 	 * A predictor id in the map header, in 1/256 bits.
@@ -3973,38 +3806,20 @@ public class DeltaMapper
 	}
 
 	/**
-	 * The cost model for a channel at a block shape: reference deltas from
-	 * SURVEY_REFERENCE_SET, context from the chosen deltas of the channels before.
-	 *
-	 * @param ps            the channel, and what its primitives need
-	 * @param ydim          the height
-	 * @param block         the block shape
-	 * @param chosen_before the deltas chosen for the channels before
-	 * @return the cost model
-	 */
-	static DeltaCost channelCost(PixelSource ps, int ydim, int block, int[][] chosen_before)
-	{
-		return channelCost(ps, ydim, block, chosen_before, PREDICTOR_TABLE, false);
-	}
-
-	/**
-	 * The cost model for a channel at a block shape, with the reference deltas
-	 * from the whole table ({@link #tableReferenceDeltas}) or from
-	 * SURVEY_REFERENCE_SET.
+	 * The cost model for a channel at a block shape: reference deltas from the
+	 * whole table ({@link #tableReferenceDeltas}), context from the chosen
+	 * deltas of the channels before.
 	 *
 	 * @param ps            the channel, and what its primitives need
 	 * @param ydim          the height
 	 * @param block         the block shape
 	 * @param chosen_before the deltas chosen for the channels before
 	 * @param table         the predictor table
-	 * @param whole_table   true: reference deltas from every id in the table
 	 * @return the cost model
 	 */
-	static DeltaCost channelCost(PixelSource ps, int ydim, int block, int[][] chosen_before, PredictorTable table, boolean whole_table)
+	static DeltaCost channelCost(PixelSource ps, int ydim, int block, int[][] chosen_before, PredictorTable table)
 	{
-		int[] ref = whole_table ? tableReferenceDeltas(ps, ydim, block, table)
-			: (int[]) getBlockDeltasFromValues(ps, ydim, block, getSetIds(SURVEY_REFERENCE_SET)).get(1);
-		return new DeltaCost(ps.v, ref, chosen_before, ps.xdim, ydim);
+		return new DeltaCost(ps.v, tableReferenceDeltas(ps, ydim, block, table), chosen_before, ps.xdim, ydim);
 	}
 
 	/**
@@ -4053,44 +3868,24 @@ public class DeltaMapper
 	 */
 	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids, PredictorTable table)
 	{
-		return getBlockDeltasByCost(channel, xdim, ydim, block, ids, table, false);
+		int[] blocks = new int[channel.length];
+		Arrays.fill(blocks, block);
+		return getBlockDeltasByCost(channel, xdim, ydim, blocks, ids, table);
 	}
 
 	/**
 	 * As {@link #getBlockDeltasByCost(int[][], int, int, int, int[][], PredictorTable)},
-	 * with the cost model's reference deltas from the whole table if asked
-	 * (as the survey that chose the ids had them).
-	 *
-	 * @param channel     the three channels, in coding order
-	 * @param xdim        the width
-	 * @param ydim        the height
-	 * @param block       the block shape
-	 * @param ids         each channel's ids
-	 * @param table       the table the ids index
-	 * @param whole_table true: reference deltas from every id in the table
-	 * @return each channel's list
-	 */
-	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids, PredictorTable table, boolean whole_table)
-	{
-		int[] blocks = new int[channel.length];
-		Arrays.fill(blocks, block);
-		return getBlockDeltasByCost(channel, xdim, ydim, blocks, ids, table, whole_table);
-	}
-
-	/**
-	 * As {@link #getBlockDeltasByCost(int[][], int, int, int, int[][], PredictorTable, boolean)},
 	 * with a block shape per channel (as {@link #surveyChannels} chooses them).
 	 *
-	 * @param channel     the three channels, in coding order
-	 * @param xdim        the width
-	 * @param ydim        the height
-	 * @param blocks      each channel's block shape
-	 * @param ids         each channel's ids
-	 * @param table       the table the ids index
-	 * @param whole_table true: reference deltas from every id in the table
+	 * @param channel the three channels, in coding order
+	 * @param xdim    the width
+	 * @param ydim    the height
+	 * @param blocks  each channel's block shape
+	 * @param ids     each channel's ids
+	 * @param table   the table the ids index
 	 * @return each channel's list
 	 */
-	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int[] blocks, int[][] ids, PredictorTable table, boolean whole_table)
+	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int[] blocks, int[][] ids, PredictorTable table)
 	{
 		ArrayList[] result = new ArrayList[channel.length];
 		int[][] delta = new int[channel.length][];
@@ -4098,7 +3893,7 @@ public class DeltaMapper
 		for(int i = 0; i < channel.length; i++)
 		{
 			int       block = blocks[i];
-			DeltaCost dc  = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i), table, whole_table);
+			DeltaCost dc  = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i), table);
 			byte[]    map = prefixMaps(ps[i], ydim, block, dc, table, ids[i], new int[] {ids[i].length})[0];
 			result[i] = getBlockDeltasFromMap(ps[i], ydim, map, table, ids[i]);
 			delta[i]  = (int[]) result[i].get(1);
@@ -4211,24 +4006,6 @@ public class DeltaMapper
 	 */
 	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, PredictorTable table, boolean survey_shapes)
 	{
-		return surveyBlockSets(channel, xdim, ydim, table, survey_shapes, false);
-	}
-
-	/**
-	 * As {@link #surveyBlockSets(int[][], int, int, PredictorTable, boolean)},
-	 * with the cost model's reference deltas from the whole table if asked
-	 * (otherwise from SURVEY_REFERENCE_SET).
-	 *
-	 * @param channel       the three channels, in coding order
-	 * @param xdim          the width
-	 * @param ydim          the height
-	 * @param table         the predictor table
-	 * @param survey_shapes whether to try BLOCK_SHAPES too
-	 * @param whole_table   true: reference deltas from every id in the table
-	 * @return the survey
-	 */
-	public static BlockSurvey surveyBlockSets(int[][] channel, int xdim, int ydim, PredictorTable table, boolean survey_shapes, boolean whole_table)
-	{
 		TreeMap<Integer, BlockSurvey> tried = new TreeMap<Integer, BlockSurvey>();
 		StringBuilder log = new StringBuilder();
 		// The block sizes are independent: surveyed at the same time (each
@@ -4238,7 +4015,7 @@ public class DeltaMapper
 		int[] first = {4, 8, 16};
 		BlockSurvey[] got = new BlockSurvey[first.length];
 		StringBuilder[] logs = new StringBuilder[first.length];
-		boundedParallel(first.length, task, t -> { logs[t] = new StringBuilder(); got[t] = surveyBlockSize(ps, ydim, first[t], table, whole_table, logs[t]); });
+		boundedParallel(first.length, task, t -> { logs[t] = new StringBuilder(); got[t] = surveyBlockSize(ps, ydim, first[t], table, logs[t]); });
 		for(int t = 0; t < first.length; t++) { tried.put(first[t], got[t]); log.append(logs[t]); }
 		int best = bestSurvey(tried);
 		int s = Arrays.binarySearch(BLOCK_SEARCH_SIZES, best);
@@ -4247,7 +4024,7 @@ public class DeltaMapper
 			if(t >= 0 && t < BLOCK_SEARCH_SIZES.length && !tried.containsKey(BLOCK_SEARCH_SIZES[t])) next.add(BLOCK_SEARCH_SIZES[t]);
 		BlockSurvey[] more = new BlockSurvey[next.size()];
 		StringBuilder[] more_log = new StringBuilder[next.size()];
-		boundedParallel(next.size(), task, t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(ps, ydim, next.get(t), table, whole_table, more_log[t]); });
+		boundedParallel(next.size(), task, t -> { more_log[t] = new StringBuilder(); more[t] = surveyBlockSize(ps, ydim, next.get(t), table, more_log[t]); });
 		for(int t = 0; t < more.length; t++) { tried.put(next.get(t), more[t]); log.append(more_log[t]); }
 		// Then the rectangles and lines (BLOCK_SHAPES), if asked for.
 		if(survey_shapes)
@@ -4256,7 +4033,7 @@ public class DeltaMapper
 			for(int t = 0; t < shape.length; t++) shape[t] = SHAPE_FIRST + t;
 			BlockSurvey[] sg = new BlockSurvey[shape.length];
 			StringBuilder[] sl = new StringBuilder[shape.length];
-			boundedParallel(shape.length, task, t -> { sl[t] = new StringBuilder(); sg[t] = surveyBlockSize(ps, ydim, shape[t], table, whole_table, sl[t]); });
+			boundedParallel(shape.length, task, t -> { sl[t] = new StringBuilder(); sg[t] = surveyBlockSize(ps, ydim, shape[t], table, sl[t]); });
 			for(int t = 0; t < shape.length; t++) { tried.put(shape[t], sg[t]); log.append(sl[t]); }
 		}
 		BlockSurvey result = tried.get(bestSurvey(tried));
@@ -4291,24 +4068,7 @@ public class DeltaMapper
 	 */
 	public static BlockSurvey surveyAtBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table)
 	{
-		return surveyAtBlockSize(channel, xdim, ydim, block, table, false);
-	}
-
-	/**
-	 * As {@link #surveyAtBlockSize(int[][], int, int, int, PredictorTable)},
-	 * with the cost model's reference deltas from the whole table if asked.
-	 *
-	 * @param channel     the three channels, in coding order
-	 * @param xdim        the width
-	 * @param ydim        the height
-	 * @param block       the block shape
-	 * @param table       the predictor table
-	 * @param whole_table true: reference deltas from every id in the table
-	 * @return the survey
-	 */
-	public static BlockSurvey surveyAtBlockSize(int[][] channel, int xdim, int ydim, int block, PredictorTable table, boolean whole_table)
-	{
-		return surveyBlockSize(pixelSources(channel, xdim, ydim, table), ydim, block, table, whole_table, new StringBuilder());
+		return surveyBlockSize(pixelSources(channel, xdim, ydim, table), ydim, block, table, new StringBuilder());
 	}
 
 	/**
@@ -4389,11 +4149,10 @@ public class DeltaMapper
 	 * @param ydim  the height
 	 * @param block the block shape
 	 * @param table the predictor table
-	 * @param whole_table true: the cost model's reference deltas from every id in the table
 	 * @param log   the report lines, added to
 	 * @return the survey
 	 */
-	private static BlockSurvey surveyBlockSize(PixelSource[] ps, int ydim, int block, PredictorTable table, boolean whole_table, StringBuilder log)
+	private static BlockSurvey surveyBlockSize(PixelSource[] ps, int ydim, int block, PredictorTable table, StringBuilder log)
 	{
 		try
 		{
@@ -4408,7 +4167,8 @@ public class DeltaMapper
 			for(int i = 0; i < 3; i++)
 			{
 				StringBuilder line = new StringBuilder();
-				ChannelSurvey c = surveyChannel(ps[i], ydim, block, table, whole_table, Arrays.copyOf(delta, i), (i > 0) ? map[i - 1] : null, line);
+				int[][] before = Arrays.copyOf(delta, i);
+				ChannelSurvey c = surveyChannel(ps[i], ydim, block, table, channelCost(ps[i], ydim, block, before, table), before, (i > 0) ? map[i - 1] : null, line);
 				result.ids[i] = c.ids; delta[i] = c.delta; map[i] = c.map;
 				result.bytes += c.bytes;
 				log.append(String.format("    channel %d", i)).append(line).append('\n');
@@ -4463,26 +4223,6 @@ public class DeltaMapper
 	 * One channel of the survey at one block shape: the greedy order by
 	 * estimated bits, then the real coded size of its prefixes at
 	 * SURVEY_COUNTS until two in a row are larger than the best.
-	 *
-	 * @param ps            the channel, and what its primitives need
-	 * @param ydim          the height
-	 * @param block         the block shape
-	 * @param table         the predictor table
-	 * @param whole_table   true: the cost model's reference deltas from every id in the table
-	 * @param chosen_before the deltas chosen for the channels before
-	 * @param previous_map  the map chosen for the channel before, or null
-	 * @param line          the report line (order length, then n:bytes for each prefix tried), added to
-	 * @return the channel's survey
-	 * @throws java.io.IOException never in practice (byte streams)
-	 */
-	private static ChannelSurvey surveyChannel(PixelSource ps, int ydim, int block, PredictorTable table, boolean whole_table,
-		int[][] chosen_before, byte[] previous_map, StringBuilder line) throws java.io.IOException
-	{
-		return surveyChannel(ps, ydim, block, table, channelCost(ps, ydim, block, chosen_before, table, whole_table), chosen_before, previous_map, line);
-	}
-
-	/**
-	 * As the method above, with the cost model given.
 	 *
 	 * @param ps            the channel, and what its primitives need
 	 * @param ydim          the height
@@ -4555,10 +4295,9 @@ public class DeltaMapper
 	 * @param ydim        the height
 	 * @param table       the predictor table
 	 * @param sizes       the block shapes to try
-	 * @param whole_table true: the cost model's reference deltas from every id in the table
 	 * @return the survey
 	 */
-	public static BlockSurvey surveyChannels(int[][] channel, int xdim, int ydim, PredictorTable table, int[] sizes, boolean whole_table)
+	public static BlockSurvey surveyChannels(int[][] channel, int xdim, int ydim, PredictorTable table, int[] sizes)
 	{
 		PixelSource[] ps = pixelSources(channel, xdim, ydim, table);
 		long task = 44L * xdim * ydim + 4L * table.size() * Math.min(SURVEY_SAMPLE_BLOCKS, blocksAcross(xdim, 4) * ((ydim - 1 + 3) / 4));
@@ -4575,13 +4314,13 @@ public class DeltaMapper
 			int[][] before = Arrays.copyOf(delta, i);
 			byte[]  prev   = (i > 0) ? map[i - 1] : null;
 			// The whole table's reference deltas for every size in one pass.
-			int[][] ref = whole_table ? tableReferenceDeltas(ps[i], ydim, sizes, table) : null;
+			int[][] ref = tableReferenceDeltas(ps[i], ydim, sizes, table);
 			boundedParallel(sizes.length, task, t ->
 			{
 				line[t] = new StringBuilder();
 				try
 				{
-					DeltaCost dc = (ref != null) ? channelCost(ps[ci], ydim, ref[t], before) : channelCost(ps[ci], ydim, sizes[t], before, table, false);
+					DeltaCost dc = channelCost(ps[ci], ydim, ref[t], before);
 					got[t] = surveyChannel(ps[ci], ydim, sizes[t], table, dc, before, prev, line[t]);
 				}
 				catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
@@ -4603,6 +4342,86 @@ public class DeltaMapper
 		result.deltas = delta;
 		result.maps   = map;
 		return result;
+	}
+
+	/**
+	 * The last surveyedBlockMaps: {xdim, the channels (copies), the survey}.
+	 */
+	private static Object[] SURVEYED = null;
+
+	/**
+	 * The channel set whose three channels have the smallest summed entropy
+	 * estimate (getIdealFrequency2; the first on a tie), as the writers pick it.
+	 *
+	 * @param qc   the six candidate channels (getCandidateChannels)
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @return the channel set, 0 to 9
+	 */
+	public static int bestChannelSet(int[][] qc, int xdim, int ydim)
+	{
+		int[] sum = new int[6];
+		java.util.stream.IntStream.range(0, 6).parallel().forEach(i -> sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(getIdealFrequency2(qc[i], xdim, ydim))));
+		int best = 0, best_sum = Integer.MAX_VALUE;
+		for(int s = 0; s < 10; s++)
+		{
+			int[] c = getChannels(s);
+			int t = sum[c[0]] + sum[c[1]] + sum[c[2]];
+			if(t < best_sum) { best_sum = t; best = s; }
+		}
+		return best;
+	}
+
+	/**
+	 * A channel's block map from a survey, as getDeltas gives other types:
+	 * [sum of |delta| (Integer), deltas (int[]), map (byte[]), the first value
+	 * (Integer)]. The deltas and map are copies, as getDeltas' are new: some
+	 * callers change them (StringMapper.getStringList), and the survey is kept
+	 * for the next call (surveyedBlockMaps).
+	 *
+	 * @param survey the survey (surveyedBlockMaps)
+	 * @param i      the channel, in coding order
+	 * @param first  the channel's first value
+	 * @return the list
+	 */
+	public static ArrayList surveyedDeltas(BlockSurvey survey, int i, int first)
+	{
+		long sum = 0;
+		for(int v : survey.deltas[i]) sum += Math.abs(v);
+		ArrayList result = new ArrayList();
+		result.add((int) Math.min(Integer.MAX_VALUE, sum));
+		result.add(survey.deltas[i].clone());
+		result.add(survey.maps[i].clone());
+		result.add(first);
+		return result;
+	}
+
+	/**
+	 * The block maps the survey chooses for three channels (surveyChannels at
+	 * SURVEY_CHANNEL_SIZES, from PREDICTOR_TABLE): each channel's block size,
+	 * predictor set, deltas and map. The last result is kept, and returned
+	 * again for the same channels, so a writer can ask whenever it needs the
+	 * block map's deltas (ranking delta types, choosing a datatype, Apply).
+	 *
+	 * @param channel the three channels, in coding order
+	 * @param xdim    the width
+	 * @param ydim    the height
+	 * @return the survey (blocks, ids, deltas and maps per channel)
+	 */
+	public static synchronized BlockSurvey surveyedBlockMaps(int[][] channel, int xdim, int ydim)
+	{
+		if(SURVEYED != null && (Integer) SURVEYED[0] == xdim)
+		{
+			int[][] had = (int[][]) SURVEYED[1];
+			boolean same = had.length == channel.length;
+			for(int i = 0; same && i < channel.length; i++) same = Arrays.equals(had[i], channel[i]);
+			if(same) return (BlockSurvey) SURVEYED[2];
+		}
+		BlockSurvey survey = surveyChannels(channel, xdim, ydim, PREDICTOR_TABLE, SURVEY_CHANNEL_SIZES);
+		int[][] copy = new int[channel.length][];
+		for(int i = 0; i < channel.length; i++) copy[i] = channel[i].clone();
+		SURVEYED = new Object[] {xdim, copy, survey};
+		return survey;
 	}
 
 	/**
@@ -6154,7 +5973,7 @@ public class DeltaMapper
 	 */
 	public static int[] getFrequency(int[] src, int xdim, int ydim, int delta_type)
 	{
-		return interiorHistogram((int[]) getDeltas(src, xdim, ydim, delta_type, 0, BLOCK_DEFAULT, 0, null).get(1), xdim, ydim);
+		return interiorHistogram((int[]) getDeltas(src, xdim, ydim, delta_type, 0).get(1), xdim, ydim);
 	}
 
 	/**
@@ -6244,7 +6063,7 @@ public class DeltaMapper
 	 */
 	public static ArrayList<int[]> getMedScanlineFrequency(int src[], int xdim, int ydim)
 	{
-		ArrayList deltas = getDeltas(src, xdim, ydim, 6, 0, BLOCK_DEFAULT, 0, null);
+		ArrayList deltas = getDeltas(src, xdim, ydim, 6, 0);
 		ArrayList<int[]> result = new ArrayList<int[]>();
 		result.add(interiorHistogram((int[]) deltas.get(1), xdim, ydim));
 		result.add(mapHistogram((byte[]) deltas.get(2), 4));
@@ -6376,7 +6195,7 @@ public class DeltaMapper
 	 */
 	public static ArrayList<int[]> getMixedDeltas4Frequency(int src[], int xdim, int ydim)
 	{
-		ArrayList deltas = getDeltas(src, xdim, ydim, 8, 0, BLOCK_DEFAULT, 0, null);
+		ArrayList deltas = getDeltas(src, xdim, ydim, 8, 0);
 		ArrayList<int[]> result = new ArrayList<int[]>();
 		result.add(interiorHistogram((int[]) deltas.get(1), xdim, ydim));
 		result.add(mapHistogram((byte[]) deltas.get(2), 4));

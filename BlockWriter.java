@@ -281,7 +281,7 @@ public class BlockWriter
 		ViewerSupport.parallel(6, i -> sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], size[0], size[1]))));
 		int[] id = DeltaMapper.getChannels(bestSet(sum));
 		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyChannels(new int[][] { qc[id[0]], qc[id[1]], qc[id[2]] }, size[0], size[1],
-			DeltaMapper.PREDICTOR_TABLE, DeltaMapper.SURVEY_CHANNEL_SIZES, true);
+			DeltaMapper.PREDICTOR_TABLE, DeltaMapper.SURVEY_CHANNEL_SIZES);
 		synchronized(this)
 		{
 			survey_blocks = survey.blocks;
@@ -598,7 +598,7 @@ public class BlockWriter
 				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows), h = y1 - y0;
 				int[][] ch = new int[3][];
 				for(int i = 0; i < 3; i++) ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
-				ArrayList[] got = DeltaMapper.getBlockDeltasByCost(ch, xdim, h, survey_blocks, survey_ids, DeltaMapper.PREDICTOR_TABLE, true);
+				ArrayList[] got = DeltaMapper.getBlockDeltasByCost(ch, xdim, h, survey_blocks, survey_ids, DeltaMapper.PREDICTOR_TABLE);
 				int[][]  d = new int[3][];
 				byte[][] m = new byte[3][];
 				for(int i = 0; i < 3; i++) { d[i] = (int[]) got[i].get(1); m[i] = (byte[]) got[i].get(2); }

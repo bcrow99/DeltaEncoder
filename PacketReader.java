@@ -4,14 +4,18 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import javax.swing.*;
 
-// PacketReader version 2.0
+// PacketReader version 2.1 (reads Packet formats 3 and 4)
 public class PacketReader
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; older files are not read
+	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: block maps with a block size per channel
+	/**
+	 * The oldest format version read (the block predictors changed in version 3).
+	 */
+	static final int  OLDEST_VERSION = 3;
 
 	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)","Adaptive","Adaptive (per packet)","Context"};
 
@@ -104,10 +108,11 @@ public class PacketReader
 	private void read(DataInputStream in, String filename) throws Exception
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		if(id != FORMAT_ID || version < OLDEST_VERSION || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Packet Writer file."
-				: filename + " is Packet format version " + version + "; this reader reads version " + FORMAT_VERSION + " only (the block predictors changed in it).");
+				: filename + " is Packet format version " + version + "; this reader reads versions " + OLDEST_VERSION + " to " + FORMAT_VERSION
+				  + " (the block predictors changed in version " + OLDEST_VERSION + ").");
 		xdim              = in.readUnsignedShort();
 		ydim              = in.readUnsignedShort();
 		pixel_shift       = in.readByte();

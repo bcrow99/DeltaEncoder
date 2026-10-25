@@ -7,14 +7,19 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// PacketWriter version 2.0
+// PacketWriter version 2.1 (the block map's predictors come from the survey)
 public class PacketWriter
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
+	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: block maps with a block size per channel
+	/**
+	 * The version written for delta types other than the block map (13), whose
+	 * files are as they were.
+	 */
+	static final int  NO_BLOCK_MAP_VERSION = 3;
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -43,8 +48,6 @@ public class PacketWriter
 	static final int ADAPTIVE_PER_PACKET   = 6;
 	static final int CONTEXT               = 7;   // deltas context-coded directly (DeltaMapper.packContextDeltas); no packets
 	byte scanline5_variant = 0;
-	int  block_size = DeltaMapper.BLOCK_DEFAULT;   // block map (delta type 13): block width/height
-	int  block_set  = 0;                           // block map: predictor set (DeltaMapper.BLOCK_SET_NAMES)
 
 	static final String[] CHANNEL_NAMES = {"blue","green","red","blue-green","red-green","red-blue"};
 
@@ -130,6 +133,19 @@ public class PacketWriter
 	// DeltaMapper.getCandidateChannels); sets channel_min and channel_init.
 	private int[][] quantizedChannels(int[] size)
 	{
+		return quantizedChannels(size, channel_min, channel_init);
+	}
+
+	/**
+	 * As quantizedChannels(size), filling min and init.
+	 *
+	 * @param size the quantized size
+	 * @param min  set to each candidate's minimum
+	 * @param init set to each candidate's first value
+	 * @return the six candidate channels
+	 */
+	private int[][] quantizedChannels(int[] size, int[] min, int[] init)
+	{
 		int[][] q = new int[3][];
 		ViewerSupport.parallel(3, i ->
 		{
@@ -137,9 +153,56 @@ public class PacketWriter
 			if(pixel_quant != 0) ch = ResizeMapper.resize(ch, image_xdim, size[0], size[1]);
 			q[i] = DeltaMapper.quantizeChannel(ch, pixel_shift);
 		});
-		int[][] qc = DeltaMapper.getCandidateChannels(q[0], q[1], q[2], channel_min);
-		for(int i = 0; i < 6; i++) channel_init[i] = qc[i][0];
+		int[][] qc = DeltaMapper.getCandidateChannels(q[0], q[1], q[2], min);
+		for(int i = 0; i < 6; i++) init[i] = qc[i][0];
 		return qc;
+	}
+
+	// ---- Block map (delta type 13) -------------------------------------------
+
+	/**
+	 * The three channels the block map codes, in coding order, for the current
+	 * settings (with their own minimum and first-value arrays, so it can run in
+	 * the background).
+	 *
+	 * @param size the quantized size
+	 * @return the channels
+	 */
+	private int[][] blockChannels(int[] size)
+	{
+		int[][] qc = quantizedChannels(size, new int[6], new int[6]);
+		int[]   id = DeltaMapper.getChannels(DeltaMapper.bestChannelSet(qc, size[0], size[1]));
+		return new int[][] {qc[id[0]], qc[id[1]], qc[id[2]]};
+	}
+
+	/**
+	 * After a change to the settings: with the block map, surveys first (in the
+	 * background, with the other menus disabled) unless the survey for these
+	 * channels is kept, then applies.
+	 */
+	private void update()
+	{
+		if(delta_type != 13) { apply(); return; }
+		view.setMenusEnabled(false);
+		view.setStatus("surveying\u2026");
+		new SwingWorker<Void,Void>()
+		{
+			@Override protected Void doInBackground()
+			{
+				int[] size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+				DeltaMapper.BlockSurvey survey = DeltaMapper.surveyedBlockMaps(blockChannels(size), size[0], size[1]);
+				System.out.print(DeltaMapper.describeBlockMaps(DeltaMapper.bestChannelSet(quantizedChannels(size, new int[6], new int[6]), size[0], size[1]), survey.maps, size[0]));
+				System.out.println();
+				return null;
+			}
+			@Override protected void done()
+			{
+				try { get(); } catch(Exception e) { System.out.println("Survey: " + e); }
+				view.setMenusEnabled(true);
+				view.setStatus(null);
+				apply();
+			}
+		}.execute();
 	}
 
 	// Entropy estimates of the 6 candidates, the set sums, and min_set_id.
@@ -192,14 +255,14 @@ public class PacketWriter
 		open_item.addActionListener(e -> { FileDialog fd = new FileDialog(frame, "Open Image", FileDialog.LOAD); fd.setVisible(true); if(fd.getFile() != null) new PacketWriter(fd.getDirectory() + fd.getFile()); });
 		file_menu.add(open_item); file_menu.addSeparator();
 		JMenuItem reset_item = new JMenuItem("Reset");
-		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); apply(); });
+		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); update(); });
 		file_menu.add(reset_item);
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
 
 		JMenu quant_menu = new JMenu("Quantization");
 		JSlider[] ss = new JSlider[1];
-		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; apply(); }, ss)); pquant_slider = ss[0];
-		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; apply(); }, ss)); pshift_slider = ss[0];
+		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; update(); }, ss)); pquant_slider = ss[0];
+		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; update(); }, ss)); pshift_slider = ss[0];
 		// Error Correction (below a separator) is not a quantizing step: it blends
 		// the preview back toward the original by correction/10. Preview only;
 		// the saved file is unaffected.
@@ -213,17 +276,12 @@ public class PacketWriter
 		{
 			final int dt = i;
 			delta_button[i] = new JRadioButtonMenuItem(dnames[i]); dg.add(delta_button[i]); delta_menu.add(delta_button[i]);
-			delta_button[i].addActionListener(e -> { if(delta_type != dt) { delta_type = dt; apply(); } });
+			delta_button[i].addActionListener(e -> { if(delta_type != dt) { delta_type = dt; update(); } });
 		}
 		delta_button[delta_type].setSelected(true);
 
-		// Block map settings (delta type 13); a change re-applies only when
-		// the block map is selected.
-		delta_menu.addSeparator();
-		delta_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
-			v -> { block_size = v; if(delta_type == 13) apply(); }));
-		delta_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", DeltaMapper.BLOCK_SET_NAMES, block_set,
-			v -> { block_set = v; if(delta_type == 13) apply(); }));
+		// The block map (delta type 13) has no settings: the survey chooses each
+		// channel's block size and predictor set (see update).
 
 		// Packet menu: minimum segment length for string segmentation.
 		// Like the entropy settings, this only takes effect at Save.
@@ -330,6 +388,12 @@ public class PacketWriter
 		int[][] qc = quantizedChannels(size);
 		computeSetSums(qc, size);
 
+		// The block map: the survey's deltas and maps (kept from update, or
+		// surveyed now).
+		int[] cid = DeltaMapper.getChannels(min_set_id);
+		final DeltaMapper.BlockSurvey survey = (delta_type == 13)
+			? DeltaMapper.surveyedBlockMaps(new int[][] {qc[cid[0]], qc[cid[1]], qc[cid[2]]}, new_xdim, new_ydim)
+			: null;
 		int[]    channel_id = DeltaMapper.getChannels(min_set_id);
 		delta_xdim = new_xdim;
 		int[][]  tables  = new int[3][];
@@ -339,7 +403,7 @@ public class PacketWriter
 		ViewerSupport.channels(delta_type == 13, 3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant, block_size, block_set, (i > 0) ? qc[channel_id[i - 1]] : null);
+			ArrayList result = (survey != null) ? DeltaMapper.surveyedDeltas(survey, i, qc[j][0]) : DeltaMapper.getDeltas(qc[j], new_xdim, new_ydim, delta_type, scanline5_variant);
 			if(DeltaMapper.hasMap(delta_type)) maps[i] = (byte[]) result.get(2);
 			delta_list[i] = ((int[]) result.get(1)).clone();
 			ArrayList dsl = StringMapper.getStringList((int[]) result.get(1), false);
@@ -697,7 +761,7 @@ public class PacketWriter
 				if(warning[i] != null) System.out.println("WARNING: channel " + i + " " + warning[i]);
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
-			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeByte(FORMAT_ID); out.writeByte((delta_type == 13) ? FORMAT_VERSION : NO_BLOCK_MAP_VERSION);
 			out.writeShort(image_xdim); out.writeShort(image_ydim); out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 			out.writeByte(min_set_id); out.writeByte(delta_type); out.writeByte(entropy_type); out.writeByte(scanline5_variant);
 			out.writeByte(packet_level);
@@ -735,7 +799,7 @@ public class PacketWriter
 			System.out.println("Entropy coding [" + ENTROPY_NAMES[entropy_type] + "] took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
-			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeByte(FORMAT_ID); out.writeByte((delta_type == 13) ? FORMAT_VERSION : NO_BLOCK_MAP_VERSION);
 			out.writeShort(image_xdim); out.writeShort(image_ydim); out.writeByte(pixel_shift); out.writeByte(pixel_quant);
 			out.writeByte(min_set_id); out.writeByte(delta_type); out.writeByte(entropy_type); out.writeByte(scanline5_variant);
 			out.writeByte(packet_level);
