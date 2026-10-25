@@ -4,15 +4,17 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockReader version 2.1 (reads Block format 4, mixed context coding)
+// BlockReader version 2.2 (reads Block formats 3 to 5; 5: mixed context
+// coding, a block size per channel)
 //
 // Reads BlockWriter's files: block map deltas (delta type 13), Context
-// coded (format version 3) or mixed-context coded (version 4). See
+// coded (format version 3) or mixed-context coded (versions 4 and 5; in 5
+// each channel has its own block size). See
 // BlockWriter.SaveHandler.save for the layout.
 public class BlockReader
 {
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding
+	static final int  FORMAT_VERSION = 5;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel
 	/**
 	 * The oldest format version read (the block predictors changed in version 3).
 	 */
@@ -119,8 +121,7 @@ public class BlockReader
 			else             delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
-		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
-		System.out.println("Block map:    block " + DeltaMapper.shapeName(map[0][0] & 0xFF) + "; predictors " + DeltaMapper.describeMapSet(map[0]) + ", " + DeltaMapper.describeMapSet(map[1]) + ", " + DeltaMapper.describeMapSet(map[2]));
+		System.out.print(DeltaMapper.describeBlockMaps(set_id, map, size[0]));
 		System.out.println();
 	}
 }

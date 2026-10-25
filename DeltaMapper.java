@@ -2476,6 +2476,70 @@ public class DeltaMapper
 		return ids.length + " predictors";
 	}
 
+	/**
+	 * A channel's name in a channel set: blue, green, red, blue-green,
+	 * red-green or red-blue.
+	 *
+	 * @param set_id the channel set
+	 * @param i      the channel, in coding order
+	 * @return its name
+	 */
+	public static String channelName(int set_id, int i) { return SET_NAMES[set_id].split(", ")[i]; }
+
+	/**
+	 * A channel's block map in a line: "Channel 0 - blue: 8 x 8, 2,400 blocks".
+	 *
+	 * @param set_id the channel set
+	 * @param i      the channel, in coding order
+	 * @param map    its block map
+	 * @param xdim   the row width of the deltas
+	 * @return the line (no newline)
+	 */
+	public static String describeBlockSize(int set_id, int i, byte[] map, int xdim)
+	{
+		int block = map[0] & 0xFF;
+		return String.format("Channel %d - %s: %d x %d, %,d blocks", i, channelName(set_id, i), blockWidth(block, xdim), blockHeight(block),
+			map.length - mapHeaderLength(map));
+	}
+
+	/**
+	 * The predictors a block map's blocks use, most used first (ties in the
+	 * map's order), one per line: the number of blocks, then the name.
+	 *
+	 * @param map    a block map
+	 * @param indent put before each line
+	 * @return the lines, each ending in a newline
+	 */
+	public static String describeBlockPredictors(byte[] map, String indent)
+	{
+		int[] ids   = getMapIds(map);
+		int[] count = new int[ids.length];
+		for(int q = mapHeaderLength(map); q < map.length; q++) count[map[q] & 0xFF]++;
+		Integer[] order = new Integer[ids.length];
+		for(int p = 0; p < ids.length; p++) order[p] = p;
+		Arrays.sort(order, (a, b) -> (count[a] != count[b]) ? count[b] - count[a] : a - b);
+		StringBuilder t = new StringBuilder();
+		for(int p : order) if(count[p] > 0) t.append(String.format("%s%,9d  %s%n", indent, count[p], PREDICTOR_TABLE.name(ids[p])));
+		return t.toString();
+	}
+
+	/**
+	 * The channel set, then each channel's block size, number of blocks and
+	 * predictors (see {@link #describeBlockSize} and {@link #describeBlockPredictors}).
+	 *
+	 * @param set_id the channel set
+	 * @param map    the channels' block maps, in coding order
+	 * @param xdim   the row width of the deltas
+	 * @return the description, each line ending in a newline
+	 */
+	public static String describeBlockMaps(int set_id, byte[][] map, int xdim)
+	{
+		StringBuilder t = new StringBuilder("Channel set: " + SET_NAMES[set_id] + String.format("%n"));
+		for(int i = 0; i < map.length; i++)
+			t.append(describeBlockSize(set_id, i, map[i], xdim)).append(String.format("%n")).append(describeBlockPredictors(map[i], "  "));
+		return t.toString();
+	}
+
 	// ---- Choosing the block size and predictor set -----------------------
 
 	/**
@@ -3944,6 +4008,21 @@ public class DeltaMapper
 	}
 
 	/**
+	 * The cost model for a channel at a block shape, from reference deltas
+	 * already found.
+	 *
+	 * @param ps            the channel
+	 * @param ydim          the height
+	 * @param ref           the reference deltas
+	 * @param chosen_before the deltas chosen for the channels before
+	 * @return the cost model
+	 */
+	static DeltaCost channelCost(PixelSource ps, int ydim, int[] ref, int[][] chosen_before)
+	{
+		return new DeltaCost(ps.v, ref, chosen_before, ps.xdim, ydim);
+	}
+
+	/**
 	 * Each channel's block deltas for its predictor ids, blocks assigned by
 	 * estimated cost as the survey does. Channels in order: each one's costs use
 	 * the deltas of the ones before.
@@ -3993,11 +4072,32 @@ public class DeltaMapper
 	 */
 	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int block, int[][] ids, PredictorTable table, boolean whole_table)
 	{
+		int[] blocks = new int[channel.length];
+		Arrays.fill(blocks, block);
+		return getBlockDeltasByCost(channel, xdim, ydim, blocks, ids, table, whole_table);
+	}
+
+	/**
+	 * As {@link #getBlockDeltasByCost(int[][], int, int, int, int[][], PredictorTable, boolean)},
+	 * with a block shape per channel (as {@link #surveyChannels} chooses them).
+	 *
+	 * @param channel     the three channels, in coding order
+	 * @param xdim        the width
+	 * @param ydim        the height
+	 * @param blocks      each channel's block shape
+	 * @param ids         each channel's ids
+	 * @param table       the table the ids index
+	 * @param whole_table true: reference deltas from every id in the table
+	 * @return each channel's list
+	 */
+	public static ArrayList[] getBlockDeltasByCost(int[][] channel, int xdim, int ydim, int[] blocks, int[][] ids, PredictorTable table, boolean whole_table)
+	{
 		ArrayList[] result = new ArrayList[channel.length];
 		int[][] delta = new int[channel.length][];
 		PixelSource[] ps = pixelSources(channel, xdim, ydim, table);
 		for(int i = 0; i < channel.length; i++)
 		{
+			int       block = blocks[i];
 			DeltaCost dc  = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i), table, whole_table);
 			byte[]    map = prefixMaps(ps[i], ydim, block, dc, table, ids[i], new int[] {ids[i].length})[0];
 			result[i] = getBlockDeltasFromMap(ps[i], ydim, map, table, ids[i]);
@@ -4036,6 +4136,21 @@ public class DeltaMapper
 		 * included (null for a survey at one shape).
 		 */
 		public TreeMap<Integer, BlockSurvey> tried;
+		/**
+		 * Each channel's block shape ({@link #surveyChannels}; null for a survey
+		 * with one shape for all the channels).
+		 */
+		public int[] blocks;
+		/**
+		 * Each channel's deltas and block map as chosen ({@link #surveyChannels};
+		 * null otherwise): what {@link #getBlockDeltasByCost} would make from
+		 * blocks and ids.
+		 */
+		public int[][]  deltas;
+		/**
+		 * Each channel's block map, as chosen.
+		 */
+		public byte[][] maps;
 	}
 
 	/**
@@ -4288,52 +4403,206 @@ public class DeltaMapper
 			int[][]  delta = new int[3][];
 			byte[][] map   = new byte[3][];
 			int      bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), blocks = bw * bh;
-			// Big images: the greedy order is found on every step-th block row
-			// (at most SURVEY_SAMPLE_BLOCKS blocks), with the id's cost scaled to
-			// match; the maps are then made over every block.
-			int   step = (blocks > SURVEY_SAMPLE_BLOCKS) ? (blocks + SURVEY_SAMPLE_BLOCKS - 1) / SURVEY_SAMPLE_BLOCKS : 1;
-			int[] rows = new int[(bh + step - 1) / step];
-			for(int r = 0; r < rows.length; r++) rows[r] = r * step;
-			int   sampled = rows.length * bw;
+			int      step = surveyStep(blocks), sampled = (bh + step - 1) / step * bw;
 			log.append(String.format("  block %s%s:\n", shapeName(block), (step > 1) ? String.format(" (order from %,d of %,d blocks)", sampled, blocks) : ""));
 			for(int i = 0; i < 3; i++)
 			{
-				DeltaCost dc    = channelCost(ps[i], ydim, block, Arrays.copyOf(delta, i), table, whole_table);
-				int[]     est   = blockCostRows(ps[i], ydim, block, dc, table, null, rows);
-				int[]     order = greedyCostOrder(est, sampled, table.size(), (long) SURVEY_ID_COST * sampled / blocks);
-				ArrayList<Integer> counts = new ArrayList<Integer>();
-				for(int c : SURVEY_COUNTS) if(c < order.length) counts.add(c);
-				counts.add(order.length);
-				byte[][] prefix = null;
-				if(step > 1)
-				{
-					est = null;
-					prefix = prefixMaps(ps[i], ydim, block, dc, table, order, counts.stream().mapToInt(Integer::intValue).toArray());
-				}
-
-				long best_bytes = Long.MAX_VALUE; int worse = 0;
-				StringBuilder line = new StringBuilder(String.format("    channel %d (order %d):", i, order.length));
-				for(int c = 0; c < counts.size(); c++)
-				{
-					int       n   = counts.get(c);
-					int[]     ids = Arrays.copyOf(order, n);
-					byte[]    mp  = (prefix != null) ? prefix[c] : assignByCost(est, true, table.size(), ids, xdim, ydim, block);
-					ArrayList r   = getBlockDeltasFromMap(ps[i], ydim, mp, table, ids);
-					int[]  d = (int[]) r.get(1);
-					byte[] m = (byte[]) r.get(2);
-					java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-					writeMap(new java.io.DataOutputStream(bytes), 13, m, (i > 0) ? map[i - 1] : null, xdim);
-					long size = bytes.size() + packContextDeltas(d, Arrays.copyOf(delta, i), xdim).length;
-					line.append(String.format(" %d:%,d", n, size));
-					if(size < best_bytes) { best_bytes = size; result.ids[i] = ids; delta[i] = d; map[i] = m; worse = 0; line.append('*'); }
-					else if(++worse == 2) break;
-				}
-				result.bytes += best_bytes;
-				log.append(line).append('\n');
+				StringBuilder line = new StringBuilder();
+				ChannelSurvey c = surveyChannel(ps[i], ydim, block, table, whole_table, Arrays.copyOf(delta, i), (i > 0) ? map[i - 1] : null, line);
+				result.ids[i] = c.ids; delta[i] = c.delta; map[i] = c.map;
+				result.bytes += c.bytes;
+				log.append(String.format("    channel %d", i)).append(line).append('\n');
 			}
 			return result;
 		}
 		catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+	}
+
+	/**
+	 * Big images find the survey's greedy order on every step-th block row (at
+	 * most SURVEY_SAMPLE_BLOCKS blocks), with the id's cost scaled to match;
+	 * the maps are then made over every block.
+	 *
+	 * @param blocks the number of blocks
+	 * @return the step
+	 */
+	private static int surveyStep(int blocks) { return (blocks > SURVEY_SAMPLE_BLOCKS) ? (blocks + SURVEY_SAMPLE_BLOCKS - 1) / SURVEY_SAMPLE_BLOCKS : 1; }
+
+	/**
+	 * One channel's survey at one block shape: its predictor set, coded size,
+	 * deltas and map.
+	 */
+	static final class ChannelSurvey
+	{
+		/** An empty result (no bytes yet). */
+		ChannelSurvey() {}
+
+		/**
+		 * The block shape.
+		 */
+		int    block;
+		/**
+		 * The predictor ids kept.
+		 */
+		int[]  ids;
+		/**
+		 * The coded bytes (Context-coded deltas plus the map).
+		 */
+		long   bytes = Long.MAX_VALUE;
+		/**
+		 * The deltas.
+		 */
+		int[]  delta;
+		/**
+		 * The block map.
+		 */
+		byte[] map;
+	}
+
+	/**
+	 * One channel of the survey at one block shape: the greedy order by
+	 * estimated bits, then the real coded size of its prefixes at
+	 * SURVEY_COUNTS until two in a row are larger than the best.
+	 *
+	 * @param ps            the channel, and what its primitives need
+	 * @param ydim          the height
+	 * @param block         the block shape
+	 * @param table         the predictor table
+	 * @param whole_table   true: the cost model's reference deltas from every id in the table
+	 * @param chosen_before the deltas chosen for the channels before
+	 * @param previous_map  the map chosen for the channel before, or null
+	 * @param line          the report line (order length, then n:bytes for each prefix tried), added to
+	 * @return the channel's survey
+	 * @throws java.io.IOException never in practice (byte streams)
+	 */
+	private static ChannelSurvey surveyChannel(PixelSource ps, int ydim, int block, PredictorTable table, boolean whole_table,
+		int[][] chosen_before, byte[] previous_map, StringBuilder line) throws java.io.IOException
+	{
+		return surveyChannel(ps, ydim, block, table, channelCost(ps, ydim, block, chosen_before, table, whole_table), chosen_before, previous_map, line);
+	}
+
+	/**
+	 * As the method above, with the cost model given.
+	 *
+	 * @param ps            the channel, and what its primitives need
+	 * @param ydim          the height
+	 * @param block         the block shape
+	 * @param table         the predictor table
+	 * @param dc            the cost model
+	 * @param chosen_before the deltas chosen for the channels before
+	 * @param previous_map  the map chosen for the channel before, or null
+	 * @param line          the report line, added to
+	 * @return the channel's survey
+	 * @throws java.io.IOException never in practice (byte streams)
+	 */
+	private static ChannelSurvey surveyChannel(PixelSource ps, int ydim, int block, PredictorTable table, DeltaCost dc,
+		int[][] chosen_before, byte[] previous_map, StringBuilder line) throws java.io.IOException
+	{
+		int   xdim = ps.xdim;
+		int   bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), blocks = bw * bh;
+		int   step = surveyStep(blocks);
+		int[] rows = new int[(bh + step - 1) / step];
+		for(int r = 0; r < rows.length; r++) rows[r] = r * step;
+		int   sampled = rows.length * bw;
+		int[]     est   = blockCostRows(ps, ydim, block, dc, table, null, rows);
+		int[]     order = greedyCostOrder(est, sampled, table.size(), (long) SURVEY_ID_COST * sampled / blocks);
+		ArrayList<Integer> counts = new ArrayList<Integer>();
+		for(int c : SURVEY_COUNTS) if(c < order.length) counts.add(c);
+		counts.add(order.length);
+		byte[][] prefix = null;
+		if(step > 1)
+		{
+			est = null;
+			prefix = prefixMaps(ps, ydim, block, dc, table, order, counts.stream().mapToInt(Integer::intValue).toArray());
+		}
+
+		ChannelSurvey result = new ChannelSurvey();
+		result.block = block;
+		int worse = 0;
+		line.append(String.format(" (order %d):", order.length));
+		for(int c = 0; c < counts.size(); c++)
+		{
+			int       n   = counts.get(c);
+			int[]     ids = Arrays.copyOf(order, n);
+			byte[]    mp  = (prefix != null) ? prefix[c] : assignByCost(est, true, table.size(), ids, xdim, ydim, block);
+			ArrayList r   = getBlockDeltasFromMap(ps, ydim, mp, table, ids);
+			int[]  d = (int[]) r.get(1);
+			byte[] m = (byte[]) r.get(2);
+			java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+			writeMap(new java.io.DataOutputStream(bytes), 13, m, previous_map, xdim);
+			long size = bytes.size() + packContextDeltas(d, chosen_before, xdim).length;
+			line.append(String.format(" %d:%,d", n, size));
+			if(size < result.bytes) { result.bytes = size; result.ids = ids; result.delta = d; result.map = m; worse = 0; line.append('*'); }
+			else if(++worse == 2) break;
+		}
+		return result;
+	}
+
+	/**
+	 * The square block sizes {@link #surveyChannels} tries by default.
+	 */
+	public static final int[] SURVEY_CHANNEL_SIZES = {4, 6, 8, 12, 16};
+
+	/**
+	 * The survey with a block shape per channel: channels in order, each
+	 * surveyed at every shape in sizes (in parallel, as memory allows) given
+	 * the deltas and map chosen for the channels before it, keeping the shape
+	 * that codes it smallest (the first on a tie). The result's block is
+	 * channel 0's; blocks has each channel's.
+	 *
+	 * @param channel     the three channels, in coding order
+	 * @param xdim        the width
+	 * @param ydim        the height
+	 * @param table       the predictor table
+	 * @param sizes       the block shapes to try
+	 * @param whole_table true: the cost model's reference deltas from every id in the table
+	 * @return the survey
+	 */
+	public static BlockSurvey surveyChannels(int[][] channel, int xdim, int ydim, PredictorTable table, int[] sizes, boolean whole_table)
+	{
+		PixelSource[] ps = pixelSources(channel, xdim, ydim, table);
+		long task = 44L * xdim * ydim + 4L * table.size() * Math.min(SURVEY_SAMPLE_BLOCKS, blocksAcross(xdim, 4) * ((ydim - 1 + 3) / 4));
+		BlockSurvey result = new BlockSurvey();
+		result.blocks = new int[channel.length];
+		int[][]  delta = new int[channel.length][];
+		byte[][] map   = new byte[channel.length][];
+		StringBuilder log = new StringBuilder();
+		for(int i = 0; i < channel.length; i++)
+		{
+			final int ci = i;
+			ChannelSurvey[] got = new ChannelSurvey[sizes.length];
+			StringBuilder[] line = new StringBuilder[sizes.length];
+			int[][] before = Arrays.copyOf(delta, i);
+			byte[]  prev   = (i > 0) ? map[i - 1] : null;
+			// The whole table's reference deltas for every size in one pass.
+			int[][] ref = whole_table ? tableReferenceDeltas(ps[i], ydim, sizes, table) : null;
+			boundedParallel(sizes.length, task, t ->
+			{
+				line[t] = new StringBuilder();
+				try
+				{
+					DeltaCost dc = (ref != null) ? channelCost(ps[ci], ydim, ref[t], before) : channelCost(ps[ci], ydim, sizes[t], before, table, false);
+					got[t] = surveyChannel(ps[ci], ydim, sizes[t], table, dc, before, prev, line[t]);
+				}
+				catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+			});
+			int best = 0;
+			for(int t = 0; t < sizes.length; t++)
+			{
+				log.append(String.format("  channel %d, block %s", i, shapeName(sizes[t]))).append(line[t]).append('\n');
+				if(got[t].bytes < got[best].bytes) best = t;
+			}
+			result.blocks[i] = sizes[best];
+			result.ids[i]    = got[best].ids;
+			result.bytes    += got[best].bytes;
+			delta[i] = got[best].delta;
+			map[i]   = got[best].map;
+		}
+		result.block  = result.blocks[0];
+		result.report = log.toString();
+		result.deltas = delta;
+		result.maps   = map;
+		return result;
 	}
 
 	/**
@@ -4440,8 +4709,143 @@ public class DeltaMapper
 	}
 
 	/**
-	 * The survey's reference deltas from the whole table: each block takes
-	 * whichever of the table's predictors gives the smallest sum of |delta|.
+	 * The survey's reference deltas from the whole table, at several block
+	 * shapes: each block takes whichever of the table's predictors gives the
+	 * smallest sum of |delta| (the first on a tie). Each family of nested
+	 * squares (4, 8 and 16; 6 and 12) is found in one pass over the pixels,
+	 * the larger blocks' sums added up from the smallest's; other shapes one
+	 * at a time. Either way the result is the same.
+	 *
+	 * @param ps     the channel, and what its primitives need
+	 * @param ydim   the height
+	 * @param blocks the block shapes
+	 * @param table  the predictor table (at most 256 ids)
+	 * @return each shape's deltas
+	 */
+	static int[][] tableReferenceDeltas(PixelSource ps, int ydim, int[] blocks, PredictorTable table)
+	{
+		int[][] ref = new int[blocks.length][];
+		if(!nestedSquares(blocks))
+		{
+			// Each family of nested squares (4, 8, 16; 6, 12) in its own pass;
+			// other shapes one at a time.
+			for(int[] family : nestedFamilies(blocks))
+			{
+				int[] shapes = new int[family.length];
+				for(int f = 0; f < family.length; f++) shapes[f] = blocks[family[f]];
+				int[][] got = (family.length == 1) ? new int[][] {tableReferenceDeltas(ps, ydim, shapes[0], table)} : tableReferenceDeltas(ps, ydim, shapes, table);
+				for(int f = 0; f < family.length; f++) ref[family[f]] = got[f];
+			}
+			return ref;
+		}
+		int xdim = ps.xdim, n = table.size();
+		int base = Integer.MAX_VALUE, top = 0;
+		for(int b : blocks) { base = Math.min(base, b); top = Math.max(top, b); }
+		int[] ids = new int[n];
+		for(int p = 0; p < n; p++) ids[p] = p;
+		byte[][] map = new byte[blocks.length][];
+		for(int t = 0; t < blocks.length; t++)
+		{
+			map[t] = new byte[2 + blocksAcross(xdim, blocks[t]) * blocksDown(ydim, blocks[t])];
+			map[t][0] = (byte) blocks[t];
+		}
+		final int base_ = base, top_ = top;
+		int bw_base = blocksAcross(xdim, base), rows_base = top / base;
+		int[] src = ps.v;
+		// A band of top rows at a time: each base block's sums of |delta|, then
+		// the sums of each shape's blocks, which are exactly unions of base blocks.
+		java.util.stream.IntStream.range(0, blocksDown(ydim, top)).parallel().forEach(band ->
+		{
+			int[] sums = new int[rows_base * bw_base * n];
+			int[] prim = new int[table.primitives];
+			int   y0 = 1 + band * top_, y1 = Math.min(ydim, y0 + top_);
+			for(int y = y0; y < y1; y++)
+			{
+				int r = (y - y0) / base_;
+				for(int x = 1; x < xdim - 1; x++)
+				{
+					int k = y * xdim + x, s0 = (r * bw_base + (x - 1) / base_) * n;
+					ps.primitives(k, table.primitives, prim);
+					for(int p = 0; p < n; p++) sums[s0 + p] += Math.abs(src[k] - table.predict(p, prim));
+				}
+			}
+			long[] total = new long[n];
+			for(int t = 0; t < blocks.length; t++)
+			{
+				int size = blocks[t], f = size / base_, rows = top_ / size, bw = blocksAcross(xdim, size), bh = blocksDown(ydim, size);
+				for(int rs = 0; rs < rows; rs++)
+				{
+					int by = band * rows + rs;
+					if(by >= bh) break;
+					for(int bx = 0; bx < bw; bx++)
+					{
+						Arrays.fill(total, 0);
+						for(int rr = rs * f; rr < rs * f + f; rr++)
+							for(int cc = bx * f; cc < Math.min(bw_base, bx * f + f); cc++)
+								for(int p = 0, s0 = (rr * bw_base + cc) * n; p < n; p++) total[p] += sums[s0 + p];
+						int best = 0;
+						for(int p = 1; p < n; p++) if(total[p] < total[best]) best = p;
+						map[t][2 + by * bw + bx] = (byte) best;
+					}
+				}
+			}
+		});
+		for(int t = 0; t < blocks.length; t++) ref[t] = (int[]) getBlockDeltasFromMap(ps, ydim, map[t], table, ids).get(1);
+		return ref;
+	}
+
+	/**
+	 * The shapes split into families of nested squares, smallest first: each
+	 * square joins the first family whose smallest divides it and whose
+	 * largest divides it or is divided by it (4, 6, 8, 12, 16: {4, 8, 16} and
+	 * {6, 12}). Other shapes are families of one.
+	 *
+	 * @param blocks the shapes
+	 * @return the families, as indices into blocks
+	 */
+	private static ArrayList<int[]> nestedFamilies(int[] blocks)
+	{
+		Integer[] order = new Integer[blocks.length];
+		for(int t = 0; t < blocks.length; t++) order[t] = t;
+		Arrays.sort(order, (a, b) -> blocks[a] - blocks[b]);
+		ArrayList<ArrayList<Integer>> family = new ArrayList<ArrayList<Integer>>();
+		for(int t : order)
+		{
+			int b = blocks[t];
+			ArrayList<Integer> home = null;
+			if(b < SHAPE_FIRST)
+				for(ArrayList<Integer> f : family)
+				{
+					int base = blocks[f.get(0)], top = blocks[f.get(f.size() - 1)];
+					if(base < SHAPE_FIRST && b % base == 0 && (top % b == 0 || b % top == 0)) { home = f; break; }
+				}
+			if(home == null) { home = new ArrayList<Integer>(); family.add(home); }
+			home.add(t);
+		}
+		ArrayList<int[]> result = new ArrayList<int[]>();
+		for(ArrayList<Integer> f : family) result.add(f.stream().mapToInt(Integer::intValue).toArray());
+		return result;
+	}
+
+	/**
+	 * Whether the shapes are squares, each dividing the largest and divided by
+	 * the smallest: then every block of each is a union of the smallest's
+	 * blocks, inside one row of the largest's.
+	 *
+	 * @param blocks the shapes
+	 * @return whether their reference deltas can be found in one pass
+	 */
+	private static boolean nestedSquares(int[] blocks)
+	{
+		int base = Integer.MAX_VALUE, top = 0;
+		for(int b : blocks) { if(b >= SHAPE_FIRST) return false; base = Math.min(base, b); top = Math.max(top, b); }
+		for(int b : blocks) if(b % base != 0 || top % b != 0) return false;
+		return true;
+	}
+
+	/**
+	 * The survey's reference deltas from the whole table at one block shape
+	 * (see the method above, which finds several shapes' in one pass).
 	 *
 	 * @param ps    the channel, and what its primitives need
 	 * @param ydim  the height
@@ -4628,8 +5032,10 @@ public class DeltaMapper
 			int head = mapHeaderLength(map);
 			out.write(map, 0, head);
 			width    = blocksAcross(xdim, map[0] & 0xFF);
+			int block = map[0] & 0xFF;
 			map      = Arrays.copyOfRange(map, head, map.length);
-			previous = (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length);
+			if(previous != null)
+				previous = alignMap(Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length), previous[0] & 0xFF, block, xdim, map.length);
 		}
 		byte[][] form = {mapToString(map), mapToArithmetic(map), mapToContext(map, previous, width), mapToNeighbours(map, previous, width)};
 		int best = 0;
@@ -4674,7 +5080,9 @@ public class DeltaMapper
 			}
 			if(!validShape(block))
 				throw new java.io.IOException("Block map with block shape " + block + ": not one this version reads.");
-			byte[] body = readMapForms(in, (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length), blocksAcross(xdim, block));
+			byte[] prev = (previous == null) ? null : Arrays.copyOfRange(previous, mapHeaderLength(previous), previous.length);
+			int    prev_block = (previous == null) ? block : previous[0] & 0xFF;
+			byte[] body = readMapForms(in, (prev == null) ? null : n_entries -> alignMap(prev, prev_block, block, xdim, n_entries), blocksAcross(xdim, block));
 			int    head = 2 + ids.length;
 			byte[] map  = new byte[body.length + head];
 			map[0] = (byte) block; map[1] = (byte) ids.length;
@@ -4684,22 +5092,52 @@ public class DeltaMapper
 				if((map[q] & 0xFF) >= ids.length) throw new java.io.IOException("Block map entry " + (map[q] & 0xFF) + " with " + ids.length + " predictors.");
 			return map;
 		}
-		return readMapForms(in, previous, mapWidth(delta_type, xdim));
+		return readMapForms(in, (previous == null) ? null : n_entries -> previous, mapWidth(delta_type, xdim));
+	}
+
+	/**
+	 * The previous channel's block map entries lined up with this channel's
+	 * blocks: each block takes the entry of the previous channel's block
+	 * under its centre (the nearest one at the edges). With the same block
+	 * shape that is entry for entry, as before format 5.
+	 *
+	 * @param previous   the previous channel's map entries
+	 * @param prev_block the previous channel's block shape
+	 * @param block      this channel's block shape
+	 * @param xdim       the row width of the deltas
+	 * @param n          the number of this map's entries
+	 * @return the entries, one per block of this map
+	 */
+	static byte[] alignMap(byte[] previous, int prev_block, int block, int xdim, int n)
+	{
+		if(prev_block == block) return previous;
+		int    w = blocksAcross(xdim, block), pw = blocksAcross(xdim, prev_block), ph = previous.length / pw;
+		int    bw = blockWidth(block, xdim), bh = blockHeight(block), pbw = blockWidth(prev_block, xdim), pbh = blockHeight(prev_block);
+		byte[] out = new byte[n];
+		for(int k = 0; k < n; k++)
+		{
+			int px = Math.min(pw - 1, ((k % w) * bw + bw / 2) / pbw);
+			int py = Math.min(ph - 1, ((k / w) * bh + bh / 2) / pbh);
+			out[k] = previous[py * pw + px];
+		}
+		return out;
 	}
 
 	/**
 	 * Reads the flag byte and one of the four map forms.
 	 *
-	 * @param in       the stream
-	 * @param previous the previous channel's map entries, or null
-	 * @param width    the map's row width
+	 * @param in            the stream
+	 * @param previous_for  the previous channel's map entries, lined up with
+	 *                      this map's n entries (given n), or null
+	 * @param width         the map's row width
 	 * @return the map entries
 	 * @throws java.io.IOException if the stream fails or the form is unknown
 	 */
-	private static byte[] readMapForms(java.io.DataInputStream in, byte[] previous, int width) throws java.io.IOException
+	private static byte[] readMapForms(java.io.DataInputStream in, java.util.function.IntFunction<byte[]> previous_for, int width) throws java.io.IOException
 	{
 		int coding = in.readByte();
 		int n      = in.readInt();
+		byte[] previous = (previous_for == null) ? null : previous_for.apply(n);
 		if(coding == 3)
 		{
 			int    K     = in.readShort();
