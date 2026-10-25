@@ -5,8 +5,8 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.2 (writes Block format 5: mixed context coding, a
-// block size per channel)
+// BlockWriter version 2.3 (writes Block format 5: mixed context coding, a
+// block size per channel; or format 6, the same in bands)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
@@ -23,14 +23,35 @@ import javax.swing.*;
 // any change to the quantization (Pixel Resolution or Color Resolution).
 // The survey measures sizes with the Context coder
 // (DeltaMapper.packContextDeltas); the file uses the mixed coder, about 1%
-// smaller. Files are read by BlockReader.
+// smaller. File > Bands splits the image into up to MAX_BANDS bands of rows
+// that a reader can decode at the same time (format 6), for about a byte
+// per column per band boundary; with 1 (the default) Save writes format 5.
+// Files are read by BlockReader.
 public class BlockWriter
 {
 	// File format: every file starts with FORMAT_ID ('B' = Block format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 5;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel
+	static final int  FORMAT_VERSION = 6;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands
+	/**
+	 * The version written with one band: the layout before bands.
+	 */
+	static final int  ONE_BAND_VERSION = 5;
+	/**
+	 * The most bands Save offers.
+	 */
+	static final int  MAX_BANDS = 16;
+	/**
+	 * The fewest rows (of the quantized image) a band may have: smaller images
+	 * get fewer bands.
+	 */
+	static final int  BAND_MIN_ROWS = 64;
+	/**
+	 * Roughly what each band boundary costs, in tenths of a byte per column
+	 * (measured: 0.8 to 1.6 bytes per column); for the Bands estimate only.
+	 */
+	static final int  BAND_COST_TENTHS = 13;
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -45,6 +66,11 @@ public class BlockWriter
 	int pixel_shift = 3;
 	int correction  = 0;
 	int min_set_id  = 0;
+	/**
+	 * How many independently decodable bands Save writes (1: one, format 5);
+	 * at most MAX_BANDS, and fewer if bands would have under BAND_MIN_ROWS rows.
+	 */
+	int bands       = 1;
 
 	// ---- The last survey (see survey) ----------------------------------------
 	/**
@@ -73,6 +99,11 @@ public class BlockWriter
 	 * The survey's time, printed with the next Apply's listing; -1 once printed.
 	 */
 	long    survey_time  = -1;
+	/**
+	 * The survey's coded size (Context-coded deltas plus maps), for the Bands
+	 * estimate.
+	 */
+	long    survey_bytes = 0;
 
 	JSlider pquant_slider, pshift_slider, corr_slider;
 	/**
@@ -152,6 +183,11 @@ public class BlockWriter
 		JMenuItem reset_item = new JMenuItem("Reset");
 		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); quantChanged(); });
 		file_menu.add(reset_item);
+		// Bands: Save codes the image as this many bands of rows, each decodable
+		// on its own (so a reader can decode them at the same time), for a small
+		// cost per band boundary. Like Save itself, it never changes the preview.
+		JSlider[] bs = new JSlider[1];
+		file_menu.add(ViewerSupport.makeSliderDialog(frame, "Bands", 1, MAX_BANDS, bands, v -> { bands = v; view.setStatus(bandEstimate()); }, bs));
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
 
 		JMenu quant_menu = new JMenu("Quantization");
@@ -255,6 +291,7 @@ public class BlockWriter
 			survey_quant  = quant;
 			survey_shift  = shift;
 			survey_time   = System.nanoTime() - start;
+			survey_bytes  = survey.bytes;
 		}
 	}
 
@@ -294,7 +331,60 @@ public class BlockWriter
 		if(!applied) return "No survey yet.";
 		StringBuilder t = new StringBuilder();
 		for(int i = 0; i < 3; i++) t.append(DeltaMapper.describeBlockSize(min_set_id, i, map_list[i], delta_xdim)).append('\n');
+		if(bandsUsed() > 1) t.append(describeBands(bandsUsed(), value_list[0].length / delta_xdim)).append('\n');
 		return t.toString();
+	}
+
+	// ---- Bands --------------------------------------------------------------
+
+	/**
+	 * The bands Save will write: bands, but no more than leave BAND_MIN_ROWS
+	 * rows in each.
+	 *
+	 * @return the number of bands
+	 */
+	int bandsUsed()
+	{
+		int rows = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant)[1];
+		return Math.max(1, Math.min(bands, rows / BAND_MIN_ROWS));
+	}
+
+	/**
+	 * A band's first row.
+	 *
+	 * @param b    the band (n for the end of the last)
+	 * @param n    the number of bands
+	 * @param rows the rows split into them
+	 * @return the row
+	 */
+	static int bandStart(int b, int n, int rows) { return (int) ((long) b * rows / n); }
+
+	/**
+	 * The bands in words: "8 bands of 375 rows" (or "of 374 to 375 rows").
+	 *
+	 * @param n    the number of bands
+	 * @param rows the rows split into them
+	 * @return the description
+	 */
+	static String describeBands(int n, int rows)
+	{
+		int lo = rows / n, hi = (rows + n - 1) / n;
+		return n + " bands of " + ((lo == hi) ? lo : lo + " to " + hi) + " rows";
+	}
+
+	/**
+	 * The Bands dialog's estimate of what the bands cost.
+	 *
+	 * @return the estimate, for the status line
+	 */
+	private String bandEstimate()
+	{
+		int n = bandsUsed();
+		if(n == 1) return (bands > 1) ? "1 band: the image is too small for more" : "1 band";
+		int[] size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+		long  cost = (long) (n - 1) * size[0] * BAND_COST_TENTHS / 10;
+		String pct = (survey_bytes > 0) ? String.format(" (%+.2f%%)", 100.0 * cost / survey_bytes) : "";
+		return describeBands(n, size[1]) + String.format(": about +%,d bytes", cost) + pct;
 	}
 
 	// Each channel's predictors, most used first, with their numbers of blocks.
@@ -418,21 +508,46 @@ public class BlockWriter
 				return;
 			}
 			int raw = image_xdim * image_ydim * 3;
-			System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
+			if(one_band_bytes > 0)
+				System.out.println(String.format("Saved %s: %,d bytes (%s; %,d as one band, %+.2f%%)", file.getName(), file.length(),
+					describeBands(bandsUsed(), value_list[0].length / delta_xdim), one_band_bytes, 100.0 * (file.length() - one_band_bytes) / one_band_bytes));
+			else
+				System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
 		}
 
-		// Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
-		// shorts), pixel_shift, pixel_quant, channel set. Then per channel:
-		// int min, int init, the block map (DeltaMapper.writeMap, type 13;
-		// it carries the channel's block size and predictor ids; its context
-		// lines up the previous channel's map, DeltaMapper.alignMap), then the
-		// deltas, mixed-context coded (DeltaMapper.packMixedDeltas). Channels 1
-		// and 2 use the ones before them as context, so the reader decodes in
-		// order.
+		/**
+		 * The size of the file as one band, when Save wrote bands (0 otherwise).
+		 */
+		long one_band_bytes = 0;
+
+		// One band: format 5 (oneBand). Bands: format 6 (inBands), and the size
+		// it would have been as one band for the report.
 		private void save(DataOutputStream out) throws IOException
+		{
+			one_band_bytes = 0;
+			if(bandsUsed() == 1) { oneBand(out); return; }
+			ByteArrayOutputStream one = new ByteArrayOutputStream();
+			oneBand(new DataOutputStream(one));
+			one_band_bytes = one.size();
+			inBands(out, bandsUsed());
+		}
+
+		/**
+		 * Format 5. Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
+		 * shorts), pixel_shift, pixel_quant, channel set. Then per channel: int
+		 * min, int init, the block map (DeltaMapper.writeMap, type 13; it
+		 * carries the channel's block size and predictor ids; its context lines
+		 * up the previous channel's map, DeltaMapper.alignMap), then the deltas,
+		 * mixed-context coded (DeltaMapper.packMixedDeltas). Channels 1 and 2 use
+		 * the ones before them as context, so the reader decodes in order.
+		 *
+		 * @param out the stream
+		 * @throws IOException if the stream fails
+		 */
+		private void oneBand(DataOutputStream out) throws IOException
 		{
 			byte[][] coded = new byte[3][];
 			ViewerSupport.parallel(3, i ->
@@ -448,7 +563,7 @@ public class BlockWriter
 			});
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
-			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeByte(FORMAT_ID); out.writeByte(ONE_BAND_VERSION);
 			out.writeShort(image_xdim); out.writeShort(image_ydim);
 			out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(min_set_id);
 			for(int i = 0; i < 3; i++)
@@ -458,6 +573,67 @@ public class BlockWriter
 				DeltaMapper.writeMap(out, 13, map_list[i], (i > 0) ? map_list[i - 1] : null, delta_xdim);
 				out.write(coded[i]);
 			}
+		}
+	
+		/**
+		 * Format 6: the header as format 5's, then the number of bands n (an
+		 * unsigned byte), each channel's int min (coding order), then n int
+		 * lengths and the n bands. Band b is rows bandStart(b) to bandStart(b +
+		 * 1) of the quantized image, coded as an image of its own with the
+		 * survey's block sizes and predictor sets (blocks assigned by cost in the
+		 * band; the predictors, least squares and contexts start again at its
+		 * top): per channel, int init, the block map, then the mixed-coded
+		 * deltas. A reader can decode the bands at the same time.
+		 *
+		 * @param out the stream
+		 * @param n   the number of bands
+		 * @throws IOException if the stream fails
+		 */
+		private void inBands(DataOutputStream out, int n) throws IOException
+		{
+			int   xdim = delta_xdim, rows = value_list[0].length / xdim;
+			byte[][] band = new byte[n][];
+			for(int b = 0; b < n; b++)
+			{
+				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows), h = y1 - y0;
+				int[][] ch = new int[3][];
+				for(int i = 0; i < 3; i++) ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
+				ArrayList[] got = DeltaMapper.getBlockDeltasByCost(ch, xdim, h, survey_blocks, survey_ids, DeltaMapper.PREDICTOR_TABLE, true);
+				int[][]  d = new int[3][];
+				byte[][] m = new byte[3][];
+				for(int i = 0; i < 3; i++) { d[i] = (int[]) got[i].get(1); m[i] = (byte[]) got[i].get(2); }
+				byte[][] coded = new byte[3][];
+				final int band_b = b;
+				ViewerSupport.parallel(3, i ->
+				{
+					try
+					{
+						int[][] previous = Arrays.copyOf(d, i);
+						coded[i] = DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim);
+						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim), d[i]))
+							System.out.println("WARNING: band " + band_b + " channel " + i + " deltas do not decode back.");
+					}
+					catch(IOException e) { throw new UncheckedIOException(e); }
+				});
+				ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+				DataOutputStream bo = new DataOutputStream(bytes);
+				for(int i = 0; i < 3; i++)
+				{
+					bo.writeInt(ch[i][0]);
+					DeltaMapper.writeMap(bo, 13, m[i], (i > 0) ? m[i - 1] : null, xdim);
+					bo.write(coded[i]);
+				}
+				band[b] = bytes.toByteArray();
+			}
+
+			int[] channel_id = DeltaMapper.getChannels(min_set_id);
+			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeShort(image_xdim); out.writeShort(image_ydim);
+			out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(min_set_id);
+			out.writeByte(n);
+			for(int i = 0; i < 3; i++) out.writeInt(channel_min[channel_id[i]]);
+			for(int b = 0; b < n; b++) out.writeInt(band[b].length);
+			for(int b = 0; b < n; b++) out.write(band[b]);
 		}
 	}
 }
