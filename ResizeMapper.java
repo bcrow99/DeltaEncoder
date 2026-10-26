@@ -7,10 +7,11 @@
  * (or rows) to drop or add; when they don't divide evenly, one fewer, with
  * the extra length spread over evenly spaced "long" segments
  * ({@link #longSegments}). Shrinking drops the column after each segment;
- * growing inserts an average after each segment but the last.
+ * growing inserts an average after each segment but the last. resize2 does
+ * the same with the dropped or inserted columns and rows centred.
  *
  * @author Brian Crowley
- * @version 1.1
+ * @version 1.2
  */
 public class ResizeMapper
 {
@@ -420,6 +421,139 @@ public class ResizeMapper
 			int[] dst = resizeX(tmp, xdim, new_xdim);
 			return dst;
 		}
+	}
+
+	/**
+	 * As {@link #resize}, but with the dropped (shrinking) or inserted
+	 * (growing) columns and rows centred: spread evenly with half a gap at
+	 * each end, the same pattern counted from either side
+	 * ({@link #centredPositions}). Mirroring or rotating an image before
+	 * shrinking it then keeps the same original pixels, and the first and
+	 * last columns and rows are kept. Shrinking only drops (every value kept
+	 * is an original one); growing inserts the average of the nearest kept
+	 * neighbours, and puts the kept values back exactly where a shrink to
+	 * that size took them from. Both directions are done in one pass, each
+	 * pixel the average of up to four source pixels with one rounding, so the
+	 * result doesn't depend on which direction goes first (a pixel inserted
+	 * in one direction only is the average of its two neighbours, as
+	 * resizeX2 and resizeY2 give it).
+	 *
+	 * @param src      the input raster
+	 * @param xdim     the original width
+	 * @param new_xdim the resized width
+	 * @param new_ydim the resized height
+	 * @return the resized raster
+	 */
+	public static int[] resize2(int src[], int xdim, int new_xdim, int new_ydim)
+	{
+		int[][] col = centredMap(xdim, new_xdim), row = centredMap(src.length / xdim, new_ydim);
+		int[] ca = col[0], cb = col[1], dst = new int[new_xdim * new_ydim];
+		for(int y = 0; y < new_ydim; y++)
+		{
+			int s = row[0][y] * xdim, t = row[1][y] * xdim, d = y * new_xdim;
+			for(int x = 0; x < new_xdim; x++) dst[d + x] = (src[s + ca[x]] + src[s + cb[x]] + src[t + ca[x]] + src[t + cb[x]]) / 4;
+		}
+		return dst;
+	}
+
+	/**
+	 * Changes the width of a raster with centred columns (see {@link #resize2}).
+	 *
+	 * @param src      the input raster
+	 * @param xdim     the original width
+	 * @param new_xdim the resized width
+	 * @return the resized raster
+	 */
+	public static int[] resizeX2(int src[], int xdim, int new_xdim)
+	{
+		int   ydim = src.length / xdim;
+		int[][] map = centredMap(xdim, new_xdim);
+		int[] a = map[0], b = map[1], dst = new int[new_xdim * ydim];
+		for(int y = 0; y < ydim; y++)
+			for(int x = 0, s = y * xdim, d = y * new_xdim; x < new_xdim; x++) dst[d + x] = (src[s + a[x]] + src[s + b[x]]) / 2;
+		return dst;
+	}
+
+	/**
+	 * Changes the height of a raster with centred rows (see {@link #resize2}).
+	 *
+	 * @param src      the input raster
+	 * @param xdim     the width
+	 * @param new_ydim the resized height
+	 * @return the resized raster
+	 */
+	public static int[] resizeY2(int src[], int xdim, int new_ydim)
+	{
+		int   ydim = src.length / xdim;
+		int[][] map = centredMap(ydim, new_ydim);
+		int[] a = map[0], b = map[1], dst = new int[xdim * new_ydim];
+		for(int y = 0; y < new_ydim; y++)
+			for(int x = 0, s = a[y] * xdim, t = b[y] * xdim, d = y * xdim; x < xdim; x++) dst[d + x] = (src[s + x] + src[t + x]) / 2;
+		return dst;
+	}
+
+	/**
+	 * Where each pixel of a resized line of new_n comes from, in a line of n:
+	 * the average of source pixels a[i] and b[i] (the same pixel where it is
+	 * kept). Shrinking drops the centred positions of the n - new_n; growing
+	 * inserts new_n - n at the centred positions of the new line, each the
+	 * average of the nearest kept pixels either side (or a copy of the one
+	 * there is).
+	 *
+	 * @param n     the line's length
+	 * @param new_n the resized length
+	 * @return {a, b}
+	 */
+	private static int[][] centredMap(int n, int new_n)
+	{
+		int[] a = new int[new_n], b = new int[new_n];
+		if(new_n <= n)
+		{
+			boolean[] drop = new boolean[n];
+			for(int p : centredPositions(n, n - new_n)) drop[p] = true;
+			for(int i = 0, o = 0; i < n; i++) if(!drop[i]) { a[o] = i; b[o] = i; o++; }
+		}
+		else
+		{
+			boolean[] insert = new boolean[new_n];
+			for(int p : centredPositions(new_n, new_n - n)) insert[p] = true;
+			int[] kept = new int[new_n];   // the source pixel at each kept position, -1 where inserted
+			for(int o = 0, i = 0; o < new_n; o++) kept[o] = insert[o] ? -1 : i++;
+			for(int o = 0; o < new_n; o++)
+			{
+				if(kept[o] >= 0) { a[o] = kept[o]; b[o] = kept[o]; continue; }
+				int l = o - 1, r = o + 1;
+				while(l >= 0 && kept[l] < 0) l--;
+				while(r < new_n && kept[r] < 0) r++;
+				a[o] = (l >= 0) ? kept[l] : kept[r];
+				b[o] = (r < new_n) ? kept[r] : kept[l];
+			}
+		}
+		return new int[][] {a, b};
+	}
+
+	/**
+	 * The centred positions of d columns (or rows) in a line of n: spread
+	 * evenly with half a gap at each end, (2j + 1) n / (2d) for the left half
+	 * and mirrored for the right, so the pattern reads the same from either
+	 * end. With an odd d the middle one is at the centre ((n - 1) / 2: one
+	 * left of centre when n is even, the one place the pattern can't be
+	 * symmetric).
+	 *
+	 * @param n the line's length
+	 * @param d how many positions, 0 to n - 1
+	 * @return the positions, in increasing order
+	 */
+	private static int[] centredPositions(int n, int d)
+	{
+		int[] p = new int[d];
+		for(int j = 0; j < d / 2; j++)
+		{
+			p[j]         = (int) ((2L * j + 1) * n / (2L * d));
+			p[d - 1 - j] = n - 1 - p[j];
+		}
+		if(d % 2 == 1) p[d / 2] = (n - 1) / 2;
+		return p;
 	}
 
 	/**
