@@ -3635,6 +3635,66 @@ public class DeltaMapper
 	}
 
 	/**
+	 * Which of the ids predict alike: on the first channel (no ref) the
+	 * cross-channel primitives are their base predictors (CROSS_BASE), so
+	 * entries that differ only in that predict the same at every pixel.
+	 * same[q] is the first position with the same predictions as pid[q]
+	 * (q itself if none earlier); with a ref every position is its own. The
+	 * survey computes only the first of each group: its sums and estimates
+	 * are the others', and a strict-less argmin over the first of each group
+	 * picks what it would over all of them.
+	 *
+	 * @param ps    the channel
+	 * @param table the predictor table
+	 * @param pid   the ids
+	 * @return each position's first alike
+	 */
+	static int[] samePrediction(PixelSource ps, PredictorTable table, int[] pid)
+	{
+		int   n = pid.length, np = table.primitives;
+		int[] same = new int[n];
+		int[] seen = new int[np * np];
+		Arrays.fill(seen, -1);
+		for(int q = 0; q < n; q++)
+		{
+			if(ps.ref != null) { same[q] = q; continue; }
+			int i = firstChannelPrimitive(table.first(pid[q])), j = firstChannelPrimitive(table.second(pid[q]));
+			int key = Math.min(i, j) * np + Math.max(i, j);
+			if(seen[key] < 0) seen[key] = q;
+			same[q] = seen[key];
+		}
+		return same;
+	}
+
+	/**
+	 * The positions that are the first of their group (see samePrediction).
+	 *
+	 * @param same each position's first alike
+	 * @return those positions, increasing
+	 */
+	static int[] distinctPositions(int[] same)
+	{
+		int m = 0;
+		for(int q = 0; q < same.length; q++) if(same[q] == q) m++;
+		int[] at = new int[m];
+		m = 0;
+		for(int q = 0; q < same.length; q++) if(same[q] == q) at[m++] = q;
+		return at;
+	}
+
+	/**
+	 * What a primitive is on the first channel: a cross-channel primitive's
+	 * base predictor, any other primitive itself.
+	 *
+	 * @param q the primitive
+	 * @return the primitive it equals without a ref
+	 */
+	private static int firstChannelPrimitive(int q)
+	{
+		return (q >= CROSS_FIRST && q < REACH_FIRST) ? CROSS_BASE[q - CROSS_FIRST] : q;
+	}
+
+	/**
 	 * As {@link #blockCostTable}, for the given block rows only:
 	 * est[(r * bw + bx) * n + q] for rows[r].
 	 *
@@ -3679,15 +3739,35 @@ public class DeltaMapper
 		int   xdim = ps.xdim, n = pid.length, np = table.primitives;
 		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 		int   y0 = 1 + by * bh_, y1 = Math.min(ydim, y0 + bh_);
+		int[] same = samePrediction(ps, table, pid), at = distinctPositions(same);
+		if(at.length == n)
+		{
+			for(int y = y0; y < y1; y++)
+				for(int x = 1; x < xdim - 1; x++)
+				{
+					int   k = y * xdim + x, s = src[k];
+					int[] cc = dc.cost[dc.context[k]];
+					ps.primitives(k, np, prim);
+					int base = offset + (x - 1) / bw_ * n;
+					for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
+				}
+			return;
+		}
+		// The first of each group only, then each position copies its group's.
+		int   m = at.length, bw = blocksAcross(xdim, block);
+		int[] one = new int[m], slot = new int[n], part = new int[bw * m];
+		for(int t = 0; t < m; t++) { one[t] = pid[at[t]]; slot[at[t]] = t; }
 		for(int y = y0; y < y1; y++)
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				int   k = y * xdim + x, s = src[k];
 				int[] cc = dc.cost[dc.context[k]];
 				ps.primitives(k, np, prim);
-				int base = offset + (x - 1) / bw_ * n;
-				for(int q = 0; q < n; q++) est[base + q] += cc[dc.index(s - table.predict(pid[q], prim))];
+				int base = (x - 1) / bw_ * m;
+				for(int t = 0; t < m; t++) part[base + t] += cc[dc.index(s - table.predict(one[t], prim))];
 			}
+		for(int bx = 0; bx < bw; bx++)
+			for(int q = 0; q < n; q++) est[offset + bx * n + q] += part[bx * m + slot[same[q]]];
 	}
 
 	/**
@@ -4624,24 +4704,30 @@ public class DeltaMapper
 		int m = 0; for(boolean b : need) if(b) m++;
 		int[] used = new int[m]; m = 0;
 		for(int q = 0; q < need.length; q++) if(need[q]) used[m++] = q;
+		// The first of each group of alike ids only (see samePrediction):
+		// the first smallest among them is the first smallest of all.
+		int[] at = distinctPositions(samePrediction(ps, table, ids));
+		int   na = at.length;
+		int[] one = new int[na];
+		for(int t = 0; t < na; t++) one[t] = ids[at[t]];
 		java.util.stream.IntStream.range(0, bh).parallel().forEach(by ->
 		{
-			long[] sums = new long[bw * n];
+			long[] sums = new long[bw * na];
 			int[]  prim = new int[table.primitives];
 			int    bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 			int    y0 = 1 + by * bh_, y1 = Math.min(ydim, y0 + bh_);
 			for(int y = y0; y < y1; y++)
 				for(int x = 1; x < xdim - 1; x++)
 				{
-					int k = y * xdim + x, base = (x - 1) / bw_ * n;
+					int k = y * xdim + x, base = (x - 1) / bw_ * na;
 					for(int q : used) prim[q] = ps.primitive(q, k);
-					for(int p = 0; p < n; p++) sums[base + p] += Math.abs(src[k] - table.predict(ids[p], prim));
+					for(int p = 0; p < na; p++) sums[base + p] += Math.abs(src[k] - table.predict(one[p], prim));
 				}
 			for(int bx = 0; bx < bw; bx++)
 			{
 				int best = 0;
-				for(int p = 1; p < n; p++) if(sums[bx * n + p] < sums[bx * n + best]) best = p;
-				map[head + by * bw + bx] = (byte) best;
+				for(int p = 1; p < na; p++) if(sums[bx * na + p] < sums[bx * na + best]) best = p;
+				map[head + by * bw + bx] = (byte) at[best];
 			}
 		});
 	}
@@ -4690,11 +4776,14 @@ public class DeltaMapper
 		final int base_ = base, top_ = top;
 		int bw_base = blocksAcross(xdim, base), rows_base = top / base;
 		int[] src = ps.v;
+		// The first of each group of alike ids only (see samePrediction).
+		int[] at = distinctPositions(samePrediction(ps, table, ids));
+		int   na = at.length;
 		// A band of top rows at a time: each base block's sums of |delta|, then
 		// the sums of each shape's blocks, which are exactly unions of base blocks.
 		java.util.stream.IntStream.range(0, blocksDown(ydim, top)).parallel().forEach(band ->
 		{
-			int[] sums = new int[rows_base * bw_base * n];
+			int[] sums = new int[rows_base * bw_base * na];
 			int[] prim = new int[table.primitives];
 			int   y0 = 1 + band * top_, y1 = Math.min(ydim, y0 + top_);
 			for(int y = y0; y < y1; y++)
@@ -4702,12 +4791,12 @@ public class DeltaMapper
 				int r = (y - y0) / base_;
 				for(int x = 1; x < xdim - 1; x++)
 				{
-					int k = y * xdim + x, s0 = (r * bw_base + (x - 1) / base_) * n;
+					int k = y * xdim + x, s0 = (r * bw_base + (x - 1) / base_) * na;
 					ps.primitives(k, table.primitives, prim);
-					for(int p = 0; p < n; p++) sums[s0 + p] += Math.abs(src[k] - table.predict(p, prim));
+					for(int p = 0; p < na; p++) sums[s0 + p] += Math.abs(src[k] - table.predict(at[p], prim));
 				}
 			}
-			long[] total = new long[n];
+			long[] total = new long[na];
 			for(int t = 0; t < blocks.length; t++)
 			{
 				int size = blocks[t], f = size / base_, rows = top_ / size, bw = blocksAcross(xdim, size), bh = blocksDown(ydim, size);
@@ -4720,10 +4809,10 @@ public class DeltaMapper
 						Arrays.fill(total, 0);
 						for(int rr = rs * f; rr < rs * f + f; rr++)
 							for(int cc = bx * f; cc < Math.min(bw_base, bx * f + f); cc++)
-								for(int p = 0, s0 = (rr * bw_base + cc) * n; p < n; p++) total[p] += sums[s0 + p];
+								for(int p = 0, s0 = (rr * bw_base + cc) * na; p < na; p++) total[p] += sums[s0 + p];
 						int best = 0;
-						for(int p = 1; p < n; p++) if(total[p] < total[best]) best = p;
-						map[t][2 + by * bw + bx] = (byte) best;
+						for(int p = 1; p < na; p++) if(total[p] < total[best]) best = p;
+						map[t][2 + by * bw + bx] = (byte) at[best];
 					}
 				}
 			}
