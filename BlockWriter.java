@@ -5,8 +5,8 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.3 (writes Block format 5: mixed context coding, a
-// block size per channel; or format 6, the same in bands)
+// BlockWriter version 2.4 (writes Block format 7: mixed context coding with
+// second opinions, a block size per channel; or format 8, the same in bands)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
@@ -22,10 +22,12 @@ import javax.swing.*;
 // coded size measured at each count). It runs at startup and again after
 // any change to the quantization (Pixel Resolution or Color Resolution).
 // The survey measures sizes with the Context coder
-// (DeltaMapper.packContextDeltas); the file uses the mixed coder, about 1%
-// smaller. File > Bands splits the image into up to MAX_BANDS bands of rows
-// that a reader can decode at the same time (format 6), for about a byte
-// per column per band boundary; with 1 (the default) Save writes format 5.
+// (DeltaMapper.packContextDeltas); the file uses the mixed coder, with its
+// contexts split by second opinions (how far GAP/8, MED and the left pixel
+// lie from the block's prediction), about 3% smaller. File > Bands splits
+// the image into up to MAX_BANDS bands of rows that a reader can decode at
+// the same time (format 8), for about a byte per column per band boundary;
+// with 1 (the default) Save writes format 7.
 // Files are read by BlockReader.
 public class BlockWriter
 {
@@ -33,11 +35,11 @@ public class BlockWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 6;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands
+	static final int  FORMAT_VERSION = 8;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions
 	/**
 	 * The version written with one band: the layout before bands.
 	 */
-	static final int  ONE_BAND_VERSION = 5;
+	static final int  ONE_BAND_VERSION = 7;
 	/**
 	 * The most bands Save offers.
 	 */
@@ -67,7 +69,7 @@ public class BlockWriter
 	int correction  = 0;
 	int min_set_id  = 0;
 	/**
-	 * How many independently decodable bands Save writes (1: one, format 5);
+	 * How many independently decodable bands Save writes (1: one, format 7);
 	 * at most MAX_BANDS, and fewer if bands would have under BAND_MIN_ROWS rows.
 	 */
 	int bands       = 1;
@@ -523,7 +525,7 @@ public class BlockWriter
 		 */
 		long one_band_bytes = 0;
 
-		// One band: format 5 (oneBand). Bands: format 6 (inBands), and the size
+		// One band: format 7 (oneBand). Bands: format 8 (inBands), and the size
 		// it would have been as one band for the report.
 		private void save(DataOutputStream out) throws IOException
 		{
@@ -536,12 +538,28 @@ public class BlockWriter
 		}
 
 		/**
-		 * Format 5. Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
+		 * The block's prediction at each pixel: values - delta (for checking the
+		 * second-opinion coding decodes back).
+		 *
+		 * @param delta  the deltas
+		 * @param values the channel
+		 * @return the predictions
+		 */
+		private int[] predictions(int[] delta, int[] values)
+		{
+			int[] p = new int[values.length];
+			for(int k = 0; k < p.length; k++) p[k] = values[k] - delta[k];
+			return p;
+		}
+
+		/**
+		 * Format 7 (5's layout). Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
 		 * shorts), pixel_shift, pixel_quant, channel set. Then per channel: int
 		 * min, int init, the block map (DeltaMapper.writeMap, type 13; it
 		 * carries the channel's block size and predictor ids; its context lines
 		 * up the previous channel's map, DeltaMapper.alignMap), then the deltas,
-		 * mixed-context coded (DeltaMapper.packMixedDeltas). Channels 1 and 2 use
+		 * mixed-context coded with the second opinions (DeltaMapper.packMixedDeltas).
+		 * Channels 1 and 2 use
 		 * the ones before them as context, so the reader decodes in order.
 		 *
 		 * @param out the stream
@@ -555,8 +573,8 @@ public class BlockWriter
 				try
 				{
 					int[][] previous = Arrays.copyOf(delta_list, i);
-					coded[i] = DeltaMapper.packMixedDeltas(delta_list[i], value_list[i], previous, delta_xdim);
-					int[] back = DeltaMapper.unpackMixedDeltas(coded[i], value_list[i], previous, delta_xdim);
+					coded[i] = DeltaMapper.packMixedDeltas(delta_list[i], value_list[i], previous, delta_xdim, true);
+					int[] back = DeltaMapper.unpackMixedDeltas(coded[i], value_list[i], previous, delta_xdim, predictions(delta_list[i], value_list[i]));
 					if(!Arrays.equals(back, delta_list[i])) System.out.println("WARNING: channel " + i + " deltas do not decode back.");
 				}
 				catch(IOException e) { throw new UncheckedIOException(e); }
@@ -576,7 +594,7 @@ public class BlockWriter
 		}
 	
 		/**
-		 * Format 6: the header as format 5's, then the number of bands n (an
+		 * Format 8 (6's layout): the header as format 7's, then the number of bands n (an
 		 * unsigned byte), each channel's int min (coding order), then n int
 		 * lengths and the n bands. Band b is rows bandStart(b) to bandStart(b +
 		 * 1) of the quantized image, coded as an image of its own with the
@@ -609,8 +627,8 @@ public class BlockWriter
 					try
 					{
 						int[][] previous = Arrays.copyOf(d, i);
-						coded[i] = DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim);
-						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim), d[i]))
+						coded[i] = DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim, true);
+						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim, predictions(d[i], ch[i])), d[i]))
 							System.out.println("WARNING: band " + band_b + " channel " + i + " deltas do not decode back.");
 					}
 					catch(IOException e) { throw new UncheckedIOException(e); }

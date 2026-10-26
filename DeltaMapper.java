@@ -4740,10 +4740,11 @@ public class DeltaMapper
 			for(int x = 1; x < xdim - 1; x++)
 			{
 				k++;
-				if(mix != null) mix.next(k, delta, dst);
 				int id = ids[map[row + (x - 1) / bw_] & 0xFF];
 				ps.prepare(k, table.uses(id, LS_FIRST));
-				dst[k] = delta[k] + ps.predict(table, id, k);
+				int p = ps.predict(table, id, k);
+				if(mix != null) mix.next(k, delta, dst, p);
+				dst[k] = delta[k] + p;
 				ps.commit(k);
 			}
 			k++;
@@ -5392,6 +5393,19 @@ public class DeltaMapper
 	// the values decoded so far, so the decoder decodes each delta as it
 	// rebuilds the channel (getValuesFromMixedDeltas).
 	// Measured on 10 test images: 1.0% smaller than packContextDeltas.
+	//
+	// With second opinions (Block formats 7 and 8): each model's context is
+	// also split 9 ways by how far a simple predictor's value lies from the
+	// block's prediction, signed (gradientLevel of opinion - prediction):
+	// GAP/8 for model 0, MED for model 1 and a (left) for model 2. Where the
+	// two disagree the delta tends to be larger and to take the opinion's
+	// sign, which activity alone can't show. Only interior pixels have a
+	// block prediction; the rest use the middle level. The decoder has the
+	// prediction before it decodes the delta (blockValues). Measured on 10
+	// test images (lossless, Color Resolution 3, and Pixel Resolution 4 with
+	// Color Resolution 3): 1.95% smaller, 3.06% at the writers' default
+	// settings; a weighted predictor (JPEG XL's) as an opinion, or its error
+	// as a context, did no better.
 	// =========================================================================
 
 	/**
@@ -5413,6 +5427,11 @@ public class DeltaMapper
 	 * The weights move by 1 / MIX_RATE of the code-length gradient per symbol.
 	 */
 	static final int MIX_RATE   = 32;
+
+	/**
+	 * Each opinion's levels: gradientLevel's -4 to 4.
+	 */
+	static final int MIX_OPINION_LEVELS = 9;
 
 	/**
 	 * The activity bucket of each value 0 to 255 (larger values use the last).
@@ -5508,6 +5527,15 @@ public class DeltaMapper
 		 * (E, SW, S, SE), and the 3x3 cross bucket.
 		 */
 		final int[] cb, fwd, c9b;
+		/**
+		 * Whether the contexts include the second opinions (see the section comment).
+		 */
+		final boolean opinions;
+		/**
+		 * The block's prediction at the pixel being coded (interior pixels; set
+		 * before encode or decode when opinions is true).
+		 */
+		int prediction;
 
 		/**
 		 * Models with every count 1 and equal weights.
@@ -5519,11 +5547,28 @@ public class DeltaMapper
 		 */
 		MixedModels(int n_symbols, int[][] previous, int xdim, int n)
 		{
+			this(n_symbols, previous, xdim, n, false);
+		}
+
+		/**
+		 * As {@link #MixedModels(int, int[][], int, int)}, with or without the
+		 * second opinions.
+		 *
+		 * @param n_symbols the number of symbols
+		 * @param previous  the deltas of the channels coded before this one
+		 * @param xdim      the row width
+		 * @param n         the number of deltas
+		 * @param opinions  whether the contexts include the second opinions
+		 */
+		MixedModels(int n_symbols, int[][] previous, int xdim, int n, boolean opinions)
+		{
 			this.n_symbols = n_symbols;
 			this.xdim      = xdim;
+			this.opinions  = opinions;
+			int contexts = opinions ? CONTEXTS * MIX_OPINION_LEVELS : CONTEXTS;
 			m     = (previous.length == 0) ? 2 : 3;
-			f     = new int[m][CONTEXTS][n_symbols];
-			total = new int[m][CONTEXTS];
+			f     = new int[m][contexts][n_symbols];
+			total = new int[m][contexts];
 			for(int[][] fm : f) for(int[] fc : fm) Arrays.fill(fc, 1);
 			for(int[] t : total) Arrays.fill(t, n_symbols);
 			w = new long[m];
@@ -5596,6 +5641,22 @@ public class DeltaMapper
 				ctx[2] = MIX_ACTIVITY_TABLE[Math.min(act, top)] * CROSS_LIMIT.length + c9b[k];
 			}
 			else ctx[1] = MIX_ACTIVITY_TABLE[Math.min(act, top)] * CROSS_LIMIT.length + c;
+			if(opinions)
+			{
+				int mid = MIX_OPINION_LEVELS / 2, o0 = mid, o1 = mid, o2 = mid;
+				if(k >= xdim && x >= 1 && x < xdim - 1)
+				{
+					int a = v[k - 1], b = v[k - xdim], cc = v[k - xdim - 1], dd = v[k - xdim + 1];
+					boolean up2 = k >= 2 * xdim;
+					int aa = (x >= 2) ? v[k - 2] : a, bb = up2 ? v[k - 2 * xdim] : b, nne = up2 ? v[k - 2 * xdim + 1] : dd;
+					o0 = gradientLevel(gap(a, aa, b, bb, cc, dd, nne, 10, 4, 1) - prediction) + mid;
+					o1 = gradientLevel(blockPredictor(11, a, b, cc, dd) - prediction) + mid;
+					o2 = gradientLevel(a - prediction) + mid;
+				}
+				ctx[0] = ctx[0] * MIX_OPINION_LEVELS + o0;
+				ctx[1] = ctx[1] * MIX_OPINION_LEVELS + o1;
+				if(m == 3) ctx[2] = ctx[2] * MIX_OPINION_LEVELS + o2;
+			}
 		}
 
 		/**
@@ -5722,11 +5783,33 @@ public class DeltaMapper
 	 */
 	public static byte[] packMixedDeltas(int[] delta, int[] values, int[][] previous, int xdim) throws java.io.IOException
 	{
+		return packMixedDeltas(delta, values, previous, xdim, false);
+	}
+
+	/**
+	 * As {@link #packMixedDeltas(int[], int[], int[][], int)}, with or without
+	 * the second opinions (Block formats 7 and 8; the block's prediction at
+	 * each pixel is values - delta).
+	 *
+	 * @param delta    the deltas
+	 * @param values   the channel as the decoder rebuilds it (before any minimum is added back)
+	 * @param previous the deltas of the channels coded before this one
+	 * @param xdim     the row width
+	 * @param opinions whether the contexts include the second opinions
+	 * @return the coded bytes
+	 * @throws java.io.IOException never in practice (a byte stream)
+	 */
+	public static byte[] packMixedDeltas(int[] delta, int[] values, int[][] previous, int xdim, boolean opinions) throws java.io.IOException
+	{
 		int[] min  = new int[1];
 		int[] rank = rankTable(delta, min);
-		MixedModels models = new MixedModels(rank.length, previous, xdim, delta.length);
+		MixedModels models = new MixedModels(rank.length, previous, xdim, delta.length, opinions);
 		ArithmeticMapper.RangeEncoder enc = new ArithmeticMapper.RangeEncoder(delta.length / 2);
-		for(int k = 0; k < delta.length; k++) models.encode(enc, k, rank[delta[k] - min[0]], delta, values);
+		for(int k = 0; k < delta.length; k++)
+		{
+			models.prediction = values[k] - delta[k];
+			models.encode(enc, k, rank[delta[k] - min[0]], delta, values);
+		}
 		byte[] coded = enc.finish();
 
 		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
@@ -5794,10 +5877,28 @@ public class DeltaMapper
 	 */
 	public static int[] unpackMixedDeltas(byte[] packed, int[] values, int[][] previous, int xdim) throws java.io.IOException
 	{
+		return unpackMixedDeltas(packed, values, previous, xdim, null);
+	}
+
+	/**
+	 * As {@link #unpackMixedDeltas(byte[], int[], int[][], int)}, for bytes
+	 * coded with the second opinions: given the block's prediction at each
+	 * pixel (null for bytes coded without them).
+	 *
+	 * @param packed     what packMixedDeltas returned
+	 * @param values     the channel's values
+	 * @param previous   the deltas of the channels coded before this one
+	 * @param xdim       the row width
+	 * @param prediction the block's prediction at each pixel, or null
+	 * @return the deltas
+	 * @throws java.io.IOException if the bytes are short
+	 */
+	public static int[] unpackMixedDeltas(byte[] packed, int[] values, int[][] previous, int xdim, int[] prediction) throws java.io.IOException
+	{
 		MixedDeltas md = readMixedDeltas(new java.io.DataInputStream(new java.io.ByteArrayInputStream(packed)));
-		MixedDecoder dec = new MixedDecoder(md, previous, xdim, values.length);
+		MixedDecoder dec = new MixedDecoder(md, previous, xdim, values.length, prediction != null);
 		int[] d = new int[values.length];
-		for(int k = 0; k < d.length; k++) dec.next(k, d, values);
+		for(int k = 0; k < d.length; k++) dec.next(k, d, values, (prediction != null) ? prediction[k] : 0);
 		return d;
 	}
 
@@ -5826,10 +5927,11 @@ public class DeltaMapper
 		 * @param previous the deltas of the channels decoded before this one
 		 * @param xdim     the row width
 		 * @param n        the number of deltas
+		 * @param opinions whether the contexts include the second opinions
 		 */
-		MixedDecoder(MixedDeltas md, int[][] previous, int xdim, int n)
+		MixedDecoder(MixedDeltas md, int[][] previous, int xdim, int n, boolean opinions)
 		{
-			models = new MixedModels(md.value.length, previous, xdim, n);
+			models = new MixedModels(md.value.length, previous, xdim, n, opinions);
 			dec    = new ArithmeticMapper.RangeDecoder(md.coded);
 			value  = md.value;
 		}
@@ -5842,6 +5944,17 @@ public class DeltaMapper
 		 * @param v the channel's values (filled below k)
 		 */
 		void next(int k, int[] d, int[] v) { d[k] = value[models.decode(dec, k, d, v)]; }
+
+		/**
+		 * As {@link #next(int, int[], int[])}, given the block's prediction at
+		 * the pixel (used only with the second opinions, at interior pixels).
+		 *
+		 * @param k          the pixel (0, 1, 2, ... in turn)
+		 * @param d          the deltas (filled below k)
+		 * @param v          the channel's values (filled below k)
+		 * @param prediction the block's prediction at k
+		 */
+		void next(int k, int[] d, int[] v, int prediction) { models.prediction = prediction; next(k, d, v); }
 	}
 
 	/**
@@ -5860,8 +5973,27 @@ public class DeltaMapper
 	 */
 	public static int[][] getValuesFromMixedDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, byte[] map, int[] ref)
 	{
+		return getValuesFromMixedDeltas(md, previous, xdim, ydim, init_value, map, ref, false);
+	}
+
+	/**
+	 * As {@link #getValuesFromMixedDeltas(MixedDeltas, int[][], int, int, int, byte[], int[])},
+	 * for deltas coded with or without the second opinions.
+	 *
+	 * @param md         the rank table and coded bytes ({@link #readMixedDeltas})
+	 * @param previous   the deltas of the channels decoded before this one
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param init_value the first value
+	 * @param map        the block map
+	 * @param ref        the previous channel's values, as decoded, or null for the first channel
+	 * @param opinions   whether the deltas were coded with the second opinions
+	 * @return {deltas, values}
+	 */
+	public static int[][] getValuesFromMixedDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, byte[] map, int[] ref, boolean opinions)
+	{
 		int[] delta = new int[xdim * ydim];
-		int[] values = blockValues(delta, xdim, ydim, init_value, map, ref, new MixedDecoder(md, previous, xdim, delta.length));
+		int[] values = blockValues(delta, xdim, ydim, init_value, map, ref, new MixedDecoder(md, previous, xdim, delta.length, opinions));
 		return new int[][] {delta, values};
 	}
 
