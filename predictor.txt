@@ -1,0 +1,628 @@
+PREDICTOR TABLE
+==============================================================================
+
+This file describes the predictors a block map (delta type 13) can use: the
+primitives, the table of 225 predictors built from them
+(DeltaMapper.PREDICTOR_TABLE, delta_mapper.TABLE), how often each was chosen,
+and the 32 entries of the old 256-entry table that were dropped. It replaces
+earlier versions of this file.
+
+NOTATION
+------------------------------------------------------------------------------
+Pixels are predicted in raster order, so only pixels above and to the left are
+known. Around the pixel x being predicted:
+
+              column:  x-2   x-1    x    x+1   x+2
+              row y-2:         NNW   bb    NNE
+              row y-1:   NWW    c     b     d    NEE
+              row y:     aa     a     x
+
+So a is the left neighbour, b the one above, c above-left, d above-right; aa
+is two to the left and bb two above; NEE is two right and one up, NNE one
+right and two up (LS uses both); NWW and NNW, their mirror images, are not
+used by any primitive. R is the previous channel in coding order at the same
+pixel, and Ra, Rb, Rc, Rd are its neighbours. Channels are coded in order, so
+R is already known when a channel is decoded; on the first channel the cross-
+channel primitives fall back to their base predictor. >> rounds down; / is
+integer division.
+
+A predictor in the table is either a primitive alone or the average of two,
+(P_i + P_j + 1) >> 1. Averaging two predictors whose errors tend to have
+opposite signs cancels much of both errors, which is why the table is mostly
+averages. Row 0, column 0 and the last column are not predicted by the block
+map: row 0 is coded horizontally, column 0 vertically and the last column
+horizontally.
+
+HOW A BLOCK MAP USES THE TABLE
+------------------------------------------------------------------------------
+Each channel's interior is split into square blocks (4, 6, 8, 12 or 16, chosen
+per channel). The channel carries its own set of up to 255 predictor ids from
+the table (one byte each in the map's header), and each block an index into
+that set. The survey (DeltaMapper.surveyChannels) builds the set: it estimates
+every table entry's coded bits on every block, adds entries in greedy order by
+the bits they save net of the map cost, measures the real coded size of the
+first n entries for n = 1, 2, 3, ... and keeps the best. The map's entries are
+entropy-coded, so their cost depends on how many predictors a channel uses and
+how unevenly, not on the size of the table.
+
+PRIMITIVES
+------------------------------------------------------------------------------
+
+PRIMITIVES ON A, B, C, D
+
+   0  a                           in  21 table entries, ~3.92% of pixels
+      The pixel to the left. Exact wherever the image is constant along rows:
+      horizontal edges, horizontal stripes, flat areas. On its own it is the
+      classic 'previous pixel' delta.
+
+   1  b                           in  15 table entries, ~0.85% of pixels
+      The pixel above. Exact wherever the image is constant down columns:
+      vertical edges and stripes.
+
+   2  c                           in   7 table entries, ~0.24% of pixels
+      The pixel above and to the left: follows edges running down-right at 45
+      degrees (constant along the NW-SE diagonal).
+
+   3  d                           in  11 table entries, ~0.28% of pixels
+      The pixel above and to the right: follows edges running down-left at 45
+      degrees (constant along the NE-SW diagonal).
+
+   4  (a+b)/2                     in  19 table entries, ~2.34% of pixels
+      = (a + b) >> 1
+      The mean of left and above, rounded down. A smooth, low-noise guess for
+      gently varying areas; it halves the noise of either neighbour but blurs
+      edges.
+
+   5  (b+c)/2                     in  17 table entries, ~0.84% of pixels
+      = (b + c) >> 1
+      The mean of above and above-left: the value half a pixel to the left on
+      the row above, i.e. a direction between vertical and the 45-degree NW
+      diagonal (about 63 degrees).
+
+   6  (a+c)/2                     in  20 table entries, ~1.15% of pixels
+      = (a + c) >> 1
+      The mean of left and above-left: the value half a pixel up in the left
+      column, a direction between horizontal and the NW diagonal (about 27
+      degrees).
+
+   7  (b+d)/2                     in  19 table entries, ~1.81% of pixels
+      = (b + d) >> 1
+      The mean of above and above-right: the row above, half a pixel to the
+      right; a direction between vertical and the NE diagonal.
+
+   8  (c+d)/2                     in  12 table entries, ~1.09% of pixels
+      = (c + d) >> 1
+      The mean of the two diagonal neighbours above: the row above at the
+      current column, smoothed (a softened b).
+
+   9  (a+b+c+d)/4                 in   9 table entries, ~1.73% of pixels
+      = (a + b + c + d + 2) >> 2
+      The rounded mean of all four causal neighbours: the smoothest of the
+      simple predictors, good in noisy flat areas.
+
+  10  a+b-c                       in   0 table entries, ~0.00% of pixels
+      = a + b - c
+      The planar (gradient) predictor: fits a plane through a, b and c and
+      extends it, so it is exact on linear ramps in any direction. It
+      overshoots at edges, which MED (11) and clamp(a+b-c) (40) correct.
+
+  11  MED                         in  10 table entries, ~3.32% of pixels
+      The median edge detector of JPEG-LS / LOCO-I: min(a, b) if c >= max(a,
+      b), max(a, b) if c <= min(a, b), otherwise a + b - c. It picks a or b at
+      a horizontal or vertical edge and the planar predictor in between.
+
+  12  (3a+b)/4                    in   0 table entries, ~0.00% of pixels
+      = (3a + b + 2) >> 2
+      Three quarters left, one quarter above: mostly horizontal, slightly
+      smoothed.
+
+  13  (a+3b)/4                    in   5 table entries, ~0.13% of pixels
+      = (a + 3b + 2) >> 2
+      One quarter left, three quarters above: mostly vertical, slightly
+      smoothed.
+
+  14  (3a+d)/4                    in   0 table entries, ~0.00% of pixels
+      = (3a + d + 2) >> 2
+      Three quarters left, one quarter above-right.
+
+  15  (3b+a)/4                    in   0 table entries, ~0.00% of pixels
+      = (3b + a + 2) >> 2
+      Three quarters above, one quarter left. This is exactly the same formula
+      as 13; both are kept so that the numbering of later primitives (and old
+      files) stays as it was.
+
+  16  (a+d)/2                     in  24 table entries, ~3.28% of pixels
+      = (a + d) >> 1
+      The mean of left and above-right: the two neighbours on either side of
+      the pixel along the NE-SW diagonal, so it interpolates across that
+      diagonal; strong on edges running at 45 degrees up-right.
+
+  17  a+(b-c)/2                   in   0 table entries, ~0.00% of pixels
+      = a + ((b - c) >> 1)
+      Left plus half the horizontal gradient of the row above: a damped planar
+      predictor along rows.
+
+  18  b+(a-c)/2                   in  14 table entries, ~0.57% of pixels
+      = b + ((a - c) >> 1)
+      Above plus half the vertical gradient of the left column: a damped
+      planar predictor down columns.
+
+  19  a+d-b                       in   5 table entries, ~0.19% of pixels
+      = a + d - b
+      The planar predictor along the other diagonal: left plus the gradient
+      from b to d. Exact on ramps, like 10, but built from the up-right
+      neighbours.
+
+  20  (a+b+d)/3                   in   0 table entries, ~0.00% of pixels
+      = (a + b + d + 1) / 3
+      The mean of left, above and above-right (integer division).
+
+  21  b+(d-c)/2                   in   0 table entries, ~0.00% of pixels
+      = b + ((d - c) >> 1)
+      Above plus half the slope of the row above: the row above extended by
+      half a step.
+
+SELECTION
+
+  22  Paeth                       in   0 table entries, ~0.00% of pixels
+      PNG's Paeth predictor: forms p = a + b - c and returns whichever of a,
+      b, c is closest to p (ties to a, then b). A selection predictor: it
+      always returns an actual neighbour.
+
+  23  median(a,b,c)               in  11 table entries, ~1.20% of pixels
+      = median(a, b, c)
+      The median of left, above and above-left: a robust choice that ignores
+      one outlier among the three.
+
+  24  median(a,b,d)               in  12 table entries, ~3.35% of pixels
+      = median(a, b, d)
+      The median of left, above and above-right.
+
+  25  median(a,d,a+d-b)           in  10 table entries, ~0.64% of pixels
+      = median(a, d, a + d - b)
+      MED's idea along the up-right diagonal: the median of a, d and their
+      planar extension a + d - b.
+
+  26  switch(a,b)                 in   0 table entries, ~0.00% of pixels
+      = switch(a, b)
+      Whichever of a or b lies in the flatter direction: a if |b - c| <= |a -
+      c| (the row above is flat), else b.
+
+  27  switch(a,b,d)               in   0 table entries, ~0.00% of pixels
+      = switch(a, b, d)
+      The flattest of three directions: a, b or d by the smallest of |b - c|,
+      |a - c| and |a - b|.
+
+CROSS-CHANNEL
+
+  28  a+(R-Ra)                    in  13 table entries, ~1.88% of pixels
+      = a + (R - Ra)
+      Cross-channel: the left pixel plus how the previous channel (R, coded
+      first) changed from its own left pixel to this pixel. Copies the other
+      channel's local detail onto this one; on the first channel it is just a.
+
+  29  b+(R-Rb)                    in  14 table entries, ~1.20% of pixels
+      = b + (R - Rb)
+      Cross-channel: above plus the previous channel's change from above.
+
+  30  d+(R-Rd)                    in  11 table entries, ~0.70% of pixels
+      = d + (R - Rd)
+      Cross-channel: above-right plus the previous channel's change from
+      above-right.
+
+  31  MED+(R-MED_R)               in   7 table entries, ~1.14% of pixels
+      = MED + (R - MED_R)
+      Cross-channel: this channel's MED prediction plus the previous channel's
+      MED error at the same pixel, so the error the other channel made is
+      assumed here too.
+
+  32  (a+b)/2+(R-..)              in  11 table entries, ~0.47% of pixels
+      = (a+b)/2 + (R - (Ra+Rb)/2)
+      Cross-channel: the mean of left and above, corrected by the previous
+      channel's error for the same predictor.
+
+  33  a+b-c+(R-..)                in   0 table entries, ~0.00% of pixels
+      = a + b - c + (R - (Ra + Rb - Rc))
+      Cross-channel: the planar predictor corrected by the previous channel's
+      planar error.
+
+  34  MED+(R-MED_R)/2             in  18 table entries, ~3.54% of pixels
+      = MED + (R - MED_R) / 2
+      As 31 with half the correction: for channels that follow the previous
+      one only partly.
+
+  35  (a+b)/2+(R-..)/2            in  19 table entries, ~2.12% of pixels
+      = (a+b)/2 + (R - ...)/2
+      As 32 with half the correction.
+
+LONGER REACH
+
+  36  2a-aa                       in   7 table entries, ~0.34% of pixels
+      = 2a - aa
+      Linear extrapolation along the row from the two pixels to the left (aa
+      is two to the left): continues a horizontal ramp.
+
+  37  2b-bb                       in   9 table entries, ~0.24% of pixels
+      = 2b - bb
+      Linear extrapolation down the column from the two pixels above (bb is
+      two above).
+
+  38  GAP                         in   0 table entries, ~0.00% of pixels
+      CALIC's gradient-adjusted predictor: measures horizontal and vertical
+      gradients from seven neighbours (a, aa, b, bb, c, d and the pixel above
+      d), picks a or b at a strong edge, otherwise (2(a + b) + d - c) / 4
+      nudged toward a or b by how strong the edge is. Thresholds 80, 32 and 8
+      (for 8-bit values).
+
+  39  GAP/8                       in  29 table entries, ~7.81% of pixels
+      GAP with thresholds an eighth as large (10, 4, 1), for quantized images
+      whose values span a smaller range. The second most used primitive after
+      LS.
+
+CLAMPED
+
+  40  clamp(a+b-c)                in  14 table entries, ~4.62% of pixels
+      = clamp(a + b - c)
+      The planar predictor clamped to the range of a, b, c and d: keeps
+      exactness on ramps but cannot overshoot at edges.
+
+  41  clamp(a+d-b)                in   0 table entries, ~0.00% of pixels
+      = clamp(a + d - b)
+      The diagonal planar predictor (19), clamped the same way.
+
+BIAS-CORRECTED
+
+  42  MED+bias                    in  17 table entries, ~6.53% of pixels
+      = MED + bias
+      MED plus its mean error so far in the pixel's gradient context, as JPEG-
+      LS corrects bias: the context is the JPEG-LS quantized gradients of d -
+      b, b - c and c - a (9 levels each, 729 contexts); each context keeps the
+      sum and count of MED's errors over every earlier pixel in raster order
+      (halved when the count reaches 64), and the correction is their rounded
+      mean.
+
+  43  (a+b)/2+bias                in   0 table entries, ~0.00% of pixels
+      = (a+b)/2 + bias
+      The mean of a and b, with the same kind of bias correction.
+
+  44  a+bias                      in   0 table entries, ~0.00% of pixels
+      = a + bias
+      The left pixel, bias-corrected.
+
+  45  b+bias                      in   9 table entries, ~0.66% of pixels
+      = b + bias
+      The pixel above, bias-corrected.
+
+LEAST SQUARES
+
+  46  LS                          in   1 table entries, ~41.84% of pixels
+      Least squares: at every pixel, the linear predictor (8 neighbours a, b,
+      c, d, aa, bb, the pixel two right one up and the pixel one right two up,
+      plus a constant; after the first channel also the previous channel at
+      the pixel, to its left and above) that best fits the causal window of
+      the 10 rows above (10 columns either side) and the 10 pixels to the
+      left, refitted pixel by pixel from exact integer running sums (ridge 1,
+      L D L^T in a fixed order, so encoder, decoder and the Python port
+      agree). The prediction is clamped to 2 beyond the range of a, b, c and
+      d; a until the window has twice as many pixels as unknowns. The single
+      most used predictor: about 42% of all pixels.
+
+  47  LS wide                     in   1 table entries, ~0.00% of pixels
+      The same least-squares fit as LS, clamped to 2 beyond the range of all 8
+      spatial neighbours instead of a, b, c and d. The two differ only where
+      the fit lands outside the range of a, b, c and d, typically at steep
+      edges and fine stripes where the right value is outside the immediate
+      neighbours. Computed from the same fit, so it costs almost nothing
+      extra.
+
+(The pixel shares split each average's share equally between its two
+primitives and come from BlockWriter's survey below; they add up to 100%, LS
+wide being new and so without survey figures. Primitives 10, 12, 14, 15, 17,
+20, 21, 22, 26, 27, 33, 38, 41, 43 and 44 appear in no entry of the table;
+they stay defined so that old files still decode and future entries can use
+them.)
+
+HOW THE TABLE WAS CHOSEN
+------------------------------------------------------------------------------
+The old table (PREDICTOR_TABLE_256, used by Block formats 3 to 8 and Delta,
+Packet and Simple formats 3 and 4) had 256 entries: 31 primitives alone, 224
+averages chosen by measurement on 7 images, and LS. In October 2026
+BlockWriter's survey was run on all 19 images of the TestImages repository
+(0.2 to 32.7 megapixels) at four settings: Color Resolution 0 / Pixel
+Resolution 0 (lossless), CR1/PR1, CR3/PR4 (the writers' default) and CR4/PR5;
+76 surveys. 32 entries were never chosen by any channel of any survey; the
+other 224, in their old order, are ids 0-223 of the new table, with LS last at
+223, followed by LS wide at 224 (Block formats 9 and 10, Delta, Packet and
+Simple format 5).
+
+Measured on 7 of the images (ballerina, bluejay, finch, haze, isle3, owl1,
+potter) at the four settings, 28 surveys, against the old table: 0.35% smaller
+lossless (haze 1.14%, where LS wide covers 87% of the pixels), 0.18% smaller
+at CR1/PR1, 0.04% smaller at CR3/PR4 and 0.03% larger at CR4/PR5; 0.21%
+smaller in all, no file more than 0.2% larger (ballerina at CR4/PR5, where
+every predictor it had chosen is still in the table: the survey's greedy
+choice varies a little with the table). Dropping 32 entries makes the survey
+roughly 5% faster. Caveat: all 15 JPEGs in TestImages carry ICC profiles, and
+the survey harness decoded them with the profile applied, while the writers
+strip it; the usage figures for the JPEGs are therefore for slightly different
+pixels than the writers see. The two decodings differ by a few levels per
+pixel, so the choices should be much the same.
+
+THE TABLE
+------------------------------------------------------------------------------
+Columns: the id; the old id in PREDICTOR_TABLE_256; the predictor; its share
+of all pixels averaged over the 76 surveys; its share at each setting (19
+surveys each); the largest share of a single channel's pixels it covered in
+any survey; and the number of surveys (of 76) in which some channel's set
+included it. LS wide is new, so it has no survey figures (the 7-image test
+gave it 15-87% of pixels in lossless files and mostly 0-30% at the default
+settings).
+
+  id  old  predictor                                     all%   CR0/PR0  CR1/PR1  CR3/PR4  CR4/PR5   max%  runs
+    0    0  a                                             1.059     2.580    0.501    0.475    0.680   14.61    31
+    1    1  b                                             0.116     0.279    0.029    0.047    0.110    5.78     9
+    2    3  d                                             0.021     0.063    0.000    0.007    0.012    0.98     7
+    3    4  (a+b)/2                                       0.233     0.000    0.082    0.435    0.416    8.52    11
+    4    5  (b+c)/2                                       0.015     0.013    0.000    0.000    0.045    1.51     3
+    5    6  (a+c)/2                                       0.049     0.000    0.000    0.073    0.121    5.31     4
+    6    7  (b+d)/2                                       0.153     0.000    0.000    0.172    0.440    7.16     9
+    7    8  (c+d)/2                                       0.012     0.000    0.000    0.036    0.014    2.05     2
+    8    9  (a+b+c+d)/4                                   0.324     0.121    0.066    0.197    0.910   21.66     8
+    9   10  MED                                           1.435     3.782    1.199    0.303    0.456   84.68    17
+   10   11  (a+3b)/4                                      0.011     0.000    0.000    0.042    0.000    2.41     1
+   11   12  (a+d)/2                                       0.151     0.000    0.115    0.288    0.201    5.29    12
+   12   14  a+d-b                                         0.001     0.003    0.002    0.000    0.000    0.17     2
+   13   15  median(a,b,c)                                 0.406     1.333    0.244    0.041    0.006   10.96    23
+   14   16  median(a,b,d)                                 1.218     4.267    0.251    0.195    0.158   23.60    23
+   15   17  median(a,d,a+d-b)                             0.144     0.538    0.039    0.000    0.000    6.27    12
+   16   18  a+(R-Ra)                                      0.074     0.149    0.127    0.000    0.021    5.92     9
+   17   19  b+(R-Rb)                                      0.017     0.029    0.038    0.000    0.000    1.69     4
+   18   20  d+(R-Rd)                                      0.008     0.025    0.005    0.000    0.000    0.84     4
+   19   21  MED+(R-MED_R)                                 0.115     0.439    0.020    0.000    0.000   16.35     4
+   20   22  (a+b)/2+(R-..)                                0.002     0.010    0.000    0.000    0.000    0.56     1
+   21   23  MED+(R-MED_R)/2                               0.226     0.904    0.000    0.000    0.000   11.92     8
+   22   24  (a+b)/2+(R-..)/2                              0.007     0.027    0.000    0.000    0.000    1.52     1
+   23   27  GAP/8                                         0.153     0.068    0.473    0.070    0.000    4.00    11
+   24   28  clamp(a+b-c)                                  1.435     4.022    0.528    0.504    0.688   62.37    28
+   25   29  MED+bias                                      2.513     1.964    3.046    1.175    3.867   34.37    43
+   26   30  b+bias                                        0.070     0.000    0.078    0.045    0.156    4.42     4
+   27   31  avg(c, a)                                     0.013     0.002    0.007    0.000    0.043    2.42     3
+   28   32  avg(c, b)                                     0.007     0.028    0.000    0.000    0.000    1.58     1
+   29   33  avg(d, a)                                     0.029     0.000    0.118    0.000    0.000    2.52     3
+   30   35  avg((a+b)/2, a)                               0.082     0.166    0.000    0.113    0.048    9.43     3
+   31   36  avg((a+b)/2, d)                               0.053     0.000    0.000    0.211    0.000    3.38     4
+   32   37  avg((b+c)/2, a)                               0.379     0.108    0.141    0.190    1.078    9.51    19
+   33   38  avg((b+c)/2, b)                               0.017     0.000    0.069    0.000    0.000    2.07     2
+   34   41  avg((b+c)/2, (a+b)/2)                         0.039     0.000    0.000    0.023    0.131    4.25     3
+   35   42  avg((a+c)/2, a)                               0.061     0.085    0.097    0.000    0.062    3.56     3
+   36   43  avg((a+c)/2, b)                               0.031     0.000    0.000    0.014    0.109    3.32     4
+   37   44  avg((a+c)/2, c)                               0.011     0.016    0.025    0.004    0.000    0.91     5
+   38   46  avg((a+c)/2, (a+b)/2)                         0.088     0.000    0.000    0.139    0.213    5.93     5
+   39   47  avg((b+d)/2, a)                               1.305     0.235    0.798    2.489    1.698   15.32    37
+   40   49  avg((b+d)/2, (a+b)/2)                         0.107     0.000    0.000    0.318    0.109    5.47     7
+   41   50  avg((b+d)/2, (b+c)/2)                         0.026     0.000    0.000    0.000    0.105    5.96     1
+   42   51  avg((b+d)/2, (a+c)/2)                         0.346     0.000    0.060    0.859    0.466   10.11    15
+   43   52  avg((c+d)/2, a)                               0.113     0.087    0.005    0.142    0.219    4.95     7
+   44   53  avg((c+d)/2, b)                               0.009     0.000    0.000    0.035    0.000    1.98     1
+   45   54  avg((c+d)/2, (a+b)/2)                         0.324     0.000    0.162    0.576    0.557    9.14    14
+   46   55  avg((a+b+c+d)/4, (a+b)/2)                     0.100     0.000    0.068    0.168    0.163    9.30     4
+   47   57  avg(MED, a)                                   0.157     0.341    0.043    0.000    0.244   10.90     8
+   48   58  avg(MED, b)                                   0.044     0.129    0.030    0.018    0.000    7.35     3
+   49   59  avg(MED, (b+d)/2)                             0.072     0.039    0.102    0.000    0.145    7.93     6
+   50   60  avg(MED, (c+d)/2)                             0.257     0.043    0.544    0.306    0.134    7.63    16
+   51   61  avg((a+3b)/4, a)                              0.099     0.084    0.313    0.000    0.000    6.53     8
+   52   62  avg((a+d)/2, a)                               0.078     0.025    0.040    0.245    0.000   11.24     4
+   53   63  avg((a+d)/2, b)                               0.025     0.052    0.000    0.000    0.047    2.96     2
+   54   64  avg((a+d)/2, d)                               0.009     0.018    0.020    0.000    0.000    1.12     2
+   55   65  avg((a+d)/2, (a+b)/2)                         1.135     0.194    0.527    2.171    1.647   11.79    31
+   56   66  avg((a+d)/2, (b+c)/2)                         0.501     0.000    0.119    1.274    0.611   12.43    19
+   57   67  avg((a+d)/2, (a+c)/2)                         0.140     0.000    0.000    0.177    0.381    9.82     6
+   58   68  avg((a+d)/2, (b+d)/2)                         0.027     0.000    0.000    0.071    0.037    2.13     3
+   59   70  avg((a+d)/2, (a+b+c+d)/4)                     0.020     0.000    0.079    0.000    0.000    4.52     1
+   60   71  avg((a+d)/2, MED)                             0.353     0.020    1.000    0.084    0.310   17.63    14
+   61   72  avg(b+(a-c)/2, a)                             0.109     0.161    0.250    0.016    0.010    5.89     8
+   62   73  avg(b+(a-c)/2, b)                             0.012     0.000    0.000    0.049    0.000    2.77     1
+   63   75  avg(b+(a-c)/2, (a+b)/2)                       0.004     0.000    0.000    0.016    0.000    0.93     1
+   64   76  avg(b+(a-c)/2, (b+c)/2)                       0.057     0.000    0.034    0.060    0.133    3.43     5
+   65   77  avg(b+(a-c)/2, (a+c)/2)                       0.045     0.020    0.000    0.047    0.113    3.49     4
+   66   78  avg(b+(a-c)/2, (b+d)/2)                       0.005     0.000    0.000    0.018    0.000    1.04     1
+   67   79  avg(b+(a-c)/2, (c+d)/2)                       0.010     0.000    0.041    0.000    0.000    2.33     1
+   68   80  avg(b+(a-c)/2, (a+b+c+d)/4)                   0.225     0.019    0.000    0.356    0.525    8.67     9
+   69   81  avg(b+(a-c)/2, (a+3b)/4)                      0.055     0.000    0.054    0.000    0.166    3.78     4
+   70   82  avg(b+(a-c)/2, (a+d)/2)                       0.188     0.087    0.336    0.244    0.084    5.22    11
+   71   83  avg(a+d-b, d)                                 0.003     0.011    0.000    0.000    0.000    0.61     1
+   72   88  avg(a+d-b, b+(a-c)/2)                         0.236     0.107    0.120    0.288    0.430    8.83    13
+   73   89  avg(median(a,b,c), a)                         0.129     0.149    0.141    0.199    0.028    4.85     7
+   74   91  avg(median(a,b,c), c)                         0.015     0.025    0.017    0.017    0.000    0.98     6
+   75   93  avg(median(a,b,c), (a+b)/2)                   0.140     0.083    0.000    0.397    0.081    6.28     9
+   76   94  avg(median(a,b,c), (b+c)/2)                   0.034     0.038    0.084    0.013    0.000    2.28     5
+   77   95  avg(median(a,b,c), (a+c)/2)                   0.034     0.004    0.075    0.029    0.028    2.14     4
+   78   96  avg(median(a,b,d), a)                         0.619     0.382    1.310    0.325    0.459    9.17    22
+   79   97  avg(median(a,b,d), b)                         0.159     0.201    0.224    0.066    0.145    5.24     5
+   80   98  avg(median(a,b,d), (a+b)/2)                   0.409     0.355    0.682    0.099    0.502   24.64    14
+   81   99  avg(median(a,b,d), (b+c)/2)                   0.058     0.111    0.063    0.058    0.000    4.03     4
+   82  100  avg(median(a,b,d), (a+c)/2)                   0.161     0.089    0.009    0.093    0.454   10.12     6
+   83  101  avg(median(a,b,d), (b+d)/2)                   0.011     0.000    0.044    0.000    0.000    2.51     1
+   84  102  avg(median(a,b,d), (a+b+c+d)/4)               0.305     0.081    0.574    0.328    0.239    7.73    16
+   85  103  avg(median(a,b,d), b+(a-c)/2)                 0.143     0.000    0.105    0.374    0.093    6.63     8
+   86  104  avg(median(a,b,d), median(a,b,c))             0.288     0.420    0.501    0.160    0.073    9.07     8
+   87  105  avg(median(a,d,a+d-b), b)                     0.469     0.023    0.137    0.764    0.950    9.46    22
+   88  106  avg(median(a,d,a+d-b), d)                     0.010     0.037    0.004    0.000    0.000    0.76     4
+   89  107  avg(median(a,d,a+d-b), (b+c)/2)               0.003     0.000    0.013    0.000    0.000    0.74     1
+   90  109  avg(a+(R-Ra), a)                              0.258     1.011    0.009    0.000    0.013    8.80    14
+   91  110  avg(a+(R-Ra), (b+c)/2)                        0.103     0.000    0.030    0.312    0.070    5.11     9
+   92  111  avg(a+(R-Ra), (a+c)/2)                        0.017     0.000    0.000    0.026    0.044    2.50     2
+   93  112  avg(a+(R-Ra), (b+d)/2)                        0.676     0.011    0.316    1.140    1.237   12.98    29
+   94  113  avg(a+(R-Ra), (c+d)/2)                        0.317     0.000    0.000    0.727    0.542    6.95    16
+   95  114  avg(a+(R-Ra), (a+d)/2)                        0.334     0.080    0.459    0.401    0.395   15.26    20
+   96  115  avg(b+(R-Rb), b)                              0.206     0.824    0.001    0.000    0.000    9.35    13
+   97  116  avg(b+(R-Rb), (a+b)/2)                        0.042     0.000    0.000    0.040    0.126    7.22     2
+   98  117  avg(b+(R-Rb), (b+c)/2)                        0.010     0.000    0.040    0.000    0.000    2.28     1
+   99  118  avg(b+(R-Rb), (a+c)/2)                        0.070     0.000    0.028    0.151    0.102    4.63     6
+  100  119  avg(b+(R-Rb), (b+d)/2)                        0.011     0.000    0.045    0.000    0.000    2.56     1
+  101  120  avg(b+(R-Rb), (c+d)/2)                        0.033     0.000    0.000    0.071    0.060    2.58     4
+  102  121  avg(b+(R-Rb), (a+d)/2)                        0.767     0.041    0.143    1.519    1.365   10.54    34
+  103  122  avg(b+(R-Rb), a+(R-Ra))                       0.505     0.163    0.340    0.799    0.717    9.95    31
+  104  123  avg(d+(R-Rd), (a+c)/2)                        0.188     0.000    0.024    0.430    0.296    6.34    12
+  105  124  avg(d+(R-Rd), (b+d)/2)                        0.008     0.000    0.034    0.000    0.000    1.92     1
+  106  125  avg(d+(R-Rd), (a+d)/2)                        0.013     0.003    0.047    0.000    0.000    1.00     4
+  107  126  avg(d+(R-Rd), median(a,d,a+d-b))              0.005     0.021    0.000    0.000    0.000    0.43     4
+  108  127  avg(d+(R-Rd), a+(R-Ra))                       0.116     0.109    0.311    0.000    0.043    4.08    19
+  109  128  avg(d+(R-Rd), b+(R-Rb))                       0.017     0.006    0.022    0.000    0.038    2.18     3
+  110  130  avg(MED+(R-MED_R), (b+c)/2)                   0.051     0.000    0.078    0.126    0.000    3.89     5
+  111  131  avg(MED+(R-MED_R), (a+c)/2)                   0.126     0.017    0.152    0.158    0.176    5.35    12
+  112  133  avg(MED+(R-MED_R), MED)                       0.341     1.365    0.000    0.000    0.000   24.63     9
+  113  134  avg(MED+(R-MED_R), (a+d)/2)                   0.230     0.102    0.306    0.336    0.176    8.85    16
+  114  135  avg((a+b)/2+(R-..), (a+b)/2)                  0.036     0.079    0.023    0.000    0.044    2.49     7
+  115  136  avg((a+b)/2+(R-..), (b+c)/2)                  0.066     0.012    0.041    0.102    0.109    3.40     7
+  116  137  avg((a+b)/2+(R-..), (a+c)/2)                  0.132     0.073    0.069    0.147    0.237    4.86    14
+  117  138  avg((a+b)/2+(R-..), (b+d)/2)                  0.065     0.000    0.009    0.166    0.085    4.71     7
+  118  139  avg((a+b)/2+(R-..), (c+d)/2)                  0.140     0.000    0.038    0.228    0.293   11.77     7
+  119  140  avg((a+b)/2+(R-..), (a+b+c+d)/4)              0.016     0.024    0.042    0.000    0.000    1.29     4
+  120  141  avg((a+b)/2+(R-..), (a+d)/2)                  0.208     0.032    0.442    0.216    0.142    4.69    19
+  121  142  avg((a+b)/2+(R-..), a+(R-Ra))                 0.011     0.037    0.000    0.009    0.000    1.66     3
+  122  144  avg((a+b)/2+(R-..), d+(R-Rd))                 0.004     0.010    0.000    0.006    0.000    0.59     2
+  123  145  avg(MED+(R-MED_R)/2, a)                       0.122     0.353    0.137    0.000    0.000    5.24    10
+  124  146  avg(MED+(R-MED_R)/2, c)                       0.383     0.000    0.214    0.432    0.887    8.35    16
+  125  147  avg(MED+(R-MED_R)/2, d)                       0.091     0.000    0.000    0.198    0.166    3.91     7
+  126  148  avg(MED+(R-MED_R)/2, (a+c)/2)                 0.132     0.054    0.121    0.164    0.189    5.71    10
+  127  149  avg(MED+(R-MED_R)/2, (b+d)/2)                 0.093     0.038    0.225    0.024    0.083    3.56    10
+  128  150  avg(MED+(R-MED_R)/2, (c+d)/2)                 0.629     0.134    0.450    0.932    1.000   10.24    31
+  129  151  avg(MED+(R-MED_R)/2, (a+d)/2)                 0.274     0.119    0.709    0.128    0.139    8.34    17
+  130  152  avg(MED+(R-MED_R)/2, median(a,b,c))           0.572     0.091    0.511    0.901    0.784    8.21    28
+  131  153  avg(MED+(R-MED_R)/2, median(a,d,a+d-b))       0.217     0.032    0.347    0.397    0.094    5.56    18
+  132  154  avg(MED+(R-MED_R)/2, a+(R-Ra))                0.345     0.162    0.918    0.247    0.052    9.12    22
+  133  155  avg(MED+(R-MED_R)/2, b+(R-Rb))                0.163     0.110    0.483    0.044    0.013    6.64    13
+  134  156  avg(MED+(R-MED_R)/2, d+(R-Rd))                0.049     0.016    0.143    0.035    0.000    3.80     7
+  135  157  avg(MED+(R-MED_R)/2, MED+(R-MED_R))           0.549     1.489    0.633    0.000    0.074   25.41    17
+  136  158  avg((a+b)/2+(R-..)/2, a)                      0.052     0.027    0.158    0.000    0.024    5.44     6
+  137  159  avg((a+b)/2+(R-..)/2, b)                      0.010     0.000    0.000    0.000    0.038    2.20     1
+  138  160  avg((a+b)/2+(R-..)/2, c)                      0.023     0.030    0.055    0.008    0.000    1.18     5
+  139  161  avg((a+b)/2+(R-..)/2, d)                      0.003     0.000    0.013    0.000    0.000    0.72     1
+  140  162  avg((a+b)/2+(R-..)/2, (a+b)/2)                0.014     0.056    0.000    0.000    0.000    1.68     1
+  141  163  avg((a+b)/2+(R-..)/2, (b+c)/2)                0.015     0.000    0.000    0.000    0.061    3.48     1
+  142  164  avg((a+b)/2+(R-..)/2, (a+c)/2)                0.028     0.000    0.069    0.041    0.000    2.63     3
+  143  165  avg((a+b)/2+(R-..)/2, (b+d)/2)                0.065     0.000    0.052    0.000    0.207    6.14     4
+  144  166  avg((a+b)/2+(R-..)/2, (c+d)/2)                0.249     0.077    0.015    0.368    0.535    7.07    15
+  145  167  avg((a+b)/2+(R-..)/2, (a+b+c+d)/4)            0.961     0.196    0.489    1.631    1.528   15.19    35
+  146  168  avg((a+b)/2+(R-..)/2, (a+d)/2)                0.421     0.068    0.288    0.511    0.817    8.92    17
+  147  169  avg((a+b)/2+(R-..)/2, median(a,b,c))          0.066     0.158    0.000    0.000    0.104    5.92     7
+  148  170  avg((a+b)/2+(R-..)/2, median(a,b,d))          0.256     0.297    0.473    0.161    0.093    5.38    18
+  149  171  avg((a+b)/2+(R-..)/2, a+(R-Ra))               0.199     0.000    0.299    0.032    0.464    6.13    11
+  150  172  avg((a+b)/2+(R-..)/2, b+(R-Rb))               0.050     0.017    0.157    0.000    0.024    3.22     7
+  151  173  avg((a+b)/2+(R-..)/2, d+(R-Rd))               0.972     0.012    0.194    1.507    2.174   11.15    38
+  152  176  avg(2a-aa, (a+b)/2)                           0.020     0.022    0.019    0.000    0.039    2.23     3
+  153  178  avg(2a-aa, MED)                               0.007     0.023    0.005    0.000    0.000    1.32     2
+  154  179  avg(2a-aa, (a+d)/2)                           0.037     0.095    0.052    0.000    0.000    2.93     4
+  155  180  avg(2a-aa, median(a,d,a+d-b))                 0.049     0.178    0.018    0.000    0.000    7.81     5
+  156  184  avg(2b-bb, (a+b+c+d)/4)                       0.003     0.013    0.000    0.000    0.000    0.76     1
+  157  185  avg(2b-bb, (a+3b)/4)                          0.004     0.017    0.000    0.000    0.000    0.96     1
+  158  186  avg(2b-bb, (a+d)/2)                           0.105     0.246    0.173    0.000    0.000    6.88     7
+  159  187  avg(2b-bb, b+(a-c)/2)                         0.005     0.019    0.000    0.000    0.000    1.11     1
+  160  188  avg(2b-bb, a+d-b)                             0.114     0.276    0.181    0.000    0.000    7.90    10
+  161  189  avg(2b-bb, median(a,d,a+d-b))                 0.014     0.023    0.034    0.000    0.000    1.31     3
+  162  190  avg(GAP/8, a)                                 1.416     0.571    2.179    1.849    1.067   12.98    52
+  163  191  avg(GAP/8, b)                                 0.255     0.129    0.125    0.453    0.313    7.47    15
+  164  192  avg(GAP/8, c)                                 0.018     0.000    0.000    0.073    0.000    4.18     1
+  165  193  avg(GAP/8, d)                                 0.041     0.077    0.074    0.000    0.015    2.03     5
+  166  194  avg(GAP/8, (a+b)/2)                           1.136     0.275    1.432    1.615    1.222   17.39    37
+  167  195  avg(GAP/8, (b+c)/2)                           0.213     0.142    0.111    0.358    0.241    7.22    15
+  168  196  avg(GAP/8, (a+c)/2)                           0.440     0.326    0.788    0.429    0.215    9.72    20
+  169  197  avg(GAP/8, (b+d)/2)                           0.022     0.000    0.000    0.069    0.019    3.15     3
+  170  198  avg(GAP/8, (c+d)/2)                           0.082     0.000    0.000    0.328    0.000   10.93     3
+  171  199  avg(GAP/8, (a+b+c+d)/4)                       1.181     0.047    0.371    2.660    1.646   16.42    29
+  172  200  avg(GAP/8, MED)                               0.762     0.918    1.438    0.390    0.302   11.79    25
+  173  201  avg(GAP/8, (a+3b)/4)                          0.089     0.104    0.193    0.059    0.000    3.41     8
+  174  202  avg(GAP/8, (a+d)/2)                           0.422     0.139    0.425    0.509    0.614   10.84    24
+  175  205  avg(GAP/8, median(a,b,c))                     0.276     0.319    0.279    0.226    0.280    6.59    14
+  176  206  avg(GAP/8, median(a,b,d))                     1.847     0.698    2.589    1.983    2.119   12.31    49
+  177  207  avg(GAP/8, median(a,d,a+d-b))                 0.016     0.000    0.000    0.064    0.000    3.66     1
+  178  208  avg(GAP/8, a+(R-Ra))                          0.730     0.137    0.677    1.262    0.844   10.51    40
+  179  209  avg(GAP/8, b+(R-Rb))                          0.446     0.155    0.831    0.452    0.345    6.76    33
+  180  210  avg(GAP/8, d+(R-Rd))                          0.013     0.000    0.054    0.000    0.000    2.15     2
+  181  211  avg(GAP/8, MED+(R-MED_R))                     0.752     0.418    1.466    0.805    0.319   10.98    38
+  182  212  avg(GAP/8, (a+b)/2+(R-..))                    0.258     0.176    0.312    0.400    0.146    6.98    23
+  183  213  avg(GAP/8, MED+(R-MED_R)/2)                   0.541     1.580    0.477    0.064    0.044   18.64    24
+  184  214  avg(GAP/8, (a+b)/2+(R-..)/2)                  0.102     0.028    0.382    0.000    0.000    4.89     8
+  185  215  avg(GAP/8, 2a-aa)                             0.083     0.200    0.040    0.041    0.051   10.03     7
+  186  216  avg(GAP/8, 2b-bb)                             0.020     0.007    0.000    0.037    0.036    2.10     3
+  187  217  avg(clamp(a+b-c), a)                          0.360     0.170    0.688    0.363    0.221    9.99    13
+  188  218  avg(clamp(a+b-c), b)                          0.010     0.029    0.009    0.000    0.000    1.30     3
+  189  219  avg(clamp(a+b-c), d)                          0.260     0.169    0.294    0.204    0.371    4.88    21
+  190  220  avg(clamp(a+b-c), (b+d)/2)                    0.294     0.103    0.091    0.626    0.356    7.04    25
+  191  221  avg(clamp(a+b-c), MED)                        1.770     6.643    0.091    0.344    0.000   69.37    14
+  192  222  avg(clamp(a+b-c), (a+d)/2)                    0.650     0.078    0.963    1.177    0.383   20.18    26
+  193  223  avg(clamp(a+b-c), a+d-b)                      0.016     0.058    0.008    0.000    0.000    2.38     4
+  194  224  avg(clamp(a+b-c), median(a,d,a+d-b))          0.202     0.066    0.483    0.073    0.184    4.53    17
+  195  225  avg(clamp(a+b-c), MED+(R-MED_R)/2)            1.152     4.610    0.000    0.000    0.000   65.03    12
+  196  226  avg(clamp(a+b-c), 2a-aa)                      0.113     0.261    0.178    0.008    0.005    6.45    12
+  197  227  avg(clamp(a+b-c), 2b-bb)                      0.016     0.059    0.005    0.000    0.000    1.42     5
+  198  228  avg(clamp(a+b-c), GAP/8)                      0.511     1.194    0.607    0.128    0.113   19.52    19
+  199  229  avg(MED+bias, a)                              0.308     0.294    0.484    0.234    0.220    8.11    15
+  200  230  avg(MED+bias, b)                              0.224     0.032    0.618    0.123    0.123    6.20    15
+  201  231  avg(MED+bias, d)                              0.012     0.004    0.023    0.000    0.022    1.33     3
+  202  232  avg(MED+bias, (a+b)/2)                        0.285     0.525    0.094    0.071    0.450   14.61     8
+  203  233  avg(MED+bias, (a+c)/2)                        0.083     0.000    0.000    0.264    0.067    4.87     5
+  204  234  avg(MED+bias, (b+d)/2)                        0.093     0.101    0.247    0.000    0.025    5.06     6
+  205  235  avg(MED+bias, (a+d)/2)                        0.064     0.000    0.000    0.000    0.257    9.14     2
+  206  236  avg(MED+bias, b+(a-c)/2)                      0.038     0.000    0.000    0.153    0.000    3.79     3
+  207  237  avg(MED+bias, median(a,b,c))                  0.027     0.021    0.018    0.000    0.071    4.03     3
+  208  238  avg(MED+bias, b+(R-Rb))                       0.052     0.043    0.165    0.000    0.000    2.95     7
+  209  239  avg(MED+bias, MED+(R-MED_R)/2)                1.117     2.148    1.185    0.796    0.337   50.82    34
+  210  240  avg(MED+bias, (a+b)/2+(R-..)/2)               0.746     0.353    0.605    0.743    1.281   15.09    32
+  211  241  avg(MED+bias, 2a-aa)                          0.373     0.671    0.506    0.266    0.052   17.51    23
+  212  242  avg(MED+bias, 2b-bb)                          0.193     0.317    0.363    0.093    0.000    7.53    17
+  213  243  avg(MED+bias, GAP/8)                          3.394     1.492    5.671    5.249    1.163   33.01    50
+  214  244  avg(MED+bias, clamp(a+b-c))                   1.014     1.448    1.063    0.883    0.661   23.75    31
+  215  245  avg(b+bias, a)                                0.032     0.000    0.101    0.025    0.000    3.38     3
+  216  247  avg(b+bias, (a+b)/2)                          0.197     0.031    0.557    0.145    0.053    5.35    12
+  217  248  avg(b+bias, (b+c)/2)                          0.080     0.000    0.013    0.197    0.111    4.56     6
+  218  249  avg(b+bias, (a+c)/2)                          0.078     0.000    0.010    0.275    0.027    5.20     6
+  219  250  avg(b+bias, (b+d)/2)                          0.085     0.179    0.075    0.085    0.000    3.87     6
+  220  251  avg(b+bias, (a+d)/2)                          0.266     0.000    0.021    0.525    0.519   13.04     8
+  221  253  avg(b+bias, MED+(R-MED_R)/2)                  0.191     0.117    0.238    0.215    0.193   10.02    13
+  222  254  avg(b+bias, GAP/8)                            0.250     0.104    0.230    0.286    0.379   11.26    11
+  223  255  LS                                           41.843    39.077   43.342   39.706   45.245  100.00    76
+  224   --  LS wide                                       new: no survey figures
+
+DROPPED (never chosen in the 76 surveys)
+------------------------------------------------------------------------------
+  old   2  c
+  old  13  b+(a-c)/2
+  old  25  2a-aa
+  old  26  2b-bb
+  old  34  avg(d, b)
+  old  39  avg((b+c)/2, c)
+  old  40  avg((b+c)/2, d)
+  old  45  avg((a+c)/2, d)
+  old  48  avg((b+d)/2, b)
+  old  56  avg((a+b+c+d)/4, (a+c)/2)
+  old  69  avg((a+d)/2, (c+d)/2)
+  old  74  avg(b+(a-c)/2, d)
+  old  84  avg(a+d-b, (b+c)/2)
+  old  85  avg(a+d-b, (a+c)/2)
+  old  86  avg(a+d-b, (b+d)/2)
+  old  87  avg(a+d-b, (c+d)/2)
+  old  90  avg(median(a,b,c), b)
+  old  92  avg(median(a,b,c), d)
+  old 108  avg(median(a,d,a+d-b), (a+c)/2)
+  old 129  avg(MED+(R-MED_R), a)
+  old 132  avg(MED+(R-MED_R), (b+d)/2)
+  old 143  avg((a+b)/2+(R-..), b+(R-Rb))
+  old 174  avg((a+b)/2+(R-..)/2, (a+b)/2+(R-..))
+  old 175  avg(2a-aa, c)
+  old 177  avg(2a-aa, (a+c)/2)
+  old 181  avg(2b-bb, (b+c)/2)
+  old 182  avg(2b-bb, (b+d)/2)
+  old 183  avg(2b-bb, (c+d)/2)
+  old 203  avg(GAP/8, b+(a-c)/2)
+  old 204  avg(GAP/8, a+d-b)
+  old 246  avg(b+bias, d)
+  old 252  avg(b+bias, median(a,b,c))
+
+Most dropped entries mix a diagonal or extrapolating primitive with a
+neighbour it rarely disagrees with in sign (for example avg(a+d-b, (b+d)/2)),
+so the average seldom beats its parts. c alone, 2a-aa and 2b-bb alone and
+b+(a-c)/2 alone are dropped too: their directions are covered by LS and by the
+averages that remain.
+

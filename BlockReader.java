@@ -4,9 +4,10 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockReader version 2.4 (reads Block formats 3 to 8; 5: mixed context
+// BlockReader version 2.5 (reads Block formats 3 to 10; 5: mixed context
 // coding, a block size per channel; 6: bands of rows, decoded at the same
-// time; 7 and 8: 5 and 6 with the mixed coder's second opinions)
+// time; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10:
+// 7 and 8 with the 225-entry predictor table)
 //
 // Reads BlockWriter's files: block map deltas (delta type 13), Context
 // coded (format version 3) or mixed-context coded (versions 4 and 5; in 5
@@ -15,7 +16,7 @@ import javax.swing.*;
 public class BlockReader
 {
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 8;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions
+	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The oldest format version read (the block predictors changed in version 3).
 	 */
@@ -91,11 +92,11 @@ public class BlockReader
 				int[] ref = (i > 0) ? channel[i - 1] : null;
 				if(version >= 4)
 				{
-					int[][] r = DeltaMapper.getValuesFromMixedDeltas(mixed[i], Arrays.copyOf(delta, i), size[0], size[1], init[i], map[i], ref, version >= 7);
+					int[][] r = DeltaMapper.getValuesFromMixedDeltas(mixed[i], Arrays.copyOf(delta, i), size[0], size[1], init[i], map[i], ref, version >= 7, table());
 					delta[i]   = r[0];
 					channel[i] = r[1];
 				}
-				else channel[i] = DeltaMapper.getValuesFromDeltas(delta[i], size[0], size[1], init[i], 13, map[i], 0, ref);
+				else channel[i] = DeltaMapper.getValuesFromDeltas(delta[i], size[0], size[1], init[i], 13, map[i], 0, ref, table());
 			}
 			for(int i = 0; i < 3; i++) if(id[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
 			int[][] bgr = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
@@ -116,11 +117,19 @@ public class BlockReader
 	}
 
 	/**
-	 * Whether the file is in bands (formats 6 and 8).
+	 * Whether the file is in bands (formats 6, 8 and 10).
 	 *
 	 * @return whether it is
 	 */
-	private boolean banded() { return version == 6 || version == 8; }
+	private boolean banded() { return version == 6 || version == 8 || version == 10; }
+
+	/**
+	 * The table the file's block maps index: PREDICTOR_TABLE from format 9,
+	 * PREDICTOR_TABLE_256 before.
+	 *
+	 * @return the table
+	 */
+	private DeltaMapper.PredictorTable table() { return (version >= 9) ? DeltaMapper.PREDICTOR_TABLE : DeltaMapper.PREDICTOR_TABLE_256; }
 
 	private void read(DataInputStream in, String filename) throws IOException
 	{
@@ -148,12 +157,12 @@ public class BlockReader
 			else             delta[i] = DeltaMapper.readContextDeltas(in, size[0] * size[1], Arrays.copyOf(delta, i), size[0]);
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
-		System.out.print(DeltaMapper.describeBlockMaps(set_id, map, size[0]));
+		System.out.print(DeltaMapper.describeBlockMaps(set_id, map, size[0], table()));
 		System.out.println();
 	}
 
 	/**
-	 * Formats 6 and 8 (see BlockWriter.SaveHandler.inBands): the bands, read (maps
+	 * Formats 6, 8 and 10 (see BlockWriter.SaveHandler.inBands): the bands, read (maps
 	 * decoded, deltas not yet).
 	 *
 	 * @param in the stream, after the header's channel set
@@ -194,13 +203,13 @@ public class BlockReader
 				System.arraycopy(band_map[b][i], head, map[i], at, band_map[b][i].length - head);
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
-		System.out.print(DeltaMapper.describeBlockMaps(set_id, map, w));
+		System.out.print(DeltaMapper.describeBlockMaps(set_id, map, w, table()));
 		System.out.println(BlockWriter.describeBands(bands, h));
 		System.out.println();
 	}
 
 	/**
-	 * Formats 6 and 8: the bands decoded at the same time, into the channels.
+	 * Formats 6, 8 and 10: the bands decoded at the same time, into the channels.
 	 *
 	 * @param channel set to the three channels, in coding order
 	 * @param w       the quantized width
@@ -215,7 +224,7 @@ public class BlockReader
 			int[][] d = new int[3][], v = new int[3][];
 			for(int i = 0; i < 3; i++)
 			{
-				int[][] r = DeltaMapper.getValuesFromMixedDeltas(band_mixed[b][i], Arrays.copyOf(d, i), w, y1 - y0, band_init[b][i], band_map[b][i], (i > 0) ? v[i - 1] : null, version >= 7);
+				int[][] r = DeltaMapper.getValuesFromMixedDeltas(band_mixed[b][i], Arrays.copyOf(d, i), w, y1 - y0, band_init[b][i], band_map[b][i], (i > 0) ? v[i - 1] : null, version >= 7, table());
 				d[i] = r[0];
 				v[i] = r[1];
 				System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);

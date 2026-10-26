@@ -7,14 +7,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// PacketWriter version 2.1 (the block map's predictors come from the survey)
+// PacketWriter version 2.2 (the block map's predictors come from the survey, from the 225-entry table)
 public class PacketWriter
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: block maps with a block size per channel
+	static final int  FORMAT_VERSION = 5;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: block maps with a block size per channel; 5: the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The version written for delta types other than the block map (13), whose
 	 * files are as they were.

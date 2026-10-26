@@ -4,18 +4,23 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import javax.swing.*;
 
-// PacketReader version 2.1 (reads Packet formats 3 and 4)
+// PacketReader version 2.2 (reads Packet formats 3 to 5)
 public class PacketReader
 {
 	// File format: every file starts with FORMAT_ID ('P' = Packet format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'P';
-	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: block maps with a block size per channel
+	static final int  FORMAT_VERSION = 5;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: block maps with a block size per channel; 5: the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The oldest format version read (the block predictors changed in version 3).
 	 */
 	static final int  OLDEST_VERSION = 3;
+	/**
+	 * The table the file's block maps index: PREDICTOR_TABLE from version 5,
+	 * PREDICTOR_TABLE_256 before.
+	 */
+	DeltaMapper.PredictorTable predictor_table = DeltaMapper.PREDICTOR_TABLE;
 
 	static final String[] ENTROPY_NAMES = {"LZ77","Huffman","Arithmetic","Arithmetic (per packet)","Huffman (per packet)","Adaptive","Adaptive (per packet)","Context"};
 
@@ -113,6 +118,7 @@ public class PacketReader
 				? filename + " is not a Packet Writer file."
 				: filename + " is Packet format version " + version + "; this reader reads versions " + OLDEST_VERSION + " to " + FORMAT_VERSION
 				  + " (the block predictors changed in version " + OLDEST_VERSION + ").");
+		predictor_table = (version >= 5) ? DeltaMapper.PREDICTOR_TABLE : DeltaMapper.PREDICTOR_TABLE_256;
 		xdim              = in.readUnsignedShort();
 		ydim              = in.readUnsignedShort();
 		pixel_shift       = in.readByte();
@@ -263,7 +269,7 @@ public class PacketReader
 
 	private int[] toChannel(int i, int[] delta, int[] size)
 	{
-		int[] channel = DeltaMapper.getValuesFromDeltas(delta, size[0], size[1], init[i], delta_type, map[i], scanline5_variant, (i > 0) ? raw[i - 1] : null);
+		int[] channel = DeltaMapper.getValuesFromDeltas(delta, size[0], size[1], init[i], delta_type, map[i], scanline5_variant, (i > 0) ? raw[i - 1] : null, predictor_table);
 		raw[i] = channel.clone();   // as decoded: the next channel's reference (block map)
 		if(DeltaMapper.getChannels(set_id)[i] > 2)
 			for(int k = 0; k < channel.length; k++) channel[k] += min[i];

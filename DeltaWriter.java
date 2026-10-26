@@ -6,14 +6,14 @@ import java.util.*;
 import java.util.zip.*;
 import javax.swing.*;
 
-// DeltaWriter version 2.2 (the block map's predictors come from the survey)
+// DeltaWriter version 2.3 (the block map's predictors come from the survey, from the 225-entry table)
 public class DeltaWriter
 {
 	// File format: every file starts with FORMAT_ID ('D' = Delta format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'D';
-	static final int  FORMAT_VERSION = 4;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: block maps with a block size per channel
+	static final int  FORMAT_VERSION = 5;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: block maps with a block size per channel; 5: the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The version written for delta types other than the block map (13), whose
 	 * files are as they were.

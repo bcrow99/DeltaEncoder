@@ -357,6 +357,28 @@ public class DeltaMapper
 		}
 	}
 
+	/**
+	 * As {@link #getValuesFromDeltas(int[], int, int, int, int, byte[], int, int[])},
+	 * with a block map's (type 13) ids in the given table (PREDICTOR_TABLE_256
+	 * for older files).
+	 *
+	 * @param delta      the deltas
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param init_value the first value
+	 * @param delta_type 0 to 13
+	 * @param map        the map (ignored for types 0-5)
+	 * @param variant    scanline 5's predictor set
+	 * @param ref        the previous channel as decoded (block map only)
+	 * @param table      the table a block map's ids index
+	 * @return the channel
+	 */
+	public static int[] getValuesFromDeltas(int[] delta, int xdim, int ydim, int init_value, int delta_type, byte[] map, int variant, int[] ref, PredictorTable table)
+	{
+		if(delta_type == 13) return getValuesFromBlockDeltas(delta, xdim, ydim, init_value, map, ref, table);
+		return getValuesFromDeltas(delta, xdim, ydim, init_value, delta_type, map, variant, ref);
+	}
+
 	// =========================================================================
 	// Delta types 0-5: one fixed predictor
 	// =========================================================================
@@ -2462,6 +2484,20 @@ public class DeltaMapper
 	 */
 	public static String describeBlockPredictors(byte[] map, String indent)
 	{
+		return describeBlockPredictors(map, indent, PREDICTOR_TABLE);
+	}
+
+	/**
+	 * As {@link #describeBlockPredictors(byte[], String)}, with the map's ids
+	 * in the given table.
+	 *
+	 * @param map    the block map
+	 * @param indent put before each line
+	 * @param table  the table the map's ids index
+	 * @return the lines, each ending in a newline
+	 */
+	public static String describeBlockPredictors(byte[] map, String indent, PredictorTable table)
+	{
 		int[] ids   = getMapIds(map);
 		int[] count = new int[ids.length];
 		for(int q = mapHeaderLength(map); q < map.length; q++) count[map[q] & 0xFF]++;
@@ -2469,7 +2505,7 @@ public class DeltaMapper
 		for(int p = 0; p < ids.length; p++) order[p] = p;
 		Arrays.sort(order, (a, b) -> (count[a] != count[b]) ? count[b] - count[a] : a - b);
 		StringBuilder t = new StringBuilder();
-		for(int p : order) if(count[p] > 0) t.append(String.format("%s%,9d  %s%n", indent, count[p], PREDICTOR_TABLE.name(ids[p])));
+		for(int p : order) if(count[p] > 0) t.append(String.format("%s%,9d  %s%n", indent, count[p], table.name(ids[p])));
 		return t.toString();
 	}
 
@@ -2484,9 +2520,24 @@ public class DeltaMapper
 	 */
 	public static String describeBlockMaps(int set_id, byte[][] map, int xdim)
 	{
+		return describeBlockMaps(set_id, map, xdim, PREDICTOR_TABLE);
+	}
+
+	/**
+	 * As {@link #describeBlockMaps(int, byte[][], int)}, with the maps' ids in
+	 * the given table (PREDICTOR_TABLE_256 for older files).
+	 *
+	 * @param set_id the channel set
+	 * @param map    the channels' block maps, in coding order
+	 * @param xdim   the row width of the deltas
+	 * @param table  the table the maps' ids index
+	 * @return the description, each line ending in a newline
+	 */
+	public static String describeBlockMaps(int set_id, byte[][] map, int xdim, PredictorTable table)
+	{
 		StringBuilder t = new StringBuilder("Channel set: " + SET_NAMES[set_id] + String.format("%n"));
 		for(int i = 0; i < map.length; i++)
-			t.append(describeBlockSize(set_id, i, map[i], xdim)).append(String.format("%n")).append(describeBlockPredictors(map[i], "  "));
+			t.append(describeBlockSize(set_id, i, map[i], xdim)).append(String.format("%n")).append(describeBlockPredictors(map[i], "  ", table));
 		return t.toString();
 	}
 
@@ -2550,7 +2601,8 @@ public class DeltaMapper
 
 	// ---- Predictor tables -------------------------------------------------------
 	//
-	// A block map's ids index PREDICTOR_TABLE: 256 predictors, each a
+	// A block map's ids index PREDICTOR_TABLE: 225 predictors (256 in
+	// PREDICTOR_TABLE_256, which older files use), each a
 	// primitive or the average of two, (P_i + P_j + 1) >> 1 (see
 	// predictor.txt for each one and how they were chosen). Primitives 0-21
 	// are blockPredictor's on a, b, c, d; the rest are:
@@ -2574,7 +2626,11 @@ public class DeltaMapper
 	//               it was coded with, so the decoder keeps the same counts;
 	//   least       46 LS: a linear predictor fitted by least squares to the
 	//   squares     pixels just above and to the left, refitted at every
-	//               pixel (see LeastSquares). Id 255, alone.
+	//               pixel (see LeastSquares), its prediction clamped to 2
+	//               beyond the range of a, b, c and d; 47 LS wide: the same
+	//               fit clamped to 2 beyond the range of all 8 of its
+	//               neighbours (they differ only where the fit lands outside
+	//               a, b, c and d, at steep edges). Each alone.
 	//
 	// Beyond a, b, c and d these need the channel's earlier pixels and the
 	// previous channel: see PixelSource.
@@ -2582,7 +2638,7 @@ public class DeltaMapper
 	/**
 	 * Where each group of primitives past 21 starts (see the section comment above).
 	 */
-	public static final int SELECTION_FIRST = 22, CROSS_FIRST = 28, REACH_FIRST = 36, CLAMP_FIRST = 40, BIAS_FIRST = 42, LS_FIRST = 46, ALL_PRIMITIVES = 47;
+	public static final int SELECTION_FIRST = 22, CROSS_FIRST = 28, REACH_FIRST = 36, CLAMP_FIRST = 40, BIAS_FIRST = 42, LS_FIRST = 46, LS_WIDE = 47, ALL_PRIMITIVES = 48;
 
 	/**
 	 * The least-squares primitive's window: this many rows above, columns
@@ -2609,7 +2665,7 @@ public class DeltaMapper
 		"2a-aa", "2b-bb", "GAP", "GAP/8",
 		"clamp(a+b-c)", "clamp(a+d-b)",
 		"MED+bias", "(a+b)/2+bias", "a+bias", "b+bias",
-		"LS"};
+		"LS", "LS wide"};
 
 	/**
 	 * The cross-channel primitives' base predictors (the last two with half the error).
@@ -2756,7 +2812,9 @@ public class DeltaMapper
 	}
 
 	/**
-	 * PREDICTOR_TABLE, as pairs of primitives, 256 of them (ids are one byte).
+	 * PREDICTOR_TABLE_256, as pairs of primitives, 256 of them (ids are one
+	 * byte): the table of Block formats 3 to 8 and Delta, Packet and Simple
+	 * formats 3 and 4.
 	 * Ids 0-254 were chosen by measurement on 7 test images at Colour
 	 * Resolution 0 and 3 (see predictor.txt); id 255 is LS, alone:
 	 * <ul>
@@ -2770,7 +2828,7 @@ public class DeltaMapper
 	 * <li>255: the least-squares primitive (46), added later.</li>
 	 * </ul>
 	 */
-	static final int[] PREDICTOR_PAIRS = {
+	static final int[] PREDICTOR_PAIRS_256 = {
 		0,0, 1,1, 2,2, 3,3, 4,4, 5,5, 6,6, 7,7, 8,8, 9,9, 11,11, 13,13,
 		16,16, 18,18, 19,19, 23,23, 24,24, 25,25, 28,28, 29,29, 30,30, 31,31, 32,32, 34,34,
 		35,35, 36,36, 37,37, 39,39, 40,40, 42,42, 45,45, 2,0, 2,1, 3,0, 3,1, 4,0,
@@ -2795,14 +2853,56 @@ public class DeltaMapper
 		45,23, 45,34, 45,39, 46,46 };
 
 	/**
+	 * PREDICTOR_TABLE, as pairs of primitives: 225 of them. Ids 0-223 are the
+	 * 224 entries of PREDICTOR_PAIRS_256 that BlockWriter's survey chose at
+	 * least once over 19 test images at four settings (Color Resolution 0, 1,
+	 * 3 and 4 with Pixel Resolution 0, 1, 4 and 5; 76 surveys), in their old
+	 * order, LS last (223); the 32 dropped were never chosen. 224 is the
+	 * wide-clamped LS (LS_WIDE): with it, 7 of the images came out 0.35%
+	 * smaller lossless (haze 1.1%) and the same at Color Resolution 3. See
+	 * predictor.txt for every primitive and entry.
+	 */
+	static final int[] PREDICTOR_PAIRS = {
+		0,0, 1,1, 3,3, 4,4, 5,5, 6,6, 7,7, 8,8, 9,9, 11,11, 13,13, 16,16,
+		19,19, 23,23, 24,24, 25,25, 28,28, 29,29, 30,30, 31,31, 32,32, 34,34, 35,35, 39,39,
+		40,40, 42,42, 45,45, 2,0, 2,1, 3,0, 4,0, 4,3, 5,0, 5,1, 5,4, 6,0,
+		6,1, 6,2, 6,4, 7,0, 7,4, 7,5, 7,6, 8,0, 8,1, 8,4, 9,4, 11,0,
+		11,1, 11,7, 11,8, 13,0, 16,0, 16,1, 16,3, 16,4, 16,5, 16,6, 16,7, 16,9,
+		16,11, 18,0, 18,1, 18,4, 18,5, 18,6, 18,7, 18,8, 18,9, 18,13, 18,16, 19,3,
+		19,18, 23,0, 23,2, 23,4, 23,5, 23,6, 24,0, 24,1, 24,4, 24,5, 24,6, 24,7,
+		24,9, 24,18, 24,23, 25,1, 25,3, 25,5, 28,0, 28,5, 28,6, 28,7, 28,8, 28,16,
+		29,1, 29,4, 29,5, 29,6, 29,7, 29,8, 29,16, 29,28, 30,6, 30,7, 30,16, 30,25,
+		30,28, 30,29, 31,5, 31,6, 31,11, 31,16, 32,4, 32,5, 32,6, 32,7, 32,8, 32,9,
+		32,16, 32,28, 32,30, 34,0, 34,2, 34,3, 34,6, 34,7, 34,8, 34,16, 34,23, 34,25,
+		34,28, 34,29, 34,30, 34,31, 35,0, 35,1, 35,2, 35,3, 35,4, 35,5, 35,6, 35,7,
+		35,8, 35,9, 35,16, 35,23, 35,24, 35,28, 35,29, 35,30, 36,4, 36,11, 36,16, 36,25,
+		37,9, 37,13, 37,16, 37,18, 37,19, 37,25, 39,0, 39,1, 39,2, 39,3, 39,4, 39,5,
+		39,6, 39,7, 39,8, 39,9, 39,11, 39,13, 39,16, 39,23, 39,24, 39,25, 39,28, 39,29,
+		39,30, 39,31, 39,32, 39,34, 39,35, 39,36, 39,37, 40,0, 40,1, 40,3, 40,7, 40,11,
+		40,16, 40,19, 40,25, 40,34, 40,36, 40,37, 40,39, 42,0, 42,1, 42,3, 42,4, 42,6,
+		42,7, 42,16, 42,18, 42,23, 42,29, 42,34, 42,35, 42,36, 42,37, 42,39, 42,40, 45,0,
+		45,4, 45,5, 45,6, 45,7, 45,16, 45,34, 45,39, 46,46, 47,47 };
+
+	/**
 	 * The predictor table block maps use.
 	 */
 	public static final PredictorTable PREDICTOR_TABLE = pairTable("predictors", PREDICTOR_PAIRS);
 
 	/**
+	 * The 256-entry table of older files (see PREDICTOR_PAIRS_256), for reading them.
+	 */
+	public static final PredictorTable PREDICTOR_TABLE_256 = pairTable("predictors (256)", PREDICTOR_PAIRS_256);
+
+	/**
+	 * The most predictor ids a block map may carry, and one more than the
+	 * largest id (both tables' ids are one byte).
+	 */
+	public static final int MAX_PREDICTORS = 256;
+
+	/**
 	 * Its size, 256.
 	 */
-	public static final int PREDICTORS = PREDICTOR_TABLE.size();   // 256
+	public static final int PREDICTORS = PREDICTOR_TABLE.size();   // 225
 
 	/**
 	 * The values a table's primitives are computed from at pixel k: the channel
@@ -2836,6 +2936,10 @@ public class DeltaMapper
 		 */
 		short[]         ls;
 		/**
+		 * The wide-clamped least-squares primitive at each pixel (LS_WIDE); null unless ls is computed.
+		 */
+		short[]         lsw;
+		/**
 		 * The decoder's least-squares predictor (see ls); the encoder computes ls up front.
 		 */
 		final LeastSquares lsq;
@@ -2857,7 +2961,9 @@ public class DeltaMapper
 		public PixelSource(int[] v, int[] ref, int xdim, int ydim, PredictorTable table)
 		{
 			this(v, ref, xdim, table, false);
-			ls = (table.primitives > LS_FIRST) ? leastSquaresPlane(v, ref, xdim, ydim) : null;
+			short[][] planes = (table.primitives > LS_FIRST) ? leastSquaresPlanes(v, ref, xdim, ydim) : null;
+			ls  = (planes != null) ? planes[0] : null;
+			lsw = (planes != null) ? planes[1] : null;
 			if(corr != null)
 				for(int y = 1; y < ydim; y++)
 					for(int x = 1; x < xdim - 1; x++) { prepare(y * xdim + x); commit(y * xdim + x); }
@@ -2877,6 +2983,7 @@ public class DeltaMapper
 		{
 			this.v = v; this.ref = ref; this.xdim = xdim;
 			ls  = least_squares ? new short[v.length] : null;
+			lsw = least_squares ? new short[v.length] : null;
 			lsq = least_squares ? new LeastSquares(v, ref, xdim) : null;
 			boolean bias = table.primitives > BIAS_FIRST;
 			corr    = bias ? new short[BIAS_BASE.length][v.length] : null;
@@ -2901,7 +3008,7 @@ public class DeltaMapper
 		 */
 		void prepare(int k, boolean ls)
 		{
-			if(lsq != null) this.ls[k] = (short) lsq.next(k, ls);
+			if(lsq != null) { this.ls[k] = (short) lsq.next(k, ls); lsw[k] = (short) lsq.wide; }
 			if(corr == null) return;
 			int a = v[k - 1], b = v[k - xdim], c = v[k - xdim - 1], d = v[k - xdim + 1];
 			int t = (gradientLevel(d - b) + 4) * 81 + (gradientLevel(b - c) + 4) * 9 + gradientLevel(c - a) + 4;
@@ -2964,6 +3071,7 @@ public class DeltaMapper
 				int p = (q == CLAMP_FIRST) ? a + b - c : a + d - b;
 				return Math.max(lo, Math.min(hi, p));
 			}
+			if(q == LS_WIDE)  return lsw[k];
 			if(q >= LS_FIRST) return ls[k];
 			int s = q - BIAS_FIRST;
 			return blockPredictor(BIAS_BASE[s], a, b, c, d) + corr[s][k];
@@ -3056,7 +3164,7 @@ public class DeltaMapper
 
 	/**
 	 * Recently computed least-squares planes, oldest first: {xdim, a copy of the
-	 * channel, a copy of the previous channel, the plane}.
+	 * channel, a copy of the previous channel, the planes (LS, LS wide)}.
 	 */
 	private static final java.util.LinkedList<Object[]> LS_CACHE = new java.util.LinkedList<Object[]>();
 
@@ -3066,24 +3174,25 @@ public class DeltaMapper
 	private static final int LS_CACHE_SIZE = 3;
 
 	/**
-	 * The encoder's least-squares primitive for a channel ({@link LeastSquares#plane}),
-	 * reused if the same channel (and previous channel) was just done: the
-	 * analysis and Apply make several PixelSources for each channel.
+	 * The encoder's least-squares primitives for a channel, LS and LS wide
+	 * ({@link LeastSquares#plane}), reused if the same channel (and previous
+	 * channel) was just done: the analysis and Apply make several
+	 * PixelSources for each channel.
 	 *
 	 * @param v    the channel
 	 * @param ref  the previous channel, or null for the first
 	 * @param xdim the width
 	 * @param ydim the height
-	 * @return the primitive at each interior pixel
+	 * @return LS and LS wide at each interior pixel
 	 */
-	static short[] leastSquaresPlane(int[] v, int[] ref, int xdim, int ydim)
+	static short[][] leastSquaresPlanes(int[] v, int[] ref, int xdim, int ydim)
 	{
 		synchronized(LS_CACHE)
 		{
 			for(Object[] e : LS_CACHE)
-				if((Integer) e[0] == xdim && Arrays.equals((int[]) e[1], v) && Arrays.equals((int[]) e[2], ref)) return (short[]) e[3];
+				if((Integer) e[0] == xdim && Arrays.equals((int[]) e[1], v) && Arrays.equals((int[]) e[2], ref)) return (short[][]) e[3];
 		}
-		short[] plane = LeastSquares.plane(v, ref, xdim, ydim);
+		short[][] plane = LeastSquares.plane(v, ref, xdim, ydim);
 		synchronized(LS_CACHE)
 		{
 			LS_CACHE.addLast(new Object[] {xdim, v.clone(), (ref == null) ? null : ref.clone(), plane});
@@ -3104,8 +3213,9 @@ public class DeltaMapper
 	 * rows that use them); the fit (ridge 1, solved by L D L^T) is done in a
 	 * fixed order, so the decoder and the Python version get the same values.
 	 * The prediction is clamped to 2 beyond the range of a, b, c, d and
-	 * rounded; a until the window has twice as many pixels as unknowns (or if
-	 * the fit fails).
+	 * rounded (and, for LS_WIDE, kept in wide: clamped to 2 beyond the range
+	 * of all 8 spatial neighbours); a until the window has twice as many
+	 * pixels as unknowns (or if the fit fails).
 	 * <p>
 	 * next(k) must be called for every interior pixel in raster order, once
 	 * the pixels before k are known, from row 1 or from a row given to start.
@@ -3149,6 +3259,11 @@ public class DeltaMapper
 		 * The row of the last pixel.
 		 */
 		int row = -1;
+		/**
+		 * The last next's prediction clamped to 2 beyond the range of all 8
+		 * neighbours (LS_WIDE) rather than a, b, c and d.
+		 */
+		int wide;
 
 		/**
 		 * The predictor for a channel.
@@ -3182,11 +3297,11 @@ public class DeltaMapper
 		 * @param ref  the previous channel, or null for the first
 		 * @param xdim the width
 		 * @param ydim the height
-		 * @return the primitive at each interior pixel (0 elsewhere)
+		 * @return LS and LS wide at each interior pixel (0 elsewhere)
 		 */
-		static short[] plane(int[] v, int[] ref, int xdim, int ydim)
+		static short[][] plane(int[] v, int[] ref, int xdim, int ydim)
 		{
-			short[] out = new short[v.length];
+			short[] out = new short[v.length], wide = new short[v.length];
 			int threads = Runtime.getRuntime().availableProcessors();
 			int band = Math.max(4 * (LS_RADIUS + 1), (ydim - 1 + threads - 1) / threads);
 			int bands = (ydim - 1 + band - 1) / band;
@@ -3196,9 +3311,9 @@ public class DeltaMapper
 				LeastSquares ls = new LeastSquares(v, ref, xdim);
 				ls.start(y0);
 				for(int y = y0; y < y1; y++)
-					for(int x = 1; x < xdim - 1; x++) out[y * xdim + x] = (short) ls.next(y * xdim + x);
+					for(int x = 1; x < xdim - 1; x++) { out[y * xdim + x] = (short) ls.next(y * xdim + x); wide[y * xdim + x] = (short) ls.wide; }
 			});
-			return out;
+			return new short[][] {out, wide};
 		}
 
 		/**
@@ -3319,13 +3434,13 @@ public class DeltaMapper
 				for(int t = 0, s = slot(y, x - 1); t < nt; t++) cur[t] += ring[s + t];
 				if(x - 1 - r >= 1) for(int t = 0, s = slot(y, x - 1 - r); t < nt; t++) cur[t] -= ring[s + t];
 			}
-			if(!fit) return 0;
+			if(!fit) { wide = 0; return 0; }
 
 			int n = nf + 1;
 			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
 			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
 			long count = win[nf * m - nf * (nf - 1) / 2] + cur[nf * m - nf * (nf - 1) / 2];
-			if(count < 2 * n) return pa;
+			if(count < 2 * n) { wide = pa; return pa; }
 			// The normal equations' lower triangle (ridge 1 on the diagonal), then
 			// L D L^T: L unit lower triangular (in a's lower triangle), D in dg.
 			for(int i = 0; i < n; i++)
@@ -3340,7 +3455,7 @@ public class DeltaMapper
 				double[] aj = a[j];
 				double s = aj[j];
 				for(int q = 0; q < j; q++) s -= aj[q] * aj[q] * dg[q];
-				if(s < 1e-9) return pa;
+				if(s < 1e-9) { wide = pa; return pa; }
 				dg[j] = s;
 				for(int i = j + 1; i < n; i++)
 				{
@@ -3367,6 +3482,10 @@ public class DeltaMapper
 			double p = 0;
 			for(int i = 0; i < n; i++) p += coef[i] * z[i];
 			int lo = Math.min(Math.min(pa, pb), Math.min(pc, pd)), hi = Math.max(Math.max(pa, pb), Math.max(pc, pd));
+			int wlo = lo, whi = hi;
+			for(int i = 4; i < 8; i++) { wlo = (int) Math.min(wlo, z[i]); whi = (int) Math.max(whi, z[i]); }
+			double w = Math.max(wlo - 2, Math.min(whi + 2, p));
+			wide = (int) Math.floor(w + 0.5);
 			if(p < lo - 2) p = lo - 2;
 			if(p > hi + 2) p = hi + 2;
 			return (int) Math.floor(p + 0.5);
@@ -4698,7 +4817,25 @@ public class DeltaMapper
 	 */
 	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref)
 	{
-		return blockValues(delta, xdim, ydim, init_value, map, ref, null);
+		return blockValues(delta, xdim, ydim, init_value, map, ref, null, PREDICTOR_TABLE);
+	}
+
+	/**
+	 * As {@link #getValuesFromBlockDeltas(int[], int, int, int, byte[], int[])},
+	 * with the map's ids in the given table (PREDICTOR_TABLE_256 for older files).
+	 *
+	 * @param delta      the deltas
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param init_value the first value
+	 * @param map        the block map
+	 * @param ref        the previous channel's values, as decoded, or null for the first channel
+	 * @param table      the table the map's ids index
+	 * @return the channel
+	 */
+	public static int[] getValuesFromBlockDeltas(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref, PredictorTable table)
+	{
+		return blockValues(delta, xdim, ydim, init_value, map, ref, null, table);
 	}
 
 	/**
@@ -4712,17 +4849,21 @@ public class DeltaMapper
 	 * @param map        the block map
 	 * @param ref        the previous channel's values, as decoded, or null
 	 * @param mix        the decoder of the deltas, or null if delta holds them
+	 * @param table      the table the map's ids index
 	 * @return the channel
 	 */
-	private static int[] blockValues(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref, MixedDecoder mix)
+	private static int[] blockValues(int[] delta, int xdim, int ydim, int init_value, byte[] map, int[] ref, MixedDecoder mix, PredictorTable table)
 	{
-		PredictorTable table = PREDICTOR_TABLE;
 		int   block = map[0] & 0xFF, bw = blocksAcross(xdim, block), head = mapHeaderLength(map);
 		int   bh_ = blockHeight(block), bw_ = blockWidth(block, xdim);
 		int[] ids   = getMapIds(map);
 		int[] dst   = new int[xdim * ydim];
 		boolean least_squares = false;
-		for(int id : ids) least_squares |= table.uses(id, LS_FIRST);
+		for(int id : ids)
+		{
+			if(id >= table.size()) throw new IllegalArgumentException("Block map with predictor id " + id + ": not in the " + table.name + " table.");
+			least_squares |= table.uses(id, LS_FIRST) || table.uses(id, LS_WIDE);
+		}
 		PixelSource ps = new PixelSource(dst, ref, xdim, table, least_squares);
 		if(mix != null) mix.next(0, delta, dst);
 		dst[0] = init_value;
@@ -4741,7 +4882,7 @@ public class DeltaMapper
 			{
 				k++;
 				int id = ids[map[row + (x - 1) / bw_] & 0xFF];
-				ps.prepare(k, table.uses(id, LS_FIRST));
+				ps.prepare(k, table.uses(id, LS_FIRST) || table.uses(id, LS_WIDE));
 				int p = ps.predict(table, id, k);
 				if(mix != null) mix.next(k, delta, dst, p);
 				dst[k] = delta[k] + p;
@@ -4891,12 +5032,12 @@ public class DeltaMapper
 		{
 			int   block = in.readUnsignedByte();
 			int   n     = in.readUnsignedByte();
-			if(n < 1 || n > PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
+			if(n < 1 || n > MAX_PREDICTORS) throw new java.io.IOException("Block map with " + n + " predictors: not one this version reads.");
 			int[] ids = new int[n];
 			for(int p = 0; p < n; p++)
 			{
 				ids[p] = in.readUnsignedByte();
-				if(ids[p] >= PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
+				if(ids[p] >= MAX_PREDICTORS) throw new java.io.IOException("Block map with predictor id " + ids[p] + ": not one this version reads.");
 			}
 			if(!validShape(block))
 				throw new java.io.IOException("Block map with block shape " + block + ": not one this version reads.");
@@ -5992,8 +6133,28 @@ public class DeltaMapper
 	 */
 	public static int[][] getValuesFromMixedDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, byte[] map, int[] ref, boolean opinions)
 	{
+		return getValuesFromMixedDeltas(md, previous, xdim, ydim, init_value, map, ref, opinions, PREDICTOR_TABLE);
+	}
+
+	/**
+	 * As {@link #getValuesFromMixedDeltas(MixedDeltas, int[][], int, int, int, byte[], int[], boolean)},
+	 * with the map's ids in the given table (PREDICTOR_TABLE_256 for older files).
+	 *
+	 * @param md         the rank table and coded bytes ({@link #readMixedDeltas})
+	 * @param previous   the deltas of the channels decoded before this one
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param init_value the first value
+	 * @param map        the block map
+	 * @param ref        the previous channel's values, as decoded, or null for the first channel
+	 * @param opinions   whether the deltas were coded with the second opinions
+	 * @param table      the table the map's ids index
+	 * @return {deltas, values}
+	 */
+	public static int[][] getValuesFromMixedDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, byte[] map, int[] ref, boolean opinions, PredictorTable table)
+	{
 		int[] delta = new int[xdim * ydim];
-		int[] values = blockValues(delta, xdim, ydim, init_value, map, ref, new MixedDecoder(md, previous, xdim, delta.length, opinions));
+		int[] values = blockValues(delta, xdim, ydim, init_value, map, ref, new MixedDecoder(md, previous, xdim, delta.length, opinions), table);
 		return new int[][] {delta, values};
 	}
 

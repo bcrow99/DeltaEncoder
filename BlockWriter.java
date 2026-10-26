@@ -5,14 +5,16 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.4 (writes Block format 7: mixed context coding with
-// second opinions, a block size per channel; or format 8, the same in bands)
+// BlockWriter version 2.5 (writes Block format 9: mixed context coding with
+// second opinions, a block size per channel, the 225-entry predictor table;
+// or format 10, the same in bands)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
 // type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
 // and a coded map. Each block uses one predictor from its channel's set, and a
-// set can be any of the 256 predictors in DeltaMapper.PREDICTOR_TABLE (id
-// 255 is the least-squares predictor, LS: see DeltaMapper.LeastSquares).
+// set can be any of the 225 predictors in DeltaMapper.PREDICTOR_TABLE (id
+// 223 is the least-squares predictor, LS: see DeltaMapper.LeastSquares; 224
+// the same fit with a wider clamp).
 // There are no block settings to choose: the survey makes them from the
 // predictor table alone. It picks the channel set, then, channel by
 // channel, the block size (a square of 4, 6, 8, 12 or 16) and the predictor set
@@ -26,8 +28,8 @@ import javax.swing.*;
 // contexts split by second opinions (how far GAP/8, MED and the left pixel
 // lie from the block's prediction), about 3% smaller. File > Bands splits
 // the image into up to MAX_BANDS bands of rows that a reader can decode at
-// the same time (format 8), for about a byte per column per band boundary;
-// with 1 (the default) Save writes format 7.
+// the same time (format 10), for about a byte per column per band boundary;
+// with 1 (the default) Save writes format 9.
 // Files are read by BlockReader.
 public class BlockWriter
 {
@@ -35,11 +37,11 @@ public class BlockWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 8;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions
+	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The version written with one band: the layout before bands.
 	 */
-	static final int  ONE_BAND_VERSION = 7;
+	static final int  ONE_BAND_VERSION = 9;
 	/**
 	 * The most bands Save offers.
 	 */
@@ -69,7 +71,7 @@ public class BlockWriter
 	int correction  = 0;
 	int min_set_id  = 0;
 	/**
-	 * How many independently decodable bands Save writes (1: one, format 7);
+	 * How many independently decodable bands Save writes (1: one, format 9);
 	 * at most MAX_BANDS, and fewer if bands would have under BAND_MIN_ROWS rows.
 	 */
 	int bands       = 1;
@@ -525,7 +527,7 @@ public class BlockWriter
 		 */
 		long one_band_bytes = 0;
 
-		// One band: format 7 (oneBand). Bands: format 8 (inBands), and the size
+		// One band: format 9 (oneBand). Bands: format 10 (inBands), and the size
 		// it would have been as one band for the report.
 		private void save(DataOutputStream out) throws IOException
 		{
@@ -553,7 +555,7 @@ public class BlockWriter
 		}
 
 		/**
-		 * Format 7 (5's layout). Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
+		 * Format 9 (5's layout). Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
 		 * shorts), pixel_shift, pixel_quant, channel set. Then per channel: int
 		 * min, int init, the block map (DeltaMapper.writeMap, type 13; it
 		 * carries the channel's block size and predictor ids; its context lines
@@ -594,7 +596,7 @@ public class BlockWriter
 		}
 	
 		/**
-		 * Format 8 (6's layout): the header as format 7's, then the number of bands n (an
+		 * Format 10 (6's layout): the header as format 9's, then the number of bands n (an
 		 * unsigned byte), each channel's int min (coding order), then n int
 		 * lengths and the n bands. Band b is rows bandStart(b) to bandStart(b +
 		 * 1) of the quantized image, coded as an image of its own with the
