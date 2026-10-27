@@ -2510,6 +2510,35 @@ public class DeltaMapper
 	}
 
 	/**
+	 * The share of the channels' predicted pixels (all but the first row and
+	 * the first and last columns) whose block's predictor uses least squares
+	 * (LS or LS wide, alone or averaged).
+	 *
+	 * @param map  the channels' block maps (each with its id list)
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @return the share, 0 to 1
+	 */
+	public static double leastSquaresShare(byte[][] map, int xdim, int ydim)
+	{
+		long ls = 0, all = 0;
+		for(byte[] m : map)
+		{
+			int block = m[0] & 0xFF, bw_ = blockWidth(block, xdim), bh_ = blockHeight(block);
+			int bw = blocksAcross(xdim, block), bh = blocksDown(ydim, block), head = mapHeaderLength(m);
+			for(int by = 0; by < bh; by++)
+				for(int bx = 0; bx < bw; bx++)
+				{
+					long area = (long) Math.min(bw_, xdim - 2 - bx * bw_) * Math.min(bh_, ydim - 1 - by * bh_);
+					int  pid  = m[2 + (m[head + by * bw + bx] & 0xFF)] & 0xFF;
+					all += area;
+					if(PREDICTOR_TABLE.first(pid) >= LS_FIRST || PREDICTOR_TABLE.second(pid) >= LS_FIRST) ls += area;
+				}
+		}
+		return (all == 0) ? 0 : (double) ls / all;
+	}
+
+	/**
 	 * The channel set, then each channel's block size, number of blocks and
 	 * predictors (see {@link #describeBlockSize} and {@link #describeBlockPredictors}).
 	 *

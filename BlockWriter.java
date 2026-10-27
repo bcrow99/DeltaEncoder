@@ -160,6 +160,7 @@ public class BlockWriter
 		}
 		image_xdim = original_image.getWidth();
 		image_ydim = original_image.getHeight();
+		System.out.println(String.format("Loaded %s, %d x %d (%,d pixels)", filename, image_xdim, image_ydim, (long) image_xdim * image_ydim));
 
 		int[] pixel = original_image.getRGB(0, 0, image_xdim, image_ydim, null, 0, image_xdim);
 		source = new int[3][pixel.length];
@@ -464,7 +465,9 @@ public class BlockWriter
 		if(survey_time >= 0)
 		{
 			System.out.print(DeltaMapper.describeBlockMaps(min_set_id, map_list, delta_xdim));
-			System.out.println("Analysis took " + ViewerSupport.formatDuration(survey_time));
+			System.out.println(String.format("Analysis took %s (%d x %d, %,d pixels; least squares in %.1f%% of blocks' pixels)",
+				ViewerSupport.formatDuration(survey_time), new_xdim, new_ydim, (long) new_xdim * new_ydim,
+				100 * DeltaMapper.leastSquaresShare(map_list, new_xdim, new_ydim)));
 			System.out.println();
 			survey_time = -1;
 		}
