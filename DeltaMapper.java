@@ -4488,22 +4488,57 @@ public class DeltaMapper
 		result.block = block;
 		int worse = 0;
 		line.append(String.format(" (order %d):", order.length));
-		for(int c = 0; c < counts.size(); c++)
+		// The counts are coded surveyWidth() at a time, on cores the other
+		// block shapes leave idle; those past where the stopping rule ends
+		// are thrown away, so the result (and the report) is the same.
+		final int[] est_ = est;
+		final byte[][] prefix_ = prefix;
+		int width = surveyWidth();
+		boolean done = false;
+		for(int c0 = 0; c0 < counts.size() && !done; c0 += width)
 		{
-			int       n   = counts.get(c);
-			int[]     ids = Arrays.copyOf(order, n);
-			byte[]    mp  = (prefix != null) ? prefix[c] : assignByCost(est, true, table.size(), ids, xdim, ydim, block);
-			ArrayList r   = getBlockDeltasFromMap(ps, ydim, mp, table, ids);
-			int[]  d = (int[]) r.get(1);
-			byte[] m = (byte[]) r.get(2);
-			java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-			writeMap(new java.io.DataOutputStream(bytes), 13, m, previous_map, xdim);
-			long size = bytes.size() + packContextDeltas(d, chosen_before, xdim).length;
-			line.append(String.format(" %d:%,d", n, size));
-			if(size < result.bytes) { result.bytes = size; result.ids = ids; result.delta = d; result.map = m; worse = 0; line.append('*'); }
-			else if(++worse == 2) break;
+			int      c1    = Math.min(counts.size(), c0 + width), first = c0;
+			int[][]  ids   = new int[c1 - c0][];
+			int[][]  d     = new int[c1 - c0][];
+			byte[][] m     = new byte[c1 - c0][];
+			long[]   size  = new long[c1 - c0];
+			boundedParallel(c1 - c0, 16L * xdim * ydim, t ->
+			{
+				int c = first + t;
+				ids[t] = Arrays.copyOf(order, counts.get(c));
+				byte[]    mp = (prefix_ != null) ? prefix_[c] : assignByCost(est_, true, table.size(), ids[t], xdim, ydim, block);
+				ArrayList r  = getBlockDeltasFromMap(ps, ydim, mp, table, ids[t]);
+				d[t] = (int[]) r.get(1);
+				m[t] = (byte[]) r.get(2);
+				try
+				{
+					java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+					writeMap(new java.io.DataOutputStream(bytes), 13, m[t], previous_map, xdim);
+					size[t] = bytes.size() + packContextDeltas(d[t], chosen_before, xdim).length;
+				}
+				catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+			});
+			for(int t = 0; t < c1 - c0; t++)
+			{
+				line.append(String.format(" %d:%,d", ids[t].length, size[t]));
+				if(size[t] < result.bytes) { result.bytes = size[t]; result.ids = ids[t]; result.delta = d[t]; result.map = m[t]; worse = 0; line.append('*'); }
+				else if(++worse == 2) { done = true; break; }
+			}
 		}
 		return result;
+	}
+
+	/**
+	 * How many of a channel's predictor counts the survey codes at once at
+	 * each block shape: the cores left over when the five block shapes run
+	 * at once, shared out (1 on up to 9 cores, 2 on 10-14, 3 on 15-19, at
+	 * most 4).
+	 *
+	 * @return the number of counts coded at once
+	 */
+	private static int surveyWidth()
+	{
+		return Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 5));
 	}
 
 	/**
