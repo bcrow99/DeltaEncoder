@@ -4488,12 +4488,12 @@ public class DeltaMapper
 		result.block = block;
 		int worse = 0;
 		line.append(String.format(" (order %d):", order.length));
-		// The counts are coded surveyWidth() at a time, on cores the other
+		// The counts are coded surveyWidth at a time, on cores the other
 		// block shapes leave idle; those past where the stopping rule ends
 		// are thrown away, so the result (and the report) is the same.
 		final int[] est_ = est;
 		final byte[][] prefix_ = prefix;
-		int width = surveyWidth();
+		int width = surveyWidth((long) xdim * ydim);
 		boolean done = false;
 		for(int c0 = 0; c0 < counts.size() && !done; c0 += width)
 		{
@@ -4529,16 +4529,26 @@ public class DeltaMapper
 	}
 
 	/**
+	 * Pixels of work each extra predictor count coded at once needs to pay
+	 * for itself (see surveyWidth): below this, the counts the stopping rule
+	 * throws away cost more than the idle cores save.
+	 */
+	static final long SURVEY_WIDTH_PIXELS = 1L << 20;
+
+	/**
 	 * How many of a channel's predictor counts the survey codes at once at
 	 * each block shape: the cores left over when the five block shapes run
 	 * at once, shared out (1 on up to 9 cores, 2 on 10-14, 3 on 15-19, at
-	 * most 4).
+	 * most 4), and no more than one per SURVEY_WIDTH_PIXELS of the channel
+	 * (so 1 below about 2 million pixels).
 	 *
+	 * @param pixels the channel's pixels
 	 * @return the number of counts coded at once
 	 */
-	private static int surveyWidth()
+	private static int surveyWidth(long pixels)
 	{
-		return Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 5));
+		long by_size = pixels / SURVEY_WIDTH_PIXELS;
+		return (int) Math.max(1, Math.min(Math.min(4, Runtime.getRuntime().availableProcessors() / 5), by_size));
 	}
 
 	/**
