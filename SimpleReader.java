@@ -4,32 +4,29 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleReader version 3.1 (reads Simple format 7: least squares alone, centred resizing)
+// SimpleReader version 3.2 (reads Simple format 8: least squares alone, the
+// wide clamp, centred resizing)
 //
 // Reads SimpleWriter's files: every interior pixel predicted by the
-// least-squares fit with each channel's window radius and clamp, the deltas
+// least-squares fit (the wide clamp) with each channel's window radius, the deltas
 // mixed-context coded with the second opinions, in bands of rows decoded at
 // the same time, resized back with ResizeMapper.resize2 (centred). See
 // SimpleWriter.SaveHandler.save for the layout. Older Simple files (formats
-// 3 to 6) are not read.
+// 3 to 7) are not read.
 public class SimpleReader
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 7;   // 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2)
+	static final int  FORMAT_VERSION = 8;   // 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2); 8: 7 with the wide clamp only (no clamp byte)
 
 	int xdim, ydim, pixel_shift, pixel_quant, set_id;
 	/**
-	 * Each channel's minimum (added back to the difference channels), window
-	 * radius and clamp, in coding order.
+	 * Each channel's minimum (added back to the difference channels) and
+	 * window radius, in coding order.
 	 */
 	int[]     min = new int[3], radius = new int[3];
-	/**
-	 * Whether each channel's prediction has the wide clamp.
-	 */
-	boolean[] wide = new boolean[3];
 	/**
 	 * The number of bands.
 	 */
@@ -102,7 +99,6 @@ public class SimpleReader
 		{
 			min[i]    = in.readInt();
 			radius[i] = in.readUnsignedByte();
-			wide[i]   = in.readUnsignedByte() != 0;
 			if(radius[i] < 1) throw new IOException(filename + ": channel " + i + " has window radius " + radius[i] + ".");
 		}
 		int h = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant)[1];
@@ -125,14 +121,15 @@ public class SimpleReader
 		}
 		System.out.println("Image:        " + xdim + " x " + ydim);
 		System.out.println("Channel set:  " + DeltaMapper.SET_NAMES[set_id]);
-		for(int i = 0; i < 3; i++) System.out.println(String.format("Channel %d - %s: %s", i, DeltaMapper.channelName(set_id, i), DeltaMapper.describeWindow(radius[i], wide[i])));
+		for(int i = 0; i < 3; i++) System.out.println(String.format("Channel %d - %s: radius %d", i, DeltaMapper.channelName(set_id, i), radius[i]));
 		if(bands > 1) System.out.println(SimpleWriter.describeBands(bands, h));
 		System.out.println();
 	}
 
-	// The bands decoded at the same time (each band's channels in order: a
-	// channel's fit and contexts use the ones before it), then the channel
-	// set recombined, resized and shifted.
+	// The bands decoded at the same time (each band's channels at the same
+	// time too, each a couple of rows behind the one before: a channel's fit
+	// and contexts use the ones before it), then the channel set recombined,
+	// resized and shifted.
 	private BufferedImage decode()
 	{
 		int[]   size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
@@ -141,14 +138,8 @@ public class SimpleReader
 		java.util.stream.IntStream.range(0, bands).parallel().forEach(b ->
 		{
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-			int[][] d = new int[3][], v = new int[3][];
-			for(int i = 0; i < 3; i++)
-			{
-				int[][] r = DeltaMapper.getValuesFromLeastSquaresDeltas(band_mixed[b][i], Arrays.copyOf(d, i), w, y1 - y0, band_init[b][i], (i > 0) ? v[i - 1] : null, radius[i], wide[i]);
-				d[i] = r[0];
-				v[i] = r[1];
-				System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
-			}
+			int[][] v = DeltaMapper.getValuesFromLeastSquaresChannels(band_mixed[b], w, y1 - y0, band_init[b], radius)[1];
+			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
 		});
 		int[] id = DeltaMapper.getChannels(set_id);
 		for(int i = 0; i < 3; i++) if(id[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];

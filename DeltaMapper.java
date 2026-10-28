@@ -3557,12 +3557,12 @@ public class DeltaMapper
 
 	// ---- Least squares alone (the Simple format) -------------------------------
 	//
-	// Every interior pixel predicted by the least-squares fit (LeastSquares),
-	// with no blocks and no map: per channel only the window radius and the
-	// clamp (narrow, LS; wide, LS wide). The edges are as the block map's
-	// (row 0 horizontal, column 0 vertical, last column horizontal), and the
-	// deltas are mixed-context coded with the second opinions (the prediction
-	// is the fit's). surveyWindows picks each channel's radius and clamp by
+	// Every interior pixel predicted by the least-squares fit with the wide
+	// clamp (LeastSquares; the LS_WIDE primitive's value), with no blocks and
+	// no map: per channel only the window radius. The edges are as the block
+	// map's (row 0 horizontal, column 0 vertical, last column horizontal), and
+	// the deltas are mixed-context coded with the second opinions (the
+	// prediction is the fit's). surveyWindows picks each channel's radius by
 	// the real coded size.
 
 	/**
@@ -3571,34 +3571,19 @@ public class DeltaMapper
 	public static final int[] WINDOW_RADII = {4, 8, 16};
 
 	/**
-	 * A channel's deltas from the least-squares fit alone.
+	 * A channel's deltas from the least-squares fit alone (the wide clamp).
 	 *
 	 * @param v      the channel
 	 * @param ref    the previous channel, or null for the first
 	 * @param xdim   the width
 	 * @param ydim   the height
 	 * @param radius the window radius
-	 * @param wide   whether the prediction has the wide clamp (LS wide)
 	 * @return the deltas
 	 */
-	public static int[] getLeastSquaresDeltas(int[] v, int[] ref, int xdim, int ydim, int radius, boolean wide)
+	public static int[] getLeastSquaresDeltas(int[] v, int[] ref, int xdim, int ydim, int radius)
 	{
-		return leastSquaresDeltas(v, LeastSquares.plane(v, ref, xdim, ydim, radius)[wide ? 1 : 0], xdim, ydim);
-	}
-
-	/**
-	 * A channel's deltas from a prediction at each interior pixel, with the
-	 * block map's edges.
-	 *
-	 * @param v    the channel
-	 * @param p    the prediction at each interior pixel
-	 * @param xdim the width
-	 * @param ydim the height
-	 * @return the deltas
-	 */
-	private static int[] leastSquaresDeltas(int[] v, short[] p, int xdim, int ydim)
-	{
-		int[] d = new int[v.length];
+		short[] p = LeastSquares.plane(v, ref, xdim, ydim, radius)[1];
+		int[]   d = new int[v.length];
 		blockEdges(v, d, xdim, ydim);
 		for(int y = 1; y < ydim; y++)
 			for(int x = 1, k = y * xdim + 1; x < xdim - 1; x++, k++) d[k] = v[k] - p[k];
@@ -3606,50 +3591,114 @@ public class DeltaMapper
 	}
 
 	/**
-	 * Decodes a channel {@link #packMixedDeltas} coded (with the second
-	 * opinions) from its least-squares deltas, rebuilding it as it goes.
+	 * Decodes channels {@link #packMixedDeltas} coded (with the second
+	 * opinions) from their least-squares deltas, rebuilding them as it goes:
+	 * each channel's fit uses the one before it, and its contexts the deltas
+	 * of all the ones before it. Each channel decodes in its own thread, a
+	 * row at a time, once the channel before it is two rows ahead (its
+	 * contexts look one row down into the earlier channels), so the channels
+	 * decode at the same time.
 	 *
-	 * @param md         the rank table and coded bytes ({@link #readMixedDeltas})
-	 * @param previous   the deltas of the channels decoded before this one
-	 * @param xdim       the width
-	 * @param ydim       the height
-	 * @param init_value the first value
-	 * @param ref        the previous channel's values, as decoded (before any
-	 *                   minimum is added back), or null for the first channel
-	 * @param radius     the window radius
-	 * @param wide       whether the prediction has the wide clamp
-	 * @return {deltas, values}
+	 * @param md     each channel's rank table and coded bytes ({@link #readMixedDeltas}), in coding order
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value
+	 * @param radius each channel's window radius
+	 * @return {deltas, values}, each per channel
 	 */
-	public static int[][] getValuesFromLeastSquaresDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, int[] ref, int radius, boolean wide)
+	public static int[][][] getValuesFromLeastSquaresChannels(MixedDeltas[] md, int xdim, int ydim, int[] init, int[] radius)
 	{
-		int[] delta = new int[xdim * ydim], dst = new int[xdim * ydim];
-		MixedDecoder mix = new MixedDecoder(md, previous, xdim, delta.length, true);
-		LeastSquares lsq = new LeastSquares(dst, ref, xdim, radius);
-		mix.next(0, delta, dst);
-		dst[0] = init_value;
-		for(int x = 1; x < xdim; x++)
+		int n = md.length;
+		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
+		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
+		Throwable[] failed = new Throwable[1];
+		Thread[] worker = new Thread[n];
+		for(int c = 0; c < n; c++)
 		{
-			mix.next(x, delta, dst);
-			dst[x] = dst[x - 1] + delta[x];
-		}
-		for(int y = 1; y < ydim; y++)
-		{
-			int k = y * xdim;
-			mix.next(k, delta, dst);
-			dst[k] = dst[k - xdim] + delta[k];
-			for(int x = 1; x < xdim - 1; x++)
+			final int i = c;
+			worker[i] = new Thread(() ->
 			{
-				k++;
-				int p = lsq.next(k);
-				if(wide) p = lsq.wide;
-				mix.next(k, delta, dst, p);
-				dst[k] = delta[k] + p;
-			}
-			k++;
-			mix.next(k, delta, dst);
-			dst[k] = dst[k - 1] + delta[k];
+				try
+				{
+					MixedDecoder mix = new MixedDecoder(md[i], Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					LeastSquares lsq = new LeastSquares(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i]);
+					for(int y = 0; y < ydim; y++)
+					{
+						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
+						leastSquaresRow(mix, lsq, delta[i], value[i], xdim, y, init[i]);
+						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
+					}
+				}
+				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
+			});
+			worker[i].start();
 		}
-		return new int[][] {delta, dst};
+		for(Thread t : worker)
+			try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+		if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+		if(failed[0] instanceof Error) throw (Error) failed[0];
+		if(failed[0] != null) throw new RuntimeException(failed[0]);
+		return new int[][][] {delta, value};
+	}
+
+	/**
+	 * Waits until channel j has rows decoded (or a channel failed).
+	 *
+	 * @param done   each channel's rows decoded
+	 * @param failed the first failure, if any
+	 * @param j      the channel
+	 * @param rows   the rows needed
+	 * @throws InterruptedException if interrupted while waiting
+	 */
+	private static void awaitRows(int[] done, Throwable[] failed, int j, int rows) throws InterruptedException
+	{
+		synchronized(done)
+		{
+			while(done[j] < rows && failed[0] == null) done.wait();
+			if(failed[0] != null) throw new IllegalStateException("an earlier channel failed to decode", failed[0]);
+		}
+	}
+
+	/**
+	 * Decodes row y of a channel's least-squares deltas and rebuilds it (rows
+	 * in order): row 0 horizontal, column 0 vertical, the last column
+	 * horizontal, the interior from the fit with the wide clamp.
+	 *
+	 * @param mix   the delta decoder
+	 * @param lsq   the fit (over dst)
+	 * @param delta the deltas, filled in
+	 * @param dst   the values, filled in
+	 * @param xdim  the width
+	 * @param y     the row
+	 * @param init  the first value
+	 */
+	private static void leastSquaresRow(MixedDecoder mix, LeastSquares lsq, int[] delta, int[] dst, int xdim, int y, int init)
+	{
+		if(y == 0)
+		{
+			mix.next(0, delta, dst);
+			dst[0] = init;
+			for(int x = 1; x < xdim; x++)
+			{
+				mix.next(x, delta, dst);
+				dst[x] = dst[x - 1] + delta[x];
+			}
+			return;
+		}
+		int k = y * xdim;
+		mix.next(k, delta, dst);
+		dst[k] = dst[k - xdim] + delta[k];
+		for(int x = 1; x < xdim - 1; x++)
+		{
+			k++;
+			lsq.next(k);
+			int p = lsq.wide;
+			mix.next(k, delta, dst, p);
+			dst[k] = delta[k] + p;
+		}
+		k++;
+		mix.next(k, delta, dst);
+		dst[k] = dst[k - 1] + delta[k];
 	}
 
 	/**
@@ -3666,10 +3715,6 @@ public class DeltaMapper
 		 */
 		public int[]     radius;
 		/**
-		 * Whether each channel's prediction has the wide clamp.
-		 */
-		public boolean[] wide;
-		/**
 		 * Each channel's deltas.
 		 */
 		public int[][]   deltas;
@@ -3678,26 +3723,29 @@ public class DeltaMapper
 		 */
 		public long[]    bytes;
 		/**
+		 * Each channel's mixed-coded deltas (packMixedDeltas, with the second
+		 * opinions).
+		 */
+		public byte[][]  coded;
+		/**
 		 * The total coded size.
 		 */
 		public long      total;
 		/**
-		 * The radii tried (WINDOW_RADII).
+		 * The radii tried.
 		 */
 		public int[]     radii;
 		/**
-		 * Each channel's coded size at each radius tried: [channel][2 * r + clamp]
-		 * (clamp 0 narrow, 1 wide).
+		 * Each channel's coded size at each radius tried: [channel][radius index].
 		 */
 		public long[][]  tried;
 	}
 
 	/**
-	 * Each channel's window radius and clamp, in turn: the pair (from radii,
-	 * and narrow before wide) whose deltas code smallest with the mixed coder
-	 * and second opinions, given the deltas chosen for the channels before
-	 * (the first smallest on a tie). The radii are tried at the same time, as
-	 * memory allows.
+	 * Each channel's window radius, in turn: the one from radii whose deltas
+	 * code smallest with the mixed coder and second opinions, given the
+	 * deltas chosen for the channels before (the first smallest on a tie).
+	 * The radii are tried at the same time, as memory allows.
 	 *
 	 * @param channel the three channels, in coding order
 	 * @param xdim    the width
@@ -3709,46 +3757,31 @@ public class DeltaMapper
 	{
 		int n = channel.length, nr = radii.length;
 		WindowSurvey s = new WindowSurvey();
-		s.radius = new int[n]; s.wide = new boolean[n]; s.deltas = new int[n][]; s.bytes = new long[n];
-		s.radii  = radii.clone(); s.tried = new long[n][2 * nr];
+		s.radius = new int[n]; s.deltas = new int[n][]; s.bytes = new long[n]; s.coded = new byte[n][];
+		s.radii  = radii.clone(); s.tried = new long[n][nr];
 		for(int i = 0; i < n; i++)
 		{
 			int[]   v = channel[i], ref = (i > 0) ? channel[i - 1] : null;
 			int[][] previous = Arrays.copyOf(s.deltas, i);
-			int[][] got = new int[2 * nr][];
-			long[]  size = s.tried[i];
-			boundedParallel(nr, 48L * xdim * ydim, r ->
+			int[][]  got = new int[nr][];
+			byte[][] coded = new byte[nr][];
+			long[]   size = s.tried[i];
+			boundedParallel(nr, 40L * xdim * ydim, r ->
 			{
-				short[][] plane = LeastSquares.plane(v, ref, xdim, ydim, radii[r]);
-				for(int c = 0; c < 2; c++)
-				{
-					int[] d = leastSquaresDeltas(v, plane[c], xdim, ydim);
-					try { size[2 * r + c] = packMixedDeltas(d, v, previous, xdim, true).length; }
-					catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
-					got[2 * r + c] = d;
-				}
+				got[r] = getLeastSquaresDeltas(v, ref, xdim, ydim, radii[r]);
+				try { coded[r] = packMixedDeltas(got[r], v, previous, xdim, true); }
+				catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+				size[r] = coded[r].length;
 			});
 			int best = 0;
-			for(int t = 1; t < 2 * nr; t++) if(size[t] < size[best]) best = t;
-			s.radius[i] = radii[best / 2];
-			s.wide[i]   = (best % 2) == 1;
+			for(int r = 1; r < nr; r++) if(size[r] < size[best]) best = r;
+			s.radius[i] = radii[best];
 			s.deltas[i] = got[best];
+			s.coded[i]  = coded[best];
 			s.bytes[i]  = size[best];
 			s.total    += size[best];
 		}
 		return s;
-	}
-
-	/**
-	 * A channel's window in words: "radius 8, wide clamp".
-	 *
-	 * @param radius the window radius
-	 * @param wide   whether the prediction has the wide clamp
-	 * @return the description
-	 */
-	public static String describeWindow(int radius, boolean wide)
-	{
-		return "radius " + radius + ", " + (wide ? "wide" : "narrow") + " clamp";
 	}
 
 	// ---- Surveying predictor sets ----------------------------------------------
@@ -6058,9 +6091,23 @@ public class DeltaMapper
 		final long[] cum, c0, c1;
 		/**
 		 * Per pixel, from the earlier channels: the cross bucket, the forward sum
-		 * (E, SW, S, SE), and the 3x3 cross bucket.
+		 * (E, SW, S, SE), and the 3x3 cross bucket; filled a row at a time as
+		 * the pixels reach it (see earlierRows).
 		 */
 		final int[] cb, fwd, c9b;
+		/**
+		 * The deltas of the channels coded before this one.
+		 */
+		final int[][] previous;
+		/**
+		 * Per pixel, the sum of the earlier channels' |deltas|.
+		 */
+		final int[] cross;
+		/**
+		 * The rows of cross, and of cb, fwd and c9b, filled so far; and the
+		 * pixel where the next row of cb, fwd and c9b is needed.
+		 */
+		int cross_rows = 0, earlier_rows = 0, earlier_end = 0;
 		/**
 		 * Whether the contexts include the second opinions (see the section comment).
 		 */
@@ -6111,21 +6158,32 @@ public class DeltaMapper
 			q = new long[m];
 			cum = new long[m]; c0 = new long[m]; c1 = new long[m];
 			cb = new int[n]; fwd = new int[n]; c9b = new int[n];
-			if(m == 3) earlierTerms(previous, n / xdim);
+			this.previous = previous;
+			cross = (m == 3) ? new int[n] : null;
+			earlier_end = (m == 3) ? 0 : Integer.MAX_VALUE;
 		}
 
 		/**
-		 * Fills cb, fwd and c9b from the earlier channels' deltas.
+		 * Fills cb, fwd and c9b from the earlier channels' deltas up to row y1
+		 * (not included), which needs those deltas up to row y1 (included):
+		 * done a row at a time as coding reaches it, so a decoder can decode
+		 * this channel while the earlier ones are still being decoded, a row or
+		 * two ahead (see getValuesFromLeastSquaresChannels).
 		 *
-		 * @param previous the deltas of the channels coded before this one
-		 * @param ydim     the height
+		 * @param y1 the row to fill to
 		 */
-		private void earlierTerms(int[][] previous, int ydim)
+		void earlierRows(int y1)
 		{
-			int   n = xdim * ydim, top = MIX_CROSS_TABLE.length - 1;
-			int[] cross = new int[n];
-			for(int[] p : previous) for(int k = 0; k < n; k++) cross[k] += Math.abs(p[k]);
-			for(int y = 0; y < ydim; y++)
+			int ydim = cb.length / xdim, top = MIX_CROSS_TABLE.length - 1;
+			y1 = Math.min(y1, ydim);
+			for(int c1 = Math.min(ydim, y1 + 1); cross_rows < c1; cross_rows++)
+				for(int k = cross_rows * xdim, end = k + xdim; k < end; k++)
+				{
+					int t = 0;
+					for(int[] p : previous) t += Math.abs(p[k]);
+					cross[k] = t;
+				}
+			for(int y = earlier_rows; y < y1; y++)
 				for(int x = 0; x < xdim; x++)
 				{
 					int k = y * xdim + x, s9 = 0, sum = 0;
@@ -6142,6 +6200,8 @@ public class DeltaMapper
 					c9b[k] = MIX_CROSS_TABLE[Math.min(s9 / 3, top)];
 					fwd[k] = sum;
 				}
+			earlier_rows = Math.max(earlier_rows, y1);
+			earlier_end  = (earlier_rows >= ydim) ? Integer.MAX_VALUE : earlier_rows * xdim;
 		}
 
 		/**
@@ -6153,6 +6213,7 @@ public class DeltaMapper
 		 */
 		void contexts(int k, int[] d, int[] v)
 		{
+			if(k >= earlier_end) earlierRows(k / xdim + 1);
 			int x = k % xdim, act = 0, g = 0, top = MIX_ACTIVITY_TABLE.length - 1;
 			if(x > 0) act += Math.abs(d[k - 1]);
 			if(k >= xdim)

@@ -5,23 +5,24 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleWriter version 3.1 (writes Simple format 7: least squares alone, centred resizing)
+// SimpleWriter version 3.2 (writes Simple format 8: least squares alone, the
+// wide clamp, centred resizing)
 //
 // A writer with one predictor and one entropy coder: every interior pixel is
 // predicted by the least-squares fit (DeltaMapper.LeastSquares: at each pixel,
 // the linear predictor that best fits a causal window of the pixels before
-// it), with no blocks and no map, and the deltas are mixed-context coded with
-// the second opinions (DeltaMapper.packMixedDeltas). The analysis picks the
-// channel set, then, channel by channel, the window radius (4, 8 or 16:
-// DeltaMapper.WINDOW_RADII) and the clamp (narrow, to 2 beyond the range of
-// the four nearest neighbours, or wide, of all eight) that code the channel
-// smallest, by the real coded size (DeltaMapper.surveyWindows). It runs at
+// it, clamped to 2 beyond the range of its eight neighbours), with no blocks
+// and no map, and the deltas are mixed-context coded with the second
+// opinions (DeltaMapper.packMixedDeltas). The analysis picks the channel set,
+// then, channel by channel, the window radius (4, 8 or 16:
+// DeltaMapper.WINDOW_RADII) that codes the channel smallest, by the real
+// coded size (DeltaMapper.surveyWindows). It runs at
 // startup and again after any change to the quantization (Pixel Resolution
 // or Color Resolution). Pixel Resolution resizes with ResizeMapper.resize2
-// (centred). File > Bands splits the image into up to MAX_BANDS
-// bands of rows that a reader can decode at the same time, for a small cost
-// per band boundary (the fit and the contexts start again at each band's
-// top).
+// (centred). The Bands menu splits the image into up to MAX_BANDS bands of
+// rows that a reader can decode at the same time, for a small cost per band
+// boundary (the fit and the contexts start again at each band's top); the
+// reader also decodes a band's three channels at the same time.
 // Files are read by SimpleReader.
 public class SimpleWriter
 {
@@ -29,7 +30,7 @@ public class SimpleWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 7;   // 3 to 5: unary strings or block maps with a choice of delta type and entropy coder (no longer read); 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2)
+	static final int  FORMAT_VERSION = 8;   // 3 to 5: unary strings or block maps with a choice of delta type and entropy coder (no longer read); 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2); 8: 7 with the wide clamp only (no clamp byte)
 	/**
 	 * The most bands Save offers.
 	 */
@@ -61,7 +62,7 @@ public class SimpleWriter
 
 	// ---- The last analysis (see analyse) ------------------------------------
 	/**
-	 * Each channel's window radius, clamp and deltas (null before the first
+	 * Each channel's window radius and deltas (null before the first
 	 * analysis).
 	 */
 	DeltaMapper.WindowSurvey survey = null;
@@ -151,11 +152,6 @@ public class SimpleWriter
 		JMenuItem reset_item = new JMenuItem("Reset");
 		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); quantChanged(); });
 		file_menu.add(reset_item);
-		// Bands: Save codes the image as this many bands of rows, each decodable
-		// on its own (so a reader can decode them at the same time), for a small
-		// cost per band boundary. Like Save itself, it never changes the preview.
-		JSlider[] bs = new JSlider[1];
-		file_menu.add(ViewerSupport.makeSliderDialog(frame, "Bands", 1, MAX_BANDS, bands, v -> { bands = v; view.setStatus(bandText()); }, bs));
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
 
 		JMenu quant_menu = new JMenu("Quantization");
@@ -168,6 +164,14 @@ public class SimpleWriter
 		quant_menu.addSeparator();
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Error Correction", 0, 10, correction, v -> { correction = v; if(surveyCurrent()) apply(); }, ss)); corr_slider = ss[0];
 
+		// Bands menu: Save codes the image as this many bands of rows, each
+		// decodable on its own (so a reader can decode them at the same time),
+		// for a small cost per band boundary. Like Save itself, it never
+		// changes the preview.
+		JMenu bands_menu = new JMenu("Bands");
+		JSlider[] bs = new JSlider[1];
+		bands_menu.add(ViewerSupport.makeSliderDialog(frame, "Number of Bands", 1, MAX_BANDS, bands, v -> { bands = v; view.setStatus(bandText()); }, bs));
+
 		// Window menu: what the analysis chose (nothing to set by hand).
 		JMenu window_menu = new JMenu("Window");
 		JMenuItem window_item = new JMenuItem("Radius");
@@ -177,7 +181,7 @@ public class SimpleWriter
 		sizes_item.addActionListener(e -> showText("Coded Size by Radius", sizesText()));
 		window_menu.add(sizes_item);
 
-		menu_bar.add(file_menu); menu_bar.add(view.makeViewMenu()); menu_bar.add(quant_menu); menu_bar.add(window_menu);
+		menu_bar.add(file_menu); menu_bar.add(view.makeViewMenu()); menu_bar.add(quant_menu); menu_bar.add(bands_menu); menu_bar.add(window_menu);
 
 		view.setImage(original_image);
 		view.show();
@@ -233,7 +237,7 @@ public class SimpleWriter
 	}
 
 	/**
-	 * Picks the channel set, then each channel's window radius and clamp, for
+	 * Picks the channel set, then each channel's window radius, for
 	 * this quantization (DeltaMapper.surveyWindows); keeps them in survey.
 	 *
 	 * @param quant the Pixel Resolution
@@ -298,7 +302,7 @@ public class SimpleWriter
 	{
 		StringBuilder t = new StringBuilder("Channel set: " + DeltaMapper.SET_NAMES[set_id] + "\n");
 		for(int i = 0; i < 3; i++)
-			t.append(String.format("Channel %d - %s: %s (%,d bytes)%n", i, DeltaMapper.channelName(set_id, i), DeltaMapper.describeWindow(s.radius[i], s.wide[i]), s.bytes[i]));
+			t.append(String.format("Channel %d - %s: radius %d (%,d bytes)%n", i, DeltaMapper.channelName(set_id, i), s.radius[i], s.bytes[i]));
 		return t.toString();
 	}
 
@@ -311,8 +315,7 @@ public class SimpleWriter
 		return t;
 	}
 
-	// Each channel's coded size at every radius tried, both clamps; the
-	// chosen one starred.
+	// Each channel's coded size at every radius tried; the chosen one starred.
 	private String sizesText()
 	{
 		if(!applied) return "No analysis yet.";
@@ -322,13 +325,9 @@ public class SimpleWriter
 		{
 			if(i > 0) t.append('\n');
 			t.append(String.format("Channel %d - %s:%n", i, DeltaMapper.channelName(min_set_id, i)));
-			t.append(String.format("  %6s %12s %12s%n", "radius", "narrow", "wide"));
+			t.append(String.format("  %6s %12s%n", "radius", "bytes"));
 			for(int r = 0; r < s.radii.length; r++)
-			{
-				boolean chosen = s.radii[r] == s.radius[i];
-				t.append(String.format("  %6d %,11d%s %,11d%s%n", s.radii[r],
-					s.tried[i][2 * r], (chosen && !s.wide[i]) ? "*" : " ", s.tried[i][2 * r + 1], (chosen && s.wide[i]) ? "*" : " "));
-			}
+				t.append(String.format("  %6d %,11d%s%n", s.radii[r], s.tried[i][r], (s.radii[r] == s.radius[i]) ? "*" : " "));
 		}
 		return t.toString();
 	}
@@ -491,18 +490,19 @@ public class SimpleWriter
 		}
 
 		/**
-		 * Format 7. Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
+		 * Format 8. Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 		 * shorts), pixel_shift, pixel_quant, channel set; per channel (coding
-		 * order) int min, the window radius and the clamp (unsigned bytes; 1:
-		 * wide); the number of bands n (an unsigned byte), n int lengths, and the
-		 * n bands. Band b is rows bandStart(b) to bandStart(b + 1) of the
-		 * quantized image, coded as an image of its own (the fit and the
-		 * contexts start again at its top): per channel, int init, then the
-		 * least-squares deltas mixed-context coded with the second opinions
+		 * order) int min and the window radius (an unsigned byte); the number of
+		 * bands n (an unsigned byte), n int lengths, and the n bands. Band b is
+		 * rows bandStart(b) to bandStart(b + 1) of the quantized image, coded as
+		 * an image of its own (the fit and the contexts start again at its
+		 * top): per channel, int init, then the least-squares deltas
+		 * mixed-context coded with the second opinions
 		 * (DeltaMapper.packMixedDeltas). Channels 1 and 2 use the ones before
 		 * them (their values in the fit, their deltas as context), so a band's
-		 * channels are decoded in order; the bands can be decoded at the same
-		 * time.
+		 * channels are decoded in order, each a couple of rows behind the one
+		 * before; the bands can be decoded at the same time. One band is what
+		 * the analysis already coded; bands are coded at the same time.
 		 *
 		 * @param out the stream
 		 * @throws IOException if the stream fails
@@ -512,36 +512,38 @@ public class SimpleWriter
 			int n = bandsUsed(), xdim = delta_xdim, rows = value_list[0].length / xdim;
 			DeltaMapper.WindowSurvey s = survey;
 			byte[][] band = new byte[n][];
-			for(int b = 0; b < n; b++)
+			ViewerSupport.parallel(n, b ->
 			{
 				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows), h = y1 - y0;
-				int[][] ch = new int[3][], d = new int[3][];
+				int[][]  ch = new int[3][], d = new int[3][];
+				byte[][] coded = new byte[3][];
 				for(int i = 0; i < 3; i++)
 				{
 					ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
-					// One band: the analysis's deltas.
-					d[i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresDeltas(ch[i], (i > 0) ? ch[i - 1] : null, xdim, h, s.radius[i], s.wide[i]);
+					d[i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresDeltas(ch[i], (i > 0) ? ch[i - 1] : null, xdim, h, s.radius[i]);
 				}
-				byte[][] coded = new byte[3][];
-				final int band_b = b;
 				ViewerSupport.parallel(3, i ->
 				{
 					try
 					{
 						int[][] previous = Arrays.copyOf(d, i);
-						coded[i] = DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim, true);
+						coded[i] = (n == 1) ? s.coded[i] : DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim, true);
 						int[] p = new int[ch[i].length];
 						for(int k = 0; k < p.length; k++) p[k] = ch[i][k] - d[i][k];
 						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim, p), d[i]))
-							System.out.println("WARNING: band " + band_b + " channel " + i + " deltas do not decode back.");
+							System.out.println("WARNING: band " + b + " channel " + i + " deltas do not decode back.");
 					}
 					catch(IOException e) { throw new UncheckedIOException(e); }
 				});
-				ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-				DataOutputStream bo = new DataOutputStream(bytes);
-				for(int i = 0; i < 3; i++) { bo.writeInt(ch[i][0]); bo.write(coded[i]); }
-				band[b] = bytes.toByteArray();
-			}
+				try
+				{
+					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+					DataOutputStream bo = new DataOutputStream(bytes);
+					for(int i = 0; i < 3; i++) { bo.writeInt(ch[i][0]); bo.write(coded[i]); }
+					band[b] = bytes.toByteArray();
+				}
+				catch(IOException e) { throw new UncheckedIOException(e); }
+			});
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
 			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
@@ -550,7 +552,7 @@ public class SimpleWriter
 			for(int i = 0; i < 3; i++)
 			{
 				out.writeInt(channel_min[channel_id[i]]);
-				out.writeByte(s.radius[i]); out.writeByte(s.wide[i] ? 1 : 0);
+				out.writeByte(s.radius[i]);
 			}
 			out.writeByte(n);
 			for(int b = 0; b < n; b++) out.writeInt(band[b].length);
