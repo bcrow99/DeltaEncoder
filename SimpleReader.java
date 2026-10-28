@@ -4,20 +4,21 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleReader version 3.0 (reads Simple format 6: least squares alone)
+// SimpleReader version 3.1 (reads Simple format 7: least squares alone, centred resizing)
 //
 // Reads SimpleWriter's files: every interior pixel predicted by the
 // least-squares fit with each channel's window radius and clamp, the deltas
 // mixed-context coded with the second opinions, in bands of rows decoded at
-// the same time. See SimpleWriter.SaveHandler.save for the layout. Older
-// Simple files (formats 3 to 5) are not read.
+// the same time, resized back with ResizeMapper.resize2 (centred). See
+// SimpleWriter.SaveHandler.save for the layout. Older Simple files (formats
+// 3 to 6) are not read.
 public class SimpleReader
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 6;   // 6: least squares alone, a window radius and clamp per channel, in bands
+	static final int  FORMAT_VERSION = 7;   // 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2)
 
 	int xdim, ydim, pixel_shift, pixel_quant, set_id;
 	/**
@@ -152,7 +153,7 @@ public class SimpleReader
 		int[] id = DeltaMapper.getChannels(set_id);
 		for(int i = 0; i < 3; i++) if(id[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
 		int[][] bgr = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
-		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize(bgr[c], w, xdim, ydim));
+		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize2(bgr[c], w, xdim, ydim));
 		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
 		image.setRGB(0, 0, xdim, ydim, DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift), 0, xdim);
 		return image;

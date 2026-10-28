@@ -3568,7 +3568,7 @@ public class DeltaMapper
 	/**
 	 * The window radii surveyWindows tries, smallest first.
 	 */
-	public static final int[] WINDOW_RADII = {3, 4, 5, 6, 8, 10, 12, 14, 16, 20};
+	public static final int[] WINDOW_RADII = {4, 8, 16};
 
 	/**
 	 * A channel's deltas from the least-squares fit alone.

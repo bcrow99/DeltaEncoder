@@ -5,19 +5,20 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleWriter version 3.0 (writes Simple format 6: least squares alone)
+// SimpleWriter version 3.1 (writes Simple format 7: least squares alone, centred resizing)
 //
 // A writer with one predictor and one entropy coder: every interior pixel is
 // predicted by the least-squares fit (DeltaMapper.LeastSquares: at each pixel,
 // the linear predictor that best fits a causal window of the pixels before
 // it), with no blocks and no map, and the deltas are mixed-context coded with
 // the second opinions (DeltaMapper.packMixedDeltas). The analysis picks the
-// channel set, then, channel by channel, the window radius (from
+// channel set, then, channel by channel, the window radius (4, 8 or 16:
 // DeltaMapper.WINDOW_RADII) and the clamp (narrow, to 2 beyond the range of
 // the four nearest neighbours, or wide, of all eight) that code the channel
 // smallest, by the real coded size (DeltaMapper.surveyWindows). It runs at
 // startup and again after any change to the quantization (Pixel Resolution
-// or Color Resolution). File > Bands splits the image into up to MAX_BANDS
+// or Color Resolution). Pixel Resolution resizes with ResizeMapper.resize2
+// (centred). File > Bands splits the image into up to MAX_BANDS
 // bands of rows that a reader can decode at the same time, for a small cost
 // per band boundary (the fit and the contexts start again at each band's
 // top).
@@ -28,7 +29,7 @@ public class SimpleWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'S';
-	static final int  FORMAT_VERSION = 6;   // 3 to 5: unary strings or block maps with a choice of delta type and entropy coder (no longer read); 6: least squares alone, a window radius and clamp per channel, in bands
+	static final int  FORMAT_VERSION = 7;   // 3 to 5: unary strings or block maps with a choice of delta type and entropy coder (no longer read); 6: least squares alone, a window radius and clamp per channel, in bands; 7: 6 with centred resizing (ResizeMapper.resize2)
 	/**
 	 * The most bands Save offers.
 	 */
@@ -264,7 +265,7 @@ public class SimpleWriter
 		for(int i = 0; i < 3; i++)
 		{
 			int[] ch = source[i];
-			if(quant != 0) ch = ResizeMapper.resize(ch, image_xdim, size[0], size[1]);
+			if(quant != 0) ch = ResizeMapper.resize2(ch, image_xdim, size[0], size[1]);
 			q[i] = DeltaMapper.quantizeChannel(ch, shift);
 		}
 		int[][] qc = DeltaMapper.getCandidateChannels(q[0], q[1], q[2], min);
@@ -441,11 +442,11 @@ public class SimpleWriter
 
 		// Like SimpleReader: recombine the channels first, then resize, then
 		// shift. Resizing each channel before recombining gives different
-		// results (ResizeMapper rounds down).
+		// results (ResizeMapper rounds down). Resizing is centred (resize2).
 		int[][] bgr = DeltaMapper.getBlueGreenRed(min_set_id, dc[0], dc[1], dc[2]);
 		ViewerSupport.parallel(3, c ->
 		{
-			if(pixel_quant != 0) bgr[c] = ResizeMapper.resize(bgr[c], new_xdim, image_xdim, image_ydim);
+			if(pixel_quant != 0) bgr[c] = ResizeMapper.resize2(bgr[c], new_xdim, image_xdim, image_ydim);
 			if(pixel_shift != 0) bgr[c] = DeltaMapper.shift(bgr[c], pixel_shift);
 		});
 
@@ -490,7 +491,7 @@ public class SimpleWriter
 		}
 
 		/**
-		 * Format 6. Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
+		 * Format 7. Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 		 * shorts), pixel_shift, pixel_quant, channel set; per channel (coding
 		 * order) int min, the window radius and the clamp (unsigned bytes; 1:
 		 * wide); the number of bands n (an unsigned byte), n int lengths, and the
