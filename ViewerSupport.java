@@ -102,11 +102,13 @@ public class ViewerSupport
 	}
 
 	// Reads any image ImageIO can read, as TYPE_INT_RGB (alpha is dropped;
-	// gray images keep their sample values). Throws IOException with a
-	// message for the user if the file can't be used.
+	// gray images keep their sample values; a JPEG's embedded colour profile
+	// is ignored, see withoutIccProfile). Throws IOException with a message
+	// for the user if the file can't be used.
 	public static BufferedImage readImage(String filename) throws IOException
 	{
-		BufferedImage src = ImageIO.read(new File(filename));
+		byte[] data = java.nio.file.Files.readAllBytes(new File(filename).toPath());
+		BufferedImage src = ImageIO.read(new ByteArrayInputStream(withoutIccProfile(data)));
 		if(src == null) throw new IOException(filename + " is not an image format Java can read.");
 		int w = src.getWidth(), h = src.getHeight();
 		if(w < DeltaMapper.MIN_DIM || h < DeltaMapper.MIN_DIM)
@@ -127,6 +129,34 @@ public class ViewerSupport
 		BufferedImage rgb = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
 		rgb.setRGB(0, 0, w, h, pixel, 0, w);
 		return rgb;
+	}
+
+	// A JPEG with its ICC profile segments (APP2 "ICC_PROFILE") removed;
+	// anything else unchanged. ImageIO converts a JPEG with a profile (e.g.
+	// Adobe RGB, which Photoshop and many cameras write) to sRGB; without
+	// it the stored values are read as they are, as the Python version
+	// (OpenCV) reads them. Only the segments before the scan are examined.
+	static byte[] withoutIccProfile(byte[] data)
+	{
+		if(data.length < 4 || (data[0] & 0xff) != 0xff || (data[1] & 0xff) != 0xd8) return data;
+		ByteArrayOutputStream out = new ByteArrayOutputStream(data.length);
+		out.write(data, 0, 2);
+		int k = 2;
+		boolean removed = false;
+		while(k + 4 <= data.length && (data[k] & 0xff) == 0xff)
+		{
+			int marker = data[k + 1] & 0xff;
+			if(marker == 0xda || marker == 0xd9) break;              // start of scan, end of image
+			int length = ((data[k + 2] & 0xff) << 8) | (data[k + 3] & 0xff);
+			if(length < 2 || k + 2 + length > data.length) return data;
+			boolean icc = marker == 0xe2 && length >= 13
+				&& new String(data, k + 4, 11, java.nio.charset.StandardCharsets.US_ASCII).equals("ICC_PROFILE");
+			if(icc) removed = true; else out.write(data, k, 2 + length);
+			k += 2 + length;
+		}
+		if(!removed) return data;
+		out.write(data, k, data.length - k);
+		return out.toByteArray();
 	}
 
 	// Prints the message and shows it in a dialog (when there is a screen).

@@ -5,1052 +5,130 @@ import java.math.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 
-//version 1.0
-
+/**
+ * Prefix-free (Huffman and unary) codes: building code lengths and code words,
+ * packing and unpacking bit strings, and estimating coded sizes.
+ * <p>
+ * In source order (the method details below follow it):
+ * <ol>
+ * <li><b>Measures and Huffman code lengths</b> ({@link #getShannonLimit},
+ *     {@link #getCost(int[], int[])}, {@link #getHuffmanLength2}), shared by
+ *     both kinds of code below.</li>
+ * <li><b>Regular Huffman</b> ({@link #getRegularHuffmanLength} through
+ *     {@link #getVarintBytes}), the codes the writers use: canonical codes
+ *     over the 256 byte values directly, from a block's own byte counts, with
+ *     no rank table; packed most significant bit first.</li>
+ * <li><b>Deflate helpers</b> ({@link #deflate}, {@link #inflate}).</li>
+ * <li><b>Ranked prefix codes</b> ({@link #getCanonicalCode(byte[])} through
+ *     {@link #getHuffmanBitlength(int[])}): values are mapped to ranks by a
+ *     rank table (most frequent value first), and the code words, indexed by
+ *     rank, can be any prefix-free code -- canonical Huffman codes, unary
+ *     codes, or others. Codes are packed least significant bit first, so the
+ *     canonical codes are stored bit-reversed. Overloads take code words as
+ *     int, long or BigInteger, for codes of any length, and there is a
+ *     compact form for tables of code lengths.</li>
+ * <li><b>Unary codes</b> ({@link #getUnaryCode}, {@link #getUnaryLength}),
+ *     for use with the ranked packers.</li>
+ * </ol>
+ * <p>
+ * Version 1.0.
+ */
 public class CodeMapper
 {
-	public static int getHuffmanBitlength(byte [] src)
+	/** Not used: all of this class's methods are static. */
+	public CodeMapper() {}
+
+	/* *****************************************************************************************************************/
+	/* Measures and Huffman code lengths, shared by both kinds of Huffman code below.                                  */
+	/* *****************************************************************************************************************/
+
+	/**
+	 * The base-2 logarithm.
+	 *
+	 * @param value a positive number
+	 * @return log<sub>2</sub>(value)
+	 */
+	public static double log2(double value)
 	{
-		ArrayList histogram_list = StringMapper.getHistogram(src);
-		int []    histogram      = (int[])histogram_list.get(1);
-		
-		int n = histogram.length;
-		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
-	    for(int k = 0; k < n; k++)
-	        frequency_list.add(histogram[k]);
-	    Collections.sort(frequency_list, Comparator.reverseOrder());
-	    int [] frequency = new int[n];
-	    for(int k = 0; k < n; k++)
-	    	    frequency[k] = frequency_list.get(k);
-	    byte [] huffman_length = getHuffmanLength2(frequency);
-	    int bitlength = getCost(huffman_length, frequency);
-		return bitlength;
-	}
-	
-	public static int getHuffmanBitlength(int [] src)
-	{
-		ArrayList histogram_list = StringMapper.getHistogram(src);
-		int []    histogram      = (int[])histogram_list.get(1);
-		
-		int n = histogram.length;
-		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
-	    for(int k = 0; k < n; k++)
-	        frequency_list.add(histogram[k]);
-	    Collections.sort(frequency_list, Comparator.reverseOrder());
-	    int [] frequency = new int[n];
-	    for(int k = 0; k < n; k++)
-	    	    frequency[k] = frequency_list.get(k);
-	    byte [] huffman_length = getHuffmanLength2(frequency);
-	    int bitlength = getCost(huffman_length, frequency);
-		return bitlength;
-	}
-	
-	// We need integer length code words (longer than original input) to support unary 
-	// string encoding, or any coding that involves longer codes than the input.
-	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
-	{
-		int k = 0;
-		int current_bit = 0;
-
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			
-			if(j < 0)
-			    j += 256;
-
-			k     = table[j];
-
-			int code_word       = code[k];
-			int code_length     = length[k];
-			int offset          = current_bit % 8;
-			code_word         <<= offset;
-			int or_length       = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte    = current_bit / 8;
-			if(number_of_bytes == 1)
-				dst[current_byte] |= (byte) (code_word & 0x00ff);
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					dst[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				if(current_byte < dst.length)
-					dst[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
+		double result = (Math.log(value) / Math.log(2.));
+		return result;
 	}
 
-	public static ArrayList packCode(byte src[], int table[], int[] code, byte[] length)
+	/**
+	 * The smallest size a set of counts can code to with a fixed (zero-order)
+	 * model: the sum of -f log<sub>2</sub>(f / total).
+	 *
+	 * @param frequency the counts
+	 * @return the size in bits
+	 */
+	public static double getShannonLimit(int[] frequency)
 	{
-	    // Assume we are not expanding the source string.
-		byte [] buffer = new byte[src.length * 4];
-		
-		int n = code.length;
-
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			if(j < 0)
-				j += 256;
-			if(j > table.length - 1)
-			{
-				// Don't see how this can happen, but setting it to the least probable
-				// value will prevent the program from halting.
-				System.out.println("Index is larger than rank table length.");
-				System.out.println("Index is " + j + ", rank table length is " + table.length);
-				System.out.println("Source length is " + src.length + ", source index is " + i);
-				j = table.length - 1;
-			}
-			
-			int k = table[j];
-			
-			int code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-			if(number_of_bytes == 1)
-				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					buffer[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-			    }
-				buffer[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-		
-        // We do an extra copy to clip the string,
-		// but that's less expensive computationally than trying to 
-		// do a bit by bit parse into an exactly sized buffer for 
-		// the last source element and avoids a code-specific solution,
-		// for example, something that only works with Huffman codes.
-		int bitlength = current_bit;
-		int number_of_bytes = bitlength / 8;
-		if(bitlength % 8 != 0)
-			number_of_bytes++;
-		byte [] dst = new byte[number_of_bytes];
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = buffer[i];
-		
-		// Adding code along with length to keep it non-code specific.
-		// Most huffman coding schemes only need the code lengths.
-		ArrayList result = new ArrayList();
-		result.add(dst);
-		result.add(bitlength);
-		result.add(table);
-		result.add(code);
-		result.add(length);
-		result.add(src.length);
-	    
-		return    result;
-	}
-	
-	public static ArrayList packCode(int src[], int table[], int[] code, byte[] length)
-	{
-		byte [] buffer = new byte[src.length * 4];
-		
-		int n = code.length;
-
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-			int code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-			if(number_of_bytes == 1)
-			{
-				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
-			}
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					buffer[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				buffer[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-		
-		// Clip the buffer data.
-		int bitlength = current_bit;
-		int number_of_bytes = bitlength / 8;
-		if(bitlength % 8 != 0)
-			number_of_bytes++;
-		byte [] dst = new byte[number_of_bytes];
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = buffer[i];
-		
-		ArrayList result = new ArrayList();
-		result.add(dst);
-		result.add(bitlength);
-		result.add(table);
-		result.add(code);
-		result.add(length);
-		result.add(src.length);
-	    
-		return    result;
-	}
-	
-	// Accepts integer input.
-	public static int packCode(int src[], int table[], int[] code, byte[] length, byte dst[])
-	{
-		int n = code.length;
-
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-			int code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-			if(number_of_bytes == 1)
-			{
-				dst[current_byte] |= (byte) (code_word & 0x00ff);	
-			}
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					dst[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				dst[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
-	}
-
-	// Method that supports longer lengths.
-	public static int packCode(int src[], int table[], int[] code, int[] length, byte dst[])
-	{
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-			int code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-
-			if(number_of_bytes == 1)
-				dst[current_byte] |= (byte) (code_word & 0x00ff);
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					dst[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				dst[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
-	}
-
-	/**************************************************************************************/
-	// Methods that support longer codes.
-
-	public static int packCode(int src[], int table[], long[] code, int[] length, byte dst[])
-	{
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-			long code_word = code[k];
-			int code_length = length[k];
-			int offset = current_bit % 8;
-			code_word <<= offset;
-			int or_length = code_length + offset;
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-			int current_byte = current_bit / 8;
-			if(number_of_bytes == 1)
-				dst[current_byte] |= (byte) (code_word & 0x00ff);
-			else
-			{
-				for(int m = 0; m < number_of_bytes - 1; m++)
-				{
-					dst[current_byte] |= (byte) (code_word & 0x00ff);
-					current_byte++;
-					code_word >>= 8;
-				}
-				dst[current_byte] = (byte) (code_word & 0x00ff);
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
-	}
-
-	public static int packCode(int src[], int table[], BigInteger[] code, int[] length, byte dst[])
-	{
-		int current_bit = 0;
-		for(int i = 0; i < src.length; i++)
-		{
-			int j = src[i];
-			int k = table[j];
-
-			BigInteger code_word = code[k];
-			int code_length = length[k];
-
-			int shift = current_bit % 8;
-
-			code_word = code_word.shiftLeft(shift);
-
-			int or_length = code_length + shift;
-
-			int number_of_bytes = or_length / 8;
-			if(or_length % 8 != 0)
-				number_of_bytes++;
-
-			int current_byte = current_bit / 8;
-			shift = 0;
-
-			for(int m = 0; m < number_of_bytes; m++)
-			{
-				BigInteger shifted_code_word = code_word.shiftRight(shift);
-
-				long mask_value   = 255;
-				BigInteger mask   = BigInteger.ONE;
-				mask              = mask.valueOf(mask_value);
-				shifted_code_word = shifted_code_word.and(mask);
-				try
-				{
-					mask_value = 1;
-					for(int n = 0; n < 8; n++)
-					{
-						mask = mask.valueOf(mask_value);
-						BigInteger bit_value = shifted_code_word.and(mask);
-						if(bit_value.compareTo(BigInteger.ZERO) != 0)
-						{
-							byte byte_mask = (byte) mask_value;
-							dst[current_byte] |= byte_mask;
-						}
-
-						mask_value *= 2;
-					}
-					current_byte++;
-					shift += 8;
-				} 
-				catch (Exception e)
-				{
-					System.out.println(e.toString());
-
-					current_byte++;
-					shift += 8;
-				}
-			}
-			current_bit += code_length;
-		}
-
-		int bit_length = current_bit;
-		return bit_length;
-	}
-
-	
-	
-	/********************************************************************************************************************/
-	/* Unpacking routines.                                                                                              */
-	/********************************************************************************************************************/
-	
-	
-	// Basic byte input , byte output.
-	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, byte[] dst)
-	{
-		int[] inverse_table = new int[table.length];
-		for(int i = 0; i < table.length; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-
-		int[] buffer = new int[dst.length];
-
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-
-		int current_bit = 0;
-		int offset = 0;
-		int current_byte = 0;
-		int number_unpacked = 0;
-		int dst_byte = 0;
-
-		for(int i = 0; i < dst.length; i++)
-		{
-			int src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				int index = current_byte + j;
-
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-					if(j == 0)
-						src_byte >>= offset;
-					else
-						src_byte <<= j * 8 - offset;
-					src_word |= src_byte;
-				}
-			}
-
-			if(offset != 0)
-			{
-				int index = current_byte + max_bytes;
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-
-					src_byte <<= max_bytes * 8 - offset;
-
-					src_word |= src_byte;
-				}
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				int code_word = code[j];
-				int mask = -1;
-				mask <<= code_length[j];
-				mask = ~mask;
-
-				int masked_src_word  = src_word & mask;
-				int masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					buffer[dst_byte++] = inverse_table[j];
-					number_unpacked++;
-					current_bit += code_length[j];
-					current_byte = current_bit / 8;
-					offset = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-					System.out.println("No match for prefix-free code at byte " + current_byte);
-			}
-		}
-      
-		for(int i = 0; i < dst.length; i++)
-			dst[i] = (byte) (buffer[i]);
-		return number_unpacked;
-	}
-	
-	public static byte [] unpackCode(ArrayList pack_list)
-	{
-		byte [] src         = (byte [])pack_list.get(0);
-		int     bitlength   = (int)    pack_list.get(1);
-		int  [] table       = (int []) pack_list.get(2);
-		int  [] code        = (int []) pack_list.get(3);
-		byte [] code_length = (byte [])pack_list.get(4);
-		int     n           = (int)    pack_list.get(5);
-		
-		System.out.println("Table length is " + table.length);
-		System.out.println("Code length is " + code.length);
-		System.out.println("Code length length is " + code_length.length);
-		System.out.println("Number of output bytes is " + n);
-		System.out.println();
-		
-		int[] inverse_table = new int[table.length];
-		for(int i = 0; i < table.length; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-		
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-		
-		int current_bit     = 0;
-		int offset          = 0;
-		int current_byte    = 0;
-		int dst_byte        = 0;
-		
-		byte [] dst = new byte[n];
+		int n = frequency.length;
+		int sum = 0;
+		for(int i = 0; i < n; i++)
+			sum += frequency[i];
+		double[] weight = new double[n];
 		for(int i = 0; i < n; i++)
 		{
-			int src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				int index = current_byte + j;
-
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-					if(j == 0)
-						src_byte >>= offset;
-					else
-						src_byte <<= j * 8 - offset;
-					src_word |= src_byte;
-				}
-			}
-
-			if(offset != 0)
-			{
-				int index = current_byte + max_bytes;
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-
-					src_byte <<= max_bytes * 8 - offset;
-
-					src_word |= src_byte;
-				}
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				int code_word = code[j];
-				int mask      = -1;
-				mask        <<= code_length[j];
-				mask          = ~mask;
-
-				int masked_src_word  = src_word  & mask;
-				int masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					dst[dst_byte++] = (byte)inverse_table[j];
-					current_bit    += code_length[j];
-					current_byte    = current_bit / 8;
-					offset          = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-			        	System.out.println("No match for prefix-free code at byte " + current_byte);
-			}
+			weight[i] = frequency[i];
+			weight[i] /= sum;
 		}
 
-	    	return dst;
-	}
-	
-	public static int [] unpackCode2(ArrayList pack_list)
-	{
-		byte [] src         = (byte [])pack_list.get(0);
-		int     bitlength   = (int)    pack_list.get(1);
-		int  [] table       = (int []) pack_list.get(2);
-		int  [] code        = (int []) pack_list.get(3);
-		byte [] code_length = (byte [])pack_list.get(4);
-		int     n           = (int)    pack_list.get(5);
-		
-		int[] inverse_table = new int[table.length];
-		for(int i = 0; i < table.length; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-		
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-		
-		int current_bit     = 0;
-		int offset          = 0;
-		int current_byte    = 0;
-		int dst_byte        = 0;
-		
-		int [] dst = new int[n];
+		double limit = 0;
 		for(int i = 0; i < n; i++)
 		{
-			int src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				int index = current_byte + j;
-
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-					if(j == 0)
-						src_byte >>= offset;
-					else
-						src_byte <<= j * 8 - offset;
-					src_word |= src_byte;
-				}
-			}
-
-			if(offset != 0)
-			{
-				int index = current_byte + max_bytes;
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-
-					src_byte <<= max_bytes * 8 - offset;
-
-					src_word |= src_byte;
-				}
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				int code_word = code[j];
-				int mask      = -1;
-				mask        <<= code_length[j];
-				mask          = ~mask;
-
-				int masked_src_word  = src_word  & mask;
-				int masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					dst[dst_byte++] = inverse_table[j];
-					current_bit    += code_length[j];
-					current_byte    = current_bit / 8;
-					offset          = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-			        	System.out.println("No match for prefix-free code at byte " + current_byte);
-			}
+			if(weight[i] != 0)
+				limit -= frequency[i] * log2(weight[i]);
 		}
 
-	    	return dst;
-	}
-	
-	
-	
-	// Byte input, integer output.
-	// This is the method used in HuffmanWriter.
-	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
-	{
-		int[] inverse_table = new int[table.length];
-		for(int i = 0; i < table.length; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-		
-		int current_bit     = 0;
-		int offset          = 0;
-		int current_byte    = 0;
-		int number_unpacked = 0;
-		int dst_byte        = 0;
-
-		for(int i = 0; i < dst.length; i++)
-		{
-			int src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				int index = current_byte + j;
-
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-					if(j == 0)
-						src_byte >>= offset;
-					else
-						src_byte <<= j * 8 - offset;
-					src_word |= src_byte;
-				}
-			}
-
-			if(offset != 0)
-			{
-				int index = current_byte + max_bytes;
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-
-					src_byte <<= max_bytes * 8 - offset;
-
-					src_word |= src_byte;
-				}
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				int code_word = code[j];
-				int mask      = -1;
-				mask        <<= code_length[j];
-				mask          = ~mask;
-
-				int masked_src_word  = src_word  & mask;
-				int masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					dst[dst_byte++] = inverse_table[j];
-					number_unpacked++;
-					
-					current_bit += code_length[j];
-					current_byte = current_bit / 8;
-					offset       = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-			        	System.out.println("No match for prefix-free code at byte " + current_byte);
-			}
-		}
-
-		return number_unpacked;
+		return limit;
 	}
 
-	/***************************************************************************************************************/
-	// Methods that support longer codes.
-	public static int unpackCode(byte src[], int table[], int[] code, int[] code_length, int bit_length, int dst[])
+	/**
+	 * The coded size: the sum of length times count.
+	 *
+	 * @param length    the code lengths
+	 * @param frequency the counts, in the same order
+	 * @return the size in bits
+	 */
+	public static int getCost(int[] length, int[] frequency)
 	{
-		int number_of_different_values = table.length;
-		int[] inverse_table = new int[number_of_different_values];
-		for(int i = 0; i < number_of_different_values; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
+		int n = length.length;
+		int cost = 0;
 
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-
-		int current_bit = 0;
-		int offset = 0;
-		int current_byte = 0;
-		int number_unpacked = 0;
-		int dst_byte = 0;
-
-		for(int i = 0; i < dst.length; i++)
-		{
-			int src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				int index = current_byte + j;
-
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-					if(j == 0)
-						src_byte >>= offset;
-					else
-						src_byte <<= j * 8 - offset;
-					src_word |= src_byte;
-				}
-			}
-
-			if(offset != 0)
-			{
-				int index = current_byte + max_bytes;
-				if(index < src.length)
-				{
-					int src_byte = (int) src[index];
-					if(src_byte < 0)
-						src_byte += 256;
-
-					src_byte <<= max_bytes * 8 - offset;
-
-					src_word |= src_byte;
-				}
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				int code_word = code[j];
-				int mask = -1;
-				mask <<= code_length[j];
-				mask = ~mask;
-
-				int masked_src_word = src_word & mask;
-				int masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					dst[dst_byte++] = inverse_table[j];
-					number_unpacked++;
-					current_bit += code_length[j];
-					current_byte = current_bit / 8;
-					offset = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-					System.out.println("No match for prefix-free code at byte " + current_byte);
-			}
-		}
-
-		return number_unpacked;
-	}
-
-	public static int unpackCode(byte src[], int table[], long[] code, int[] code_length, int bit_length, int dst[])
-	{
-		int number_of_different_values = table.length;
-		int[] inverse_table = new int[number_of_different_values];
-		for(int i = 0; i < number_of_different_values; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-
-		int current_bit = 0;
-		int offset = 0;
-		int current_byte = 0;
-		int number_unpacked = 0;
-		int dst_byte = 0;
-
-		for(int i = 0; i < dst.length; i++)
-		{
-			long src_word = 0;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				long src_byte = (long) src[current_byte + j];
-				if(src_byte < 0)
-					src_byte += 256;
-				if(j == 0)
-					src_byte >>= offset;
-				else
-					src_byte <<= j * 8 - offset;
-				src_word |= src_byte;
-			}
-
-			if(offset != 0)
-			{
-				long src_byte = (long) src[current_byte + max_bytes];
-				if(src_byte < 0)
-					src_byte += 256;
-
-				src_byte <<= max_bytes * 8 - offset;
-
-				src_word |= src_byte;
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				long code_word = code[j];
-				long mask = -1;
-				mask <<= code_length[j];
-				mask = ~mask;
-
-				long masked_src_word = src_word & mask;
-				long masked_code_word = code_word & mask;
-
-				if(masked_src_word == masked_code_word)
-				{
-					dst[dst_byte++] = inverse_table[j];
-					number_unpacked++;
-					current_bit += code_length[j];
-					current_byte = current_bit / 8;
-					offset = current_bit % 8;
-					break;
-				} 
-				else if(j == code.length - 1)
-				{
-					System.out.println("No match for prefix-free code at byte " + current_byte);
-				}
-			}
-		}
-		return number_unpacked;
-	}
-
-	public static int unpackCode(byte src[], int table[], BigInteger[] code, int[] code_length, int bit_length, int dst[])
-	{
-		int number_of_different_values = table.length;
-		int[] inverse_table = new int[number_of_different_values];
-		for(int i = 0; i < number_of_different_values; i++)
-		{
-			int j = table[i];
-			inverse_table[j] = i;
-		}
-
-		int max_length = code_length[code.length - 1];
-		int max_bytes = max_length / 8;
-		if(max_length % 8 != 0)
-			max_bytes++;
-
-		int current_bit = 0;
-		int offset = 0;
-		int current_byte = 0;
-		int number_unpacked = 0;
-		int dst_byte = 0;
-
-		for(int i = 0; i < dst.length; i++)
-		{
-			BigInteger src_word = BigInteger.ZERO;
-
-			for(int j = 0; j < max_bytes; j++)
-			{
-				long src_byte = (long) src[current_byte + j];
-				if(src_byte < 0)
-					src_byte += 256;
-
-				BigInteger addend = BigInteger.valueOf(src_byte);
-				if(j == 0)
-					addend = addend.shiftRight(offset);
-				else
-					addend = addend.shiftLeft(j * 8 - offset);
-				src_word = src_word.add(addend);
-			}
-
-			if(offset != 0)
-			{
-				long src_byte = (long) src[current_byte + max_bytes];
-				if(src_byte < 0)
-					src_byte += 256;
-				BigInteger addend = BigInteger.valueOf(src_byte);
-				addend = addend.shiftLeft(max_bytes * 8 - offset);
-				src_word = src_word.add(addend);
-			}
-
-			for(int j = 0; j < code.length; j++)
-			{
-				BigInteger code_word = code[j];
-				BigInteger mask = BigInteger.ONE;
-				BigInteger addend = BigInteger.valueOf(2);
-				for(int k = 1; k < code_length[j]; k++)
-				{
-					mask = mask.add(addend);
-					addend = addend.multiply(BigInteger.valueOf(2));
-				}
-				BigInteger masked_src_word = src_word.and(mask);
-
-				if(code_word.compareTo(masked_src_word) == 0)
-				{
-					dst[dst_byte++] = inverse_table[j];
-					number_unpacked++;
-					current_bit += code_length[j];
-					current_byte = current_bit / 8;
-					offset = current_bit % 8;
-
-					break;
-				} else if(j == code.length - 1)
-				{
-					System.out.println("No match for prefix-free code.");
-				}
-			}
-		}
-
-		return number_unpacked;
-	}
-
-	public static long[] getUnaryCode(int n)
-	{
-		long[] code = new long[n];
-
-		code[0] = 0;
-
-		long addend = 1;
-		for(int i = 1; i < n; i++)
-		{
-			code[i] = code[i - 1] + addend;
-			addend *= 2;
-		}
-		return code;
-	}
-
-	public static BigInteger[] getBigUnaryCode(int n)
-	{
-		BigInteger[] code = new BigInteger[n];
-
-		code[0] = BigInteger.ZERO;
-		BigInteger addend = BigInteger.ONE;
-		for(int i = 1; i < n; i++)
-		{
-			BigInteger value = code[i - 1];
-			value = value.add(addend);
-			code[i] = value;
-			addend = addend.multiply(BigInteger.valueOf(2));
-		}
-		return code;
-	}
-
-	public static int[] getUnaryLength(int n)
-	{
-		int[] length = new int[n];
 		for(int i = 0; i < n; i++)
-			length[i] = i + 1;
-		length[n - 1]--;
-		return length;
+		{
+			cost += length[i] * frequency[i];
+		}
+		return cost;
 	}
 
+	/**
+	 * The coded size: the sum of length times count.
+	 *
+	 * @param length    the code lengths
+	 * @param frequency the counts, in the same order
+	 * @return the size in bits
+	 */
+	public static int getCost(byte[] length, int[] frequency)
+	{
+		int n = length.length;
+		int cost = 0;
+
+		for(int i = 0; i < n; i++)
+		{
+			cost += length[i] * frequency[i];
+		}
+		return cost;
+	}
+
+	/**
+	 * Huffman code lengths, computed in place (Moffat and Katajainen's method)
+	 * on a copy of the counts.
+	 *
+	 * @param frequency the counts, sorted largest first (at least two)
+	 * @return each count's code length, in the same order (so nondecreasing)
+	 */
 	public static byte[] getHuffmanLength2(int[] frequency)
 	{
 		// The in-place processing is one of the
@@ -1145,6 +223,12 @@ public class CodeMapper
 		return code_length;
 	}
 
+	/**
+	 * As {@link #getHuffmanLength2}, returning the lengths as ints.
+	 *
+	 * @param frequency the counts, sorted largest first (at least two)
+	 * @return each count's code length, in the same order (so nondecreasing)
+	 */
 	public static int[] getHuffmanLength(int[] frequency)
 	{
 		// The in-place processing is one of the
@@ -1234,6 +318,416 @@ public class CodeMapper
 		return w;
 	}
 
+	/* *****************************************************************************************************************/
+	/* "Regular" Huffman: canonical codes over the 256 byte values, from a block's own byte counts (a channel payload  */
+	/* or a packet). A block's table is its 256 code lengths (0 = not used), no rank table. Tables are Deflated        */
+	/* together (packRegularTables); coded lengths go in a varint column (packRegularLengths). Codes are MSB first.    */
+	/* *****************************************************************************************************************/
+
+	/**
+	 * Longest code allowed, so codes fit in an int. Longer codes are avoided by
+	 * halving the counts (used values stay &gt;= 1) and rebuilding.
+	 */
+	public static final int REGULAR_MAX_CODE_LENGTH = 24;
+
+	/**
+	 * Code length for each of the 256 byte values (0 = not used), from
+	 * {@link #getHuffmanLength2} applied to the used values' counts. No length is
+	 * over {@link #REGULAR_MAX_CODE_LENGTH}.
+	 *
+	 * @param frequency the count of each byte value (256 entries)
+	 * @return the code lengths (256 entries)
+	 */
+	public static byte[] getRegularHuffmanLength(int[] frequency)
+	{
+		int[] f = frequency.clone();
+		while(true)
+		{
+			byte[] length = buildRegularHuffmanLength(f);
+			int max = 0;
+			for(byte l : length)
+				if(l > max)
+					max = l;
+			if(max <= REGULAR_MAX_CODE_LENGTH)
+				return length;
+			for(int s = 0; s < 256; s++)
+				if(f[s] > 0)
+					f[s] = Math.max(1, f[s] / 2);
+		}
+	}
+
+	/**
+	 * One try at {@link #getRegularHuffmanLength}, with no limit on the length.
+	 * A single used value gets length 1.
+	 *
+	 * @param f the count of each byte value (256 entries)
+	 * @return the code lengths (256 entries)
+	 */
+	private static byte[] buildRegularHuffmanLength(int[] f)
+	{
+		byte[] length = new byte[256];
+		int used = 0;
+		for(int s = 0; s < 256; s++)
+			if(f[s] > 0)
+				used++;
+		if(used == 0)
+			return length;
+		if(used == 1)
+		{
+			for(int s = 0; s < 256; s++)
+				if(f[s] > 0)
+					length[s] = 1;
+			return length;
+		}
+
+		// getHuffmanLength2 wants the counts sorted from largest to smallest
+		// and returns the lengths in that same order.
+		Integer[] order = new Integer[used];
+		int k = 0;
+		for(int s = 0; s < 256; s++)
+			if(f[s] > 0)
+				order[k++] = s;
+		Arrays.sort(order, (a, b) -> f[a] != f[b] ? Integer.compare(f[b], f[a]) : Integer.compare(a, b));
+		int[] sorted = new int[used];
+		for(k = 0; k < used; k++)
+			sorted[k] = f[order[k]];
+		byte[] sorted_length = getHuffmanLength2(sorted);
+		for(k = 0; k < used; k++)
+			length[order[k]] = sorted_length[k];
+		return length;
+	}
+
+	/**
+	 * Counts the byte values in use.
+	 *
+	 * @param length the code lengths (256 entries)
+	 * @return how many byte values have a code
+	 */
+	private static int countUsedValues(byte[] length)
+	{
+		int used = 0;
+		for(byte l : length)
+			if(l > 0)
+				used++;
+		return used;
+	}
+
+	/**
+	 * Canonical codes: shorter codes first, and within a length, lower byte
+	 * values first.
+	 *
+	 * @param length the code lengths (256 entries, 0 = not used)
+	 * @return each byte value's code word (256 entries)
+	 */
+	public static int[] getRegularCanonicalCode(byte[] length)
+	{
+		int[] code = new int[256];
+		int next = 0;
+		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
+		{
+			for(int s = 0; s < 256; s++)
+				if(length[s] == len)
+					code[s] = next++;
+			next <<= 1;
+		}
+		return code;
+	}
+
+	/**
+	 * Huffman-codes a packet, most significant bit first. A packet that uses a
+	 * single byte value codes to nothing -- its table says it all.
+	 *
+	 * @param data   the bytes to code
+	 * @param length the code lengths (256 entries), from
+	 *               {@link #getRegularHuffmanLength}
+	 * @return the coded bytes
+	 * @see #unpackRegularCode
+	 */
+	public static byte[] packRegularCode(byte[] data, byte[] length)
+	{
+		if(countUsedValues(length) <= 1)
+			return new byte[0];
+		int[] code = getRegularCanonicalCode(length);
+		long bits = 0;
+		for(byte b : data)
+			bits += length[b & 0xFF];
+		byte[] dst = new byte[(int) ((bits + 7) / 8)];
+		long position = 0;
+		for(byte b : data)
+		{
+			int s = b & 0xFF, len = length[s], code_word = code[s];
+			for(int k = len - 1; k >= 0; k--, position++)
+				if(((code_word >>> k) & 1) != 0)
+					dst[(int) (position >>> 3)] |= (byte) (0x80 >>> (position & 7));
+		}
+		return dst;
+	}
+
+	/**
+	 * Decodes {@link #packRegularCode}'s output.
+	 *
+	 * @param src    the coded bytes
+	 * @param length the code lengths it was coded with (256 entries)
+	 * @param n      the number of bytes coded
+	 * @return the decoded bytes
+	 */
+	public static byte[] unpackRegularCode(byte[] src, byte[] length, int n)
+	{
+		byte[] dst = new byte[n];
+		if(countUsedValues(length) <= 1)
+		{
+			for(int s = 0; s < 256; s++)
+				if(length[s] > 0)
+					Arrays.fill(dst, (byte) s);
+			return dst;
+		}
+		// Per length: how many codes, the first code, and where its byte
+		// values start in the canonical order.
+		int[] count = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		for(byte l : length)
+			if(l > 0)
+				count[l]++;
+		int[] first_code  = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		int[] first_index = new int[REGULAR_MAX_CODE_LENGTH + 1];
+		int[] order       = new int[256];
+		int code_word = 0, index = 0;
+		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
+		{
+			first_code[len]  = code_word;
+			first_index[len] = index;
+			for(int s = 0; s < 256; s++)
+				if(length[s] == len)
+					order[index++] = s;
+			code_word = (code_word + count[len]) << 1;
+		}
+		long position = 0;
+		for(int k = 0; k < n; k++)
+		{
+			int c = 0;
+			for(int len = 1; ; len++)
+			{
+				c = (c << 1) | ((src[(int) (position >>> 3)] >>> (7 - (position & 7))) & 1);
+				position++;
+				int offset = c - first_code[len];
+				if(offset < count[len])
+				{
+					dst[k] = (byte) order[first_index[len] + offset];
+					break;
+				}
+			}
+		}
+		return dst;
+	}
+
+	/**
+	 * Coded size in bytes, without coding.
+	 *
+	 * @param frequency the count of each byte value (256 entries)
+	 * @param length    the code lengths (256 entries)
+	 * @return the size {@link #packRegularCode} would return
+	 */
+	public static long getRegularCodeBytes(int[] frequency, byte[] length)
+	{
+		if(countUsedValues(length) <= 1)
+			return 0;
+		long bits = 0;
+		for(int s = 0; s < 256; s++)
+			bits += (long) frequency[s] * length[s];
+		return (bits + 7) / 8;
+	}
+
+	/**
+	 * All of a channel's tables (256 bytes each), one after another, Deflated.
+	 *
+	 * @param table         the code length tables
+	 * @param deflate_level the Deflate level (0 to 9)
+	 * @return the Deflated bytes
+	 * @see #unpackRegularTables
+	 */
+	public static byte[] packRegularTables(byte[][] table, int deflate_level)
+	{
+		byte[] raw = new byte[table.length * 256];
+		for(int k = 0; k < table.length; k++)
+			System.arraycopy(table[k], 0, raw, k * 256, 256);
+		Deflater deflater = new Deflater(deflate_level);
+		deflater.setInput(raw);
+		deflater.finish();
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+		byte[] buffer = new byte[65536];
+		while(!deflater.finished())
+		{
+			int len = deflater.deflate(buffer);
+			out.write(buffer, 0, len);
+		}
+		deflater.end();
+		return out.toByteArray();
+	}
+
+	/**
+	 * Reads tables stored by {@link #packRegularTables}.
+	 *
+	 * @param packed the Deflated bytes
+	 * @param n      the number of tables
+	 * @return the tables (256 bytes each)
+	 * @throws DataFormatException if the data is not valid Deflate
+	 */
+	public static byte[][] unpackRegularTables(byte[] packed, int n) throws DataFormatException
+	{
+		byte[] raw = new byte[n * 256];
+		Inflater inflater = new Inflater();
+		inflater.setInput(packed);
+		int got = 0;
+		while(got < raw.length)
+		{
+			int len = inflater.inflate(raw, got, raw.length - got);
+			if(len == 0 && (inflater.finished() || inflater.needsInput()))
+				break;
+			got += len;
+		}
+		inflater.end();
+		byte[][] table = new byte[n][];
+		for(int k = 0; k < n; k++)
+			table[k] = Arrays.copyOfRange(raw, k * 256, k * 256 + 256);
+		return table;
+	}
+
+	/**
+	 * Each packet's coded length as a varint (7 bits per byte, low bits first;
+	 * high bit = more).
+	 *
+	 * @param coded the coded packets
+	 * @return the varints, one after another
+	 * @see #unpackRegularLengths
+	 */
+	public static byte[] packRegularLengths(byte[][] coded)
+	{
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+		for(byte[] c : coded)
+		{
+			int v = c.length;
+			while(v >= 128)
+			{
+				out.write((v & 127) | 128);
+				v >>>= 7;
+			}
+			out.write(v);
+		}
+		return out.toByteArray();
+	}
+
+	/**
+	 * Reads {@link #packRegularLengths}'s varints.
+	 *
+	 * @param packed the varints
+	 * @param n      how many to read
+	 * @return the lengths
+	 */
+	public static int[] unpackRegularLengths(byte[] packed, int n)
+	{
+		int[] length = new int[n];
+		int position = 0;
+		for(int k = 0; k < n; k++)
+		{
+			int v = 0, shift = 0, b;
+			do
+			{
+				b = packed[position++] & 0xFF;
+				v |= (b & 127) << shift;
+				shift += 7;
+			} while(b >= 128);
+			length[k] = v;
+		}
+		return length;
+	}
+
+	/**
+	 * How many bytes v takes as a varint (see {@link #packRegularLengths}).
+	 *
+	 * @param v a value, not negative
+	 * @return the number of bytes
+	 */
+	public static int getVarintBytes(long v)
+	{
+		int n = 1;
+		while(v >= 128)
+		{
+			v >>>= 7;
+			n++;
+		}
+		return n;
+	}
+
+	// ---- Deflate helpers -----------------------------------------------------
+
+	/**
+	 * Deflates all of src (looping until the stream is finished, so even tiny or
+	 * incompressible inputs come out whole).
+	 *
+	 * @param src   the bytes
+	 * @param level the Deflate level (0 to 9)
+	 * @return the Deflated bytes
+	 * @see #inflate
+	 */
+	public static byte[] deflate(byte[] src, int level)
+	{
+		Deflater deflater = new Deflater(level);
+		deflater.setInput(src);
+		deflater.finish();
+		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(src.length / 2 + 64);
+		byte[] buffer = new byte[65536];
+		while(!deflater.finished())
+		{
+			int n = deflater.deflate(buffer);
+			out.write(buffer, 0, n);
+		}
+		deflater.end();
+		return out.toByteArray();
+	}
+
+	/**
+	 * Inflates src into exactly n bytes.
+	 *
+	 * @param src the Deflated bytes
+	 * @param n   the number of bytes expected
+	 * @return the inflated bytes
+	 * @throws DataFormatException if the data is not valid Deflate or inflates
+	 *         to fewer than n bytes
+	 */
+	public static byte[] inflate(byte[] src, int n) throws DataFormatException
+	{
+		Inflater inflater = new Inflater();
+		inflater.setInput(src);
+		byte[] dst = new byte[n];
+		int    pos = 0;
+		while(pos < n && !inflater.finished())
+		{
+			int k = inflater.inflate(dst, pos, n - pos);
+			if(k == 0 && (inflater.needsInput() || inflater.needsDictionary())) break;
+			pos += k;
+		}
+		inflater.end();
+		if(pos < n) throw new DataFormatException("inflated " + pos + " of " + n + " bytes");
+		return dst;
+	}
+
+	/* *****************************************************************************************************************/
+	/* Ranked prefix codes: values are mapped to ranks by a rank table (most frequent first), and                      */
+	/* the code words, indexed by rank, can be any prefix-free code -- canonical Huffman codes or                      */
+	/* unary codes. Codes are packed least significant bit first, so canonical codes are stored                        */
+	/* bit-reversed.                                                                                                   */
+	/* *****************************************************************************************************************/
+
+	// ---- Canonical code words ------------------------------------------------
+
+	/**
+	 * Canonical code words for code lengths in nondecreasing order, bit-reversed
+	 * so that packing them least significant bit first
+	 * ({@link #packCode(byte[], int[], int[], byte[], byte[])}) writes each one
+	 * most significant bit first.
+	 *
+	 * @param length the code lengths, nondecreasing; the longest under 32 bits
+	 * @return the code words
+	 */
 	public static int[] getCanonicalCode(byte[] length)
 	{
 		int n = length.length;
@@ -1272,6 +766,12 @@ public class CodeMapper
 		return reversed_code;
 	}
 
+	/**
+	 * As {@link #getCanonicalCode(byte[])}, with the lengths as ints.
+	 *
+	 * @param length the code lengths, nondecreasing; the longest under 32 bits
+	 * @return the code words
+	 */
 	public static int[] getCanonicalCode(int[] length)
 	{
 		int n = length.length;
@@ -1310,6 +810,13 @@ public class CodeMapper
 		return reversed_code;
 	}
 
+	/**
+	 * As {@link #getCanonicalCode(int[])}, returning longs, for codes up to 63
+	 * bits long.
+	 *
+	 * @param length the code lengths, nondecreasing; the longest under 64 bits
+	 * @return the code words
+	 */
 	public static long[] getCanonicalCode2(int[] length)
 	{
 		int n = length.length;
@@ -1322,7 +829,7 @@ public class CodeMapper
 		shifted_code[0] = 0;
 		for(int i = 1; i < n; i++)
 		{
-			code[i] = (int) (code[i - 1] + Math.pow(2, max_length - length[i - 1]));
+			code[i] = code[i - 1] + (1L << (max_length - length[i - 1]));
 			int shift = max_length - length[i];
 			shifted_code[i] = code[i] >> shift;
 		}
@@ -1348,6 +855,12 @@ public class CodeMapper
 		return reversed_code;
 	}
 
+	/**
+	 * As {@link #getCanonicalCode(int[])}, for code words of any length.
+	 *
+	 * @param length the code lengths, nondecreasing
+	 * @return the code words
+	 */
 	public static BigInteger[] getBigCanonicalCode(int[] length)
 	{
 		int n = length.length;
@@ -1361,8 +874,7 @@ public class CodeMapper
 		for(int i = 1; i < n; i++)
 		{
 			code[i] = code[i - 1];
-			int j = (int) (Math.pow(2, max_length - length[i - 1]));
-			BigInteger addend = BigInteger.valueOf(j);
+			BigInteger addend = BigInteger.ONE.shiftLeft(max_length - length[i - 1]);
 			code[i] = code[i].add(addend);
 
 			int shift = max_length - length[i];
@@ -1392,6 +904,14 @@ public class CodeMapper
 		return reversed_code;
 	}
 
+	/**
+	 * The share of zero bits in a set of code words, each code word counted once.
+	 *
+	 * @param code      the code words
+	 * @param length    each code word's length in bits
+	 * @param frequency the counts (not used)
+	 * @return zero bits / all bits
+	 */
 	public static double getZeroRatio(int[] code, int[] length, int[] frequency)
 	{
 		int n = code.length;
@@ -1419,59 +939,1172 @@ public class CodeMapper
 		return ratio;
 	}
 
-	public static double log2(double value)
-	{
-		double result = (Math.log(value) / Math.log(2.));
-		return result;
-	}
+	// ---- Packing -------------------------------------------------------------
 
-	public static double getShannonLimit(int[] frequency)
+	/**
+	 * Packs src's code words into dst, least significant bit first.
+	 * <p>
+	 * Integer code words (longer than the 8-bit input) support unary string
+	 * coding, or any coding with codes longer than the input.
+	 *
+	 * @param src    the bytes to code
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words, as {@link #getCanonicalCode(byte[])} gives them
+	 * @param length each code word's length in bits
+	 * @param dst    the output; must be zeroed and large enough
+	 * @return the number of bits written
+	 */
+	public static int packCode(byte src[], int table[], int[] code, byte[] length, byte dst[])
 	{
-		int n = frequency.length;
-		int sum = 0;
-		for(int i = 0; i < n; i++)
-			sum += frequency[i];
-		double[] weight = new double[n];
-		for(int i = 0; i < n; i++)
+		int k = 0;
+		int current_bit = 0;
+
+		for(int i = 0; i < src.length; i++)
 		{
-			weight[i] = frequency[i];
-			weight[i] /= sum;
+			int j = src[i];
+			
+			if(j < 0)
+			    j += 256;
+
+			k     = table[j];
+
+			int code_word       = code[k];
+			int code_length     = length[k];
+			int offset          = current_bit % 8;
+			code_word         <<= offset;
+			int or_length       = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte    = current_bit / 8;
+			if(number_of_bytes == 1)
+				dst[current_byte] |= (byte) (code_word & 0x00ff);
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					dst[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				if(current_byte < dst.length)
+					dst[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
 		}
 
-		double limit = 0;
-		for(int i = 0; i < n; i++)
-		{
-			if(weight[i] != 0)
-				limit -= frequency[i] * log2(weight[i]);
-		}
-
-		return limit;
+		int bit_length = current_bit;
+		return bit_length;
 	}
 
-	public static int getCost(int[] length, int[] frequency)
+	/**
+	 * Packs src's code words, least significant bit first, into a new array
+	 * clipped to the bits written. Assumes the result is at most four times the
+	 * length of src.
+	 *
+	 * @param src    the bytes to code
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words, as {@link #getCanonicalCode(byte[])} gives them
+	 * @param length each code word's length in bits
+	 * @return [packed bytes (byte[]), bit length (Integer), table, code, length,
+	 *         number of values coded (Integer)], as {@link #unpackCode(ArrayList)}
+	 *         takes it
+	 */
+	public static ArrayList packCode(byte src[], int table[], int[] code, byte[] length)
 	{
-		int n = length.length;
-		int cost = 0;
+	    // Assume we are not expanding the source string.
+		byte [] buffer = new byte[src.length * 4];
+		
+		int n = code.length;
 
-		for(int i = 0; i < n; i++)
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
 		{
-			cost += length[i] * frequency[i];
+			int j = src[i];
+			if(j < 0)
+				j += 256;
+			if(j > table.length - 1)
+			{
+				// Don't see how this can happen, but setting it to the least probable
+				// value will prevent the program from halting.
+				System.out.println("Index is larger than rank table length.");
+				System.out.println("Index is " + j + ", rank table length is " + table.length);
+				System.out.println("Source length is " + src.length + ", source index is " + i);
+				j = table.length - 1;
+			}
+			
+			int k = table[j];
+			
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					buffer[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+			    }
+				buffer[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
 		}
-		return cost;
+		
+        // We do an extra copy to clip the string,
+		// but that's less expensive computationally than trying to 
+		// do a bit by bit parse into an exactly sized buffer for 
+		// the last source element and avoids a code-specific solution,
+		// for example, something that only works with Huffman codes.
+		int bitlength = current_bit;
+		int number_of_bytes = bitlength / 8;
+		if(bitlength % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = buffer[i];
+		
+		// Adding code along with length to keep it non-code specific.
+		// Most huffman coding schemes only need the code lengths.
+		ArrayList result = new ArrayList();
+		result.add(dst);
+		result.add(bitlength);
+		result.add(table);
+		result.add(code);
+		result.add(length);
+		result.add(src.length);
+	    
+		return    result;
 	}
 
-	public static int getCost(byte[] length, int[] frequency)
+	/**
+	 * As {@link #packCode(byte[], int[], int[], byte[])}, for integer values.
+	 *
+	 * @param src    the values to code (each a valid index into table)
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words
+	 * @param length each code word's length in bits
+	 * @return [packed bytes (byte[]), bit length (Integer), table, code, length,
+	 *         number of values coded (Integer)], as {@link #unpackCode2} takes it
+	 */
+	public static ArrayList packCode(int src[], int table[], int[] code, byte[] length)
 	{
-		int n = length.length;
-		int cost = 0;
+		byte [] buffer = new byte[src.length * 4];
+		
+		int n = code.length;
 
-		for(int i = 0; i < n; i++)
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
 		{
-			cost += length[i] * frequency[i];
+			int j = src[i];
+			int k = table[j];
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+			{
+				buffer[current_byte] |= (byte) (code_word & 0x00ff);	
+			}
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					buffer[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				buffer[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
 		}
-		return cost;
+		
+		// Clip the buffer data.
+		int bitlength = current_bit;
+		int number_of_bytes = bitlength / 8;
+		if(bitlength % 8 != 0)
+			number_of_bytes++;
+		byte [] dst = new byte[number_of_bytes];
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = buffer[i];
+		
+		ArrayList result = new ArrayList();
+		result.add(dst);
+		result.add(bitlength);
+		result.add(table);
+		result.add(code);
+		result.add(length);
+		result.add(src.length);
+	    
+		return    result;
 	}
 
+	/**
+	 * As {@link #packCode(byte[], int[], int[], byte[], byte[])}, for integer
+	 * values.
+	 *
+	 * @param src    the values to code (each a valid index into table)
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words
+	 * @param length each code word's length in bits
+	 * @param dst    the output; must be zeroed and large enough
+	 * @return the number of bits written
+	 */
+	public static int packCode(int src[], int table[], int[] code, byte[] length, byte dst[])
+	{
+		int n = code.length;
+
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			int k = table[j];
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+			{
+				dst[current_byte] |= (byte) (code_word & 0x00ff);	
+			}
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					dst[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				dst[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
+		}
+
+		int bit_length = current_bit;
+		return bit_length;
+	}
+
+	/**
+	 * As {@link #packCode(int[], int[], int[], byte[], byte[])}, with the
+	 * lengths as ints.
+	 *
+	 * @param src    the values to code (each a valid index into table)
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words
+	 * @param length each code word's length in bits
+	 * @param dst    the output; must be zeroed and large enough
+	 * @return the number of bits written
+	 */
+	public static int packCode(int src[], int table[], int[] code, int[] length, byte dst[])
+	{
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			int k = table[j];
+			int code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+
+			if(number_of_bytes == 1)
+				dst[current_byte] |= (byte) (code_word & 0x00ff);
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					dst[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				dst[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
+		}
+
+		int bit_length = current_bit;
+		return bit_length;
+	}
+
+	/**
+	 * As {@link #packCode(int[], int[], int[], int[], byte[])}, with code words up
+	 * to 64 bits.
+	 *
+	 * @param src    the values to code (each a valid index into table)
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words
+	 * @param length each code word's length in bits
+	 * @param dst    the output; must be zeroed and large enough
+	 * @return the number of bits written
+	 */
+	public static int packCode(int src[], int table[], long[] code, int[] length, byte dst[])
+	{
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			int k = table[j];
+			long code_word = code[k];
+			int code_length = length[k];
+			int offset = current_bit % 8;
+			code_word <<= offset;
+			int or_length = code_length + offset;
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+			int current_byte = current_bit / 8;
+			if(number_of_bytes == 1)
+				dst[current_byte] |= (byte) (code_word & 0x00ff);
+			else
+			{
+				for(int m = 0; m < number_of_bytes - 1; m++)
+				{
+					dst[current_byte] |= (byte) (code_word & 0x00ff);
+					current_byte++;
+					code_word >>= 8;
+				}
+				dst[current_byte] = (byte) (code_word & 0x00ff);
+			}
+			current_bit += code_length;
+		}
+
+		int bit_length = current_bit;
+		return bit_length;
+	}
+
+	/**
+	 * As {@link #packCode(int[], int[], int[], int[], byte[])}, with code words
+	 * of any length.
+	 *
+	 * @param src    the values to code (each a valid index into table)
+	 * @param table  the rank table: table[v] is the index in code and length of
+	 *               value v's code word (see {@code StringMapper.getRankTable})
+	 * @param code   the code words
+	 * @param length each code word's length in bits
+	 * @param dst    the output; must be zeroed and large enough
+	 * @return the number of bits written
+	 */
+	public static int packCode(int src[], int table[], BigInteger[] code, int[] length, byte dst[])
+	{
+		int current_bit = 0;
+		for(int i = 0; i < src.length; i++)
+		{
+			int j = src[i];
+			int k = table[j];
+
+			BigInteger code_word = code[k];
+			int code_length = length[k];
+
+			int shift = current_bit % 8;
+
+			code_word = code_word.shiftLeft(shift);
+
+			int or_length = code_length + shift;
+
+			int number_of_bytes = or_length / 8;
+			if(or_length % 8 != 0)
+				number_of_bytes++;
+
+			int current_byte = current_bit / 8;
+			shift = 0;
+
+			for(int m = 0; m < number_of_bytes; m++)
+			{
+				BigInteger shifted_code_word = code_word.shiftRight(shift);
+
+				long mask_value   = 255;
+				BigInteger mask   = BigInteger.ONE;
+				mask              = mask.valueOf(mask_value);
+				shifted_code_word = shifted_code_word.and(mask);
+				try
+				{
+					mask_value = 1;
+					for(int n = 0; n < 8; n++)
+					{
+						mask = mask.valueOf(mask_value);
+						BigInteger bit_value = shifted_code_word.and(mask);
+						if(bit_value.compareTo(BigInteger.ZERO) != 0)
+						{
+							byte byte_mask = (byte) mask_value;
+							dst[current_byte] |= byte_mask;
+						}
+
+						mask_value *= 2;
+					}
+					current_byte++;
+					shift += 8;
+				} 
+				catch (Exception e)
+				{
+					System.out.println(e.toString());
+
+					current_byte++;
+					shift += 8;
+				}
+			}
+			current_bit += code_length;
+		}
+
+		int bit_length = current_bit;
+		return bit_length;
+	}
+
+	// ---- Unpacking -----------------------------------------------------------
+
+	/**
+	 * Unpacks code words packed by
+	 * {@link #packCode(byte[], int[], int[], byte[], byte[])}: byte input, byte
+	 * output.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param src         the packed bits
+	 * @param table       the rank table the codes were packed with: table[v] is
+	 *                    value v's index in code and code_length
+	 * @param code        the code words
+	 * @param code_length each code word's length in bits
+	 * @param bit_length  the number of bits packed (not used: dst's length says
+	 *                    how many values to unpack)
+	 * @param dst         the output; its length is the number of values
+	 * @return the number of values unpacked
+	 */
+	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, byte[] dst)
+	{
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+
+		int[] buffer = new int[dst.length];
+
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+
+		int current_bit = 0;
+		int offset = 0;
+		int current_byte = 0;
+		int number_unpacked = 0;
+		int dst_byte = 0;
+
+		for(int i = 0; i < dst.length; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask = -1;
+				mask <<= code_length[j];
+				mask = ~mask;
+
+				int masked_src_word  = src_word & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					buffer[dst_byte++] = inverse_table[j];
+					number_unpacked++;
+					current_bit += code_length[j];
+					current_byte = current_bit / 8;
+					offset = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+					System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+      
+		for(int i = 0; i < dst.length; i++)
+			dst[i] = (byte) (buffer[i]);
+		return number_unpacked;
+	}
+
+	/**
+	 * Unpacks {@link #packCode(byte[], int[], int[], byte[])}'s result, printing
+	 * the table sizes as it starts.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param pack_list [packed bytes, bit length, table, code, code lengths,
+	 *                  number of values], as packCode returns it
+	 * @return the unpacked bytes
+	 */
+	public static byte [] unpackCode(ArrayList pack_list)
+	{
+		byte [] src         = (byte [])pack_list.get(0);
+		int     bitlength   = (int)    pack_list.get(1);
+		int  [] table       = (int []) pack_list.get(2);
+		int  [] code        = (int []) pack_list.get(3);
+		byte [] code_length = (byte [])pack_list.get(4);
+		int     n           = (int)    pack_list.get(5);
+		
+		System.out.println("Table length is " + table.length);
+		System.out.println("Code length is " + code.length);
+		System.out.println("Code length length is " + code_length.length);
+		System.out.println("Number of output bytes is " + n);
+		System.out.println();
+		
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+		
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
+		int dst_byte        = 0;
+		
+		byte [] dst = new byte[n];
+		for(int i = 0; i < n; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
+
+				int masked_src_word  = src_word  & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = (byte)inverse_table[j];
+					current_bit    += code_length[j];
+					current_byte    = current_bit / 8;
+					offset          = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+	    	return dst;
+	}
+
+	/**
+	 * Unpacks {@link #packCode(int[], int[], int[], byte[])}'s result to
+	 * integer values.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param pack_list [packed bytes, bit length, table, code, code lengths,
+	 *                  number of values], as packCode returns it
+	 * @return the unpacked values
+	 */
+	public static int [] unpackCode2(ArrayList pack_list)
+	{
+		byte [] src         = (byte [])pack_list.get(0);
+		int     bitlength   = (int)    pack_list.get(1);
+		int  [] table       = (int []) pack_list.get(2);
+		int  [] code        = (int []) pack_list.get(3);
+		byte [] code_length = (byte [])pack_list.get(4);
+		int     n           = (int)    pack_list.get(5);
+		
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+		
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
+		int dst_byte        = 0;
+		
+		int [] dst = new int[n];
+		for(int i = 0; i < n; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
+
+				int masked_src_word  = src_word  & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					current_bit    += code_length[j];
+					current_byte    = current_bit / 8;
+					offset          = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+	    	return dst;
+	}
+
+	/**
+	 * Unpacks code words to integer values: byte input, integer output. This is
+	 * the method used in HuffmanWriter.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param src         the packed bits
+	 * @param table       the rank table the codes were packed with: table[v] is
+	 *                    value v's index in code and code_length
+	 * @param code        the code words
+	 * @param code_length each code word's length in bits
+	 * @param bit_length  the number of bits packed (not used)
+	 * @param dst         the output; its length is the number of values
+	 * @return the number of values unpacked
+	 */
+	public static int unpackCode(byte[] src, int[] table, int[] code, byte[] code_length, int bit_length, int[] dst)
+	{
+		int[] inverse_table = new int[table.length];
+		for(int i = 0; i < table.length; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+		
+		int current_bit     = 0;
+		int offset          = 0;
+		int current_byte    = 0;
+		int number_unpacked = 0;
+		int dst_byte        = 0;
+
+		for(int i = 0; i < dst.length; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask      = -1;
+				mask        <<= code_length[j];
+				mask          = ~mask;
+
+				int masked_src_word  = src_word  & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					number_unpacked++;
+					
+					current_bit += code_length[j];
+					current_byte = current_bit / 8;
+					offset       = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+			        	System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+		return number_unpacked;
+	}
+
+	/**
+	 * As {@link #unpackCode(byte[], int[], int[], byte[], int, int[])}, with the
+	 * lengths as ints.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param src         the packed bits
+	 * @param table       the rank table the codes were packed with: table[v] is
+	 *                    value v's index in code and code_length
+	 * @param code        the code words
+	 * @param code_length each code word's length in bits
+	 * @param bit_length  the number of bits packed (not used)
+	 * @param dst         the output; its length is the number of values
+	 * @return the number of values unpacked
+	 */
+	public static int unpackCode(byte src[], int table[], int[] code, int[] code_length, int bit_length, int dst[])
+	{
+		int number_of_different_values = table.length;
+		int[] inverse_table = new int[number_of_different_values];
+		for(int i = 0; i < number_of_different_values; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+
+		int current_bit = 0;
+		int offset = 0;
+		int current_byte = 0;
+		int number_unpacked = 0;
+		int dst_byte = 0;
+
+		for(int i = 0; i < dst.length; i++)
+		{
+			int src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				int index = current_byte + j;
+
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+					if(j == 0)
+						src_byte >>= offset;
+					else
+						src_byte <<= j * 8 - offset;
+					src_word |= src_byte;
+				}
+			}
+
+			if(offset != 0)
+			{
+				int index = current_byte + max_bytes;
+				if(index < src.length)
+				{
+					int src_byte = (int) src[index];
+					if(src_byte < 0)
+						src_byte += 256;
+
+					src_byte <<= max_bytes * 8 - offset;
+
+					src_word |= src_byte;
+				}
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				int code_word = code[j];
+				int mask = -1;
+				mask <<= code_length[j];
+				mask = ~mask;
+
+				int masked_src_word = src_word & mask;
+				int masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					number_unpacked++;
+					current_bit += code_length[j];
+					current_byte = current_bit / 8;
+					offset = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+					System.out.println("No match for prefix-free code at byte " + current_byte);
+			}
+		}
+
+		return number_unpacked;
+	}
+
+	/**
+	 * As {@link #unpackCode(byte[], int[], int[], int[], int, int[])}, with code
+	 * words up to 64 bits.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param src         the packed bits
+	 * @param table       the rank table the codes were packed with: table[v] is
+	 *                    value v's index in code and code_length
+	 * @param code        the code words
+	 * @param code_length each code word's length in bits
+	 * @param bit_length  the number of bits packed (not used)
+	 * @param dst         the output; its length is the number of values
+	 * @return the number of values unpacked
+	 */
+	public static int unpackCode(byte src[], int table[], long[] code, int[] code_length, int bit_length, int dst[])
+	{
+		int number_of_different_values = table.length;
+		int[] inverse_table = new int[number_of_different_values];
+		for(int i = 0; i < number_of_different_values; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+
+		int current_bit = 0;
+		int offset = 0;
+		int current_byte = 0;
+		int number_unpacked = 0;
+		int dst_byte = 0;
+
+		for(int i = 0; i < dst.length; i++)
+		{
+			long src_word = 0;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				long src_byte = (long) src[current_byte + j];
+				if(src_byte < 0)
+					src_byte += 256;
+				if(j == 0)
+					src_byte >>= offset;
+				else
+					src_byte <<= j * 8 - offset;
+				src_word |= src_byte;
+			}
+
+			if(offset != 0)
+			{
+				long src_byte = (long) src[current_byte + max_bytes];
+				if(src_byte < 0)
+					src_byte += 256;
+
+				src_byte <<= max_bytes * 8 - offset;
+
+				src_word |= src_byte;
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				long code_word = code[j];
+				long mask = -1;
+				mask <<= code_length[j];
+				mask = ~mask;
+
+				long masked_src_word = src_word & mask;
+				long masked_code_word = code_word & mask;
+
+				if(masked_src_word == masked_code_word)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					number_unpacked++;
+					current_bit += code_length[j];
+					current_byte = current_bit / 8;
+					offset = current_bit % 8;
+					break;
+				} 
+				else if(j == code.length - 1)
+				{
+					System.out.println("No match for prefix-free code at byte " + current_byte);
+				}
+			}
+		}
+		return number_unpacked;
+	}
+
+	/**
+	 * As {@link #unpackCode(byte[], int[], int[], int[], int, int[])}, with code
+	 * words of any length.
+	 * <p>
+	 * Each code word is found by trying the codes in order, so they should be
+	 * in order of nondecreasing length (as {@link #getCanonicalCode(byte[])}
+	 * gives them); the last length is taken as the longest. A position that
+	 * matches no code prints a message and is skipped.
+	 *
+	 * @param src         the packed bits
+	 * @param table       the rank table the codes were packed with: table[v] is
+	 *                    value v's index in code and code_length
+	 * @param code        the code words
+	 * @param code_length each code word's length in bits
+	 * @param bit_length  the number of bits packed (not used)
+	 * @param dst         the output; its length is the number of values
+	 * @return the number of values unpacked
+	 */
+	public static int unpackCode(byte src[], int table[], BigInteger[] code, int[] code_length, int bit_length, int dst[])
+	{
+		int number_of_different_values = table.length;
+		int[] inverse_table = new int[number_of_different_values];
+		for(int i = 0; i < number_of_different_values; i++)
+		{
+			int j = table[i];
+			inverse_table[j] = i;
+		}
+
+		int max_length = code_length[code.length - 1];
+		int max_bytes = max_length / 8;
+		if(max_length % 8 != 0)
+			max_bytes++;
+
+		int current_bit = 0;
+		int offset = 0;
+		int current_byte = 0;
+		int number_unpacked = 0;
+		int dst_byte = 0;
+
+		for(int i = 0; i < dst.length; i++)
+		{
+			BigInteger src_word = BigInteger.ZERO;
+
+			for(int j = 0; j < max_bytes; j++)
+			{
+				long src_byte = (long) src[current_byte + j];
+				if(src_byte < 0)
+					src_byte += 256;
+
+				BigInteger addend = BigInteger.valueOf(src_byte);
+				if(j == 0)
+					addend = addend.shiftRight(offset);
+				else
+					addend = addend.shiftLeft(j * 8 - offset);
+				src_word = src_word.add(addend);
+			}
+
+			if(offset != 0)
+			{
+				long src_byte = (long) src[current_byte + max_bytes];
+				if(src_byte < 0)
+					src_byte += 256;
+				BigInteger addend = BigInteger.valueOf(src_byte);
+				addend = addend.shiftLeft(max_bytes * 8 - offset);
+				src_word = src_word.add(addend);
+			}
+
+			for(int j = 0; j < code.length; j++)
+			{
+				BigInteger code_word = code[j];
+				BigInteger mask = BigInteger.ONE;
+				BigInteger addend = BigInteger.valueOf(2);
+				for(int k = 1; k < code_length[j]; k++)
+				{
+					mask = mask.add(addend);
+					addend = addend.multiply(BigInteger.valueOf(2));
+				}
+				BigInteger masked_src_word = src_word.and(mask);
+
+				if(code_word.compareTo(masked_src_word) == 0)
+				{
+					dst[dst_byte++] = inverse_table[j];
+					number_unpacked++;
+					current_bit += code_length[j];
+					current_byte = current_bit / 8;
+					offset = current_bit % 8;
+
+					break;
+				} else if(j == code.length - 1)
+				{
+					System.out.println("No match for prefix-free code.");
+				}
+			}
+		}
+
+		return number_unpacked;
+	}
+
+	// ---- Code length tables --------------------------------------------------
+
+	/**
+	 * A compact form of a nondecreasing table of code lengths: the first length,
+	 * then the differences between neighbours, packed 1, 2 or 4 bits each when the
+	 * largest difference is 1, 2, or 3 or 4, and one byte each otherwise.
+	 *
+	 * @param length the code lengths, nondecreasing (at least one)
+	 * @return [n (Integer), first length (Byte), largest difference (Byte),
+	 *         packed differences (byte[])]
+	 * @see #unpackLengthTable(ArrayList)
+	 */
 	public static ArrayList packLengthTable(byte[] length)
 	{
 		ArrayList result = new ArrayList();
@@ -1540,7 +2173,7 @@ public class CodeMapper
 			}
 			result.add(packed_length);
 		} 
-		else if(max_delta == 3)
+		else if(max_delta == 3 || max_delta == 4)
 		{
 			int byte_length = (n - 1) / 2;
 			if((n - 1) % 2 != 0)
@@ -1573,6 +2206,15 @@ public class CodeMapper
 		return result;
 	}
 
+	/**
+	 * Rebuilds a table of code lengths from {@link #packLengthTable}'s result.
+	 * Prints a message, and returns zeros, if the packed differences are the
+	 * wrong length.
+	 *
+	 * @param length_list [n, first length, largest difference, packed
+	 *                    differences], as packLengthTable returns it
+	 * @return the code lengths
+	 */
 	public static byte[] unpackLengthTable(ArrayList length_list)
 	{
 		int n = (int) length_list.get(0);
@@ -1690,6 +2332,15 @@ public class CodeMapper
 		return length;
 	}
 
+	/**
+	 * As {@link #unpackLengthTable(ArrayList)}, with the parts given separately.
+	 *
+	 * @param n            the number of lengths
+	 * @param init_value   the first length
+	 * @param max_delta    the largest difference between neighbours
+	 * @param packed_delta the packed differences
+	 * @return the code lengths
+	 */
 	public static byte[] unpackLengthTable(int n, byte init_value, byte max_delta, byte[] packed_delta)
 	{
 		byte[] length = new byte[n];
@@ -1799,9 +2450,17 @@ public class CodeMapper
 		}
 		return length;
 	}
-	
-	
-	
+
+	// ---- Whole-string conveniences -------------------------------------------
+
+	/**
+	 * A Huffman code for a byte string, from its own byte counts, without coding
+	 * it.
+	 *
+	 * @param string the bytes
+	 * @return [estimated bit length (Integer), Shannon limit in bits (Double),
+	 *         rank table (int[]), code words (int[]), code lengths (byte[])]
+	 */
 	public static ArrayList getHuffmanList(byte[] string)
 	{
 		ArrayList list = new ArrayList();
@@ -1850,6 +2509,15 @@ public class CodeMapper
 		return list;
 	}
 
+	/**
+	 * Huffman-codes a byte string from its own byte counts, printing the
+	 * estimated and actual bit lengths.
+	 *
+	 * @param string the bytes
+	 * @return [bit length (Integer), rank table (int[]), code words (int[]), code
+	 *         lengths (byte[]), packed lengths ({@link #packLengthTable}'s
+	 *         result), packed bytes (byte[])]
+	 */
 	public static ArrayList getHuffmanList2(byte[] string)
 	{
 		ArrayList list = new ArrayList();
@@ -1908,297 +2576,113 @@ public class CodeMapper
 		return list;
 	}
 
-	/********************************************************************************************************************/
-	/* "Regular" Huffman: canonical codes over the 256 byte values, from a block's own byte counts (a channel payload  */
-	/* or a packet). A block's table is its 256 code lengths (0 = not used), no rank table. Tables are Deflated        */
-	/* together (packRegularTables); coded lengths go in a varint column (packRegularLengths). Codes are MSB first.    */
-	/********************************************************************************************************************/
-
-	// Longest code allowed, so codes fit in an int. Longer codes are avoided
-	// by halving the counts (used values stay >= 1) and rebuilding.
-	public static final int REGULAR_MAX_CODE_LENGTH = 24;
-
-	// Code length for each of the 256 byte values (0 = not used), from
-	// getHuffmanLength2 applied to the used values' counts.
-	public static byte[] getRegularHuffmanLength(int[] frequency)
+	/**
+	 * The size src would Huffman-code to, from its own histogram.
+	 *
+	 * @param src the bytes
+	 * @return the coded size in bits (not counting the table)
+	 */
+	public static int getHuffmanBitlength(byte [] src)
 	{
-		int[] f = frequency.clone();
-		while(true)
-		{
-			byte[] length = buildRegularHuffmanLength(f);
-			int max = 0;
-			for(byte l : length)
-				if(l > max)
-					max = l;
-			if(max <= REGULAR_MAX_CODE_LENGTH)
-				return length;
-			for(int s = 0; s < 256; s++)
-				if(f[s] > 0)
-					f[s] = Math.max(1, f[s] / 2);
-		}
+		ArrayList histogram_list = StringMapper.getHistogram(src);
+		int []    histogram      = (int[])histogram_list.get(1);
+		
+		int n = histogram.length;
+		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	    frequency[k] = frequency_list.get(k);
+	    byte [] huffman_length = getHuffmanLength2(frequency);
+	    int bitlength = getCost(huffman_length, frequency);
+		return bitlength;
 	}
 
-	private static byte[] buildRegularHuffmanLength(int[] f)
+	/**
+	 * The size src would Huffman-code to, from its own histogram.
+	 *
+	 * @param src the values
+	 * @return the coded size in bits (not counting the table)
+	 */
+	public static int getHuffmanBitlength(int [] src)
 	{
-		byte[] length = new byte[256];
-		int used = 0;
-		for(int s = 0; s < 256; s++)
-			if(f[s] > 0)
-				used++;
-		if(used == 0)
-			return length;
-		if(used == 1)
-		{
-			for(int s = 0; s < 256; s++)
-				if(f[s] > 0)
-					length[s] = 1;
-			return length;
-		}
-
-		// getHuffmanLength2 wants the counts sorted from largest to smallest
-		// and returns the lengths in that same order.
-		Integer[] order = new Integer[used];
-		int k = 0;
-		for(int s = 0; s < 256; s++)
-			if(f[s] > 0)
-				order[k++] = s;
-		Arrays.sort(order, (a, b) -> f[a] != f[b] ? Integer.compare(f[b], f[a]) : Integer.compare(a, b));
-		int[] sorted = new int[used];
-		for(k = 0; k < used; k++)
-			sorted[k] = f[order[k]];
-		byte[] sorted_length = getHuffmanLength2(sorted);
-		for(k = 0; k < used; k++)
-			length[order[k]] = sorted_length[k];
-		return length;
+		ArrayList histogram_list = StringMapper.getHistogram(src);
+		int []    histogram      = (int[])histogram_list.get(1);
+		
+		int n = histogram.length;
+		ArrayList <Integer> frequency_list = new ArrayList <Integer>();
+	    for(int k = 0; k < n; k++)
+	        frequency_list.add(histogram[k]);
+	    Collections.sort(frequency_list, Comparator.reverseOrder());
+	    int [] frequency = new int[n];
+	    for(int k = 0; k < n; k++)
+	    	    frequency[k] = frequency_list.get(k);
+	    byte [] huffman_length = getHuffmanLength2(frequency);
+	    int bitlength = getCost(huffman_length, frequency);
+		return bitlength;
 	}
 
-	private static int countUsedValues(byte[] length)
-	{
-		int used = 0;
-		for(byte l : length)
-			if(l > 0)
-				used++;
-		return used;
-	}
+	// ---- Unary codes ---------------------------------------------------------
 
-	// Canonical codes: shorter codes first, and within a length, lower byte
-	// values first.
-	public static int[] getRegularCanonicalCode(byte[] length)
+	/**
+	 * Unary code words for n values: value i is i one bits, then a zero (except
+	 * the last, which needs no terminating zero). Use with
+	 * {@link #getUnaryLength}.
+	 *
+	 * @param n the number of values (at most 64)
+	 * @return the code words: code[i] = 2<sup>i</sup> - 1
+	 */
+	public static long[] getUnaryCode(int n)
 	{
-		int[] code = new int[256];
-		int next = 0;
-		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
+		long[] code = new long[n];
+
+		code[0] = 0;
+
+		long addend = 1;
+		for(int i = 1; i < n; i++)
 		{
-			for(int s = 0; s < 256; s++)
-				if(length[s] == len)
-					code[s] = next++;
-			next <<= 1;
+			code[i] = code[i - 1] + addend;
+			addend *= 2;
 		}
 		return code;
 	}
 
-	// Huffman-codes a packet. A packet that uses a single byte value codes to
-	// nothing -- its table says it all.
-	public static byte[] packRegularCode(byte[] data, byte[] length)
+	/**
+	 * As {@link #getUnaryCode}, for any number of values.
+	 *
+	 * @param n the number of values
+	 * @return the code words: code[i] = 2<sup>i</sup> - 1
+	 */
+	public static BigInteger[] getBigUnaryCode(int n)
 	{
-		if(countUsedValues(length) <= 1)
-			return new byte[0];
-		int[] code = getRegularCanonicalCode(length);
-		long bits = 0;
-		for(byte b : data)
-			bits += length[b & 0xFF];
-		byte[] dst = new byte[(int) ((bits + 7) / 8)];
-		long position = 0;
-		for(byte b : data)
+		BigInteger[] code = new BigInteger[n];
+
+		code[0] = BigInteger.ZERO;
+		BigInteger addend = BigInteger.ONE;
+		for(int i = 1; i < n; i++)
 		{
-			int s = b & 0xFF, len = length[s], code_word = code[s];
-			for(int k = len - 1; k >= 0; k--, position++)
-				if(((code_word >>> k) & 1) != 0)
-					dst[(int) (position >>> 3)] |= (byte) (0x80 >>> (position & 7));
+			BigInteger value = code[i - 1];
+			value = value.add(addend);
+			code[i] = value;
+			addend = addend.multiply(BigInteger.valueOf(2));
 		}
-		return dst;
+		return code;
 	}
 
-	public static byte[] unpackRegularCode(byte[] src, byte[] length, int n)
-	{
-		byte[] dst = new byte[n];
-		if(countUsedValues(length) <= 1)
-		{
-			for(int s = 0; s < 256; s++)
-				if(length[s] > 0)
-					Arrays.fill(dst, (byte) s);
-			return dst;
-		}
-		// Per length: how many codes, the first code, and where its byte
-		// values start in the canonical order.
-		int[] count = new int[REGULAR_MAX_CODE_LENGTH + 1];
-		for(byte l : length)
-			if(l > 0)
-				count[l]++;
-		int[] first_code  = new int[REGULAR_MAX_CODE_LENGTH + 1];
-		int[] first_index = new int[REGULAR_MAX_CODE_LENGTH + 1];
-		int[] order       = new int[256];
-		int code_word = 0, index = 0;
-		for(int len = 1; len <= REGULAR_MAX_CODE_LENGTH; len++)
-		{
-			first_code[len]  = code_word;
-			first_index[len] = index;
-			for(int s = 0; s < 256; s++)
-				if(length[s] == len)
-					order[index++] = s;
-			code_word = (code_word + count[len]) << 1;
-		}
-		long position = 0;
-		for(int k = 0; k < n; k++)
-		{
-			int c = 0;
-			for(int len = 1; ; len++)
-			{
-				c = (c << 1) | ((src[(int) (position >>> 3)] >>> (7 - (position & 7))) & 1);
-				position++;
-				int offset = c - first_code[len];
-				if(offset < count[len])
-				{
-					dst[k] = (byte) order[first_index[len] + offset];
-					break;
-				}
-			}
-		}
-		return dst;
-	}
-
-	// Coded size in bytes, without coding.
-	public static long getRegularCodeBytes(int[] frequency, byte[] length)
-	{
-		if(countUsedValues(length) <= 1)
-			return 0;
-		long bits = 0;
-		for(int s = 0; s < 256; s++)
-			bits += (long) frequency[s] * length[s];
-		return (bits + 7) / 8;
-	}
-
-	// All of a channel's tables (256 bytes each), one after another, Deflated.
-	public static byte[] packRegularTables(byte[][] table, int deflate_level)
-	{
-		byte[] raw = new byte[table.length * 256];
-		for(int k = 0; k < table.length; k++)
-			System.arraycopy(table[k], 0, raw, k * 256, 256);
-		Deflater deflater = new Deflater(deflate_level);
-		deflater.setInput(raw);
-		deflater.finish();
-		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-		byte[] buffer = new byte[65536];
-		while(!deflater.finished())
-		{
-			int len = deflater.deflate(buffer);
-			out.write(buffer, 0, len);
-		}
-		deflater.end();
-		return out.toByteArray();
-	}
-
-	public static byte[][] unpackRegularTables(byte[] packed, int n) throws DataFormatException
-	{
-		byte[] raw = new byte[n * 256];
-		Inflater inflater = new Inflater();
-		inflater.setInput(packed);
-		int got = 0;
-		while(got < raw.length)
-		{
-			int len = inflater.inflate(raw, got, raw.length - got);
-			if(len == 0 && (inflater.finished() || inflater.needsInput()))
-				break;
-			got += len;
-		}
-		inflater.end();
-		byte[][] table = new byte[n][];
-		for(int k = 0; k < n; k++)
-			table[k] = Arrays.copyOfRange(raw, k * 256, k * 256 + 256);
-		return table;
-	}
-
-	// Each packet's coded length as a varint (7 bits per byte, high bit = more).
-	public static byte[] packRegularLengths(byte[][] coded)
-	{
-		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-		for(byte[] c : coded)
-		{
-			int v = c.length;
-			while(v >= 128)
-			{
-				out.write((v & 127) | 128);
-				v >>>= 7;
-			}
-			out.write(v);
-		}
-		return out.toByteArray();
-	}
-
-	public static int[] unpackRegularLengths(byte[] packed, int n)
+	/**
+	 * The lengths of the unary code words from {@link #getUnaryCode}.
+	 *
+	 * @param n the number of values
+	 * @return length[i] = i + 1, except the last, n - 1
+	 */
+	public static int[] getUnaryLength(int n)
 	{
 		int[] length = new int[n];
-		int position = 0;
-		for(int k = 0; k < n; k++)
-		{
-			int v = 0, shift = 0, b;
-			do
-			{
-				b = packed[position++] & 0xFF;
-				v |= (b & 127) << shift;
-				shift += 7;
-			} while(b >= 128);
-			length[k] = v;
-		}
+		for(int i = 0; i < n; i++)
+			length[i] = i + 1;
+		length[n - 1]--;
 		return length;
-	}
-
-	public static int getVarintBytes(long v)
-	{
-		int n = 1;
-		while(v >= 128)
-		{
-			v >>>= 7;
-			n++;
-		}
-		return n;
-	}
-
-	// ---- Deflate helpers -----------------------------------------------------
-
-	// Deflates all of src (looping until the stream is finished, so even
-	// tiny or incompressible inputs come out whole).
-	public static byte[] deflate(byte[] src, int level)
-	{
-		Deflater deflater = new Deflater(level);
-		deflater.setInput(src);
-		deflater.finish();
-		java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(src.length / 2 + 64);
-		byte[] buffer = new byte[65536];
-		while(!deflater.finished())
-		{
-			int n = deflater.deflate(buffer);
-			out.write(buffer, 0, n);
-		}
-		deflater.end();
-		return out.toByteArray();
-	}
-
-	// Inflates src into exactly n bytes.
-	public static byte[] inflate(byte[] src, int n) throws DataFormatException
-	{
-		Inflater inflater = new Inflater();
-		inflater.setInput(src);
-		byte[] dst = new byte[n];
-		int    pos = 0;
-		while(pos < n && !inflater.finished())
-		{
-			int k = inflater.inflate(dst, pos, n - pos);
-			if(k == 0 && (inflater.needsInput() || inflater.needsDictionary())) break;
-			pos += k;
-		}
-		inflater.end();
-		if(pos < n) throw new DataFormatException("inflated " + pos + " of " + n + " bytes");
-		return dst;
 	}
 }

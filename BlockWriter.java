@@ -5,25 +5,57 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.0
+// BlockWriter version 2.5 (writes Block format 9: mixed context coding with
+// second opinions, a block size per channel, the 225-entry predictor table;
+// or format 10, the same in bands)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
-// type 13) with Context-coded deltas (DeltaMapper.packContextDeltas) and a
-// coded map. Each block uses one predictor from its channel's set, and a
-// set can be any of the 255 predictors in DeltaMapper.PREDICTOR_TABLE. The
-// startup analysis (and Find Best) picks the channel set, then surveys the
-// sets (DeltaMapper.surveyBlockSets: per channel, predictors added in
-// greedy order by estimated coded bits, blocks assigned by the estimate,
-// and the real coded size measured), and also codes with each
-// named set (DeltaMapper.findBestBlock); it keeps whichever is smallest --
-// actual sizes, not estimates. Files are read by BlockReader.
+// type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
+// and a coded map. Each block uses one predictor from its channel's set, and a
+// set can be any of the 225 predictors in DeltaMapper.PREDICTOR_TABLE (id
+// 223 is the least-squares predictor, LS: see DeltaMapper.LeastSquares; 224
+// the same fit with a wider clamp).
+// There are no block settings to choose: the survey makes them from the
+// predictor table alone. It picks the channel set, then, channel by
+// channel, the block size (a square of 4, 6, 8, 12 or 16) and the predictor set
+// that code the channel smallest (DeltaMapper.surveyChannels: predictors
+// added in greedy order by estimated coded bits, the estimate's reference
+// deltas from the whole table, blocks assigned by the estimate, and the real
+// coded size measured at each count). It runs at startup and again after
+// any change to the quantization (Pixel Resolution or Color Resolution).
+// The survey measures sizes with the Context coder
+// (DeltaMapper.packContextDeltas); the file uses the mixed coder, with its
+// contexts split by second opinions (how far GAP/8, MED and the left pixel
+// lie from the block's prediction), about 3% smaller. File > Bands splits
+// the image into up to MAX_BANDS bands of rows that a reader can decode at
+// the same time (format 10), for about a byte per column per band boundary;
+// with 1 (the default) Save writes format 9.
+// Files are read by BlockReader.
 public class BlockWriter
 {
 	// File format: every file starts with FORMAT_ID ('B' = Block format) and
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 3;   // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE) and cross-channel block maps
+	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
+	/**
+	 * The version written with one band: the layout before bands.
+	 */
+	static final int  ONE_BAND_VERSION = 9;
+	/**
+	 * The most bands Save offers.
+	 */
+	static final int  MAX_BANDS = 16;
+	/**
+	 * The fewest rows (of the quantized image) a band may have: smaller images
+	 * get fewer bands.
+	 */
+	static final int  BAND_MIN_ROWS = 64;
+	/**
+	 * Roughly what each band boundary costs, in tenths of a byte per column
+	 * (measured: 0.8 to 1.6 bytes per column); for the Bands estimate only.
+	 */
+	static final int  BAND_COST_TENTHS = 13;
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -38,25 +70,69 @@ public class BlockWriter
 	int pixel_shift = 3;
 	int correction  = 0;
 	int min_set_id  = 0;
-	int block_size  = DeltaMapper.BLOCK_DEFAULT;
-	int block_set   = 0;          // a named set (DeltaMapper.BLOCK_SET_NAMES), or SURVEYED
-	int[][] survey_ids = null;    // each channel's surveyed predictor ids (the last analysis)
-	static final int SURVEYED = -1;
+	/**
+	 * How many independently decodable bands Save writes (1: one, format 9);
+	 * at most MAX_BANDS, and fewer if bands would have under BAND_MIN_ROWS rows.
+	 */
+	int bands       = 1;
 
-	JSlider        pquant_slider, pshift_slider, corr_slider;
-	JSpinner       block_spinner;
-	JRadioButton[] set_button = new JRadioButton[DeltaMapper.BLOCK_SET_NAMES.length + 1];   // [0] = Surveyed
+	// ---- The last survey (see survey) ----------------------------------------
+	/**
+	 * Each channel's block size and predictor ids, in coding order (null
+	 * before the first survey).
+	 */
+	int[]   survey_blocks = null;
+	/**
+	 * Each channel's predictor ids, in coding order.
+	 */
+	int[][] survey_ids    = null;
+	/**
+	 * Each channel's deltas and block map as the survey chose them (what Apply
+	 * codes).
+	 */
+	int[][] survey_deltas = null;
+	/**
+	 * Each channel's block map as the survey chose it.
+	 */
+	byte[][] survey_maps  = null;
+	/**
+	 * The quantization the survey was made for.
+	 */
+	int     survey_quant = -1, survey_shift = -1;
+	/**
+	 * The survey's time, printed with the next Apply's listing; -1 once printed.
+	 */
+	long    survey_time  = -1;
+	/**
+	 * The survey's coded size (Context-coded deltas plus maps), for the Bands
+	 * estimate.
+	 */
+	long    survey_bytes = 0;
+
+	JSlider pquant_slider, pshift_slider, corr_slider;
+	/**
+	 * A survey is running in the background.
+	 */
+	boolean analysing = false;
+	/**
+	 * Waits for the quantization sliders to settle before surveying.
+	 */
+	javax.swing.Timer quant_timer;
 
 	// ---- Results of the last Apply (read by Save) ---------------------------
 	int[]    set_sum = new int[10], channel_sum = new int[6];
 	int[]    channel_init = new int[6], channel_min = new int[6];
 	int[][]  delta_list = new int[3][];
+	/**
+	 * The channels as the reader rebuilds them (before any minimum is added
+	 * back): the mixed coder's contexts use them.
+	 */
+	int[][]  value_list = new int[3][];
 	byte[][] map_list   = new byte[3][];
 	int      delta_xdim;
 
 	long    file_length;
 	boolean applied  = false;   // the last Apply finished; Save needs it
-	boolean updating = false;   // set while the analysis moves the controls
 
 	public static void main(String[] args)
 	{
@@ -84,6 +160,7 @@ public class BlockWriter
 		}
 		image_xdim = original_image.getWidth();
 		image_ydim = original_image.getHeight();
+		System.out.println(String.format("Loaded %s, %d x %d (%,d pixels)", filename, image_xdim, image_ydim, (long) image_xdim * image_ydim));
 
 		int[] pixel = original_image.getRGB(0, 0, image_xdim, image_ydim, null, 0, image_xdim);
 		source = new int[3][pixel.length];
@@ -98,130 +175,141 @@ public class BlockWriter
 		JFrame   frame    = view.frame;
 		JMenuBar menu_bar = frame.getJMenuBar();
 
+		// A quantization change surveys again, once the slider has stopped
+		// moving for QUANT_SETTLE_MS.
+		quant_timer = new javax.swing.Timer(QUANT_SETTLE_MS, e -> runAnalysis());
+		quant_timer.setRepeats(false);
+
 		JMenu file_menu = new JMenu("File");
 		JMenuItem open_item = new JMenuItem("Open...");
 		open_item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
 		open_item.addActionListener(e -> { FileDialog fd = new FileDialog(frame, "Open Image", FileDialog.LOAD); fd.setVisible(true); if(fd.getFile() != null) new BlockWriter(fd.getDirectory() + fd.getFile()); });
 		file_menu.add(open_item); file_menu.addSeparator();
 		JMenuItem reset_item = new JMenuItem("Reset");
-		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); apply(); });
+		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); quantChanged(); });
 		file_menu.add(reset_item);
+		// Bands: Save codes the image as this many bands of rows, each decodable
+		// on its own (so a reader can decode them at the same time), for a small
+		// cost per band boundary. Like Save itself, it never changes the preview.
+		JSlider[] bs = new JSlider[1];
+		file_menu.add(ViewerSupport.makeSliderDialog(frame, "Bands", 1, MAX_BANDS, bands, v -> { bands = v; view.setStatus(bandEstimate()); }, bs));
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
 
 		JMenu quant_menu = new JMenu("Quantization");
 		JSlider[] ss = new JSlider[1];
-		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; apply(); }, ss)); pquant_slider = ss[0];
-		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; apply(); }, ss)); pshift_slider = ss[0];
+		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Pixel Resolution", 0, 10, pixel_quant, v -> { pixel_quant = v; quantChanged(); }, ss)); pquant_slider = ss[0];
+		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; quantChanged(); }, ss)); pshift_slider = ss[0];
 		// Error Correction (below a separator) is not a quantizing step: it blends
 		// the preview back toward the original by correction/10. Preview only;
-		// the saved file is unaffected.
+		// the saved file is unaffected, and there is nothing to survey again.
 		quant_menu.addSeparator();
-		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Error Correction", 0, 10, correction, v -> { correction = v; apply(); }, ss)); corr_slider = ss[0];
+		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Error Correction", 0, 10, correction, v -> { correction = v; if(surveyCurrent()) apply(); }, ss)); corr_slider = ss[0];
 
-		// Block menu: the settings, and Find Best to rerun the analysis
-		// (worth doing after changing the quantization: the surveyed sets
-		// are kept until then). Block Predictors offers the surveyed sets
-		// (available once an analysis has run) and the named sets.
+		// Block menu: what the survey chose (nothing to set by hand).
 		JMenu block_menu = new JMenu("Block");
-		JSpinner[] sp = new JSpinner[1];
-		block_menu.add(ViewerSupport.makeSpinnerDialog(frame, "Block Size", DeltaMapper.BLOCK_MIN, DeltaMapper.BLOCK_MAX, block_size,
-			v -> { block_size = v; if(!updating) apply(); }, sp)); block_spinner = sp[0];
-		String[] set_names = new String[DeltaMapper.BLOCK_SET_NAMES.length + 1];
-		set_names[0] = "Surveyed (per channel)";
-		System.arraycopy(DeltaMapper.BLOCK_SET_NAMES, 0, set_names, 1, DeltaMapper.BLOCK_SET_NAMES.length);
-		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Block Predictors", set_names, block_set + 1,
-			v -> { block_set = v - 1; if(!updating) apply(); }, set_button));
-		set_button[0].setEnabled(false);   // until the first analysis
-		block_menu.addSeparator();
-		JMenuItem find_item = new JMenuItem("Find Best");
-		find_item.addActionListener(e -> runAnalysis());
-		block_menu.add(find_item);
+		JMenuItem size_item = new JMenuItem("Size");
+		size_item.addActionListener(e -> showText("Block Size", sizeText()));
+		block_menu.add(size_item);
+		JMenuItem predictor_item = new JMenuItem("Predictors");
+		predictor_item.addActionListener(e -> showText("Block Predictors", predictorText()));
+		block_menu.add(predictor_item);
 
 		menu_bar.add(file_menu); menu_bar.add(view.makeViewMenu()); menu_bar.add(quant_menu); menu_bar.add(block_menu);
 
 		view.setImage(original_image);
 		view.show();
-		SwingUtilities.invokeLater(() -> { apply(); runAnalysis(); });
+		// The preview shows the original until the survey has chosen the blocks.
+		SwingUtilities.invokeLater(this::runAnalysis);
 	}
 
-	// ---- Analysis ---------------------------------------------------------------
+	/**
+	 * How long a quantization slider must rest before the survey runs again, in
+	 * milliseconds.
+	 */
+	static final int QUANT_SETTLE_MS = 400;
 
-	// Runs init() in the background with the other menus disabled, then
-	// shows the chosen settings in the controls and applies them.
+	// ---- Survey -----------------------------------------------------------------
+
+	// After a quantization change: surveys again once the sliders settle.
+	private void quantChanged()
+	{
+		view.setStatus("waiting to survey...");
+		quant_timer.restart();
+	}
+
+	// Whether the last survey was made for the current quantization.
+	private boolean surveyCurrent() { return survey_blocks != null && survey_quant == pixel_quant && survey_shift == pixel_shift; }
+
+	// Surveys in the background with the other menus disabled, then applies
+	// (which prints the listing). If the quantization changed meanwhile, it
+	// surveys again.
 	private void runAnalysis()
 	{
+		if(analysing) return;   // done() checks the quantization again
+		analysing = true;
 		view.setMenusEnabled(false);
-		view.setStatus("analysing...");
-		new SwingWorker<int[],Void>()
+		view.setStatus("surveying...");
+		final int quant = pixel_quant, shift = pixel_shift;
+		new SwingWorker<Void,Void>()
 		{
-			@Override protected int[] doInBackground() { return init(); }
+			@Override protected Void doInBackground() { survey(quant, shift); return null; }
 			@Override protected void done()
 			{
-				try
-				{
-					int[] best = get();
-					updating = true;
-					block_spinner.setValue(best[0]);
-					set_button[best[1] + 1].setSelected(true);
-					set_button[0].setEnabled(survey_ids != null);
-					block_size = best[0]; block_set = best[1];
-					updating = false;
-				}
-				catch(Exception e) { System.out.println("init: " + e); }
+				boolean failed = false;
+				try { get(); }
+				catch(Exception e) { System.out.println("survey: " + e); failed = true; }
+				analysing = false;
+				boolean changed = (quant != pixel_quant || shift != pixel_shift);
+				if(changed && !quant_timer.isRunning()) { runAnalysis(); return; }
+				if(failed) { view.setMenusEnabled(true); view.setStatus("survey failed"); return; }
 				view.setMenusEnabled(true);
 				view.setStatus(null);
-				apply();
+				if(surveyCurrent()) apply();
 			}
 		}.execute();
 	}
 
-	// Picks the channel set with the smallest entropy estimate, then the
-	// block size and predictor sets that code smallest: the surveyed sets
-	// (DeltaMapper.surveyBlockSets, kept in survey_ids) or a named set
-	// (DeltaMapper.findBestBlock). Returns {block size, named set or SURVEYED}.
-	public int[] init()
+	/**
+	 * Surveys the channel set, then each channel's block size and predictor
+	 * set, for this quantization (DeltaMapper.surveyChannels); keeps them in
+	 * survey_blocks and survey_ids.
+	 *
+	 * @param quant the Pixel Resolution
+	 * @param shift the Color Resolution
+	 */
+	public void survey(int quant, int shift)
 	{
 		long    start = System.nanoTime();
-		int[]   size  = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
-		int[][] qc    = quantizedChannels(size, new int[6], new int[6]);
+		int[]   size  = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, quant);
+		int[][] qc    = quantizedChannels(size, quant, shift, new int[6], new int[6]);
 		int[]   sum   = new int[6];
 		ViewerSupport.parallel(6, i -> sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], size[0], size[1]))));
-		int set_id = bestSet(sum);
-		int[] id = DeltaMapper.getChannels(set_id);
-		int[][] ch = { qc[id[0]], qc[id[1]], qc[id[2]] };
-
-		long[][] bytes = new long[DeltaMapper.BLOCK_SET_NAMES.length][DeltaMapper.BLOCK_SEARCH_SIZES.length];
-		int[]    best  = DeltaMapper.findBestBlock(ch, size[0], size[1], bytes);
-		System.out.println("Channel set: " + DeltaMapper.SET_NAMES[set_id]);
-		System.out.print(DeltaMapper.getBlockTable(bytes, best));
-		long named = bytes[best[1]][Arrays.binarySearch(DeltaMapper.BLOCK_SEARCH_SIZES, best[0])];
-		System.out.println("Named sets took " + ViewerSupport.formatDuration(System.nanoTime() - start));
-		System.out.println();
-
-		long t0 = System.nanoTime();
-		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyBlockSets(ch, size[0], size[1]);
-		survey_ids = survey.ids;
-		System.out.print(survey.report);
-		System.out.print(DeltaMapper.describeGroupUse(survey, DeltaMapper.getBlockDeltasByCost(ch, size[0], size[1], survey.block, survey.ids)));
-		System.out.println("Survey took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
-		boolean use_survey = survey.bytes <= named;
-		System.out.println(String.format("Surveyed sets %,d bytes, best named set (%s, block %d) %,d bytes: using the %s.",
-			survey.bytes, DeltaMapper.BLOCK_SET_NAMES[best[1]], best[0], named, use_survey ? "surveyed sets" : "named set"));
-		System.out.println("Analysis took " + ViewerSupport.formatDuration(System.nanoTime() - start));
-		System.out.println();
-		return use_survey ? new int[] {survey.block, SURVEYED} : best;
+		int[] id = DeltaMapper.getChannels(bestSet(sum));
+		DeltaMapper.BlockSurvey survey = DeltaMapper.surveyChannels(new int[][] { qc[id[0]], qc[id[1]], qc[id[2]] }, size[0], size[1],
+			DeltaMapper.PREDICTOR_TABLE, DeltaMapper.SURVEY_CHANNEL_SIZES);
+		synchronized(this)
+		{
+			survey_blocks = survey.blocks;
+			survey_ids    = survey.ids;
+			survey_deltas = survey.deltas;
+			survey_maps   = survey.maps;
+			survey_quant  = quant;
+			survey_shift  = shift;
+			survey_time   = System.nanoTime() - start;
+			survey_bytes  = survey.bytes;
+		}
 	}
 
 	// The six candidate channels after quantizing (see
 	// DeltaMapper.getCandidateChannels); fills min and init.
-	private int[][] quantizedChannels(int[] size, int[] min, int[] init)
+	private int[][] quantizedChannels(int[] size, int quant, int shift, int[] min, int[] init)
 	{
 		int[][] q = new int[3][];
 		for(int i = 0; i < 3; i++)
 		{
 			int[] ch = source[i];
-			if(pixel_quant != 0) ch = ResizeMapper.resize(ch, image_xdim, size[0], size[1]);
-			q[i] = DeltaMapper.quantizeChannel(ch, pixel_shift);
+			if(quant != 0) ch = ResizeMapper.resize(ch, image_xdim, size[0], size[1]);
+			q[i] = DeltaMapper.quantizeChannel(ch, shift);
 		}
 		int[][] qc = DeltaMapper.getCandidateChannels(q[0], q[1], q[2], min);
 		for(int i = 0; i < 6; i++) init[i] = qc[i][0];
@@ -240,10 +328,102 @@ public class BlockWriter
 		return best;
 	}
 
+	// ---- The Block menu ---------------------------------------------------------
+
+	// Each channel's block size and number of blocks.
+	private String sizeText()
+	{
+		if(!applied) return "No survey yet.";
+		StringBuilder t = new StringBuilder();
+		for(int i = 0; i < 3; i++) t.append(DeltaMapper.describeBlockSize(min_set_id, i, map_list[i], delta_xdim)).append('\n');
+		if(bandsUsed() > 1) t.append(describeBands(bandsUsed(), value_list[0].length / delta_xdim)).append('\n');
+		return t.toString();
+	}
+
+	// ---- Bands --------------------------------------------------------------
+
+	/**
+	 * The bands Save will write: bands, but no more than leave BAND_MIN_ROWS
+	 * rows in each.
+	 *
+	 * @return the number of bands
+	 */
+	int bandsUsed()
+	{
+		int rows = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant)[1];
+		return Math.max(1, Math.min(bands, rows / BAND_MIN_ROWS));
+	}
+
+	/**
+	 * A band's first row.
+	 *
+	 * @param b    the band (n for the end of the last)
+	 * @param n    the number of bands
+	 * @param rows the rows split into them
+	 * @return the row
+	 */
+	static int bandStart(int b, int n, int rows) { return (int) ((long) b * rows / n); }
+
+	/**
+	 * The bands in words: "8 bands of 375 rows" (or "of 374 to 375 rows").
+	 *
+	 * @param n    the number of bands
+	 * @param rows the rows split into them
+	 * @return the description
+	 */
+	static String describeBands(int n, int rows)
+	{
+		int lo = rows / n, hi = (rows + n - 1) / n;
+		return n + " bands of " + ((lo == hi) ? lo : lo + " to " + hi) + " rows";
+	}
+
+	/**
+	 * The Bands dialog's estimate of what the bands cost.
+	 *
+	 * @return the estimate, for the status line
+	 */
+	private String bandEstimate()
+	{
+		int n = bandsUsed();
+		if(n == 1) return (bands > 1) ? "1 band: the image is too small for more" : "1 band";
+		int[] size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+		long  cost = (long) (n - 1) * size[0] * BAND_COST_TENTHS / 10;
+		String pct = (survey_bytes > 0) ? String.format(" (%+.2f%%)", 100.0 * cost / survey_bytes) : "";
+		return describeBands(n, size[1]) + String.format(": about +%,d bytes", cost) + pct;
+	}
+
+	// Each channel's predictors, most used first, with their numbers of blocks.
+	private String predictorText()
+	{
+		if(!applied) return "No survey yet.";
+		StringBuilder t = new StringBuilder();
+		for(int i = 0; i < 3; i++)
+		{
+			if(i > 0) t.append('\n');
+			t.append(String.format("Channel %d - %s:%n", i, DeltaMapper.channelName(min_set_id, i)));
+			t.append(DeltaMapper.describeBlockPredictors(map_list[i], "  "));
+		}
+		return t.toString();
+	}
+
+	// Shows text in a dialog, in a fixed-width font so the counts line up.
+	private void showText(String title, String text)
+	{
+		JTextArea area = new JTextArea(text.trim());
+		area.setEditable(false);
+		area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, area.getFont().getSize()));
+		JScrollPane pane = new JScrollPane(area);
+		Dimension d = area.getPreferredSize();
+		pane.setPreferredSize(new Dimension(Math.min(d.width + 40, 900), Math.min(d.height + 30, 600)));
+		JOptionPane.showMessageDialog(view.frame, pane, title, JOptionPane.PLAIN_MESSAGE);
+	}
+
 	// ---- Apply --------------------------------------------------------------
 
 	// Quantizes, picks the channel set, makes the block map deltas (what
-	// Save codes), then rebuilds the image from them for the preview.
+	// Save codes), then rebuilds the image from them for the preview. After
+	// a new survey it prints the channel set and each channel's blocks and
+	// predictors.
 	void apply()
 	{
 		applied = false;
@@ -253,33 +433,44 @@ public class BlockWriter
 
 	private void applyImpl()
 	{
+		// A survey for this quantization first, if there isn't one (a coder
+		// whose fields were set directly, or a survey that failed).
+		if(!surveyCurrent()) survey(pixel_quant, pixel_shift);
+
 		int[]   size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
 		int     new_xdim = size[0], new_ydim = size[1];
-		int[][] qc = quantizedChannels(size, channel_min, channel_init);
+		int[][] qc = quantizedChannels(size, pixel_quant, pixel_shift, channel_min, channel_init);
 		ViewerSupport.parallel(6, i -> channel_sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], new_xdim, new_ydim))));
 		min_set_id = bestSet(channel_sum);
 
 		int[]   channel_id = DeltaMapper.getChannels(min_set_id);
 		int[][] dc = new int[3][];
-		// Surveyed sets: blocks assigned by estimated coded size, as the
-		// survey does (channels in order). Named sets: by smallest |delta|.
-		ArrayList[] by_cost = null;
-		if(block_set == SURVEYED && survey_ids != null)
-			by_cost = DeltaMapper.getBlockDeltasByCost(new int[][] {qc[channel_id[0]], qc[channel_id[1]], qc[channel_id[2]]}, new_xdim, new_ydim, block_size, survey_ids);
-		final ArrayList[] surveyed = by_cost;
-		int[][] raw = new int[3][];   // decoded, before the minimum: the next channel's reference
-		ViewerSupport.channels(true, 3, i ->
+		// The deltas and maps the survey chose (for this quantization, so for
+		// these channels): each channel's block size and set, blocks assigned
+		// by estimated coded size.
+		// The reader rebuilds each channel exactly as quantized (before the
+		// minimum is added back), so the preview and the mixed coder use the
+		// quantized channels as they are: no need to decode the deltas here.
+		ViewerSupport.parallel(3, i ->
 		{
 			int j = channel_id[i];
-			ArrayList result = (surveyed != null) ? surveyed[i]
-				: DeltaMapper.getBlockDeltasFromValues(qc[j], (i > 0) ? qc[channel_id[i - 1]] : null, new_xdim, new_ydim, block_size, DeltaMapper.getSetIds(Math.max(0, block_set)));
-			delta_list[i] = (int[]) result.get(1);
-			map_list[i]   = (byte[]) result.get(2);
-			dc[i] = DeltaMapper.getValuesFromDeltas(delta_list[i], new_xdim, new_ydim, channel_init[j], 13, map_list[i], 0, (i > 0) ? raw[i - 1] : null);
-			raw[i] = dc[i].clone();
+			delta_list[i] = survey_deltas[i];
+			map_list[i]   = survey_maps[i];
+			value_list[i] = qc[j];
+			dc[i] = qc[j].clone();
 			if(j > 2) for(int k = 0; k < dc[i].length; k++) dc[i][k] += channel_min[j];
 		});
 		delta_xdim = new_xdim;
+
+		if(survey_time >= 0)
+		{
+			System.out.print(DeltaMapper.describeBlockMaps(min_set_id, map_list, delta_xdim));
+			System.out.println(String.format("Analysis took %s (%d x %d, %,d pixels; least squares in %.1f%% of blocks' pixels)",
+				ViewerSupport.formatDuration(survey_time), new_xdim, new_ydim, (long) new_xdim * new_ydim,
+				100 * DeltaMapper.leastSquaresShare(map_list, new_xdim, new_ydim)));
+			System.out.println();
+			survey_time = -1;
+		}
 
 		// Like BlockReader: recombine the channels first, then resize, then
 		// shift. Resizing each channel before recombining gives different
@@ -324,38 +515,78 @@ public class BlockWriter
 				return;
 			}
 			int raw = image_xdim * image_ydim * 3;
-			System.out.println("Block size " + block_size + ", predictors " + DeltaMapper.describeMapSet(map_list[0]) + ", "
-				+ DeltaMapper.describeMapSet(map_list[1]) + ", " + DeltaMapper.describeMapSet(map_list[2]) + ": " + file.length() + " bytes");
+			if(one_band_bytes > 0)
+				System.out.println(String.format("Saved %s: %,d bytes (%s; %,d as one band, %+.2f%%)", file.getName(), file.length(),
+					describeBands(bandsUsed(), value_list[0].length / delta_xdim), one_band_bytes, 100.0 * (file.length() - one_band_bytes) / one_band_bytes));
+			else
+				System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
 		}
 
-		// Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
-		// shorts), pixel_shift, pixel_quant, channel set. Then per channel:
-		// int min, int init, the block map (DeltaMapper.writeMap, type 13;
-		// it carries the block size and the channel's predictor ids), then the deltas
-		// (DeltaMapper.packContextDeltas). Channels 1 and 2 use the ones
-		// before them as context, so the reader decodes in order.
+		/**
+		 * The size of the file as one band, when Save wrote bands (0 otherwise).
+		 */
+		long one_band_bytes = 0;
+
+		// One band: format 9 (oneBand). Bands: format 10 (inBands), and the size
+		// it would have been as one band for the report.
 		private void save(DataOutputStream out) throws IOException
 		{
-			long t0 = System.nanoTime();
+			one_band_bytes = 0;
+			if(bandsUsed() == 1) { oneBand(out); return; }
+			ByteArrayOutputStream one = new ByteArrayOutputStream();
+			oneBand(new DataOutputStream(one));
+			one_band_bytes = one.size();
+			inBands(out, bandsUsed());
+		}
+
+		/**
+		 * The block's prediction at each pixel: values - delta (for checking the
+		 * second-opinion coding decodes back).
+		 *
+		 * @param delta  the deltas
+		 * @param values the channel
+		 * @return the predictions
+		 */
+		private int[] predictions(int[] delta, int[] values)
+		{
+			int[] p = new int[values.length];
+			for(int k = 0; k < p.length; k++) p[k] = values[k] - delta[k];
+			return p;
+		}
+
+		/**
+		 * Format 9 (5's layout). Header: FORMAT_ID, ONE_BAND_VERSION, width, height (unsigned
+		 * shorts), pixel_shift, pixel_quant, channel set. Then per channel: int
+		 * min, int init, the block map (DeltaMapper.writeMap, type 13; it
+		 * carries the channel's block size and predictor ids; its context lines
+		 * up the previous channel's map, DeltaMapper.alignMap), then the deltas,
+		 * mixed-context coded with the second opinions (DeltaMapper.packMixedDeltas).
+		 * Channels 1 and 2 use
+		 * the ones before them as context, so the reader decodes in order.
+		 *
+		 * @param out the stream
+		 * @throws IOException if the stream fails
+		 */
+		private void oneBand(DataOutputStream out) throws IOException
+		{
 			byte[][] coded = new byte[3][];
 			ViewerSupport.parallel(3, i ->
 			{
 				try
 				{
 					int[][] previous = Arrays.copyOf(delta_list, i);
-					coded[i] = DeltaMapper.packContextDeltas(delta_list[i], previous, delta_xdim);
-					int[] back = DeltaMapper.readContextDeltas(new DataInputStream(new ByteArrayInputStream(coded[i])), delta_list[i].length, previous, delta_xdim);
+					coded[i] = DeltaMapper.packMixedDeltas(delta_list[i], value_list[i], previous, delta_xdim, true);
+					int[] back = DeltaMapper.unpackMixedDeltas(coded[i], value_list[i], previous, delta_xdim, predictions(delta_list[i], value_list[i]));
 					if(!Arrays.equals(back, delta_list[i])) System.out.println("WARNING: channel " + i + " deltas do not decode back.");
 				}
 				catch(IOException e) { throw new UncheckedIOException(e); }
 			});
-			System.out.println("Entropy coding took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
 
 			int[] channel_id = DeltaMapper.getChannels(min_set_id);
-			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeByte(FORMAT_ID); out.writeByte(ONE_BAND_VERSION);
 			out.writeShort(image_xdim); out.writeShort(image_ydim);
 			out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(min_set_id);
 			for(int i = 0; i < 3; i++)
@@ -365,6 +596,67 @@ public class BlockWriter
 				DeltaMapper.writeMap(out, 13, map_list[i], (i > 0) ? map_list[i - 1] : null, delta_xdim);
 				out.write(coded[i]);
 			}
+		}
+	
+		/**
+		 * Format 10 (6's layout): the header as format 9's, then the number of bands n (an
+		 * unsigned byte), each channel's int min (coding order), then n int
+		 * lengths and the n bands. Band b is rows bandStart(b) to bandStart(b +
+		 * 1) of the quantized image, coded as an image of its own with the
+		 * survey's block sizes and predictor sets (blocks assigned by cost in the
+		 * band; the predictors, least squares and contexts start again at its
+		 * top): per channel, int init, the block map, then the mixed-coded
+		 * deltas. A reader can decode the bands at the same time.
+		 *
+		 * @param out the stream
+		 * @param n   the number of bands
+		 * @throws IOException if the stream fails
+		 */
+		private void inBands(DataOutputStream out, int n) throws IOException
+		{
+			int   xdim = delta_xdim, rows = value_list[0].length / xdim;
+			byte[][] band = new byte[n][];
+			for(int b = 0; b < n; b++)
+			{
+				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows), h = y1 - y0;
+				int[][] ch = new int[3][];
+				for(int i = 0; i < 3; i++) ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
+				ArrayList[] got = DeltaMapper.getBlockDeltasByCost(ch, xdim, h, survey_blocks, survey_ids, DeltaMapper.PREDICTOR_TABLE);
+				int[][]  d = new int[3][];
+				byte[][] m = new byte[3][];
+				for(int i = 0; i < 3; i++) { d[i] = (int[]) got[i].get(1); m[i] = (byte[]) got[i].get(2); }
+				byte[][] coded = new byte[3][];
+				final int band_b = b;
+				ViewerSupport.parallel(3, i ->
+				{
+					try
+					{
+						int[][] previous = Arrays.copyOf(d, i);
+						coded[i] = DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim, true);
+						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim, predictions(d[i], ch[i])), d[i]))
+							System.out.println("WARNING: band " + band_b + " channel " + i + " deltas do not decode back.");
+					}
+					catch(IOException e) { throw new UncheckedIOException(e); }
+				});
+				ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+				DataOutputStream bo = new DataOutputStream(bytes);
+				for(int i = 0; i < 3; i++)
+				{
+					bo.writeInt(ch[i][0]);
+					DeltaMapper.writeMap(bo, 13, m[i], (i > 0) ? m[i - 1] : null, xdim);
+					bo.write(coded[i]);
+				}
+				band[b] = bytes.toByteArray();
+			}
+
+			int[] channel_id = DeltaMapper.getChannels(min_set_id);
+			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+			out.writeShort(image_xdim); out.writeShort(image_ydim);
+			out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(min_set_id);
+			out.writeByte(n);
+			for(int i = 0; i < 3; i++) out.writeInt(channel_min[channel_id[i]]);
+			for(int b = 0; b < n; b++) out.writeInt(band[b].length);
+			for(int b = 0; b < n; b++) out.write(band[b]);
 		}
 	}
 }

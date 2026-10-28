@@ -1,21 +1,221 @@
 import java.util.ArrayList;
-import java.util.Hashtable;
-import java.util.Collections;
+import java.util.Arrays;
 
 /**
- * This is a class with methods to analyze and process bit strings.
+ * Unary bit strings and their compression.
+ * <p>
+ * Values are coded as unary strings by frequency rank ({@link #getRankTable},
+ * {@link #packStrings}): rank k is k one bits and a terminating zero, so the
+ * most frequent value costs one bit. The strings can then be shortened by
+ * repeated bit-pair transforms ({@link #compressStrings}), which pay off when
+ * the string is dominated by runs of zeros or of ones.
+ * <p>
+ * <b>The string format.</b> A string is its data bits, least significant bit
+ * first within each byte, followed by one trailing data byte:
+ * <ul>
+ * <li>bits 0-3: how many compression passes were applied (0 to 15);</li>
+ * <li>bit 4: the transform used, 0 for zero-bit ({@link #compressZeroBits}),
+ *     1 for one-bit ({@link #compressOneBits});</li>
+ * <li>bits 5-7: how many bits of the last data byte are unused.</li>
+ * </ul>
+ * In source order (the method details below follow it): the string format,
+ * bit counts, unary strings, and bit-pair compression.
  *
  * @author Brian Crowley
  * @version 1.0
  */
-
-// version 1.0
-
 public class StringMapper
 {
 	/**
-	 * Creates a histogram from a byte array and returns a list including the
-	 * histogram and some other key information.
+	 * The share of the bits a compression must save for {@link #compressStrings}
+	 * to keep it (default 0.10, 10%). A marginal reduction can raise the Huffman
+	 * entropy of the result and hurt the overall compression.
+	 */
+	public static double compress_threshold = 0.10;  // default 10% savings required
+
+	/** Not used: all of this class's methods are static. */
+	public StringMapper() {}
+
+	// ---- The string format: data bits, then a trailing data byte (see the class description) 
+
+	/**
+	 * The bytes a string needs for its data bits, including the trailing data
+	 * byte.
+	 *
+	 * @param bitlength the number of data bits
+	 * @return the length of the string in bytes
+	 */
+	public static int getBytelength(int bitlength)
+	{
+		int bytelength = bitlength / 8;
+		if (bitlength % 8 != 0) bytelength++;
+		return bytelength + 1;   // +1 for the trailing data byte
+	}
+
+	/**
+	 * The number of data bits in a string, from its trailing data byte.
+	 *
+	 * @param string a string, with its trailing data byte
+	 * @return the number of data bits
+	 */
+	public static int getBitlength(byte[] string)
+	{
+		byte last_byte  = string[string.length - 1];
+		byte extra_bits = (byte)((last_byte >> 5) & 7);
+		return (string.length - 1) * 8 - extra_bits;
+	}
+
+	/**
+	 * Writes a string's trailing data byte.
+	 *
+	 * @param type       the transform, 0 (zero-bit) or 1 (one-bit)
+	 * @param iterations the number of compression passes (0 to 15)
+	 * @param bitlength  the number of data bits
+	 * @param string     the string; its last byte is overwritten
+	 */
+	public static void setData(int type, int iterations, int bitlength, byte[] string)
+	{
+		if (type == 1) iterations += 16;
+		int  odd_bits   = bitlength % 8;
+		byte extra_bits = 0;
+		if (odd_bits != 0) extra_bits = (byte)(8 - odd_bits);
+		extra_bits <<= 5;
+		string[string.length - 1]  = (byte) iterations;
+		string[string.length - 1] |= extra_bits;
+	}
+
+	/**
+	 * The low five bits of the trailing data byte: the number of compression
+	 * passes, plus 16 if the one-bit transform was used (see {@link #getType}).
+	 *
+	 * @param string a string, with its trailing data byte
+	 * @return passes + 16 * type
+	 */
+	public static byte getIterations(byte[] string)
+	{
+		return (byte)(string[string.length - 1] & 31);
+	}
+
+	/**
+	 * Sets the low five bits of the trailing data byte, keeping the unused-bit
+	 * count in the top three.
+	 *
+	 * @param iterations the number of passes, plus 16 for the one-bit transform
+	 * @param string     the string; its last byte is changed
+	 */
+	public static void setIterations(int iterations, byte[] string)
+	{
+		byte mask = SegmentMapper.getLeadingMask(3);
+		string[string.length - 1] &= mask;
+		string[string.length - 1] |= (byte) iterations;
+	}
+
+	/**
+	 * The transform a string was compressed with.
+	 *
+	 * @param string a string, with its trailing data byte
+	 * @return 0 for the zero-bit transform, 1 for the one-bit transform
+	 */
+	public static byte getType(byte[] string)
+	{
+		byte iterations = (byte)(string[string.length - 1] & 31);
+		return (iterations > 15) ? (byte) 1 : (byte) 0;
+	}
+
+	// ---- Bit counts ------------------------------------------------------------------
+
+	/**
+	 * The number of zero bits in each byte value.
+	 *
+	 * @return 256 counts, table[b] = zero bits in b
+	 */
+	public static int[] getBitTable()
+	{
+		int[] table = new int[256];
+		byte value = 0, mask = 1;
+		for (int i = 0; i < 256; i++)
+		{
+			int sum = 0;
+			for (int j = 0; j < 8; j++)
+				if ((value & (mask << j)) == 0) sum++;
+			table[i] = sum;
+			value++;
+		}
+		return table;
+	}
+
+	/**
+	 * The share of zero bits in the first bit_length bits of a string.
+	 *
+	 * @param string     the bits
+	 * @param bit_length how many bits to count
+	 * @return zero bits / bit_length
+	 */
+	public static double getZeroRatio(byte[] string, int bit_length)
+	{
+		int[] table      = getBitTable();
+		int   byte_length = bit_length / 8;
+		int   zero_sum   = 0, one_sum = 0;
+
+		for (int i = 0; i < byte_length; i++)
+		{
+			int j = (int) string[i];
+			if (j < 0) j += 256;
+			zero_sum += table[j];
+			one_sum  += 8 - table[j];
+		}
+
+		byte mask      = 1;
+		int  remainder = bit_length % 8;
+		for (int i = 0; i < remainder; i++)
+		{
+			if ((string[byte_length] & (mask << i)) == 0) zero_sum++;
+			else                                           one_sum++;
+		}
+		return (double) zero_sum / (zero_sum + one_sum);
+	}
+
+	/**
+	 * As {@link #getZeroRatio(byte[], int)}, with the table of zero-bit counts
+	 * given (so it isn't rebuilt on every call).
+	 *
+	 * @param string     the bits
+	 * @param bit_length how many bits to count
+	 * @param table      {@link #getBitTable}'s result
+	 * @return zero bits / bit_length
+	 */
+	public static double getZeroRatio(byte[] string, int bit_length, int[] table)
+	{
+		int byte_length = bit_length / 8;
+		int zero_sum    = 0, one_sum = 0;
+
+		for (int i = 0; i < byte_length; i++)
+		{
+			int j = (int) string[i];
+			if (j < 0) j += 256;
+			zero_sum += table[j];
+			one_sum  += 8 - table[j];
+		}
+
+		byte mask      = 1;
+		int  remainder = bit_length % 8;
+		for (int i = 0; i < remainder; i++)
+		{
+			if ((string[byte_length] & (mask << i)) == 0) zero_sum++;
+			else                                           one_sum++;
+		}
+		return (double) zero_sum / (zero_sum + one_sum);
+	}
+
+	// ---- Unary strings: values coded by frequency rank -------------------------------
+
+	/**
+	 * A histogram of byte values (taken as unsigned, 0 to 255), from the smallest
+	 * value present to the largest.
+	 *
+	 * @param src the bytes (at least one)
+	 * @return [min (Integer), histogram (int[]: histogram[v - min] is the count
+	 *         of v), range (Integer: max - min + 1)]
 	 */
 	public static ArrayList getHistogram(byte src[])
 	{
@@ -43,8 +243,11 @@ public class StringMapper
 	}
 
 	/**
-	 * Creates a histogram from an int array and returns a list including the
-	 * histogram and some other key information.
+	 * A histogram of int values, from the smallest value present to the largest.
+	 *
+	 * @param src the values (at least one)
+	 * @return [min (Integer), histogram (int[]: histogram[v - min] is the count
+	 *         of v), range (Integer: max - min + 1)]
 	 */
 	public static ArrayList getHistogram(int src[])
 	{
@@ -68,36 +271,38 @@ public class StringMapper
 	}
 
 	/**
-	 * Creates a rank table from most popular to least popular from a histogram.
+	 * A rank table from a histogram: the most frequent entry gets rank 0, the next
+	 * rank 1, and so on. Among equal counts the later entry ranks first, as in
+	 * earlier versions (which made the same tables whenever no count was shared
+	 * by more than 1,000 entries).
+	 *
+	 * @param src a histogram
+	 * @return rank[i] for each entry i of the histogram
 	 */
 	public static int[] getRankTable(int src[])
 	{
-		ArrayList list    = new ArrayList();
-		Hashtable table   = new Hashtable();
-		for (int i = 0; i < src.length; i++)
-		{
-			double key = src[i];
-			while (table.containsKey(key))
-				key += .001;
-			table.put(key, i);
-			list.add(key);
-		}
-		Collections.sort(list);
-
-		int[] rank = new int[src.length];
-		int k = -1;
-		for (int i = src.length - 1; i >= 0; i--)
-		{
-			double key = (double) list.get(i);
-			int j = (int) table.get(key);
-			rank[j] = ++k;
-		}
+		int n = src.length;
+		Integer[] order = new Integer[n];
+		for (int i = 0; i < n; i++)
+			order[i] = i;
+		// Largest count first; equal counts keep the old order (later bin first).
+		Arrays.sort(order, (a, b) -> (src[a] != src[b]) ? Integer.compare(src[b], src[a]) : Integer.compare(b, a));
+		int[] rank = new int[n];
+		for (int k = 0; k < n; k++)
+			rank[order[k]] = k;
 		return rank;
 	}
 
 	/**
-	 * Packs an int array into a unary bit string using the rank table.
-	 * Allocates the output buffer and sets the trailing data byte internally.
+	 * Packs values into a unary string by rank: a value v of rank k = table[v] is
+	 * k one bits and then a zero, except the last rank (table.length - 1), which
+	 * needs no terminating zero. The trailing data byte records no compression
+	 * passes, with the type set by which bit is more common.
+	 *
+	 * @param src   the values, each an index into table
+	 * @param table the rank table, from {@link #getRankTable}
+	 * @return the string, with its trailing data byte
+	 * @see #unpackStrings
 	 */
 	public static byte[] packStrings(int[] src, int[] table)
 	{
@@ -191,7 +396,15 @@ public class StringMapper
 	}
 
 	/**
-	 * Unpacks a unary bit string into an int array using the rank table.
+	 * Unpacks a unary string made by {@link #packStrings}. bitlength is capped at
+	 * the length the string's own data byte records. A malformed string prints
+	 * the exception and returns what was unpacked before it.
+	 *
+	 * @param src       the string (uncompressed), with its trailing data byte
+	 * @param table     the rank table it was packed with
+	 * @param size      the number of values
+	 * @param bitlength the number of data bits
+	 * @return the values
 	 */
 	public static int[] unpackStrings(byte[] src, int[] table, int size, int bitlength)
 	{
@@ -249,10 +462,91 @@ public class StringMapper
 		return dst;
 	}
 
-	// -----------------------------------------------------------------------
-	// Zero-bit compression (stop bits = zeros)
-	// -----------------------------------------------------------------------
+	/**
+	 * Unary-codes a set of values by their frequency rank, and compresses the
+	 * string if that saves enough ({@link #compressStrings}).
+	 * <p>
+	 * Note: this changes value in place. value[0] is overwritten with range / 2,
+	 * and the other values have the minimum subtracted.
+	 *
+	 * @param value the values (changed, see above)
+	 * @return [min (Integer), bit length of the uncompressed string (Integer),
+	 *         rank table (int[]), the string (byte[], compressed or not)]
+	 */
+	public static ArrayList getStringList(int[] value)
+	{
+		ArrayList string_list = new ArrayList();
 
+		ArrayList histogram_list = getHistogram(value);
+		int       min_value      = (int)   histogram_list.get(0);
+		int[]     histogram      = (int[]) histogram_list.get(1);
+		int       value_range    = (int)   histogram_list.get(2);
+		int[]     string_table   = getRankTable(histogram);
+
+		value[0] = value_range / 2;
+		for (int i = 1; i < value.length; i++)
+			value[i] -= min_value;
+
+		byte[] string    = packStrings(value, string_table);
+		int    bitlength = getBitlength(string);
+		byte[] compressed_string = compressStrings(string);
+
+		string_list.add(min_value);
+		string_list.add(bitlength);
+		string_list.add(string_table);
+		string_list.add(compressed_string);
+		return string_list;
+	}
+
+	/**
+	 * As {@link #getStringList(int[])}, with compression optional.
+	 * <p>
+	 * Note: this changes value in place. value[0] is overwritten with range / 2,
+	 * and the other values have the minimum subtracted.
+	 *
+	 * @param value    the values (changed, see above)
+	 * @param compress whether to try {@link #compressStrings} on the string
+	 * @return [min (Integer), bit length of the uncompressed string (Integer),
+	 *         rank table (int[]), the string (byte[])]
+	 */
+	public static ArrayList getStringList(int[] value, boolean compress)
+	{
+		ArrayList string_list = new ArrayList();
+
+		ArrayList histogram_list = getHistogram(value);
+		int       min_value      = (int)   histogram_list.get(0);
+		int[]     histogram      = (int[]) histogram_list.get(1);
+		int       value_range    = (int)   histogram_list.get(2);
+		int[]     string_table   = getRankTable(histogram);
+
+		value[0] = value_range / 2;
+		for (int i = 1; i < value.length; i++)
+			value[i] -= min_value;
+
+		byte[] string    = packStrings(value, string_table);
+		int    bitlength = getBitlength(string);
+
+		string_list.add(min_value);
+		string_list.add(bitlength);
+		string_list.add(string_table);
+		string_list.add(compress ? compressStrings(string) : string);
+		return string_list;
+	}
+
+	// ---- Bit-pair compression: zero-bit and one-bit transforms, applied repeatedly ---
+
+	/**
+	 * One pass of the zero-bit transform. Reading the input bits in order: "00"
+	 * becomes "0", "01" becomes "11", "1" becomes "10", and a lone "0" at the end
+	 * becomes "1". It shortens strings where pairs of zeros outnumber lone ones.
+	 *
+	 * @param src  the input bits
+	 * @param size the number of input bits
+	 * @param dst  the output, zeroed here; up to twice the input's length
+	 * @return {the number of output bits, 1 if the input ended in a lone zero
+	 *         (else 0)}
+	 * @see #decompressZeroBits
+	 */
 	public static int[] compressZeroBits(byte src[], int size, byte dst[])
 	{
 		int[] result = new int[2];
@@ -314,6 +608,16 @@ public class StringMapper
 		return result;
 	}
 
+	/**
+	 * Undoes one pass of {@link #compressZeroBits}: "0" becomes "00", "11"
+	 * becomes "01", "10" becomes "1", and a lone "1" at the end becomes "0".
+	 * Stops early rather than overflow dst.
+	 *
+	 * @param src  the input bits
+	 * @param size the number of input bits
+	 * @param dst  the output, zeroed here
+	 * @return the number of output bits
+	 */
 	public static int decompressZeroBits(byte src[], int size, byte dst[])
 	{
 		for (int i = 0; i < dst.length; i++) dst[i] = 0;
@@ -366,10 +670,19 @@ public class StringMapper
 		return current_byte * 8 + current_bit;
 	}
 
-	// -----------------------------------------------------------------------
-	// One-bit compression (run bits = ones)
-	// -----------------------------------------------------------------------
-
+	/**
+	 * One pass of the one-bit transform, the mirror of
+	 * {@link #compressZeroBits}: "11" becomes "1", "10" becomes "01", "0" becomes
+	 * "00", and a lone "1" at the end becomes "0". It shortens strings where pairs
+	 * of ones outnumber lone zeros.
+	 *
+	 * @param src  the input bits
+	 * @param size the number of input bits
+	 * @param dst  the output, zeroed here; up to twice the input's length
+	 * @return {the number of output bits, 1 if the input ended in a lone one
+	 *         (else 0)}
+	 * @see #decompressOneBits
+	 */
 	public static int[] compressOneBits(byte src[], int size, byte dst[])
 	{
 		int[] result = new int[2];
@@ -419,6 +732,16 @@ public class StringMapper
 		return result;
 	}
 
+	/**
+	 * Undoes one pass of {@link #compressOneBits}: "1" becomes "11", "01" becomes
+	 * "10", "00" becomes "0", and a lone "0" at the end becomes "1". Stops early
+	 * rather than overflow dst.
+	 *
+	 * @param src  the input bits
+	 * @param size the number of input bits
+	 * @param dst  the output, zeroed here
+	 * @return the number of output bits
+	 */
 	public static int decompressOneBits(byte src[], int size, byte dst[])
 	{
 		for (int i = 0; i < dst.length; i++) dst[i] = 0;
@@ -475,10 +798,82 @@ public class StringMapper
 		return current_byte * 8 + current_bit;
 	}
 
-	// -----------------------------------------------------------------------
-	// High-level compress / decompress (single method each)
-	// -----------------------------------------------------------------------
+	/**
+	 * The change in length one pass of a transform would make, without making
+	 * it. For the zero-bit transform each lone one costs a bit and each "00"
+	 * saves one; for the one-bit transform each lone zero costs a bit and each
+	 * "11" saves one.
+	 *
+	 * @param string         the bits
+	 * @param bit_length     the number of bits
+	 * @param transform_type 0 for zero-bit, 1 for one-bit
+	 * @return the change in bits: negative when the pass would shorten the string
+	 */
+	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
+	{
+		int positive = 0, negative = 0;
+		byte mask       = 1;
+		int  byte_length = bit_length / 8;
 
+		if (transform_type == 0)
+		{
+			int previous = 1;
+			for (int i = 0; i < byte_length; i++)
+				for (int j = 0; j < 8; j++)
+				{
+					int k = string[i] & (mask << j);
+					if      (k != 0 && previous != 0) positive++;
+					else if (k != 0)                  previous = 1;
+					else if (k == 0 && previous != 0) previous = 0;
+					else                             { negative++; previous = 1; }
+				}
+			int remainder = bit_length % 8;
+			for (int i = 0; i < remainder; i++)
+			{
+				int j = string[byte_length] & (mask << i);
+				if      (j != 0 && previous != 0) positive++;
+				else if (j != 0)                  previous = 1;
+				else if (j == 0 && previous != 0) previous = 0;
+				else                            { negative++; previous = 1; }
+			}
+		}
+		else
+		{
+			int previous = 0;
+			for (int i = 0; i < byte_length; i++)
+				for (int j = 0; j < 8; j++)
+				{
+					int k = string[i] & (mask << j);
+					if      (k == 0 && previous == 0) positive++;
+					else if (k == 0)                  previous = 0;
+					else if (k != 0 && previous == 0) previous = 1;
+					else                            { negative++; previous = 0; }
+				}
+			int remainder = bit_length % 8;
+			for (int i = 0; i < remainder; i++)
+			{
+				int j = string[byte_length] & (mask << i);
+				if      (j == 0 && previous == 0) positive++;
+				else if (j == 0)                  previous = 0;
+				else if (j != 0 && previous == 0) previous = 1;
+				else                            { negative++; previous = 0; }
+			}
+		}
+		return positive - negative;
+	}
+
+	/**
+	 * Compresses a string with repeated bit-pair transforms. It picks the
+	 * transform (zero-bit or one-bit) that one pass would shorten more, then
+	 * repeats it while each pass still saves bits, up to 15 passes, recording the
+	 * transform and the number of passes in the trailing data byte.
+	 *
+	 * @param src a string, with its trailing data byte
+	 * @return the compressed string, or a copy of src if no pass saves bits or
+	 *         the total saving is under {@link #compress_threshold} of the
+	 *         original length
+	 * @see #decompressStrings
+	 */
 	public static byte[] compressStrings(byte[] src)
 	{
 		int    bit_length  = getBitlength(src);
@@ -557,8 +952,13 @@ public class StringMapper
 			return src.clone();
 	}
 
-	public static double compress_threshold = 0.10;  // default 10% savings required
-
+	/**
+	 * Undoes {@link #compressStrings}.
+	 *
+	 * @param string a string, compressed or not
+	 * @return the uncompressed string (with no passes recorded), or string
+	 *         itself if it was not compressed
+	 */
 	public static byte[] decompressStrings(byte[] string)
 	{
 		int iterations = getIterations(string);
@@ -621,220 +1021,5 @@ public class StringMapper
 			System.arraycopy(buffer2, 0, dst, 0, out_bytelength - 1);
 		setData(type, 0, uncompressed_length, dst);
 		return dst;
-	}
-
-	// -----------------------------------------------------------------------
-	// getStringList
-	// -----------------------------------------------------------------------
-
-	public static ArrayList getStringList(int[] value)
-	{
-		ArrayList string_list = new ArrayList();
-
-		ArrayList histogram_list = getHistogram(value);
-		int       min_value      = (int)   histogram_list.get(0);
-		int[]     histogram      = (int[]) histogram_list.get(1);
-		int       value_range    = (int)   histogram_list.get(2);
-		int[]     string_table   = getRankTable(histogram);
-
-		value[0] = value_range / 2;
-		for (int i = 1; i < value.length; i++)
-			value[i] -= min_value;
-
-		byte[] string    = packStrings(value, string_table);
-		int    bitlength = getBitlength(string);
-		byte[] compressed_string = compressStrings(string);
-
-		string_list.add(min_value);
-		string_list.add(bitlength);
-		string_list.add(string_table);
-		string_list.add(compressed_string);
-		return string_list;
-	}
-
-	public static ArrayList getStringList(int[] value, boolean compress)
-	{
-		ArrayList string_list = new ArrayList();
-
-		ArrayList histogram_list = getHistogram(value);
-		int       min_value      = (int)   histogram_list.get(0);
-		int[]     histogram      = (int[]) histogram_list.get(1);
-		int       value_range    = (int)   histogram_list.get(2);
-		int[]     string_table   = getRankTable(histogram);
-
-		value[0] = value_range / 2;
-		for (int i = 1; i < value.length; i++)
-			value[i] -= min_value;
-
-		byte[] string    = packStrings(value, string_table);
-		int    bitlength = getBitlength(string);
-
-		string_list.add(min_value);
-		string_list.add(bitlength);
-		string_list.add(string_table);
-		string_list.add(compress ? compressStrings(string) : string);
-		return string_list;
-	}
-
-	// -----------------------------------------------------------------------
-	// Utility methods
-	// -----------------------------------------------------------------------
-
-	public static int getBitlength(byte[] string)
-	{
-		byte last_byte  = string[string.length - 1];
-		byte extra_bits = (byte)((last_byte >> 5) & 7);
-		return (string.length - 1) * 8 - extra_bits;
-	}
-
-	public static byte getIterations(byte[] string)
-	{
-		return (byte)(string[string.length - 1] & 31);
-	}
-
-	public static void setIterations(int iterations, byte[] string)
-	{
-		byte mask = SegmentMapper.getLeadingMask(3);
-		string[string.length - 1] &= mask;
-		string[string.length - 1] |= (byte) iterations;
-	}
-
-	public static byte getType(byte[] string)
-	{
-		byte iterations = (byte)(string[string.length - 1] & 31);
-		return (iterations > 15) ? (byte) 1 : (byte) 0;
-	}
-
-	public static int getBytelength(int bitlength)
-	{
-		int bytelength = bitlength / 8;
-		if (bitlength % 8 != 0) bytelength++;
-		return bytelength + 1;   // +1 for the trailing data byte
-	}
-
-	public static void setData(int type, int iterations, int bitlength, byte[] string)
-	{
-		if (type == 1) iterations += 16;
-		int  odd_bits   = bitlength % 8;
-		byte extra_bits = 0;
-		if (odd_bits != 0) extra_bits = (byte)(8 - odd_bits);
-		extra_bits <<= 5;
-		string[string.length - 1]  = (byte) iterations;
-		string[string.length - 1] |= extra_bits;
-	}
-
-	public static int[] getBitTable()
-	{
-		int[] table = new int[256];
-		byte value = 0, mask = 1;
-		for (int i = 0; i < 256; i++)
-		{
-			int sum = 0;
-			for (int j = 0; j < 8; j++)
-				if ((value & (mask << j)) == 0) sum++;
-			table[i] = sum;
-			value++;
-		}
-		return table;
-	}
-
-	public static double getZeroRatio(byte[] string, int bit_length)
-	{
-		int[] table      = getBitTable();
-		int   byte_length = bit_length / 8;
-		int   zero_sum   = 0, one_sum = 0;
-
-		for (int i = 0; i < byte_length; i++)
-		{
-			int j = (int) string[i];
-			if (j < 0) j += 256;
-			zero_sum += table[j];
-			one_sum  += 8 - table[j];
-		}
-
-		byte mask      = 1;
-		int  remainder = bit_length % 8;
-		for (int i = 0; i < remainder; i++)
-		{
-			if ((string[byte_length] & (mask << i)) == 0) zero_sum++;
-			else                                           one_sum++;
-		}
-		return (double) zero_sum / (zero_sum + one_sum);
-	}
-
-	public static double getZeroRatio(byte[] string, int bit_length, int[] table)
-	{
-		int byte_length = bit_length / 8;
-		int zero_sum    = 0, one_sum = 0;
-
-		for (int i = 0; i < byte_length; i++)
-		{
-			int j = (int) string[i];
-			if (j < 0) j += 256;
-			zero_sum += table[j];
-			one_sum  += 8 - table[j];
-		}
-
-		byte mask      = 1;
-		int  remainder = bit_length % 8;
-		for (int i = 0; i < remainder; i++)
-		{
-			if ((string[byte_length] & (mask << i)) == 0) zero_sum++;
-			else                                           one_sum++;
-		}
-		return (double) zero_sum / (zero_sum + one_sum);
-	}
-
-	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
-	{
-		int positive = 0, negative = 0;
-		byte mask       = 1;
-		int  byte_length = bit_length / 8;
-
-		if (transform_type == 0)
-		{
-			int previous = 1;
-			for (int i = 0; i < byte_length; i++)
-				for (int j = 0; j < 8; j++)
-				{
-					int k = string[i] & (mask << j);
-					if      (k != 0 && previous != 0) positive++;
-					else if (k != 0)                  previous = 1;
-					else if (k == 0 && previous != 0) previous = 0;
-					else                             { negative++; previous = 1; }
-				}
-			int remainder = bit_length % 8;
-			for (int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & (mask << i);
-				if      (j != 0 && previous != 0) positive++;
-				else if (j != 0)                  previous = 1;
-				else if (j == 0 && previous != 0) previous = 0;
-				else                            { negative++; previous = 1; }
-			}
-		}
-		else
-		{
-			int previous = 0;
-			for (int i = 0; i < byte_length; i++)
-				for (int j = 0; j < 8; j++)
-				{
-					int k = string[i] & (mask << j);
-					if      (k == 0 && previous == 0) positive++;
-					else if (k == 0)                  previous = 0;
-					else if (k != 0 && previous == 0) previous = 1;
-					else                            { negative++; previous = 0; }
-				}
-			int remainder = bit_length % 8;
-			for (int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & (mask << i);
-				if      (j == 0 && previous == 0) positive++;
-				else if (j == 0)                  previous = 0;
-				else if (j != 0 && previous == 0) previous = 1;
-				else                            { negative++; previous = 0; }
-			}
-		}
-		return positive - negative;
 	}
 }
