@@ -54,8 +54,8 @@ public class PacketWriter
 	// ---- Packet (string segmentation) parameters ----------------------------
 	// packet_level 0..10 sets the minimum segment length passed to
 	// SegmentMapper.getSegmentedData3(): 0 = MIN_SEGMENT_BITS (32 bytes),
-	// 10 = no segmentation (the whole string compressed as one piece, which
-	// is what SimpleWriter does). Levels in between are geometric steps.
+	// 10 = no segmentation (the whole string compressed as one piece).
+	// Levels in between are geometric steps.
 	// Merging is capped at MAX_PACKET_FACTOR times the minimum segment
 	// length: uncapped, merging collapses the packet count to a handful by
 	// level 2; capped, it falls roughly by half per level.

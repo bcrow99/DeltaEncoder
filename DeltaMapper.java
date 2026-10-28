@@ -3193,7 +3193,8 @@ public class DeltaMapper
 
 	/**
 	 * Recently computed least-squares planes, oldest first: {xdim, a copy of the
-	 * channel, a copy of the previous channel, the planes (LS, LS wide)}.
+	 * channel, a copy of the previous channel, the planes (LS, LS wide), the
+	 * window radius}.
 	 */
 	private static final java.util.LinkedList<Object[]> LS_CACHE = new java.util.LinkedList<Object[]>();
 
@@ -3216,15 +3217,31 @@ public class DeltaMapper
 	 */
 	static short[][] leastSquaresPlanes(int[] v, int[] ref, int xdim, int ydim)
 	{
+		return leastSquaresPlanes(v, ref, xdim, ydim, LS_RADIUS);
+	}
+
+	/**
+	 * As {@link #leastSquaresPlanes(int[], int[], int, int)}, with the window
+	 * of the given radius.
+	 *
+	 * @param v      the channel
+	 * @param ref    the previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param radius the window radius (LS_RADIUS for the table's LS)
+	 * @return LS and LS wide at each interior pixel
+	 */
+	static short[][] leastSquaresPlanes(int[] v, int[] ref, int xdim, int ydim, int radius)
+	{
 		synchronized(LS_CACHE)
 		{
 			for(Object[] e : LS_CACHE)
-				if((Integer) e[0] == xdim && Arrays.equals((int[]) e[1], v) && Arrays.equals((int[]) e[2], ref)) return (short[][]) e[3];
+				if((Integer) e[0] == xdim && (Integer) e[4] == radius && Arrays.equals((int[]) e[1], v) && Arrays.equals((int[]) e[2], ref)) return (short[][]) e[3];
 		}
-		short[][] plane = LeastSquares.plane(v, ref, xdim, ydim);
+		short[][] plane = LeastSquares.plane(v, ref, xdim, ydim, radius);
 		synchronized(LS_CACHE)
 		{
-			LS_CACHE.addLast(new Object[] {xdim, v.clone(), (ref == null) ? null : ref.clone(), plane});
+			LS_CACHE.addLast(new Object[] {xdim, v.clone(), (ref == null) ? null : ref.clone(), plane, radius});
 			while(LS_CACHE.size() > LS_CACHE_SIZE) LS_CACHE.removeFirst();
 		}
 		return plane;
@@ -3233,13 +3250,13 @@ public class DeltaMapper
 	/**
 	 * The least-squares primitive (LS_FIRST): at each pixel, the linear
 	 * predictor (with a constant term) that best fits the pixels in a causal
-	 * window -- the LS_RADIUS rows above, LS_RADIUS columns either side, and
-	 * the LS_RADIUS pixels to the left -- from 8 neighbours (a, b, c, d, two
-	 * to the left, two up, two to the right one up, one to the right two up)
-	 * and, after the first channel, the previous channel at the pixel, to its
-	 * left and above. The window's sums are exact integers, kept as it slides
-	 * (each pixel's products are computed once, and kept for the LS_RADIUS + 1
-	 * rows that use them); the fit (ridge 1, solved by L D L^T) is done in a
+	 * window -- the r rows above, r columns either side, and the r pixels to
+	 * the left (r = LS_RADIUS for the table's LS) -- from 8 neighbours (a, b,
+	 * c, d, two to the left, two up, two to the right one up, one to the
+	 * right two up) and, after the first channel, the previous channel at the
+	 * pixel, to its left and above. The window's sums are exact integers, kept as it slides
+	 * (each pixel's products are computed once, and kept for the r + 1 rows
+	 * that use them); the fit (ridge 1, solved by L D L^T) is done in a
 	 * fixed order, so the decoder and the Python version get the same values.
 	 * The prediction is clamped to 2 beyond the range of a, b, c, d and
 	 * rounded (and, for LS_WIDE, kept in wide: clamped to 2 beyond the range
@@ -3263,13 +3280,17 @@ public class DeltaMapper
 		 */
 		final int    xdim, nf, m, nt;
 		/**
+		 * The window radius.
+		 */
+		final int    r;
+		/**
 		 * Per column, the window rows' sums of products; the window's sums; their
 		 * current-row part.
 		 */
 		final long[] col, win, cur;
 		/**
-		 * The products of each pixel of the last LS_RADIUS + 1 rows, by row modulo
-		 * LS_RADIUS + 1 (a product is at most about 520 * 520).
+		 * The products of each pixel of the last r + 1 rows, by row modulo r + 1
+		 * (a product is at most about 520 * 520).
 		 */
 		final int[]  ring;
 		/**
@@ -3303,14 +3324,27 @@ public class DeltaMapper
 		 */
 		LeastSquares(int[] v, int[] ref, int xdim)
 		{
-			this.v = v; this.ref = ref; this.xdim = xdim;
+			this(v, ref, xdim, LS_RADIUS);
+		}
+
+		/**
+		 * The predictor for a channel, with the window of the given radius.
+		 *
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param radius the window radius (at least 1)
+		 */
+		LeastSquares(int[] v, int[] ref, int xdim, int radius)
+		{
+			this.v = v; this.ref = ref; this.xdim = xdim; this.r = radius;
 			nf   = (ref == null) ? 8 : 11;
 			m    = nf + 2;
 			nt   = m * (m + 1) / 2;
 			col  = new long[xdim * nt];
 			win  = new long[nt];
 			cur  = new long[nt];
-			ring = new int[(LS_RADIUS + 1) * xdim * nt];
+			ring = new int[(r + 1) * xdim * nt];
 			z    = new long[m];
 			a    = new double[nf + 1][nf + 1];
 			b    = new double[nf + 1];
@@ -3322,22 +3356,23 @@ public class DeltaMapper
 		 * The encoder's least-squares primitive for a whole channel, in bands of
 		 * rows computed in parallel.
 		 *
-		 * @param v    the channel
-		 * @param ref  the previous channel, or null for the first
-		 * @param xdim the width
-		 * @param ydim the height
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param ydim   the height
+		 * @param radius the window radius
 		 * @return LS and LS wide at each interior pixel (0 elsewhere)
 		 */
-		static short[][] plane(int[] v, int[] ref, int xdim, int ydim)
+		static short[][] plane(int[] v, int[] ref, int xdim, int ydim, int radius)
 		{
 			short[] out = new short[v.length], wide = new short[v.length];
 			int threads = Runtime.getRuntime().availableProcessors();
-			int band = Math.max(4 * (LS_RADIUS + 1), (ydim - 1 + threads - 1) / threads);
+			int band = Math.max(4 * (radius + 1), (ydim - 1 + threads - 1) / threads);
 			int bands = (ydim - 1 + band - 1) / band;
 			java.util.stream.IntStream.range(0, bands).parallel().forEach(t ->
 			{
 				int y0 = 1 + t * band, y1 = Math.min(ydim, y0 + band);
-				LeastSquares ls = new LeastSquares(v, ref, xdim);
+				LeastSquares ls = new LeastSquares(v, ref, xdim, radius);
 				ls.start(y0);
 				for(int y = y0; y < y1; y++)
 					for(int x = 1; x < xdim - 1; x++) { out[y * xdim + x] = (short) ls.next(y * xdim + x); wide[y * xdim + x] = (short) ls.wide; }
@@ -3352,7 +3387,6 @@ public class DeltaMapper
 		 */
 		void start(int y0)
 		{
-			int r = LS_RADIUS;
 			for(int ty = Math.max(1, y0 - 1 - r); ty <= y0 - 1; ty++)
 				for(int tx = 1; tx < xdim - 1; tx++)
 				{
@@ -3369,7 +3403,7 @@ public class DeltaMapper
 		 * @param x the column
 		 * @return the offset
 		 */
-		private int slot(int y, int x) { return ((y % (LS_RADIUS + 1)) * xdim + x) * nt; }
+		private int slot(int y, int x) { return ((y % (r + 1)) * xdim + x) * nt; }
 
 		/**
 		 * The value at (y, x), clamped to the image.
@@ -3439,7 +3473,7 @@ public class DeltaMapper
 		 */
 		int next(int k, boolean fit)
 		{
-			int y = k / xdim, x = k % xdim, r = LS_RADIUS;
+			int y = k / xdim, x = k % xdim;
 			if(y != row)
 			{
 				// The window's rows become y - r .. y - 1 (from 1): add row y - 1
@@ -3519,6 +3553,202 @@ public class DeltaMapper
 			if(p > hi + 2) p = hi + 2;
 			return (int) Math.floor(p + 0.5);
 		}
+	}
+
+	// ---- Least squares alone (the Simple format) -------------------------------
+	//
+	// Every interior pixel predicted by the least-squares fit (LeastSquares),
+	// with no blocks and no map: per channel only the window radius and the
+	// clamp (narrow, LS; wide, LS wide). The edges are as the block map's
+	// (row 0 horizontal, column 0 vertical, last column horizontal), and the
+	// deltas are mixed-context coded with the second opinions (the prediction
+	// is the fit's). surveyWindows picks each channel's radius and clamp by
+	// the real coded size.
+
+	/**
+	 * The window radii surveyWindows tries, smallest first.
+	 */
+	public static final int[] WINDOW_RADII = {3, 4, 5, 6, 8, 10, 12, 14, 16, 20};
+
+	/**
+	 * A channel's deltas from the least-squares fit alone.
+	 *
+	 * @param v      the channel
+	 * @param ref    the previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param radius the window radius
+	 * @param wide   whether the prediction has the wide clamp (LS wide)
+	 * @return the deltas
+	 */
+	public static int[] getLeastSquaresDeltas(int[] v, int[] ref, int xdim, int ydim, int radius, boolean wide)
+	{
+		return leastSquaresDeltas(v, LeastSquares.plane(v, ref, xdim, ydim, radius)[wide ? 1 : 0], xdim, ydim);
+	}
+
+	/**
+	 * A channel's deltas from a prediction at each interior pixel, with the
+	 * block map's edges.
+	 *
+	 * @param v    the channel
+	 * @param p    the prediction at each interior pixel
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @return the deltas
+	 */
+	private static int[] leastSquaresDeltas(int[] v, short[] p, int xdim, int ydim)
+	{
+		int[] d = new int[v.length];
+		blockEdges(v, d, xdim, ydim);
+		for(int y = 1; y < ydim; y++)
+			for(int x = 1, k = y * xdim + 1; x < xdim - 1; x++, k++) d[k] = v[k] - p[k];
+		return d;
+	}
+
+	/**
+	 * Decodes a channel {@link #packMixedDeltas} coded (with the second
+	 * opinions) from its least-squares deltas, rebuilding it as it goes.
+	 *
+	 * @param md         the rank table and coded bytes ({@link #readMixedDeltas})
+	 * @param previous   the deltas of the channels decoded before this one
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param init_value the first value
+	 * @param ref        the previous channel's values, as decoded (before any
+	 *                   minimum is added back), or null for the first channel
+	 * @param radius     the window radius
+	 * @param wide       whether the prediction has the wide clamp
+	 * @return {deltas, values}
+	 */
+	public static int[][] getValuesFromLeastSquaresDeltas(MixedDeltas md, int[][] previous, int xdim, int ydim, int init_value, int[] ref, int radius, boolean wide)
+	{
+		int[] delta = new int[xdim * ydim], dst = new int[xdim * ydim];
+		MixedDecoder mix = new MixedDecoder(md, previous, xdim, delta.length, true);
+		LeastSquares lsq = new LeastSquares(dst, ref, xdim, radius);
+		mix.next(0, delta, dst);
+		dst[0] = init_value;
+		for(int x = 1; x < xdim; x++)
+		{
+			mix.next(x, delta, dst);
+			dst[x] = dst[x - 1] + delta[x];
+		}
+		for(int y = 1; y < ydim; y++)
+		{
+			int k = y * xdim;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - xdim] + delta[k];
+			for(int x = 1; x < xdim - 1; x++)
+			{
+				k++;
+				int p = lsq.next(k);
+				if(wide) p = lsq.wide;
+				mix.next(k, delta, dst, p);
+				dst[k] = delta[k] + p;
+			}
+			k++;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - 1] + delta[k];
+		}
+		return new int[][] {delta, dst};
+	}
+
+	/**
+	 * What surveyWindows chose for each channel, and what it measured.
+	 */
+	public static final class WindowSurvey
+	{
+		/**
+		 * An empty survey (surveyWindows fills it in).
+		 */
+		public WindowSurvey() {}
+		/**
+		 * Each channel's window radius, in coding order.
+		 */
+		public int[]     radius;
+		/**
+		 * Whether each channel's prediction has the wide clamp.
+		 */
+		public boolean[] wide;
+		/**
+		 * Each channel's deltas.
+		 */
+		public int[][]   deltas;
+		/**
+		 * Each channel's coded size (its mixed-coded deltas).
+		 */
+		public long[]    bytes;
+		/**
+		 * The total coded size.
+		 */
+		public long      total;
+		/**
+		 * The radii tried (WINDOW_RADII).
+		 */
+		public int[]     radii;
+		/**
+		 * Each channel's coded size at each radius tried: [channel][2 * r + clamp]
+		 * (clamp 0 narrow, 1 wide).
+		 */
+		public long[][]  tried;
+	}
+
+	/**
+	 * Each channel's window radius and clamp, in turn: the pair (from radii,
+	 * and narrow before wide) whose deltas code smallest with the mixed coder
+	 * and second opinions, given the deltas chosen for the channels before
+	 * (the first smallest on a tie). The radii are tried at the same time, as
+	 * memory allows.
+	 *
+	 * @param channel the three channels, in coding order
+	 * @param xdim    the width
+	 * @param ydim    the height
+	 * @param radii   the radii to try
+	 * @return the survey
+	 */
+	public static WindowSurvey surveyWindows(int[][] channel, int xdim, int ydim, int[] radii)
+	{
+		int n = channel.length, nr = radii.length;
+		WindowSurvey s = new WindowSurvey();
+		s.radius = new int[n]; s.wide = new boolean[n]; s.deltas = new int[n][]; s.bytes = new long[n];
+		s.radii  = radii.clone(); s.tried = new long[n][2 * nr];
+		for(int i = 0; i < n; i++)
+		{
+			int[]   v = channel[i], ref = (i > 0) ? channel[i - 1] : null;
+			int[][] previous = Arrays.copyOf(s.deltas, i);
+			int[][] got = new int[2 * nr][];
+			long[]  size = s.tried[i];
+			boundedParallel(nr, 48L * xdim * ydim, r ->
+			{
+				short[][] plane = LeastSquares.plane(v, ref, xdim, ydim, radii[r]);
+				for(int c = 0; c < 2; c++)
+				{
+					int[] d = leastSquaresDeltas(v, plane[c], xdim, ydim);
+					try { size[2 * r + c] = packMixedDeltas(d, v, previous, xdim, true).length; }
+					catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+					got[2 * r + c] = d;
+				}
+			});
+			int best = 0;
+			for(int t = 1; t < 2 * nr; t++) if(size[t] < size[best]) best = t;
+			s.radius[i] = radii[best / 2];
+			s.wide[i]   = (best % 2) == 1;
+			s.deltas[i] = got[best];
+			s.bytes[i]  = size[best];
+			s.total    += size[best];
+		}
+		return s;
+	}
+
+	/**
+	 * A channel's window in words: "radius 8, wide clamp".
+	 *
+	 * @param radius the window radius
+	 * @param wide   whether the prediction has the wide clamp
+	 * @return the description
+	 */
+	public static String describeWindow(int radius, boolean wide)
+	{
+		return "radius " + radius + ", " + (wide ? "wide" : "narrow") + " clamp";
 	}
 
 	// ---- Surveying predictor sets ----------------------------------------------
