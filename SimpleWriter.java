@@ -502,7 +502,9 @@ public class SimpleWriter
 		 * them (their values in the fit, their deltas as context), so a band's
 		 * channels are decoded in order, each a couple of rows behind the one
 		 * before; the bands can be decoded at the same time. One band is what
-		 * the analysis already coded; bands are coded at the same time.
+		 * the analysis already coded; more bands reuse the analysis's deltas
+		 * past each band's first rows (DeltaMapper.getLeastSquaresBandDeltas)
+		 * and are coded at the same time.
 		 *
 		 * @param out the stream
 		 * @throws IOException if the stream fails
@@ -514,13 +516,13 @@ public class SimpleWriter
 			byte[][] band = new byte[n][];
 			ViewerSupport.parallel(n, b ->
 			{
-				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows), h = y1 - y0;
+				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows);
 				int[][]  ch = new int[3][], d = new int[3][];
 				byte[][] coded = new byte[3][];
 				for(int i = 0; i < 3; i++)
 				{
 					ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
-					d[i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresDeltas(ch[i], (i > 0) ? ch[i - 1] : null, xdim, h, s.radius[i]);
+					d[i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresBandDeltas(s.deltas[i], value_list[i], (i > 0) ? value_list[i - 1] : null, xdim, y0, y1, s.radius[i]);
 				}
 				ViewerSupport.parallel(3, i ->
 				{

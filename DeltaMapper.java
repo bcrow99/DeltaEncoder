@@ -3254,14 +3254,18 @@ public class DeltaMapper
 	 * the left (r = LS_RADIUS for the table's LS) -- from 8 neighbours (a, b,
 	 * c, d, two to the left, two up, two to the right one up, one to the
 	 * right two up) and, after the first channel, the previous channel at the
-	 * pixel, to its left and above. The window's sums are exact integers, kept as it slides
-	 * (each pixel's products are computed once, and kept for the r + 1 rows
-	 * that use them); the fit (ridge 1, solved by L D L^T) is done in a
-	 * fixed order, so the decoder and the Python version get the same values.
-	 * The prediction is clamped to 2 beyond the range of a, b, c, d and
-	 * rounded (and, for LS_WIDE, kept in wide: clamped to 2 beyond the range
-	 * of all 8 spatial neighbours); a until the window has twice as many
-	 * pixels as unknowns (or if the fit fails).
+	 * pixel, to its left and above. The window's sums are exact integers, kept
+	 * as it slides: per column, the sums of the window's rows; each pixel's
+	 * products are kept only while it is in the current row's part of the
+	 * window, and computed again when its row joins the columns and when it
+	 * leaves them, so the memory moved through per row stays small (it
+	 * matters when many channels or bands are fitted at once); the fit (ridge
+	 * 1, solved by L D L^T) is done in a fixed order, so the decoder and the
+	 * Python version get the same values. The prediction is clamped to 2
+	 * beyond the range of a, b, c, d and rounded (and, for LS_WIDE, kept in
+	 * wide: clamped to 2 beyond the range of all 8 spatial neighbours); a
+	 * until the window has twice as many pixels as unknowns (or if the fit
+	 * fails).
 	 * <p>
 	 * next(k) must be called for every interior pixel in raster order, once
 	 * the pixels before k are known, from row 1 or from a row given to start.
@@ -3284,15 +3288,24 @@ public class DeltaMapper
 		 */
 		final int    r;
 		/**
-		 * Per column, the window rows' sums of products; the window's sums; their
-		 * current-row part.
+		 * Per column, the window rows' sums of products (r rows of products of
+		 * at most about 520 * 520: an int holds them for any radius up to 255).
 		 */
-		final long[] col, win, cur;
+		final int[]  col;
 		/**
-		 * The products of each pixel of the last r + 1 rows, by row modulo r + 1
-		 * (a product is at most about 520 * 520).
+		 * The window's sums, and their current-row part.
+		 */
+		final long[] win, cur;
+		/**
+		 * The products of the current row's last r + 1 pixels, by column modulo
+		 * r + 1 (a product is at most about 520 * 520).
 		 */
 		final int[]  ring;
+		/**
+		 * The products of a pixel whose row joins or leaves the columns,
+		 * computed again.
+		 */
+		final int[]  gone;
 		/**
 		 * The augmented vector of the pixel being added.
 		 */
@@ -3341,10 +3354,11 @@ public class DeltaMapper
 			nf   = (ref == null) ? 8 : 11;
 			m    = nf + 2;
 			nt   = m * (m + 1) / 2;
-			col  = new long[xdim * nt];
+			col  = new int[xdim * nt];
 			win  = new long[nt];
 			cur  = new long[nt];
-			ring = new int[(r + 1) * xdim * nt];
+			ring = new int[(r + 1) * nt];
+			gone = new int[nt];
 			z    = new long[m];
 			a    = new double[nf + 1][nf + 1];
 			b    = new double[nf + 1];
@@ -3387,23 +3401,24 @@ public class DeltaMapper
 		 */
 		void start(int y0)
 		{
-			for(int ty = Math.max(1, y0 - 1 - r); ty <= y0 - 1; ty++)
+			// The columns hold rows y0 - 1 - r .. y0 - 2 (from 1); row y0 - 1
+			// joins them at the first next.
+			for(int ty = Math.max(1, y0 - 1 - r); ty <= y0 - 2; ty++)
 				for(int tx = 1; tx < xdim - 1; tx++)
 				{
-					products(ty, tx);
-					if(ty <= y0 - 2) for(int t = 0, c = tx * nt, s = slot(ty, tx); t < nt; t++) col[c + t] += ring[s + t];
+					products(ty, tx, gone, 0);
+					for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += gone[t];
 				}
 			row = y0 - 1;
 		}
 
 		/**
-		 * Where pixel (y, x)'s products are kept in ring.
+		 * Where the products of the current row's pixel x are kept in ring.
 		 *
-		 * @param y the row
 		 * @param x the column
 		 * @return the offset
 		 */
-		private int slot(int y, int x) { return ((y % (r + 1)) * xdim + x) * nt; }
+		private int slot(int x) { return (x % (r + 1)) * nt; }
 
 		/**
 		 * The value at (y, x), clamped to the image.
@@ -3444,14 +3459,24 @@ public class DeltaMapper
 		 * @param y the row
 		 * @param x the column
 		 */
-		private void products(int y, int x)
+		private void products(int y, int x) { products(y, x, ring, slot(x)); }
+
+		/**
+		 * Computes pixel (y, x)'s products into out from at.
+		 *
+		 * @param y   the row
+		 * @param x   the column
+		 * @param out where they go
+		 * @param at  the first one's place
+		 */
+		private void products(int y, int x, int[] out, int at)
 		{
 			features(y, x);
-			int t = slot(y, x);
+			int t = at;
 			for(int i = 0; i < m; i++)
 			{
 				long zi = z[i];
-				for(int j = i; j < m; j++) ring[t++] = (int) (zi * z[j]);
+				for(int j = i; j < m; j++) out[t++] = (int) (zi * z[j]);
 			}
 		}
 
@@ -3476,15 +3501,20 @@ public class DeltaMapper
 			int y = k / xdim, x = k % xdim;
 			if(y != row)
 			{
-				// The window's rows become y - r .. y - 1 (from 1): add row y - 1
-				// (its last pixel's products first), drop row y - 1 - r.
+				// The window's rows become y - r .. y - 1 (from 1): add row y - 1,
+				// drop row y - 1 - r (the products of both computed again).
 				if(y - 1 >= 1)
-				{
-					products(y - 1, xdim - 2);
-					for(int tx = 1; tx < xdim - 1; tx++) for(int t = 0, c = tx * nt, s = slot(y - 1, tx); t < nt; t++) col[c + t] += ring[s + t];
-				}
+					for(int tx = 1; tx < xdim - 1; tx++)
+					{
+						products(y - 1, tx, gone, 0);
+						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += gone[t];
+					}
 				if(y - 1 - r >= 1)
-					for(int tx = 1; tx < xdim - 1; tx++) for(int t = 0, c = tx * nt, s = slot(y - 1 - r, tx); t < nt; t++) col[c + t] -= ring[s + t];
+					for(int tx = 1; tx < xdim - 1; tx++)
+					{
+						products(y - 1 - r, tx, gone, 0);
+						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] -= gone[t];
+					}
 				row = y;
 				Arrays.fill(win, 0); Arrays.fill(cur, 0);
 				for(int tx = 1; tx <= Math.min(xdim - 2, 1 + r); tx++) for(int t = 0; t < nt; t++) win[t] += col[tx * nt + t];
@@ -3494,8 +3524,8 @@ public class DeltaMapper
 				if(x + r <= xdim - 2) for(int t = 0, c = (x + r) * nt; t < nt; t++) win[t] += col[c + t];
 				if(x - r - 1 >= 1)    for(int t = 0, c = (x - r - 1) * nt; t < nt; t++) win[t] -= col[c + t];
 				products(y, x - 1);
-				for(int t = 0, s = slot(y, x - 1); t < nt; t++) cur[t] += ring[s + t];
-				if(x - 1 - r >= 1) for(int t = 0, s = slot(y, x - 1 - r); t < nt; t++) cur[t] -= ring[s + t];
+				for(int t = 0, s = slot(x - 1); t < nt; t++) cur[t] += ring[s + t];
+				if(x - 1 - r >= 1) for(int t = 0, s = slot(x - 1 - r); t < nt; t++) cur[t] -= ring[s + t];
 			}
 			if(!fit) { wide = 0; return 0; }
 
@@ -3587,6 +3617,34 @@ public class DeltaMapper
 		blockEdges(v, d, xdim, ydim);
 		for(int y = 1; y < ydim; y++)
 			for(int x = 1, k = y * xdim + 1; x < xdim - 1; x++, k++) d[k] = v[k] - p[k];
+		return d;
+	}
+
+	/**
+	 * A band's least-squares deltas -- what getLeastSquaresDeltas gives for
+	 * rows y0 to y1 - 1 alone, coded as an image of their own -- from the whole
+	 * channel's. They differ only in the band's first radius + 2 rows (the
+	 * band's top row is an edge, and the window's first row uses the row
+	 * above it), so only those are fitted again; the sums are exact, so the
+	 * rest are the same.
+	 *
+	 * @param whole  the whole channel's deltas (getLeastSquaresDeltas, at this radius)
+	 * @param v      the whole channel
+	 * @param ref    the whole previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param y0     the band's first row
+	 * @param y1     the row after its last
+	 * @param radius the window radius
+	 * @return the band's deltas
+	 */
+	public static int[] getLeastSquaresBandDeltas(int[] whole, int[] v, int[] ref, int xdim, int y0, int y1, int radius)
+	{
+		int   h = y1 - y0, k = Math.min(h, radius + 2);
+		int[] d = new int[h * xdim];
+		int[] top = getLeastSquaresDeltas(Arrays.copyOfRange(v, y0 * xdim, (y0 + k) * xdim),
+		                                  (ref == null) ? null : Arrays.copyOfRange(ref, y0 * xdim, (y0 + k) * xdim), xdim, k, radius);
+		System.arraycopy(top, 0, d, 0, k * xdim);
+		System.arraycopy(whole, (y0 + k) * xdim, d, k * xdim, (h - k) * xdim);
 		return d;
 	}
 
@@ -3745,7 +3803,11 @@ public class DeltaMapper
 	 * Each channel's window radius, in turn: the one from radii whose deltas
 	 * code smallest with the mixed coder and second opinions, given the
 	 * deltas chosen for the channels before (the first smallest on a tie).
-	 * The radii are tried at the same time, as memory allows.
+	 * The radii are fitted at the same time, as memory allows (each fit also
+	 * splits itself across the cores: LeastSquares.plane), and a channel's
+	 * radii are coded, in threads of their own, while the next channel's are
+	 * fitted: the coding needs only the deltas chosen before, and the fit
+	 * only the channels' values.
 	 *
 	 * @param channel the three channels, in coding order
 	 * @param xdim    the width
@@ -3756,32 +3818,84 @@ public class DeltaMapper
 	public static WindowSurvey surveyWindows(int[][] channel, int xdim, int ydim, int[] radii)
 	{
 		int n = channel.length, nr = radii.length;
+		long task = 40L * xdim * ydim;
 		WindowSurvey s = new WindowSurvey();
 		s.radius = new int[n]; s.deltas = new int[n][]; s.bytes = new long[n]; s.coded = new byte[n][];
 		s.radii  = radii.clone(); s.tried = new long[n][nr];
+		int[][][] got = new int[n][][];
+		got[0] = fitWindows(channel, 0, xdim, ydim, radii, task);
 		for(int i = 0; i < n; i++)
 		{
-			int[]   v = channel[i], ref = (i > 0) ? channel[i - 1] : null;
-			int[][] previous = Arrays.copyOf(s.deltas, i);
-			int[][]  got = new int[nr][];
-			byte[][] coded = new byte[nr][];
-			long[]   size = s.tried[i];
-			boundedParallel(nr, 40L * xdim * ydim, r ->
+			int fi = i;
+			Throwable[] failed = new Throwable[1];
+			Thread coder = new Thread(() ->
 			{
-				got[r] = getLeastSquaresDeltas(v, ref, xdim, ydim, radii[r]);
-				try { coded[r] = packMixedDeltas(got[r], v, previous, xdim, true); }
-				catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
-				size[r] = coded[r].length;
+				try { codeWindows(s, fi, channel[fi], got[fi], xdim, task); }
+				catch(Throwable e) { failed[0] = e; }
 			});
-			int best = 0;
-			for(int r = 1; r < nr; r++) if(size[r] < size[best]) best = r;
-			s.radius[i] = radii[best];
-			s.deltas[i] = got[best];
-			s.coded[i]  = coded[best];
-			s.bytes[i]  = size[best];
-			s.total    += size[best];
+			coder.start();
+			Throwable fit_failed = null;
+			try { if(i + 1 < n) got[i + 1] = fitWindows(channel, i + 1, xdim, ydim, radii, task); }
+			catch(Throwable e) { fit_failed = e; }
+			try { coder.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+			if(failed[0] == null) failed[0] = fit_failed;
+			if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+			if(failed[0] instanceof Error) throw (Error) failed[0];
+			if(failed[0] != null) throw new RuntimeException(failed[0]);
+			got[i] = null;   // the radii not chosen
 		}
 		return s;
+	}
+
+	/**
+	 * Channel i's least-squares deltas at each radius (surveyWindows).
+	 *
+	 * @param channel the channels, in coding order
+	 * @param i       the channel
+	 * @param xdim    the width
+	 * @param ydim    the height
+	 * @param radii   the radii
+	 * @param task    the memory one fit needs
+	 * @return the deltas, per radius
+	 */
+	private static int[][] fitWindows(int[][] channel, int i, int xdim, int ydim, int[] radii, long task)
+	{
+		int[]   v = channel[i], ref = (i > 0) ? channel[i - 1] : null;
+		int[][] got = new int[radii.length][];
+		boundedParallel(radii.length, task, r -> got[r] = getLeastSquaresDeltas(v, ref, xdim, ydim, radii[r]));
+		return got;
+	}
+
+	/**
+	 * Codes channel i's deltas at each radius, given the deltas chosen for
+	 * the channels before it, and keeps the smallest in s (surveyWindows).
+	 *
+	 * @param s    the survey
+	 * @param i    the channel
+	 * @param v    its values
+	 * @param got  its deltas, per radius
+	 * @param xdim the width
+	 * @param task the memory one coding needs
+	 */
+	private static void codeWindows(WindowSurvey s, int i, int[] v, int[][] got, int xdim, long task)
+	{
+		int      nr = got.length;
+		int[][]  previous = Arrays.copyOf(s.deltas, i);
+		byte[][] coded = new byte[nr][];
+		long[]   size = s.tried[i];
+		boundedParallel(nr, task, r ->
+		{
+			try { coded[r] = packMixedDeltas(got[r], v, previous, xdim, true); }
+			catch(java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+			size[r] = coded[r].length;
+		});
+		int best = 0;
+		for(int r = 1; r < nr; r++) if(size[r] < size[best]) best = r;
+		s.radius[i] = s.radii[best];
+		s.deltas[i] = got[best];
+		s.coded[i]  = coded[best];
+		s.bytes[i]  = size[best];
+		s.total    += size[best];
 	}
 
 	// ---- Surveying predictor sets ----------------------------------------------
