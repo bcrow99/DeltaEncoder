@@ -11,10 +11,12 @@ import javax.swing.*;
 // SimpleWriter without the analysis, for speed: one channel set, green,
 // blue-green and red-green (SET_ID; the set SimpleWriter's analysis picks
 // most often, and within about 1% of its choice on the test images), every
-// interior pixel predicted by the least-squares fit
-// (DeltaMapper.LeastSquares, the wide clamp) with one window radius,
-// RADIUS, for every channel and image, solved at every EVERY-th pixel along
-// a row, and the deltas mixed-context coded
+// interior pixel predicted by the least-squares fit from the rows above
+// (DeltaMapper.RowFit, the wide clamp: the window is the RADIUS rows above,
+// with none of the pixel's own row, so a reader solves a whole row's fits at
+// the same time before decoding it) with one window radius for every
+// channel and image, solved at every EVERY-th pixel along a row, and the
+// deltas mixed-context coded
 // with the second opinions (DeltaMapper.packMixedDeltas). As in
 // SimpleWriter, a channel's fit uses the channel before it and its contexts
 // the deltas of the channels before it. Nothing is fitted or coded until
@@ -53,7 +55,7 @@ public class SimpleWriter2
 	static final int  RADIUS = 10;
 	/**
 	 * How often along a row the fit is solved: at every EVERY-th pixel, the
-	 * pixels between using the last solution (DeltaMapper.LeastSquares).
+	 * pixels between using the last solution (DeltaMapper.RowFit).
 	 */
 	static final int  EVERY = 3;
 	/**
@@ -329,7 +331,8 @@ public class SimpleWriter2
 
 	/**
 	 * File &gt; Save: codes the image (encode) into the file "foo", twice, and
-	 * prints both times (the first includes compiling the code).
+	 * prints both times (the first includes compiling the code), without the
+	 * decode check, and the check's time.
 	 */
 	class SaveHandler implements ActionListener
 	{
@@ -349,9 +352,10 @@ public class SimpleWriter2
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 			// The image is coded twice and the times of both printed: the first
 			// includes compiling the code (the first time it runs in this JVM),
-			// the second is the run time only. Both give the same bytes.
+			// the second is the run time only. Both leave out the decode check,
+			// which is timed on its own. Both give the same bytes.
 			File file = new File("foo");
-			long[] took = new long[2];
+			long[] took = new long[2], check = new long[2];
 			try
 			{
 				byte[] data = null;
@@ -359,8 +363,8 @@ public class SimpleWriter2
 				{
 					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 					long start = System.nanoTime();
-					encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
-					took[pass] = System.nanoTime() - start;
+					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
+					took[pass] = System.nanoTime() - start - check[pass];
 					byte[] got = bytes.toByteArray();
 					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
 					data = got;
@@ -380,6 +384,7 @@ public class SimpleWriter2
 			System.out.println(String.format("Coded %d x %d (%,d pixels)", delta_xdim, rows, (long) delta_xdim * rows));
 			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
 			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
+			System.out.println("Decode check:               " + ViewerSupport.formatDuration(check[1]));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
@@ -394,8 +399,8 @@ public class SimpleWriter2
 	 * SimpleWriter.bandStart(b) to bandStart(b + 1) of the quantized image,
 	 * coded as an image of its own (the fit and the contexts start again at
 	 * its top): per channel (green, blue-green, red-green), int init, then
-	 * the least-squares deltas (radius RADIUS, solved at every EVERY-th pixel
-	 * along a row) mixed-context coded with the second opinions
+	 * the deltas of the least-squares fit from the rows above (DeltaMapper.RowFit:
+	 * radius RADIUS, solved at every EVERY-th pixel along a row) mixed-context coded with the second opinions
 	 * (DeltaMapper.packMixedDeltas). Channels 1 and 2 use the ones before
 	 * them (their values in the fit, their deltas as context), so a band's
 	 * channels are decoded in order, each a couple of rows behind the one
@@ -403,10 +408,12 @@ public class SimpleWriter2
 	 * <p>
 	 * Each channel is fitted once over the whole image (the fit splits itself
 	 * across the cores); the bands' deltas come from it, with only each
-	 * band's first rows fitted again (DeltaMapper.getLeastSquaresBandDeltas).
+	 * band's first rows fitted again (DeltaMapper.getRowFitBandDeltas).
 	 * A channel's coding needs only the deltas of the channels before it, so
-	 * its bands are coded (and checked by decoding them back) while the next
-	 * channel is fitted.
+	 * its bands are coded while the next channel is fitted. Once everything
+	 * is coded, each band's channels are checked by decoding them back, at
+	 * the same time; the time that took is returned, so the coding can be
+	 * timed without it.
 	 *
 	 * @param out         the stream
 	 * @param value       the channels as quantized, in coding order (difference channels less their minimum)
@@ -417,10 +424,12 @@ public class SimpleWriter2
 	 * @param pixel_shift the Color Resolution
 	 * @param pixel_quant the Pixel Resolution
 	 * @param n           the number of bands
+	 * @return the time the decode check took, in nanoseconds
 	 * @throws IOException if the stream fails
 	 */
-	static void encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n) throws IOException
+	static long encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n) throws IOException
 	{
+		long check_time = 0;
 		int rows = value[0].length / xdim;
 		int[][][]  d = new int[n][3][];      // [band][channel]
 		byte[][][] coded = new byte[n][3][];
@@ -432,11 +441,11 @@ public class SimpleWriter2
 			{
 				int   fi = i;
 				int[] ref = (i > 0) ? value[i - 1] : null;
-				int[] whole = DeltaMapper.getLeastSquaresDeltas(value[i], ref, xdim, rows, RADIUS, EVERY);
+				int[] whole = DeltaMapper.getRowFitDeltas(value[i], ref, xdim, rows, RADIUS, EVERY);
 				for(int b = 0; b < n; b++)
 				{
 					int y0 = SimpleWriter.bandStart(b, n, rows), y1 = SimpleWriter.bandStart(b + 1, n, rows);
-					d[b][i] = (n == 1) ? whole : DeltaMapper.getLeastSquaresBandDeltas(whole, value[i], ref, xdim, y0, y1, RADIUS, EVERY);
+					d[b][i] = (n == 1) ? whole : DeltaMapper.getRowFitBandDeltas(whole, value[i], ref, xdim, y0, y1, RADIUS, EVERY);
 				}
 				for(int b = 0; b < n; b++)
 				{
@@ -448,6 +457,25 @@ public class SimpleWriter2
 						int[]   dd = d[fb][fi];
 						int[][] previous = Arrays.copyOf(d[fb], fi);
 						coded[fb][fi] = DeltaMapper.packMixedDeltas(dd, ch, previous, xdim, true);
+						return null;
+					}));
+				}
+			}
+			waitFor(jobs);
+			// The check, once everything is coded (so its time can be told
+			// apart): each band's channels decoded back, at the same time.
+			long check = System.nanoTime();
+			jobs.clear();
+			for(int b = 0; b < n; b++)
+				for(int i = 0; i < 3; i++)
+				{
+					int fb = b, fi = i;
+					jobs.add(coder.submit(() ->
+					{
+						int y0 = SimpleWriter.bandStart(fb, n, rows), y1 = SimpleWriter.bandStart(fb + 1, n, rows);
+						int[]   ch = (n == 1) ? value[fi] : Arrays.copyOfRange(value[fi], y0 * xdim, y1 * xdim);
+						int[]   dd = d[fb][fi];
+						int[][] previous = Arrays.copyOf(d[fb], fi);
 						int[] p = new int[ch.length];
 						for(int k = 0; k < p.length; k++) p[k] = ch[k] - dd[k];
 						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[fb][fi], ch, previous, xdim, p), dd))
@@ -455,20 +483,8 @@ public class SimpleWriter2
 						return null;
 					}));
 				}
-			}
-			for(Future<?> f : jobs)
-			{
-				try { f.get(); }
-				catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException(e); }
-				catch(ExecutionException e)
-				{
-					Throwable c = e.getCause();
-					if(c instanceof IOException) throw (IOException) c;
-					if(c instanceof RuntimeException) throw (RuntimeException) c;
-					if(c instanceof Error) throw (Error) c;
-					throw new IOException(c);
-				}
-			}
+			waitFor(jobs);
+			check_time = System.nanoTime() - check;
 		}
 		finally { coder.shutdownNow(); }
 
@@ -488,5 +504,29 @@ public class SimpleWriter2
 		out.writeByte(n);
 		for(int b = 0; b < n; b++) out.writeInt(band[b].length);
 		for(int b = 0; b < n; b++) out.write(band[b]);
+		return check_time;
+	}
+
+	/**
+	 * Waits for jobs, passing on the first one's failure.
+	 *
+	 * @param jobs the jobs
+	 * @throws IOException if one failed with one, or was interrupted
+	 */
+	private static void waitFor(java.util.List<Future<?>> jobs) throws IOException
+	{
+		for(Future<?> f : jobs)
+		{
+			try { f.get(); }
+			catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException(e); }
+			catch(ExecutionException e)
+			{
+				Throwable c = e.getCause();
+				if(c instanceof IOException) throw (IOException) c;
+				if(c instanceof RuntimeException) throw (RuntimeException) c;
+				if(c instanceof Error) throw (Error) c;
+				throw new IOException(c);
+			}
+		}
 	}
 }

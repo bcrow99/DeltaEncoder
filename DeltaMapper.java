@@ -3934,6 +3934,585 @@ public class DeltaMapper
 		dst[k] = dst[k - 1] + delta[k];
 	}
 
+	// ---- Least squares from the rows above (the Simple 2 format) ---------------
+	//
+	// RowFit is the least-squares primitive with a window of the rows above
+	// only: no pixels of the pixel's own row. A row's fits then depend only on
+	// the rows before it, so they can all be solved, in parallel, before the
+	// row is decoded; decoding a row is left with the prediction from the
+	// solved coefficients and the delta decoder. It costs a little compression
+	// (the pixels just to the left are the closest training pixels).
+
+	/**
+	 * Least squares fitted from the rows above. At each interior pixel (y,
+	 * x), the linear predictor (with a constant term) that best fits the
+	 * pixels in the window -- the r rows above it (from row 1) and r columns
+	 * either side (the interior columns) -- from the same 8 neighbours as
+	 * LeastSquares and, after the first channel, the previous channel at the
+	 * pixel, to its left and above. The fit is solved at every every-th pixel
+	 * along a row, from column 1, and the pixels up to the next solved one
+	 * use its solution; where it can't be solved (fewer than twice as many
+	 * window pixels as unknowns, or a singular system) they are predicted by
+	 * a, the pixel to the left. The prediction has the wide clamp (2 beyond
+	 * the range of all 8 spatial neighbours). The window's sums are exact
+	 * integers, kept per column as the rows go by; the solution (ridge 1, L
+	 * D L^T) is in a fixed order, so the encoder (in bands of rows, each
+	 * started on its own: start) and the decoder, and the Python version, get
+	 * the same values.
+	 * <p>
+	 * Per row: moveTo(y) brings the columns to row y's window (adding row y -
+	 * 1, dropping row y - 1 - r), solveRow(y) solves the row's fits, then
+	 * predict(y, x) for each interior pixel. moveTo and solveRow split their
+	 * work into tasks run at the same time when asked to (the decoder; the
+	 * encoder runs bands of rows at the same time instead).
+	 */
+	static final class RowFit
+	{
+		/**
+		 * The channel (filled in as it decodes), and the previous channel (null for the first).
+		 */
+		final int[]  v, ref;
+		/**
+		 * The width, the number of features, their augmented length (features,
+		 * 1, value), the number of products of the augmented vector, and the
+		 * number of unknowns (features and the constant).
+		 */
+		final int    xdim, nf, m, nt, n;
+		/**
+		 * The window radius, and how often along a row the fit is solved.
+		 */
+		final int    r, every;
+		/**
+		 * The solved pixels per row (columns 1, 1 + every, ... up to xdim - 2).
+		 */
+		final int    points;
+		/**
+		 * Per column, the window rows' sums of products (r rows of products of
+		 * at most about 520 * 520: an int holds them for any radius up to 255).
+		 */
+		final int[]  col;
+		/**
+		 * Each solved pixel's solution (n each), for the current row.
+		 */
+		final double[] coef;
+		/**
+		 * Whether each solved pixel's fit could be solved.
+		 */
+		final boolean[] valid;
+		/**
+		 * The features of the pixel being predicted.
+		 */
+		final long[] z;
+		/**
+		 * The row whose window the columns hold (-1 for none yet).
+		 */
+		int row = -1;
+		/**
+		 * The last prediction (predict returns it too).
+		 */
+		int wide;
+
+		/**
+		 * The fit for a channel.
+		 *
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param radius the window radius (at least 1)
+		 * @param every  how often along a row the fit is solved (at least 1)
+		 */
+		RowFit(int[] v, int[] ref, int xdim, int radius, int every)
+		{
+			this.v = v; this.ref = ref; this.xdim = xdim; this.r = radius; this.every = every;
+			nf     = (ref == null) ? 8 : 11;
+			m      = nf + 2;
+			nt     = m * (m + 1) / 2;
+			n      = nf + 1;
+			points = Math.max(0, (xdim - 2 + every - 1) / every);
+			col    = new int[xdim * nt];
+			coef   = new double[points * n];
+			valid  = new boolean[points];
+			z      = new long[m];
+		}
+
+		/**
+		 * One task's working arrays.
+		 */
+		final class Work
+		{
+			/**
+			 * A task's arrays, sized for this fit.
+			 */
+			Work() {}
+			/**
+			 * An augmented vector, and its products.
+			 */
+			final long[] zw = new long[m];
+			/**
+			 * The products of one pixel.
+			 */
+			final int[]  p  = new int[nt];
+			/**
+			 * A window's sums.
+			 */
+			final long[] win = new long[nt];
+			/**
+			 * The normal equations' matrix.
+			 */
+			final double[][] a = new double[n][n];
+			/**
+			 * Their right-hand side, and D of L D L^T.
+			 */
+			final double[] b = new double[n], dg = new double[n];
+		}
+
+		/**
+		 * The value at (y, x), clamped to the image.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 * @return the value
+		 */
+		private int at(int y, int x)
+		{
+			if(y < 0) y = 0;
+			if(x < 0) x = 0; else if(x > xdim - 1) x = xdim - 1;
+			return v[y * xdim + x];
+		}
+
+		/**
+		 * Sets zz to the features of pixel (y, x), 1, and its value.
+		 *
+		 * @param y  the row
+		 * @param x  the column
+		 * @param zz where they go
+		 */
+		private void features(int y, int x, long[] zz)
+		{
+			zz[0] = at(y, x - 1); zz[1] = at(y - 1, x); zz[2] = at(y - 1, x - 1); zz[3] = at(y - 1, x + 1);
+			zz[4] = at(y, x - 2); zz[5] = at(y - 2, x); zz[6] = at(y - 1, x + 2); zz[7] = at(y - 2, x + 1);
+			if(ref != null)
+			{
+				int k = y * xdim + x;
+				zz[8] = ref[k]; zz[9] = ref[k - 1]; zz[10] = ref[k - xdim];
+			}
+			zz[nf] = 1;
+			zz[nf + 1] = v[y * xdim + x];
+		}
+
+		/**
+		 * Pixel (y, x)'s products into w.p.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 * @param w the task's arrays
+		 */
+		private void products(int y, int x, Work w)
+		{
+			long[] zz = w.zw;
+			features(y, x, zz);
+			int t = 0;
+			for(int i = 0; i < m; i++)
+			{
+				long zi = zz[i];
+				for(int j = i; j < m; j++) w.p[t++] = (int) (zi * zz[j]);
+			}
+		}
+
+		/**
+		 * Sets up the window as if the rows before y0 had been gone through
+		 * (for a band of rows the encoder fits on its own).
+		 *
+		 * @param y0 the first row predicted
+		 */
+		void start(int y0)
+		{
+			Arrays.fill(col, 0);
+			Work w = new Work();
+			for(int ty = Math.max(1, y0 - r); ty <= y0 - 1; ty++)
+				for(int tx = 1; tx < xdim - 1; tx++)
+				{
+					products(ty, tx, w);
+					for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += w.p[t];
+				}
+			row = y0;
+		}
+
+		/**
+		 * Brings the columns to row y's window: rows y - r .. y - 1 (from 1).
+		 * After row y - 1, adds row y - 1 and drops row y - 1 - r; otherwise
+		 * starts again (start).
+		 *
+		 * @param y        the row
+		 * @param parallel whether to split the work into tasks run at the same time
+		 */
+		void moveTo(int y, boolean parallel)
+		{
+			if(row == y) return;
+			if(row != y - 1) { start(y); return; }
+			int add = y - 1, drop = y - 1 - r;
+			if(add >= 1 && xdim > 2)
+			{
+				int tasks = parallel ? tasks(xdim - 2, 128) : 1;
+				runTasks(tasks, t ->
+				{
+					Work w = new Work();
+					int c0 = 1 + (int) ((long) t * (xdim - 2) / tasks), c1 = 1 + (int) ((long) (t + 1) * (xdim - 2) / tasks);
+					for(int tx = c0; tx < c1; tx++)
+					{
+						int c = tx * nt;
+						products(add, tx, w);
+						for(int s = 0; s < nt; s++) col[c + s] += w.p[s];
+						if(drop >= 1)
+						{
+							products(drop, tx, w);
+							for(int s = 0; s < nt; s++) col[c + s] -= w.p[s];
+						}
+					}
+				});
+			}
+			row = y;
+		}
+
+		/**
+		 * Solves row y's fits (the columns at row y's window: moveTo).
+		 *
+		 * @param y        the row
+		 * @param parallel whether to split the work into tasks run at the same time
+		 */
+		void solveRow(int y, boolean parallel)
+		{
+			if(points == 0) return;
+			int tasks = parallel ? tasks(points, 32) : 1;
+			runTasks(tasks, t ->
+			{
+				Work w = new Work();
+				int p0 = (int) ((long) t * points / tasks), p1 = (int) ((long) (t + 1) * points / tasks);
+				int lo = 0, hi = -1;   // the columns in w.win
+				for(int p = p0; p < p1; p++)
+				{
+					int x = 1 + p * every;
+					int nlo = Math.max(1, x - r), nhi = Math.min(xdim - 2, x + r);
+					if(p == p0)
+					{
+						Arrays.fill(w.win, 0);
+						for(int c = nlo; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
+					}
+					else
+					{
+						for(int c = lo; c < nlo; c++)  for(int s = 0, o = c * nt; s < nt; s++) w.win[s] -= col[o + s];
+						for(int c = hi + 1; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
+					}
+					lo = nlo; hi = nhi;
+					valid[p] = solve(w, p);
+				}
+			});
+		}
+
+		/**
+		 * Solves the fit for w.win into solved pixel p's coefficients.
+		 *
+		 * @param w the task's arrays (w.win the window's sums)
+		 * @param p the solved pixel
+		 * @return whether it was solved
+		 */
+		private boolean solve(Work w, int p)
+		{
+			long[] win = w.win;
+			double[][] a = w.a;
+			double[] b = w.b, dg = w.dg;
+			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
+			long count = win[nf * m - nf * (nf - 1) / 2];
+			if(count < 2 * n) return false;
+			// The normal equations' lower triangle (ridge 1 on the diagonal), then
+			// L D L^T: L unit lower triangular (in a's lower triangle), D in dg.
+			for(int i = 0; i < n; i++)
+			{
+				int base = i * m - i * (i - 1) / 2;
+				for(int j = i; j < n; j++) a[j][i] = (double) win[base + j - i];
+				b[i] = (double) win[base + m - 1 - i];
+				a[i][i] += 1.0;
+			}
+			for(int j = 0; j < n; j++)
+			{
+				double[] aj = a[j];
+				double s = aj[j];
+				for(int q = 0; q < j; q++) s -= aj[q] * aj[q] * dg[q];
+				if(s < 1e-9) return false;
+				dg[j] = s;
+				for(int i = j + 1; i < n; i++)
+				{
+					double[] ai = a[i];
+					double t = ai[j];
+					for(int q = 0; q < j; q++) t -= ai[q] * aj[q] * dg[q];
+					ai[j] = t / s;
+				}
+			}
+			int o = p * n;
+			for(int i = 0; i < n; i++)
+			{
+				double s = b[i];
+				for(int q = 0; q < i; q++) s -= a[i][q] * coef[o + q];
+				coef[o + i] = s;
+			}
+			for(int i = 0; i < n; i++) coef[o + i] /= dg[i];
+			for(int i = n - 1; i >= 0; i--)
+			{
+				double s = coef[o + i];
+				for(int q = i + 1; q < n; q++) s -= a[q][i] * coef[o + q];
+				coef[o + i] = s;
+			}
+			return true;
+		}
+
+		/**
+		 * The prediction at interior pixel (y, x), with the wide clamp (row y's
+		 * fits solved: solveRow), also left in wide.
+		 *
+		 * @param y the row
+		 * @param x the column
+		 * @return the prediction
+		 */
+		int predict(int y, int x)
+		{
+			int p  = (x - 1) / every;
+			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
+			if(!valid[p]) { wide = pa; return pa; }
+			features(y, x, z);
+			double s = 0;
+			for(int i = 0, o = p * n; i < n; i++) s += coef[o + i] * z[i];
+			int lo = Math.min(Math.min(pa, pb), Math.min(pc, pd)), hi = Math.max(Math.max(pa, pb), Math.max(pc, pd));
+			for(int i = 4; i < 8; i++) { lo = (int) Math.min(lo, z[i]); hi = (int) Math.max(hi, z[i]); }
+			double w = Math.max(lo - 2, Math.min(hi + 2, s));
+			wide = (int) Math.floor(w + 0.5);
+			return wide;
+		}
+
+		/**
+		 * How many tasks to split work into: one per core, but no fewer than
+		 * min items each.
+		 *
+		 * @param items the items of work
+		 * @param min   the fewest items a task should have
+		 * @return the number of tasks
+		 */
+		private static int tasks(int items, int min)
+		{
+			return Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), items / min));
+		}
+
+		/**
+		 * Runs body(0 .. tasks - 1), the first in this thread and the rest in
+		 * ROW_POOL, and waits for them.
+		 *
+		 * @param tasks the number of tasks
+		 * @param body  the task
+		 */
+		private static void runTasks(int tasks, java.util.function.IntConsumer body)
+		{
+			if(tasks == 1) { body.accept(0); return; }
+			java.util.concurrent.Future<?>[] f = new java.util.concurrent.Future<?>[tasks - 1];
+			for(int t = 1; t < tasks; t++) { int ft = t; f[t - 1] = ROW_POOL.submit(() -> body.accept(ft)); }
+			Throwable failed = null;
+			try { body.accept(0); } catch(Throwable e) { failed = e; }
+			for(java.util.concurrent.Future<?> g : f)
+			{
+				try { g.get(); }
+				catch(java.util.concurrent.ExecutionException e) { if(failed == null) failed = e.getCause(); }
+				catch(InterruptedException e) { Thread.currentThread().interrupt(); if(failed == null) failed = e; }
+			}
+			if(failed instanceof RuntimeException) throw (RuntimeException) failed;
+			if(failed instanceof Error) throw (Error) failed;
+			if(failed != null) throw new RuntimeException(failed);
+		}
+
+		/**
+		 * The encoder's predictions for a whole channel, in bands of rows
+		 * computed at the same time (each band started on its own).
+		 *
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param ydim   the height
+		 * @param radius the window radius
+		 * @param every  how often along a row the fit is solved
+		 * @return the prediction at each interior pixel (0 elsewhere)
+		 */
+		static short[] plane(int[] v, int[] ref, int xdim, int ydim, int radius, int every)
+		{
+			short[] out = new short[v.length];
+			int threads = Runtime.getRuntime().availableProcessors();
+			int band = Math.max(4 * (radius + 1), (ydim - 1 + threads - 1) / threads);
+			int bands = (ydim - 1 + band - 1) / band;
+			java.util.stream.IntStream.range(0, bands).parallel().forEach(t ->
+			{
+				int y0 = 1 + t * band, y1 = Math.min(ydim, y0 + band);
+				RowFit f = new RowFit(v, ref, xdim, radius, every);
+				f.start(y0);
+				for(int y = y0; y < y1; y++)
+				{
+					f.moveTo(y, false);
+					f.solveRow(y, false);
+					for(int x = 1; x < xdim - 1; x++) out[y * xdim + x] = (short) f.predict(y, x);
+				}
+			});
+			return out;
+		}
+	}
+
+	/**
+	 * The threads RowFit's decoder tasks run in (their own: the tasks never
+	 * wait for anything, so the pool can't block).
+	 */
+	static final java.util.concurrent.ExecutorService ROW_POOL = java.util.concurrent.Executors.newFixedThreadPool(
+		Runtime.getRuntime().availableProcessors(), task -> { Thread t = new Thread(task, "RowFit"); t.setDaemon(true); return t; });
+
+	/**
+	 * A channel's deltas from the least-squares fit from the rows above
+	 * (RowFit, the wide clamp).
+	 *
+	 * @param v      the channel
+	 * @param ref    the previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param radius the window radius
+	 * @param every  how often along a row the fit is solved
+	 * @return the deltas
+	 */
+	public static int[] getRowFitDeltas(int[] v, int[] ref, int xdim, int ydim, int radius, int every)
+	{
+		short[] p = RowFit.plane(v, ref, xdim, ydim, radius, every);
+		int[]   d = new int[v.length];
+		blockEdges(v, d, xdim, ydim);
+		for(int y = 1; y < ydim; y++)
+			for(int x = 1, k = y * xdim + 1; x < xdim - 1; x++, k++) d[k] = v[k] - p[k];
+		return d;
+	}
+
+	/**
+	 * A band's RowFit deltas -- what getRowFitDeltas gives for rows y0 to y1 -
+	 * 1 alone, coded as an image of their own -- from the whole channel's.
+	 * They differ only in the band's first radius + 2 rows (the band's top row
+	 * is an edge, and the window's first row uses the row above it), so only
+	 * those are fitted again; the sums are exact, so the rest are the same.
+	 *
+	 * @param whole  the whole channel's deltas (getRowFitDeltas, at this radius and every)
+	 * @param v      the whole channel
+	 * @param ref    the whole previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param y0     the band's first row
+	 * @param y1     the row after its last
+	 * @param radius the window radius
+	 * @param every  how often along a row the fit is solved
+	 * @return the band's deltas
+	 */
+	public static int[] getRowFitBandDeltas(int[] whole, int[] v, int[] ref, int xdim, int y0, int y1, int radius, int every)
+	{
+		int   h = y1 - y0, k = Math.min(h, radius + 2);
+		int[] d = new int[h * xdim];
+		int[] top = getRowFitDeltas(Arrays.copyOfRange(v, y0 * xdim, (y0 + k) * xdim),
+		                            (ref == null) ? null : Arrays.copyOfRange(ref, y0 * xdim, (y0 + k) * xdim), xdim, k, radius, every);
+		System.arraycopy(top, 0, d, 0, k * xdim);
+		System.arraycopy(whole, (y0 + k) * xdim, d, k * xdim, (h - k) * xdim);
+		return d;
+	}
+
+	/**
+	 * Decodes channels {@link #packMixedDeltas} coded (with the second
+	 * opinions) from their RowFit deltas, rebuilding them as it goes: each
+	 * channel's fit uses the one before it, and its contexts the deltas of
+	 * all the ones before it. Each channel decodes in its own thread, a row at
+	 * a time, once the channel before it is two rows ahead (as
+	 * getValuesFromLeastSquaresChannels); before each row its fits are solved
+	 * in tasks run at the same time (RowFit.moveTo, solveRow), so decoding a
+	 * row is left with the predictions and the delta decoder.
+	 *
+	 * @param md     each channel's rank table and coded bytes ({@link #readMixedDeltas}), in coding order
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value
+	 * @param radius each channel's window radius
+	 * @param every  how often along a row the fit was solved
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromRowFitChannels(MixedDeltas[] md, int xdim, int ydim, int[] init, int[] radius, int every)
+	{
+		int n = md.length;
+		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
+		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
+		Throwable[] failed = new Throwable[1];
+		Thread[] worker = new Thread[n];
+		for(int c = 0; c < n; c++)
+		{
+			final int i = c;
+			worker[i] = new Thread(() ->
+			{
+				try
+				{
+					MixedDecoder mix = new MixedDecoder(md[i], Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					RowFit fit = new RowFit(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
+					for(int y = 0; y < ydim; y++)
+					{
+						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
+						rowFitRow(mix, fit, delta[i], value[i], xdim, y, init[i]);
+						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
+					}
+				}
+				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
+			});
+			worker[i].start();
+		}
+		for(Thread t : worker)
+			try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+		if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+		if(failed[0] instanceof Error) throw (Error) failed[0];
+		if(failed[0] != null) throw new RuntimeException(failed[0]);
+		return new int[][][] {delta, value};
+	}
+
+	/**
+	 * Decodes row y of a channel's RowFit deltas and rebuilds it (rows in
+	 * order): row 0 horizontal, column 0 vertical, the last column
+	 * horizontal, the interior from the fit, its fits solved first.
+	 *
+	 * @param mix   the delta decoder
+	 * @param fit   the fit (over dst)
+	 * @param delta the deltas, filled in
+	 * @param dst   the values, filled in
+	 * @param xdim  the width
+	 * @param y     the row
+	 * @param init  the first value
+	 */
+	private static void rowFitRow(MixedDecoder mix, RowFit fit, int[] delta, int[] dst, int xdim, int y, int init)
+	{
+		if(y == 0)
+		{
+			mix.next(0, delta, dst);
+			dst[0] = init;
+			for(int x = 1; x < xdim; x++)
+			{
+				mix.next(x, delta, dst);
+				dst[x] = dst[x - 1] + delta[x];
+			}
+			return;
+		}
+		fit.moveTo(y, true);
+		fit.solveRow(y, true);
+		int k = y * xdim;
+		mix.next(k, delta, dst);
+		dst[k] = dst[k - xdim] + delta[k];
+		for(int x = 1; x < xdim - 1; x++)
+		{
+			k++;
+			int p = fit.predict(y, x);
+			mix.next(k, delta, dst, p);
+			dst[k] = delta[k] + p;
+		}
+		k++;
+		mix.next(k, delta, dst);
+		dst[k] = dst[k - 1] + delta[k];
+	}
+
 	/**
 	 * What surveyWindows chose for each channel, and what it measured.
 	 */

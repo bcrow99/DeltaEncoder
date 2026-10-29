@@ -6,8 +6,10 @@ import javax.swing.*;
 //
 // Reads SimpleWriter2's files: the channels green, blue-green and red-green
 // (SimpleWriter2.SET_ID), every interior pixel predicted by the
-// least-squares fit (the wide clamp, window radius SimpleWriter2.RADIUS,
-// solved at every SimpleWriter2.EVERY-th pixel along a row), the deltas
+// least-squares fit from the rows above (DeltaMapper.RowFit, the wide clamp,
+// window radius SimpleWriter2.RADIUS, solved at every
+// SimpleWriter2.EVERY-th pixel along a row; a row's fits are solved at the
+// same time, before the row is decoded), the deltas
 // mixed-context coded with the second opinions, in bands of rows decoded at
 // the same time, resized back with ResizeMapper.resize2 (centred). See
 // SimpleWriter2.encode for the layout.
@@ -179,7 +181,7 @@ public class SimpleReader2
 		java.util.stream.IntStream.range(0, bands).parallel().forEach(b ->
 		{
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-			int[][] v = DeltaMapper.getValuesFromLeastSquaresChannels(band_mixed[b], w, y1 - y0, band_init[b], radius, SimpleWriter2.EVERY)[1];
+			int[][] v = DeltaMapper.getValuesFromRowFitChannels(band_mixed[b], w, y1 - y0, band_init[b], radius, SimpleWriter2.EVERY)[1];
 			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
 		});
 		for(int i = 0; i < 3; i++) if(SimpleWriter2.CHANNELS[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
