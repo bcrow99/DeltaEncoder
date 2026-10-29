@@ -55,7 +55,7 @@ public class SimpleWriter2
 	 * How often along a row the fit is solved: at every EVERY-th pixel, the
 	 * pixels between using the last solution (DeltaMapper.LeastSquares).
 	 */
-	static final int  EVERY = 2;
+	static final int  EVERY = 3;
 	/**
 	 * The most bands Save offers.
 	 */
