@@ -13,7 +13,8 @@ import javax.swing.*;
 // most often, and within about 1% of its choice on the test images), every
 // interior pixel predicted by the least-squares fit
 // (DeltaMapper.LeastSquares, the wide clamp) with one window radius,
-// RADIUS, for every channel and image, and the deltas mixed-context coded
+// RADIUS, for every channel and image, solved at every EVERY-th pixel along
+// a row, and the deltas mixed-context coded
 // with the second opinions (DeltaMapper.packMixedDeltas). As in
 // SimpleWriter, a channel's fit uses the channel before it and its contexts
 // the deltas of the channels before it. Nothing is fitted or coded until
@@ -50,6 +51,11 @@ public class SimpleWriter2
 	 * The least-squares window radius, for every channel.
 	 */
 	static final int  RADIUS = 10;
+	/**
+	 * How often along a row the fit is solved: at every EVERY-th pixel, the
+	 * pixels between using the last solution (DeltaMapper.LeastSquares).
+	 */
+	static final int  EVERY = 2;
 	/**
 	 * The most bands Save offers.
 	 */
@@ -368,11 +374,12 @@ public class SimpleWriter2
 	 * Codes the channels and writes the file. Format 1. Header: FORMAT_ID,
 	 * FORMAT_VERSION, width, height (unsigned shorts), pixel_shift,
 	 * pixel_quant; per channel (coding order) int min; the number of bands n
-	 * (an unsigned byte), n int lengths, and the n bands. Band b is rows SimpleWriter.bandStart(b) to
-	 * bandStart(b + 1) of the quantized image, coded as an image of its own
-	 * (the fit and the contexts start again at its top): per channel (green,
-	 * blue-green, red-green), int init, then the least-squares deltas (radius RADIUS)
-	 * mixed-context coded with the second opinions
+	 * (an unsigned byte), n int lengths, and the n bands. Band b is rows
+	 * SimpleWriter.bandStart(b) to bandStart(b + 1) of the quantized image,
+	 * coded as an image of its own (the fit and the contexts start again at
+	 * its top): per channel (green, blue-green, red-green), int init, then
+	 * the least-squares deltas (radius RADIUS, solved at every EVERY-th pixel
+	 * along a row) mixed-context coded with the second opinions
 	 * (DeltaMapper.packMixedDeltas). Channels 1 and 2 use the ones before
 	 * them (their values in the fit, their deltas as context), so a band's
 	 * channels are decoded in order, each a couple of rows behind the one
@@ -409,11 +416,11 @@ public class SimpleWriter2
 			{
 				int   fi = i;
 				int[] ref = (i > 0) ? value[i - 1] : null;
-				int[] whole = DeltaMapper.getLeastSquaresDeltas(value[i], ref, xdim, rows, RADIUS);
+				int[] whole = DeltaMapper.getLeastSquaresDeltas(value[i], ref, xdim, rows, RADIUS, EVERY);
 				for(int b = 0; b < n; b++)
 				{
 					int y0 = SimpleWriter.bandStart(b, n, rows), y1 = SimpleWriter.bandStart(b + 1, n, rows);
-					d[b][i] = (n == 1) ? whole : DeltaMapper.getLeastSquaresBandDeltas(whole, value[i], ref, xdim, y0, y1, RADIUS);
+					d[b][i] = (n == 1) ? whole : DeltaMapper.getLeastSquaresBandDeltas(whole, value[i], ref, xdim, y0, y1, RADIUS, EVERY);
 				}
 				for(int b = 0; b < n; b++)
 				{

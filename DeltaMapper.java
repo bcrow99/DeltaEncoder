@@ -3288,6 +3288,16 @@ public class DeltaMapper
 		 */
 		final int    r;
 		/**
+		 * How often along a row the fit is solved: at every pixel (1), or at
+		 * every every-th pixel from the row's first, the pixels between using
+		 * the last solution (the window still moves at every pixel).
+		 */
+		final int    every;
+		/**
+		 * coef holds a solution from this row (for every &gt; 1).
+		 */
+		boolean have = false;
+		/**
 		 * Per column, the window rows' sums of products (r rows of products of
 		 * at most about 520 * 520: an int holds them for any radius up to 255).
 		 */
@@ -3359,7 +3369,22 @@ public class DeltaMapper
 		 */
 		LeastSquares(int[] v, int[] ref, int xdim, int radius)
 		{
-			this.v = v; this.ref = ref; this.xdim = xdim; this.r = radius;
+			this(v, ref, xdim, radius, 1);
+		}
+
+		/**
+		 * The predictor for a channel, with the window of the given radius,
+		 * solving the fit at every every-th pixel along a row.
+		 *
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param radius the window radius (at least 1)
+		 * @param every  how often the fit is solved (at least 1)
+		 */
+		LeastSquares(int[] v, int[] ref, int xdim, int radius, int every)
+		{
+			this.v = v; this.ref = ref; this.xdim = xdim; this.r = radius; this.every = every;
 			nf   = (ref == null) ? 8 : 11;
 			m    = nf + 2;
 			nt   = m * (m + 1) / 2;
@@ -3387,6 +3412,23 @@ public class DeltaMapper
 		 */
 		static short[][] plane(int[] v, int[] ref, int xdim, int ydim, int radius)
 		{
+			return plane(v, ref, xdim, ydim, radius, 1);
+		}
+
+		/**
+		 * As {@link #plane(int[], int[], int, int, int)}, solving the fit at
+		 * every every-th pixel along a row.
+		 *
+		 * @param v      the channel
+		 * @param ref    the previous channel, or null for the first
+		 * @param xdim   the width
+		 * @param ydim   the height
+		 * @param radius the window radius
+		 * @param every  how often the fit is solved
+		 * @return LS and LS wide at each interior pixel (0 elsewhere)
+		 */
+		static short[][] plane(int[] v, int[] ref, int xdim, int ydim, int radius, int every)
+		{
 			short[] out = new short[v.length], wide = new short[v.length];
 			int threads = Runtime.getRuntime().availableProcessors();
 			int band = Math.max(4 * (radius + 1), (ydim - 1 + threads - 1) / threads);
@@ -3394,7 +3436,7 @@ public class DeltaMapper
 			java.util.stream.IntStream.range(0, bands).parallel().forEach(t ->
 			{
 				int y0 = 1 + t * band, y1 = Math.min(ydim, y0 + band);
-				LeastSquares ls = new LeastSquares(v, ref, xdim, radius);
+				LeastSquares ls = new LeastSquares(v, ref, xdim, radius, every);
 				ls.start(y0);
 				for(int y = y0; y < y1; y++)
 					for(int x = 1; x < xdim - 1; x++) { out[y * xdim + x] = (short) ls.next(y * xdim + x); wide[y * xdim + x] = (short) ls.wide; }
@@ -3534,6 +3576,7 @@ public class DeltaMapper
 					}
 				row = y;
 				stored = y;
+				have = false;
 				Arrays.fill(win, 0);
 				for(int tx = 1; tx <= Math.min(xdim - 2, 1 + r); tx++) for(int t = 0; t < nt; t++) win[t] += col[tx * nt + t];
 			}
@@ -3549,9 +3592,28 @@ public class DeltaMapper
 
 			int n = nf + 1;
 			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
+			if(!have || (x - 1) % every == 0)
+			{
+				have = false;
+				if(!solve(pa)) return pa;
+				have = (every > 1);
+			}
+			return predict(y, x, pa, pb, pc, pd);
+		}
+
+		/**
+		 * Solves the fit for the window's sums into coef.
+		 *
+		 * @param pa the pixel to the left (the prediction, in wide too, if
+		 *           the fit can't be solved)
+		 * @return whether it was solved
+		 */
+		private boolean solve(int pa)
+		{
+			int n = nf + 1;
 			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
 			long count = win[nf * m - nf * (nf - 1) / 2];
-			if(count < 2 * n) { wide = pa; return pa; }
+			if(count < 2 * n) { wide = pa; return false; }
 			// The normal equations' lower triangle (ridge 1 on the diagonal), then
 			// L D L^T: L unit lower triangular (in a's lower triangle), D in dg.
 			for(int i = 0; i < n; i++)
@@ -3566,7 +3628,7 @@ public class DeltaMapper
 				double[] aj = a[j];
 				double s = aj[j];
 				for(int q = 0; q < j; q++) s -= aj[q] * aj[q] * dg[q];
-				if(s < 1e-9) { wide = pa; return pa; }
+				if(s < 1e-9) { wide = pa; return false; }
 				dg[j] = s;
 				for(int i = j + 1; i < n; i++)
 				{
@@ -3589,6 +3651,24 @@ public class DeltaMapper
 				for(int q = i + 1; q < n; q++) s -= a[q][i] * coef[q];
 				coef[i] = s;
 			}
+			return true;
+		}
+
+		/**
+		 * The prediction at (y, x) from coef, clamped (and, in wide, with the
+		 * wide clamp).
+		 *
+		 * @param y  the row
+		 * @param x  the column
+		 * @param pa the pixel to the left
+		 * @param pb the one above
+		 * @param pc above and to the left
+		 * @param pd above and to the right
+		 * @return the prediction
+		 */
+		private int predict(int y, int x, int pa, int pb, int pc, int pd)
+		{
+			int n = nf + 1;
 			features(y, x);
 			double p = 0;
 			for(int i = 0; i < n; i++) p += coef[i] * z[i];
@@ -3630,7 +3710,24 @@ public class DeltaMapper
 	 */
 	public static int[] getLeastSquaresDeltas(int[] v, int[] ref, int xdim, int ydim, int radius)
 	{
-		short[] p = LeastSquares.plane(v, ref, xdim, ydim, radius)[1];
+		return getLeastSquaresDeltas(v, ref, xdim, ydim, radius, 1);
+	}
+
+	/**
+	 * As {@link #getLeastSquaresDeltas(int[], int[], int, int, int)}, solving
+	 * the fit at every every-th pixel along a row.
+	 *
+	 * @param v      the channel
+	 * @param ref    the previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param radius the window radius
+	 * @param every  how often the fit is solved
+	 * @return the deltas
+	 */
+	public static int[] getLeastSquaresDeltas(int[] v, int[] ref, int xdim, int ydim, int radius, int every)
+	{
+		short[] p = LeastSquares.plane(v, ref, xdim, ydim, radius, every)[1];
 		int[]   d = new int[v.length];
 		blockEdges(v, d, xdim, ydim);
 		for(int y = 1; y < ydim; y++)
@@ -3657,10 +3754,30 @@ public class DeltaMapper
 	 */
 	public static int[] getLeastSquaresBandDeltas(int[] whole, int[] v, int[] ref, int xdim, int y0, int y1, int radius)
 	{
+		return getLeastSquaresBandDeltas(whole, v, ref, xdim, y0, y1, radius, 1);
+	}
+
+	/**
+	 * As {@link #getLeastSquaresBandDeltas(int[], int[], int[], int, int, int, int)},
+	 * solving the fit at every every-th pixel along a row (whole made the
+	 * same way).
+	 *
+	 * @param whole  the whole channel's deltas (getLeastSquaresDeltas, at this radius and every)
+	 * @param v      the whole channel
+	 * @param ref    the whole previous channel, or null for the first
+	 * @param xdim   the width
+	 * @param y0     the band's first row
+	 * @param y1     the row after its last
+	 * @param radius the window radius
+	 * @param every  how often the fit is solved
+	 * @return the band's deltas
+	 */
+	public static int[] getLeastSquaresBandDeltas(int[] whole, int[] v, int[] ref, int xdim, int y0, int y1, int radius, int every)
+	{
 		int   h = y1 - y0, k = Math.min(h, radius + 2);
 		int[] d = new int[h * xdim];
 		int[] top = getLeastSquaresDeltas(Arrays.copyOfRange(v, y0 * xdim, (y0 + k) * xdim),
-		                                  (ref == null) ? null : Arrays.copyOfRange(ref, y0 * xdim, (y0 + k) * xdim), xdim, k, radius);
+		                                  (ref == null) ? null : Arrays.copyOfRange(ref, y0 * xdim, (y0 + k) * xdim), xdim, k, radius, every);
 		System.arraycopy(top, 0, d, 0, k * xdim);
 		System.arraycopy(whole, (y0 + k) * xdim, d, k * xdim, (h - k) * xdim);
 		return d;
@@ -3684,6 +3801,23 @@ public class DeltaMapper
 	 */
 	public static int[][][] getValuesFromLeastSquaresChannels(MixedDeltas[] md, int xdim, int ydim, int[] init, int[] radius)
 	{
+		return getValuesFromLeastSquaresChannels(md, xdim, ydim, init, radius, 1);
+	}
+
+	/**
+	 * As {@link #getValuesFromLeastSquaresChannels(MixedDeltas[], int, int, int[], int[])},
+	 * for deltas whose fit was solved at every every-th pixel along a row.
+	 *
+	 * @param md     each channel's rank table and coded bytes ({@link #readMixedDeltas}), in coding order
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value
+	 * @param radius each channel's window radius
+	 * @param every  how often the fit was solved
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromLeastSquaresChannels(MixedDeltas[] md, int xdim, int ydim, int[] init, int[] radius, int every)
+	{
 		int n = md.length;
 		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
 		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
@@ -3697,7 +3831,7 @@ public class DeltaMapper
 				try
 				{
 					MixedDecoder mix = new MixedDecoder(md[i], Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
-					LeastSquares lsq = new LeastSquares(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i]);
+					LeastSquares lsq = new LeastSquares(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
 					for(int y = 0; y < ydim; y++)
 					{
 						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
