@@ -4437,6 +4437,28 @@ public class DeltaMapper
 	 */
 	public static int[][][] getValuesFromRowFitChannels(MixedDeltas[] md, int xdim, int ydim, int[] init, int[] radius, int every)
 	{
+		@SuppressWarnings({"unchecked", "rawtypes"})
+		java.util.concurrent.Future<MixedDeltas>[] ready = new java.util.concurrent.Future[md.length];
+		for(int i = 0; i < md.length; i++) ready[i] = java.util.concurrent.CompletableFuture.completedFuture(md[i]);
+		return getValuesFromRowFitChannels(ready, xdim, ydim, init, radius, every);
+	}
+
+	/**
+	 * As {@link #getValuesFromRowFitChannels(MixedDeltas[], int, int, int[], int[], int)},
+	 * for channels still being read: each channel's thread starts decoding
+	 * once its coded deltas are there (md[i] done; init[i] set before it), so
+	 * a reader can decode the channels read so far while it reads the rest.
+	 *
+	 * @param md     each channel's rank table and coded bytes, when read, in coding order
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value (set before md[i] is done)
+	 * @param radius each channel's window radius
+	 * @param every  how often along a row the fit was solved
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromRowFitChannels(java.util.concurrent.Future<MixedDeltas>[] md, int xdim, int ydim, int[] init, int[] radius, int every)
+	{
 		int n = md.length;
 		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
 		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
@@ -4449,7 +4471,7 @@ public class DeltaMapper
 			{
 				try
 				{
-					MixedDecoder mix = new MixedDecoder(md[i], Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					MixedDecoder mix = new MixedDecoder(md[i].get(), Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
 					RowFit fit = new RowFit(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
 					for(int y = 0; y < ydim; y++)
 					{
