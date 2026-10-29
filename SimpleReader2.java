@@ -12,8 +12,9 @@ import javax.swing.*;
 // same time, before the row is decoded), the deltas
 // mixed-context coded with the second opinions, in bands of rows decoded at
 // the same time, resized back with ResizeMapper.resize2 (centred). The file
-// is read in stages: each band's channels start decoding as soon as they
-// have been read, while the rest of the file is read. See
+// is read in stages: each band's channels start decoding as soon as the
+// start of them has been read, and decode their coded bytes as they arrive,
+// while the rest of the file is read. See
 // SimpleWriter2.encode for the layout.
 /**
  * Reads SimpleWriter2's files (see the comment above).
@@ -78,7 +79,8 @@ public class SimpleReader2
 	 * Reads a file's header, opens its window, then reads and decodes the
 	 * file (twice, printing both times: the first includes compiling the
 	 * code). Reading and decoding overlap: each channel of each band starts
-	 * decoding as soon as it has been read (decodeFile).
+	 * decoding as soon as the start of it has been read, and decodes its
+	 * coded bytes as they arrive (decode).
 	 *
 	 * @param filename the file
 	 */
@@ -157,19 +159,40 @@ public class SimpleReader2
 	}
 
 	/**
-	 * Reads the file and decodes it, in stages: the bands start decoding at
-	 * once, each in its own thread (each band's channels in threads of their
-	 * own, each a couple of rows behind the one before: a channel's fit and
-	 * contexts use the ones before it), and each channel starts as soon as
-	 * this thread has read it, while the rest are read. Then blue, green and
-	 * red are rebuilt, resized and shifted. Leaves the time the reading took
-	 * in read_time.
+	 * Reads the file and decodes it, in stages (decode).
 	 *
 	 * @param filename the file
 	 * @return the image
 	 * @throws IOException if it can't be read
 	 */
 	private BufferedImage decodeFile(String filename) throws IOException
+	{
+		try(InputStream in = new FileInputStream(filename)) { return decode(in, filename); }
+	}
+
+	/**
+	 * How many coded bytes are read at a time, saying each time that they
+	 * have arrived.
+	 */
+	static final int CHUNK = 1 << 16;
+
+	/**
+	 * Reads a Simple 2 file from a stream and decodes it, in stages: the
+	 * bands start decoding at once, each in its own thread (each band's
+	 * channels in threads of their own, each a couple of rows behind the one
+	 * before: a channel's fit and contexts use the ones before it), and each
+	 * channel starts as soon as this thread has read the start of it (its
+	 * rank table), decoding its coded bytes as they arrive, a chunk at a
+	 * time, while the rest are read (ArithmeticMapper.Arriving). Then blue,
+	 * green and red are rebuilt, resized and shifted. Leaves the time the
+	 * reading took in read_time.
+	 *
+	 * @param raw  the stream (from the start of the file)
+	 * @param name its name, for messages
+	 * @return the image
+	 * @throws IOException if it can't be read, or isn't the file the header was read from
+	 */
+	private BufferedImage decode(InputStream raw, String name) throws IOException
 	{
 		int[]   size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
 		int     w = size[0], h = size[1];
@@ -197,24 +220,44 @@ public class SimpleReader2
 			worker[b].start();
 		}
 		long start = System.nanoTime();
-		try(DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(filename))))
+		java.util.List<ArithmeticMapper.Arriving> arriving = new java.util.ArrayList<>();
+		long[] used = new long[1];   // the bytes read so far
+		try
 		{
-			readHeader(in, filename);
+			DataInputStream in = new DataInputStream(new FilterInputStream(new BufferedInputStream(raw, CHUNK))
+			{
+				@Override public int read() throws IOException { int c = super.read(); if(c >= 0) used[0]++; return c; }
+				@Override public int read(byte[] b, int off, int len) throws IOException { int n = super.read(b, off, len); if(n > 0) used[0] += n; return n; }
+			});
+			int xd = xdim, yd = ydim, nb = bands;
+			int[] len = length;
+			readHeader(in, name);
+			if(xdim != xd || ydim != yd || bands != nb || !java.util.Arrays.equals(length, len)) throw new IOException(name + " changed while it was read.");
 			for(int b = 0; b < bands; b++)
 			{
-				byte[] bytes = new byte[length[b]];
-				in.readFully(bytes);
-				DataInputStream bi = new DataInputStream(new ByteArrayInputStream(bytes));
+				long end = used[0] + length[b];
 				for(int i = 0; i < 3; i++)
 				{
-					init[b][i] = bi.readInt();
-					coded[b][i].complete(DeltaMapper.readMixedDeltas(bi));
+					init[b][i] = in.readInt();
+					DeltaMapper.MixedDeltas md = DeltaMapper.readArrivingMixedDeltas(in);
+					arriving.add(md.arriving);
+					coded[b][i].complete(md);
+					byte[] buf = md.arriving.bytes;
+					for(int got = 0; got < buf.length; )
+					{
+						int n = in.read(buf, got, Math.min(CHUNK, buf.length - got));
+						if(n < 0) throw new EOFException(name + " ends in band " + b + ", channel " + i + ".");
+						got += n;
+						md.arriving.arrived(got);
+					}
 				}
+				if(used[0] != end) throw new IOException(name + ": band " + b + " is not the length its header says.");
 			}
 		}
 		catch(IOException | RuntimeException e)
 		{
 			for(int b = 0; b < bands; b++) for(int i = 0; i < 3; i++) coded[b][i].completeExceptionally(e);
+			for(ArithmeticMapper.Arriving a : arriving) a.fail(e);
 			for(Thread t : worker) try { t.join(); } catch(InterruptedException x) { Thread.currentThread().interrupt(); }
 			throw e;
 		}

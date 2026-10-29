@@ -7320,6 +7320,11 @@ public class DeltaMapper
 		 * The coded bytes.
 		 */
 		final byte[] coded;
+		/**
+		 * The coded bytes as they arrive (readArrivingMixedDeltas), or null
+		 * when they are all there.
+		 */
+		final ArithmeticMapper.Arriving arriving;
 
 		/**
 		 * Holds what {@link #readMixedDeltas} read.
@@ -7327,7 +7332,37 @@ public class DeltaMapper
 		 * @param value the delta value of each rank
 		 * @param coded the coded bytes
 		 */
-		MixedDeltas(int[] value, byte[] coded) { this.value = value; this.coded = coded; }
+		MixedDeltas(int[] value, byte[] coded) { this.value = value; this.coded = coded; arriving = null; }
+
+		/**
+		 * Holds what {@link #readArrivingMixedDeltas} read: the coded bytes
+		 * are still to arrive.
+		 *
+		 * @param value    the delta value of each rank
+		 * @param arriving the coded bytes, as they arrive
+		 */
+		MixedDeltas(int[] value, ArithmeticMapper.Arriving arriving) { this.value = value; this.coded = arriving.bytes; this.arriving = arriving; }
+	}
+
+	/**
+	 * Reads the start of deltas {@link #packMixedDeltas} wrote -- the rank
+	 * table and the coded bytes' length -- but not the coded bytes: the
+	 * caller reads them into arriving.bytes (in order) and says how many have
+	 * arrived as it goes, and a decoder can start on them meanwhile.
+	 *
+	 * @param in the stream
+	 * @return the rank table, and a buffer for the coded bytes
+	 * @throws java.io.IOException if the stream fails
+	 */
+	public static MixedDeltas readArrivingMixedDeltas(java.io.DataInputStream in) throws java.io.IOException
+	{
+		int    min   = in.readInt();
+		int[]  rank  = readTable(in);
+		int    n     = in.readInt();
+		if(n < 0) throw new java.io.IOException("a coded length of " + n + ".");
+		int[] value = new int[rank.length];
+		for(int v = 0; v < rank.length; v++) value[rank[v]] = v + min;
+		return new MixedDeltas(value, new ArithmeticMapper.Arriving(n));
 	}
 
 	/**
@@ -7417,7 +7452,7 @@ public class DeltaMapper
 		MixedDecoder(MixedDeltas md, int[][] previous, int xdim, int n, boolean opinions)
 		{
 			models = new MixedModels(md.value.length, previous, xdim, n, opinions);
-			dec    = new ArithmeticMapper.RangeDecoder(md.coded);
+			dec    = (md.arriving != null) ? new ArithmeticMapper.RangeDecoder(md.arriving) : new ArithmeticMapper.RangeDecoder(md.coded);
 			value  = md.value;
 		}
 
