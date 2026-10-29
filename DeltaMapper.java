@@ -3255,9 +3255,9 @@ public class DeltaMapper
 	 * c, d, two to the left, two up, two to the right one up, one to the
 	 * right two up) and, after the first channel, the previous channel at the
 	 * pixel, to its left and above. The window's sums are exact integers, kept
-	 * as it slides: per column, the sums of the window's rows; each pixel's
-	 * products are kept only while it is in the current row's part of the
-	 * window, and computed again when its row joins the columns and when it
+	 * as it slides: per column, the sums of the window's rows; the current
+	 * row's pixels' products are kept (one row of them) and added to the
+	 * columns when the row joins them, and computed again when the row
 	 * leaves them, so the memory moved through per row stays small (it
 	 * matters when many channels or bands are fitted at once); the fit (ridge
 	 * 1, solved by L D L^T) is done in a fixed order, so the decoder and the
@@ -3293,14 +3293,19 @@ public class DeltaMapper
 		 */
 		final int[]  col;
 		/**
-		 * The window's sums, and their current-row part.
+		 * The window's sums (the columns' part and the current row's).
 		 */
-		final long[] win, cur;
+		final long[] win;
 		/**
-		 * The products of the current row's last r + 1 pixels, by column modulo
-		 * r + 1 (a product is at most about 520 * 520).
+		 * The products of the current row's pixels so far, by column (a
+		 * product is at most about 520 * 520): kept so that when the row joins
+		 * the columns its products needn't be computed again.
 		 */
 		final int[]  ring;
+		/**
+		 * The row whose products ring holds (-1 for none).
+		 */
+		int stored = -1;
 		/**
 		 * The products of a pixel whose row joins or leaves the columns,
 		 * computed again.
@@ -3310,6 +3315,10 @@ public class DeltaMapper
 		 * The augmented vector of the pixel being added.
 		 */
 		final long[] z;
+		/**
+		 * The pixel whose features z holds (-1 for none).
+		 */
+		int zk = -1;
 		/**
 		 * The normal equations' matrix.
 		 */
@@ -3356,8 +3365,7 @@ public class DeltaMapper
 			nt   = m * (m + 1) / 2;
 			col  = new int[xdim * nt];
 			win  = new long[nt];
-			cur  = new long[nt];
-			ring = new int[(r + 1) * nt];
+			ring = new int[xdim * nt];
 			gone = new int[nt];
 			z    = new long[m];
 			a    = new double[nf + 1][nf + 1];
@@ -3418,7 +3426,7 @@ public class DeltaMapper
 		 * @param x the column
 		 * @return the offset
 		 */
-		private int slot(int x) { return (x % (r + 1)) * nt; }
+		private int slot(int x) { return x * nt; }
 
 		/**
 		 * The value at (y, x), clamped to the image.
@@ -3442,6 +3450,7 @@ public class DeltaMapper
 		 */
 		private void features(int y, int x)
 		{
+			zk = y * xdim + x;
 			z[0] = at(y, x - 1); z[1] = at(y - 1, x); z[2] = at(y - 1, x - 1); z[3] = at(y - 1, x + 1);
 			z[4] = at(y, x - 2); z[5] = at(y - 2, x); z[6] = at(y - 1, x + 2); z[7] = at(y - 2, x + 1);
 			if(ref != null)
@@ -3471,7 +3480,10 @@ public class DeltaMapper
 		 */
 		private void products(int y, int x, int[] out, int at)
 		{
-			features(y, x);
+			// The fit at a pixel leaves its features in z: only its value
+			// (unknown to a decoder then) is needed for its products.
+			int k = y * xdim + x;
+			if(zk == k) z[nf + 1] = v[k]; else features(y, x);
 			int t = at;
 			for(int i = 0; i < m; i++)
 			{
@@ -3501,13 +3513,18 @@ public class DeltaMapper
 			int y = k / xdim, x = k % xdim;
 			if(y != row)
 			{
-				// The window's rows become y - r .. y - 1 (from 1): add row y - 1,
-				// drop row y - 1 - r (the products of both computed again).
+				// The window's rows become y - r .. y - 1 (from 1): add row y - 1
+				// (its products kept in ring as it went by, but for its last
+				// pixel's, which no next adds to the current row, and unless the
+				// window started at row y), drop row y - 1 - r (its products
+				// computed again).
 				if(y - 1 >= 1)
 					for(int tx = 1; tx < xdim - 1; tx++)
 					{
-						products(y - 1, tx, gone, 0);
-						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += gone[t];
+						int[] p = ring;
+						int   at = slot(tx);
+						if(stored != y - 1 || tx == xdim - 2) { products(y - 1, tx, gone, 0); p = gone; at = 0; }
+						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += p[at + t];
 					}
 				if(y - 1 - r >= 1)
 					for(int tx = 1; tx < xdim - 1; tx++)
@@ -3516,7 +3533,8 @@ public class DeltaMapper
 						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] -= gone[t];
 					}
 				row = y;
-				Arrays.fill(win, 0); Arrays.fill(cur, 0);
+				stored = y;
+				Arrays.fill(win, 0);
 				for(int tx = 1; tx <= Math.min(xdim - 2, 1 + r); tx++) for(int t = 0; t < nt; t++) win[t] += col[tx * nt + t];
 			}
 			else
@@ -3524,23 +3542,23 @@ public class DeltaMapper
 				if(x + r <= xdim - 2) for(int t = 0, c = (x + r) * nt; t < nt; t++) win[t] += col[c + t];
 				if(x - r - 1 >= 1)    for(int t = 0, c = (x - r - 1) * nt; t < nt; t++) win[t] -= col[c + t];
 				products(y, x - 1);
-				for(int t = 0, s = slot(x - 1); t < nt; t++) cur[t] += ring[s + t];
-				if(x - 1 - r >= 1) for(int t = 0, s = slot(x - 1 - r); t < nt; t++) cur[t] -= ring[s + t];
+				for(int t = 0, s = slot(x - 1); t < nt; t++) win[t] += ring[s + t];
+				if(x - 1 - r >= 1) for(int t = 0, s = slot(x - 1 - r); t < nt; t++) win[t] -= ring[s + t];
 			}
 			if(!fit) { wide = 0; return 0; }
 
 			int n = nf + 1;
 			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
 			// Products of (i, j), i <= j < m: index i * m - i * (i - 1) / 2 + (j - i).
-			long count = win[nf * m - nf * (nf - 1) / 2] + cur[nf * m - nf * (nf - 1) / 2];
+			long count = win[nf * m - nf * (nf - 1) / 2];
 			if(count < 2 * n) { wide = pa; return pa; }
 			// The normal equations' lower triangle (ridge 1 on the diagonal), then
 			// L D L^T: L unit lower triangular (in a's lower triangle), D in dg.
 			for(int i = 0; i < n; i++)
 			{
 				int base = i * m - i * (i - 1) / 2;
-				for(int j = i; j < n; j++) a[j][i] = (double) (win[base + j - i] + cur[base + j - i]);
-				b[i] = (double) (win[base + m - 1 - i] + cur[base + m - 1 - i]);
+				for(int j = i; j < n; j++) a[j][i] = (double) win[base + j - i];
+				b[i] = (double) win[base + m - 1 - i];
 				a[i][i] += 1.0;
 			}
 			for(int j = 0; j < n; j++)
