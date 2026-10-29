@@ -3317,14 +3317,10 @@ public class DeltaMapper
 		 */
 		int stored = -1;
 		/**
-		 * The products of a pixel whose row joins the columns, computed again.
+		 * The products of a pixel whose row joins or leaves the columns,
+		 * computed again.
 		 */
 		final int[]  gone;
-		/**
-		 * The products of a row that leaves the columns (or joins them
-		 * without its products kept), computed again, by column.
-		 */
-		final int[]  leave;
 		/**
 		 * The augmented vector of the pixel being added.
 		 */
@@ -3396,7 +3392,6 @@ public class DeltaMapper
 			win  = new long[nt];
 			ring = new int[xdim * nt];
 			gone = new int[nt];
-			leave = new int[xdim * nt];
 			z    = new long[m];
 			a    = new double[nf + 1][nf + 1];
 			b    = new double[nf + 1];
@@ -3565,30 +3560,33 @@ public class DeltaMapper
 				// pixel's, which no next adds to the current row, and unless the
 				// window started at row y), drop row y - 1 - r (its products
 				// computed again).
-				// Each as one loop over the row's columns (1 to xdim - 2): ring,
-				// leave and col are laid out alike, and a long simple loop is
-				// one the JIT vectorises.
-				int lo = nt, hi = (xdim - 1) * nt;
+				// The kept row as one loop over its columns (1 to xdim - 3: ring
+				// and col are laid out alike, and a long simple loop is one the
+				// JIT vectorises); the leaving row a column at a time, its
+				// products computed into gone (a row of them stored would add
+				// to the memory moved through per row).
 				if(y - 1 >= 1)
 				{
 					if(stored == y - 1)
 					{
 						int last = (xdim - 2) * nt;
-						for(int i = lo; i < last; i++) col[i] += ring[i];
+						for(int i = nt; i < last; i++) col[i] += ring[i];
 						products(y - 1, xdim - 2, gone, 0);
 						for(int t = 0; t < nt; t++) col[last + t] += gone[t];
 					}
 					else
-					{
-						for(int tx = 1; tx < xdim - 1; tx++) products(y - 1, tx, leave, slot(tx));
-						for(int i = lo; i < hi; i++) col[i] += leave[i];
-					}
+						for(int tx = 1; tx < xdim - 1; tx++)
+						{
+							products(y - 1, tx, gone, 0);
+							for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += gone[t];
+						}
 				}
 				if(y - 1 - r >= 1)
-				{
-					for(int tx = 1; tx < xdim - 1; tx++) products(y - 1 - r, tx, leave, slot(tx));
-					for(int i = lo; i < hi; i++) col[i] -= leave[i];
-				}
+					for(int tx = 1; tx < xdim - 1; tx++)
+					{
+						products(y - 1 - r, tx, gone, 0);
+						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] -= gone[t];
+					}
 				row = y;
 				stored = y;
 				have = false;
