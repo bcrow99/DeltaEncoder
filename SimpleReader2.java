@@ -71,7 +71,8 @@ public class SimpleReader2
 	}
 
 	/**
-	 * Reads a file, opens its window and decodes it.
+	 * Reads a file, opens its window and decodes it (twice, printing both
+	 * times: the first includes compiling the code).
 	 *
 	 * @param filename the file
 	 */
@@ -94,10 +95,21 @@ public class SimpleReader2
 				view.show();
 			});
 
+			// Decoded twice, the times of both printed: the first includes
+			// compiling the code (the first time it runs in this JVM), the
+			// second is the run time only. The image shows after the first.
 			start = System.nanoTime();
 			decoded_image = decode();
-			System.out.println("Image rebuilt in " + ((System.nanoTime() - start) / 1_000_000) + " ms.");
+			long first = System.nanoTime() - start;
 			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
+			start = System.nanoTime();
+			BufferedImage again = decode();
+			long second = System.nanoTime() - start;
+			int[] p = decoded_image.getRGB(0, 0, xdim, ydim, null, 0, xdim), q = again.getRGB(0, 0, xdim, ydim, null, 0, xdim);
+			if(!java.util.Arrays.equals(p, q)) System.out.println("WARNING: the second decoding differs from the first.");
+			System.out.println("Image rebuilt (" + xdim + " x " + ydim + ").");
+			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(first));
+			System.out.println("Run time only:              " + ViewerSupport.formatDuration(second));
 		}
 		catch(Exception e)
 		{

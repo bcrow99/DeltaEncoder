@@ -3317,10 +3317,14 @@ public class DeltaMapper
 		 */
 		int stored = -1;
 		/**
-		 * The products of a pixel whose row joins or leaves the columns,
-		 * computed again.
+		 * The products of a pixel whose row joins the columns, computed again.
 		 */
 		final int[]  gone;
+		/**
+		 * The products of a row that leaves the columns (or joins them
+		 * without its products kept), computed again, by column.
+		 */
+		final int[]  leave;
 		/**
 		 * The augmented vector of the pixel being added.
 		 */
@@ -3392,6 +3396,7 @@ public class DeltaMapper
 			win  = new long[nt];
 			ring = new int[xdim * nt];
 			gone = new int[nt];
+			leave = new int[xdim * nt];
 			z    = new long[m];
 			a    = new double[nf + 1][nf + 1];
 			b    = new double[nf + 1];
@@ -3560,20 +3565,30 @@ public class DeltaMapper
 				// pixel's, which no next adds to the current row, and unless the
 				// window started at row y), drop row y - 1 - r (its products
 				// computed again).
+				// Each as one loop over the row's columns (1 to xdim - 2): ring,
+				// leave and col are laid out alike, and a long simple loop is
+				// one the JIT vectorises.
+				int lo = nt, hi = (xdim - 1) * nt;
 				if(y - 1 >= 1)
-					for(int tx = 1; tx < xdim - 1; tx++)
+				{
+					if(stored == y - 1)
 					{
-						int[] p = ring;
-						int   at = slot(tx);
-						if(stored != y - 1 || tx == xdim - 2) { products(y - 1, tx, gone, 0); p = gone; at = 0; }
-						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] += p[at + t];
+						int last = (xdim - 2) * nt;
+						for(int i = lo; i < last; i++) col[i] += ring[i];
+						products(y - 1, xdim - 2, gone, 0);
+						for(int t = 0; t < nt; t++) col[last + t] += gone[t];
 					}
+					else
+					{
+						for(int tx = 1; tx < xdim - 1; tx++) products(y - 1, tx, leave, slot(tx));
+						for(int i = lo; i < hi; i++) col[i] += leave[i];
+					}
+				}
 				if(y - 1 - r >= 1)
-					for(int tx = 1; tx < xdim - 1; tx++)
-					{
-						products(y - 1 - r, tx, gone, 0);
-						for(int t = 0, c = tx * nt; t < nt; t++) col[c + t] -= gone[t];
-					}
+				{
+					for(int tx = 1; tx < xdim - 1; tx++) products(y - 1 - r, tx, leave, slot(tx));
+					for(int i = lo; i < hi; i++) col[i] -= leave[i];
+				}
 				row = y;
 				stored = y;
 				have = false;
@@ -3582,11 +3597,21 @@ public class DeltaMapper
 			}
 			else
 			{
-				if(x + r <= xdim - 2) for(int t = 0, c = (x + r) * nt; t < nt; t++) win[t] += col[c + t];
-				if(x - r - 1 >= 1)    for(int t = 0, c = (x - r - 1) * nt; t < nt; t++) win[t] -= col[c + t];
+				// The column joining the window and the one leaving it, and the
+				// current row's pixel joining and leaving, in one pass where all
+				// four apply (exact: each is an int of at most about r * 520 *
+				// 520, so their sum fits an int too).
 				products(y, x - 1);
-				for(int t = 0, s = slot(x - 1); t < nt; t++) win[t] += ring[s + t];
-				if(x - 1 - r >= 1) for(int t = 0, s = slot(x - 1 - r); t < nt; t++) win[t] -= ring[s + t];
+				int ca = (x + r) * nt, cb = (x - r - 1) * nt, sa = slot(x - 1), sb = slot(x - 1 - r);
+				if(x - r - 1 >= 1 && x + r <= xdim - 2)
+					for(int t = 0; t < nt; t++) win[t] += (col[ca + t] - col[cb + t]) + (ring[sa + t] - ring[sb + t]);
+				else
+				{
+					if(x + r <= xdim - 2) for(int t = 0; t < nt; t++) win[t] += col[ca + t];
+					if(x - r - 1 >= 1)    for(int t = 0; t < nt; t++) win[t] -= col[cb + t];
+					for(int t = 0; t < nt; t++) win[t] += ring[sa + t];
+					if(x - 1 - r >= 1) for(int t = 0; t < nt; t++) win[t] -= ring[sb + t];
+				}
 			}
 			if(!fit) { wide = 0; return 0; }
 

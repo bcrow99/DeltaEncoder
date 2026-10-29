@@ -328,7 +328,8 @@ public class SimpleWriter2
 	// ---- Save ---------------------------------------------------------------
 
 	/**
-	 * File &gt; Save: codes the image (encode) into the file "foo".
+	 * File &gt; Save: codes the image (encode) into the file "foo", twice, and
+	 * prints both times (the first includes compiling the code).
 	 */
 	class SaveHandler implements ActionListener
 	{
@@ -346,11 +347,25 @@ public class SimpleWriter2
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
+			// The image is coded twice and the times of both printed: the first
+			// includes compiling the code (the first time it runs in this JVM),
+			// the second is the run time only. Both give the same bytes.
 			File file = new File("foo");
-			long start = System.nanoTime();
-			try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))
+			long[] took = new long[2];
+			try
 			{
-				encode(out, value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
+				byte[] data = null;
+				for(int pass = 0; pass < 2; pass++)
+				{
+					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+					long start = System.nanoTime();
+					encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
+					took[pass] = System.nanoTime() - start;
+					byte[] got = bytes.toByteArray();
+					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
+					data = got;
+				}
+				try(OutputStream out = new BufferedOutputStream(new FileOutputStream(file))) { out.write(data); }
 			}
 			catch(Exception e)
 			{
@@ -359,11 +374,12 @@ public class SimpleWriter2
 				e.printStackTrace();
 				return;
 			}
-			long took = System.nanoTime() - start;
 			int n = bandsUsed(), raw = image_xdim * image_ydim * 3, rows = value_list[0].length / delta_xdim;
 			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), SimpleWriter.describeBands(n, rows)));
 			else      System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
-			System.out.println(String.format("Coded in %s (%d x %d, %,d pixels)", ViewerSupport.formatDuration(took), delta_xdim, rows, (long) delta_xdim * rows));
+			System.out.println(String.format("Coded %d x %d (%,d pixels)", delta_xdim, rows, (long) delta_xdim * rows));
+			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
+			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
