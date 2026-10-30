@@ -37,11 +37,11 @@ s2    SimpleWriter2
 s2_4  SimpleWriter2 bands=4
 "
 
-# Sizes in bytes for coffee.png, with LS (predictor id 255); b with Block format 9: the 225-entry predictor table, mixed context coding with second opinions, each channel's block size (4, 6, 8, 12 or 16) and set surveyed from the whole table; b4 the same in 4 bands (format 10); the delta type 13 jobs (D and P version 5) use the same survey's block maps; s with Simple format 8: least squares alone with the wide clamp, each channel's window radius (4, 8 or 16) chosen by the coded size, mixed context coding with second opinions, centred resizing (resize2); s4 the same in 4 bands; s2 with Simple 2 format 1: the same coding with the channels green, blue-green, red-green and window radius 10, no analysis; s2_4 the same in 4 bands.
+# Sizes in bytes for coffee.png, with LS (predictor id 255); b with Block format 9: the 225-entry predictor table, mixed context coding with second opinions, each channel's block size (4, 6, 8, 12 or 16) and set surveyed from the whole table; b4 the same in 4 bands (format 10); the delta type 13 jobs (D and P version 5) use the same survey's block maps; s with Simple format 8: least squares alone with the wide clamp, each channel's window radius (4, 8 or 16) chosen by the coded size, mixed context coding with second opinions, centred resizing (resize2); s4 the same in 4 bands; s2 with Simple 2 format 1: the same coding with the channels green, blue-green, red-green and window radius 10, the fit from the rows above only, solved at every 3rd pixel, no analysis; s2_4 the same in 4 bands.
 declare -A EXPECTED=(
 	[b]=85838 [b4]=88232 [d13]=96368 [d13c]=89190 [d2]=110560
 	[d2_13]=96368 [p13]=97606 [s]=85535 [s4]=87702
-	[s2]=84182 [s2_4]=86350
+	[s2]=84535 [s2_4]=86812
 )
 
 mkdir -p "$OUT/classes" || exit 1
