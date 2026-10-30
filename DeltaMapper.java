@@ -4055,6 +4055,10 @@ public class DeltaMapper
 			 */
 			final int[]  p  = new int[nt];
 			/**
+			 * addColumns' augmented vectors of the row it adds and the row it drops.
+			 */
+			final int[]  za = new int[m], zd = new int[m];
+			/**
 			 * A window's sums.
 			 */
 			final long[] win = new long[nt];
@@ -4175,17 +4179,57 @@ public class DeltaMapper
 		{
 			int add = y - 1, drop = y - 1 - r;
 			if(add < 1) return;
+			int[] za = w.za, zd = w.zd;
+			// Each column gains the added pixel's products and loses the dropped
+			// one's, in one pass (the sums are ints, so the same in any order).
 			for(int tx = c0; tx < c1; tx++)
 			{
-				int c = tx * nt;
-				products(add, tx, w);
-				for(int s = 0; s < nt; s++) col[c + s] += w.p[s];
+				int t = tx * nt;
+				features(add, tx, za);
 				if(drop >= 1)
 				{
-					products(drop, tx, w);
-					for(int s = 0; s < nt; s++) col[c + s] -= w.p[s];
+					features(drop, tx, zd);
+					for(int i = 0; i < m; i++)
+					{
+						int ai = za[i], di = zd[i];
+						for(int j = i; j < m; j++, t++) col[t] += ai * za[j] - di * zd[j];
+					}
 				}
+				else
+					for(int i = 0; i < m; i++)
+					{
+						int ai = za[i];
+						for(int j = i; j < m; j++, t++) col[t] += ai * za[j];
+					}
 			}
+		}
+
+		/**
+		 * As features(int, int, long[]), into ints (addColumns: the values and
+		 * their products fit), with the neighbours read directly where none
+		 * needs clamping to the image.
+		 *
+		 * @param y  the row
+		 * @param x  the column
+		 * @param zz where they go
+		 */
+		private void features(int y, int x, int[] zz)
+		{
+			int k = y * xdim + x;
+			if(y >= 2 && x >= 2 && x <= xdim - 3)
+			{
+				int up = k - xdim, up2 = up - xdim;
+				zz[0] = v[k - 1];  zz[1] = v[up];  zz[2] = v[up - 1];  zz[3] = v[up + 1];
+				zz[4] = v[k - 2];  zz[5] = v[up2]; zz[6] = v[up + 2];  zz[7] = v[up2 + 1];
+			}
+			else
+			{
+				zz[0] = at(y, x - 1); zz[1] = at(y - 1, x); zz[2] = at(y - 1, x - 1); zz[3] = at(y - 1, x + 1);
+				zz[4] = at(y, x - 2); zz[5] = at(y - 2, x); zz[6] = at(y - 1, x + 2); zz[7] = at(y - 2, x + 1);
+			}
+			if(ref != null) { zz[8] = ref[k]; zz[9] = ref[k - 1]; zz[10] = ref[k - xdim]; }
+			zz[nf] = 1;
+			zz[nf + 1] = v[k];
 		}
 
 		/**
