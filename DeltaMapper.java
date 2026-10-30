@@ -6874,6 +6874,17 @@ public class DeltaMapper
 	 * The mixing weights sum to 2<sup>MIX_W_BITS</sup>.
 	 */
 	static final int MIX_W_BITS = 16;
+	/**
+	 * The symbols in a block of MixedModels' block sums (fb), and its log 2:
+	 * decoding passes over whole blocks.
+	 */
+	static final int MIX_BLOCK_SHIFT = 3, MIX_BLOCK = 1 << MIX_BLOCK_SHIFT;
+	/**
+	 * MixedModels.rank_average's scale (log 2); above what (16 symbols on
+	 * average) decode makes the block sums, and, once it has, above what (8)
+	 * it passes over blocks first.
+	 */
+	static final int MIX_RANK_SHIFT = 5, MIX_BLOCKS_MAKE = 16 << MIX_RANK_SHIFT, MIX_BLOCKS_FIRST = 8 << MIX_RANK_SHIFT;
 
 	/**
 	 * The smallest a mixing weight can be.
@@ -6963,6 +6974,26 @@ public class DeltaMapper
 		 */
 		final int[][] total;
 		/**
+		 * The counts summed by blocks of MIX_BLOCK symbols, by model and
+		 * context, so that decode can pass over whole blocks of symbols: made
+		 * once the decoded symbols have been large (most channels never do, and
+		 * encoding never does), then kept by update.
+		 */
+		int[][][] fb;
+		/**
+		 * The number of blocks of symbols.
+		 */
+		final int blocks;
+		/**
+		 * The decoded symbols' running average, times 2<sup>MIX_RANK_SHIFT</sup>
+		 * (only to choose how decode searches: any way finds the same symbol).
+		 */
+		long rank_average = 0;
+		/**
+		 * The bottom of the interval of the block passBlocks stopped at.
+		 */
+		long block_lo;
+		/**
 		 * The mixing weights (summing to 2<sup>MIX_W_BITS</sup>).
 		 */
 		final long[] w;
@@ -7042,6 +7073,7 @@ public class DeltaMapper
 			total = new int[m][contexts];
 			for(int[][] fm : f) for(int[] fc : fm) Arrays.fill(fc, 1);
 			for(int[] t : total) Arrays.fill(t, n_symbols);
+			blocks = (n_symbols + MIX_BLOCK - 1) / MIX_BLOCK;
 			w = new long[m];
 			Arrays.fill(w, (1L << MIX_W_BITS) / m);
 			w[0] += (1L << MIX_W_BITS) - (1L << MIX_W_BITS) / m * m;
@@ -7181,8 +7213,22 @@ public class DeltaMapper
 					int u = 0;
 					for(int i = 0; i < n_symbols; i++) { fc[i] = (fc[i] + 1) >> 1; u += fc[i]; }
 					total[j][ctx[j]] = u;
+					if(fb != null) blockSums(fc, fb[j][ctx[j]]);
 				}
+				else if(fb != null) fb[j][ctx[j]][s >> MIX_BLOCK_SHIFT] += ArithmeticMapper.CONTEXT_INCREMENT;
 			}
+		}
+
+		/**
+		 * Sums one model and context's counts by blocks.
+		 *
+		 * @param fc the counts
+		 * @param bc their block sums
+		 */
+		void blockSums(int[] fc, int[] bc)
+		{
+			Arrays.fill(bc, 0);
+			for(int i = 0; i < n_symbols; i++) bc[i >> MIX_BLOCK_SHIFT] += fc[i];
 		}
 
 		/**
@@ -7231,6 +7277,15 @@ public class DeltaMapper
 			long lo = 0, hi;
 			Arrays.fill(cum, 0);
 			Arrays.fill(c1, 0);
+			// The symbol is the first whose interval's top is above t (the tops
+			// rise with the symbol), found a symbol at a time; but once the
+			// block sums are made, while the symbols have been large, first
+			// pass over whole blocks to the one holding it (passBlocks).
+			if(fb != null && rank_average > MIX_BLOCKS_FIRST)
+			{
+				s  = passBlocks(t);
+				lo = block_lo;
+			}
 			while(true)
 			{
 				long a = 0;
@@ -7249,6 +7304,46 @@ public class DeltaMapper
 			for(int j = 0; j < m; j++) q[j] = c1[j] - c0[j];
 			dec.decode(lo, hi - lo);
 			update(s);
+			rank_average += s - (rank_average >> MIX_RANK_SHIFT);
+			if(fb == null && rank_average > MIX_BLOCKS_MAKE)
+			{
+				fb = new int[m][total[0].length][blocks];
+				for(int j = 0; j < m; j++) for(int c = 0; c < fb[j].length; c++) blockSums(f[j][c], fb[j][c]);
+			}
+			return s;
+		}
+
+		/**
+		 * For decode: passes over whole blocks of symbols while t is above
+		 * their tops (from the block sums: the same numbers as a symbol at a
+		 * time), never the last block (it ends the search), leaving cum and
+		 * c1 as a symbol at a time would at the start of the block it stops at.
+		 * Kept out of decode so that decode stays as small as before for the
+		 * channels that never use it (most of them).
+		 *
+		 * @param t the target
+		 * @return the first symbol of the block holding the symbol (its interval's bottom in block_lo)
+		 */
+		int passBlocks(long t)
+		{
+			int  s  = 0;
+			long lo = 0;
+			for(int b = 0; b < blocks - 1; b++)
+			{
+				int  e  = (b << MIX_BLOCK_SHIFT) + MIX_BLOCK - 1;
+				long ab = 0;
+				for(int j = 0; j < m; j++)
+				{
+					c0[j] = ((cum[j] + fb[j][ctx[j]][b]) << MIX_R_BITS) / total[j][ctx[j]];
+					ab   += w[j] * c0[j];
+				}
+				long he = (ab >> MIX_W_BITS) + e + 1;
+				if(t < he) break;
+				for(int j = 0; j < m; j++) { cum[j] += fb[j][ctx[j]][b]; c1[j] = c0[j]; }
+				lo = he;
+				s  = e + 1;
+			}
+			block_lo = lo;
 			return s;
 		}
 	}
