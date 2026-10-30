@@ -22,6 +22,7 @@ you don't give one. **File > Save** writes the compressed image to a file called
 | Writer | Reader |
 |---|---|
 | SimpleWriter | SimpleReader |
+| SimpleWriter2 | SimpleReader2 |
 | PacketWriter | PacketReader |
 | DeltaWriter, DeltaWriter2 | DeltaReader |
 | BlockWriter | BlockReader |

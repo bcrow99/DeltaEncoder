@@ -3992,13 +3992,15 @@ public class DeltaMapper
 		 */
 		final int[]  col;
 		/**
-		 * Each solved pixel's solution (n each), for the current row.
+		 * Each solved pixel's solution (n each), and whether its fit could be
+		 * solved: two sets, row y's in set y &amp; 1, so that a decoder can solve
+		 * the next row's fits while it decodes this one (RowWave).
 		 */
-		final double[] coef;
+		final double[][] coef;
 		/**
-		 * Whether each solved pixel's fit could be solved.
+		 * As coef: whether each solved pixel's fit could be solved, row y's in set y &amp; 1.
 		 */
-		final boolean[] valid;
+		final boolean[][] valid;
 		/**
 		 * The features of the pixel being predicted.
 		 */
@@ -4030,8 +4032,8 @@ public class DeltaMapper
 			n      = nf + 1;
 			points = Math.max(0, (xdim - 2 + every - 1) / every);
 			col    = new int[xdim * nt];
-			coef   = new double[points * n];
-			valid  = new boolean[points];
+			coef   = new double[2][points * n];
+			valid  = new boolean[2][points];
 			z      = new long[m];
 		}
 
@@ -4150,28 +4152,40 @@ public class DeltaMapper
 		{
 			if(row == y) return;
 			if(row != y - 1) { start(y); return; }
-			int add = y - 1, drop = y - 1 - r;
-			if(add >= 1 && xdim > 2)
+			if(y - 1 >= 1 && xdim > 2)
 			{
 				int tasks = parallel ? tasks(xdim - 2, 128) : 1;
-				runTasks(tasks, t ->
-				{
-					Work w = new Work();
-					int c0 = 1 + (int) ((long) t * (xdim - 2) / tasks), c1 = 1 + (int) ((long) (t + 1) * (xdim - 2) / tasks);
-					for(int tx = c0; tx < c1; tx++)
-					{
-						int c = tx * nt;
-						products(add, tx, w);
-						for(int s = 0; s < nt; s++) col[c + s] += w.p[s];
-						if(drop >= 1)
-						{
-							products(drop, tx, w);
-							for(int s = 0; s < nt; s++) col[c + s] -= w.p[s];
-						}
-					}
-				});
+				runTasks(tasks, t -> addColumns(y, 1 + (int) ((long) t * (xdim - 2) / tasks), 1 + (int) ((long) (t + 1) * (xdim - 2) / tasks), new Work()));
 			}
 			row = y;
+		}
+
+		/**
+		 * moveTo's work on columns c0 to c1 - 1 alone (of the interior): adds
+		 * row y - 1 and drops row y - 1 - r (from row 1). Needs row y - 1
+		 * through column c1 - 1 (and the rows above), and changes no other
+		 * columns, so parts of a row can be done at different times.
+		 *
+		 * @param y  the row whose window the columns move to (row y - 1's was the last)
+		 * @param c0 the first column
+		 * @param c1 the column after the last
+		 * @param w  the task's arrays
+		 */
+		void addColumns(int y, int c0, int c1, Work w)
+		{
+			int add = y - 1, drop = y - 1 - r;
+			if(add < 1) return;
+			for(int tx = c0; tx < c1; tx++)
+			{
+				int c = tx * nt;
+				products(add, tx, w);
+				for(int s = 0; s < nt; s++) col[c + s] += w.p[s];
+				if(drop >= 1)
+				{
+					products(drop, tx, w);
+					for(int s = 0; s < nt; s++) col[c + s] -= w.p[s];
+				}
+			}
 		}
 
 		/**
@@ -4184,39 +4198,52 @@ public class DeltaMapper
 		{
 			if(points == 0) return;
 			int tasks = parallel ? tasks(points, 32) : 1;
-			runTasks(tasks, t ->
+			runTasks(tasks, t -> solvePoints(y, (int) ((long) t * points / tasks), (int) ((long) (t + 1) * points / tasks), new Work()));
+		}
+
+		/**
+		 * solveRow's work on solved pixels p0 to p1 - 1 alone: uses the columns
+		 * r either side of them (at row y's window), and changes nothing else
+		 * but their solutions.
+		 *
+		 * @param y  the row
+		 * @param p0 the first solved pixel
+		 * @param p1 the one after the last
+		 * @param w  the task's arrays
+		 */
+		void solvePoints(int y, int p0, int p1, Work w)
+		{
+			double[]  coef  = this.coef[y & 1];
+			boolean[] valid = this.valid[y & 1];
+			int lo = 0, hi = -1;   // the columns in w.win
+			for(int p = p0; p < p1; p++)
 			{
-				Work w = new Work();
-				int p0 = (int) ((long) t * points / tasks), p1 = (int) ((long) (t + 1) * points / tasks);
-				int lo = 0, hi = -1;   // the columns in w.win
-				for(int p = p0; p < p1; p++)
+				int x = 1 + p * every;
+				int nlo = Math.max(1, x - r), nhi = Math.min(xdim - 2, x + r);
+				if(p == p0)
 				{
-					int x = 1 + p * every;
-					int nlo = Math.max(1, x - r), nhi = Math.min(xdim - 2, x + r);
-					if(p == p0)
-					{
-						Arrays.fill(w.win, 0);
-						for(int c = nlo; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
-					}
-					else
-					{
-						for(int c = lo; c < nlo; c++)  for(int s = 0, o = c * nt; s < nt; s++) w.win[s] -= col[o + s];
-						for(int c = hi + 1; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
-					}
-					lo = nlo; hi = nhi;
-					valid[p] = solve(w, p);
+					Arrays.fill(w.win, 0);
+					for(int c = nlo; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
 				}
-			});
+				else
+				{
+					for(int c = lo; c < nlo; c++)  for(int s = 0, o = c * nt; s < nt; s++) w.win[s] -= col[o + s];
+					for(int c = hi + 1; c <= nhi; c++) for(int s = 0, o = c * nt; s < nt; s++) w.win[s] += col[o + s];
+				}
+				lo = nlo; hi = nhi;
+				valid[p] = solve(w, p, coef);
+			}
 		}
 
 		/**
 		 * Solves the fit for w.win into solved pixel p's coefficients.
 		 *
-		 * @param w the task's arrays (w.win the window's sums)
-		 * @param p the solved pixel
+		 * @param w    the task's arrays (w.win the window's sums)
+		 * @param p    the solved pixel
+		 * @param coef the set of solutions it goes in
 		 * @return whether it was solved
 		 */
-		private boolean solve(Work w, int p)
+		private boolean solve(Work w, int p, double[] coef)
 		{
 			long[] win = w.win;
 			double[][] a = w.a;
@@ -4277,8 +4304,9 @@ public class DeltaMapper
 		{
 			int p  = (x - 1) / every;
 			int pa = at(y, x - 1), pb = at(y - 1, x), pc = at(y - 1, x - 1), pd = at(y - 1, x + 1);
-			if(!valid[p]) { wide = pa; return pa; }
+			if(!valid[y & 1][p]) { wide = pa; return pa; }
 			features(y, x, z);
+			double[] coef = this.coef[y & 1];
 			double s = 0;
 			for(int i = 0, o = p * n; i < n; i++) s += coef[o + i] * z[i];
 			int lo = Math.min(Math.min(pa, pb), Math.min(pc, pd)), hi = Math.max(Math.max(pa, pb), Math.max(pc, pd));
@@ -4423,9 +4451,9 @@ public class DeltaMapper
 	 * channel's fit uses the one before it, and its contexts the deltas of
 	 * all the ones before it. Each channel decodes in its own thread, a row at
 	 * a time, once the channel before it is two rows ahead (as
-	 * getValuesFromLeastSquaresChannels); before each row its fits are solved
-	 * in tasks run at the same time (RowFit.moveTo, solveRow), so decoding a
-	 * row is left with the predictions and the delta decoder.
+	 * getValuesFromLeastSquaresChannels); the next row's fits are solved in
+	 * tasks that follow the decoding along the row (RowWave), so decoding a row
+	 * is left with the predictions and the delta decoder, and seldom waits.
 	 *
 	 * @param md     each channel's rank table and coded bytes ({@link #readMixedDeltas}), in coding order
 	 * @param xdim   the width
@@ -4473,10 +4501,11 @@ public class DeltaMapper
 				{
 					MixedDecoder mix = new MixedDecoder(md[i].get(), Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
 					RowFit fit = new RowFit(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
+					RowWave wave = new RowWave(fit, ydim);
 					for(int y = 0; y < ydim; y++)
 					{
 						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
-						rowFitRow(mix, fit, delta[i], value[i], xdim, y, init[i]);
+						wave.row(mix, delta[i], value[i], y, init[i]);
 						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
 					}
 				}
@@ -4490,6 +4519,222 @@ public class DeltaMapper
 		if(failed[0] instanceof Error) throw (Error) failed[0];
 		if(failed[0] != null) throw new RuntimeException(failed[0]);
 		return new int[][][] {delta, value};
+	}
+
+	/**
+	 * A channel's RowFit fits for the decoder, solved a row ahead of the
+	 * decoding and following it along the row (a wavefront). The interior
+	 * columns are split into chunks (at least CHUNK and more than the window
+	 * radius wide). Once the decoder has passed a chunk of row y, the chunk's
+	 * columns are moved to row y + 1's window (RowFit.addColumns: they need
+	 * only row y through the chunk), and once a chunk and the chunks either
+	 * side of it have moved, the chunk's fits for row y + 1 are solved
+	 * (RowFit.solvePoints: a fit's window reaches only into the chunks either
+	 * side), into the other set of solutions from row y's. Before the decoder
+	 * predicts in a chunk of row y + 1 it waits (seldom) for that chunk's
+	 * fits. A chunk's columns move to row y + 2 only once the decoder has
+	 * reached the chunk after it in row y + 1, by when the fits of row y + 1
+	 * that use them are solved. Each task is handed to ROW_POOL only once what
+	 * it needs is done, so the tasks never wait. The sums are exact and each
+	 * fit is solved as before, so the predictions are the same as row by row
+	 * (rowFitRow).
+	 */
+	static final class RowWave
+	{
+		/**
+		 * The fewest columns in a chunk.
+		 */
+		static final int CHUNK = 128;
+		/**
+		 * The fit.
+		 */
+		final RowFit fit;
+		/**
+		 * The height.
+		 */
+		final int ydim;
+		/**
+		 * The number of chunks.
+		 */
+		final int chunks;
+		/**
+		 * Each chunk's first column (and, at chunks, the last interior column + 1).
+		 */
+		final int[] start;
+		/**
+		 * Each chunk's first solved pixel (and, at chunks, the number of them).
+		 */
+		final int[] first;
+		/**
+		 * Per chunk: the row whose window its columns hold, the row whose fits
+		 * have been handed out to be solved, and the row whose fits are solved.
+		 */
+		final java.util.concurrent.atomic.AtomicIntegerArray moved, handed, solved;
+		/**
+		 * Each chunk's working arrays (a chunk's tasks never run at the same time).
+		 */
+		final RowFit.Work[] work;
+		/**
+		 * The first exception from a task, if any (the decoder throws it).
+		 */
+		volatile Throwable failed;
+
+		/**
+		 * The wavefront for a fit.
+		 *
+		 * @param fit  the fit (fresh)
+		 * @param ydim the height
+		 */
+		RowWave(RowFit fit, int ydim)
+		{
+			this.fit  = fit;
+			this.ydim = ydim;
+			int inner = Math.max(0, fit.xdim - 2), width = Math.max(CHUNK, fit.r + 1);
+			chunks = Math.max(1, inner / width);
+			start  = new int[chunks + 1];
+			first  = new int[chunks + 1];
+			for(int t = 0; t <= chunks; t++)
+			{
+				start[t] = 1 + (int) ((long) t * inner / chunks);
+				first[t] = Math.min(fit.points, (start[t] - 1 + fit.every - 1) / fit.every);   // the first solved pixel at or after start[t]
+			}
+			moved  = new java.util.concurrent.atomic.AtomicIntegerArray(chunks);
+			handed = new java.util.concurrent.atomic.AtomicIntegerArray(chunks);
+			solved = new java.util.concurrent.atomic.AtomicIntegerArray(chunks);
+			work   = new RowFit.Work[chunks];
+			for(int t = 0; t < chunks; t++) work[t] = fit.new Work();
+		}
+
+		/**
+		 * Decodes row y of the channel's deltas and rebuilds it (rows in
+		 * order), as rowFitRow, with the fits solved a row ahead: row 1's
+		 * before it (rows 0 and 1 have nothing above them to wait for), the
+		 * rest while the row before is decoded.
+		 *
+		 * @param mix   the delta decoder
+		 * @param delta the deltas, filled in
+		 * @param dst   the values, filled in (the fit's channel)
+		 * @param y     the row
+		 * @param init  the first value
+		 */
+		void row(MixedDecoder mix, int[] delta, int[] dst, int y, int init)
+		{
+			int xdim = fit.xdim;
+			if(y == 0 || xdim <= 2 || fit.points == 0) { rowFitRow(mix, fit, delta, dst, xdim, y, init); return; }
+			if(y == 1)
+			{
+				fit.moveTo(1, true);
+				fit.solveRow(1, true);
+				for(int t = 0; t < chunks; t++) { moved.set(t, 1); handed.set(t, 1); solved.set(t, 1); }
+			}
+			boolean ahead = y + 1 < ydim;   // whether to solve the next row's fits as this one decodes
+			int k = y * xdim;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - xdim] + delta[k];
+			for(int t = 0; t < chunks; t++)
+			{
+				await(t, y);
+				// The decoder has passed chunk t - 1, and chunk t's fits (the
+				// last to use chunk t - 1's columns) are solved.
+				if(ahead && t > 0) move(t - 1, y + 1);
+				for(int x = start[t]; x < start[t + 1]; x++)
+				{
+					k++;
+					int p = fit.predict(y, x);
+					mix.next(k, delta, dst, p);
+					dst[k] = delta[k] + p;
+				}
+			}
+			if(ahead) move(chunks - 1, y + 1);
+			k++;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - 1] + delta[k];
+		}
+
+		/**
+		 * Waits until chunk t's fits for row y are solved.
+		 *
+		 * @param t the chunk
+		 * @param y the row
+		 */
+		private void await(int t, int y)
+		{
+			if(solved.get(t) != y)
+				synchronized(this)
+				{
+					while(solved.get(t) != y && failed == null)
+						try { wait(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+				}
+			Throwable e = failed;
+			if(e instanceof RuntimeException) throw (RuntimeException) e;
+			if(e instanceof Error) throw (Error) e;
+			if(e != null) throw new RuntimeException(e);
+		}
+
+		/**
+		 * Hands out moving chunk t's columns to row y's window, then the
+		 * solving of the fits that then have all their columns.
+		 *
+		 * @param t the chunk
+		 * @param y the row
+		 */
+		private void move(int t, int y)
+		{
+			ROW_POOL.execute(() ->
+			{
+				try
+				{
+					fit.addColumns(y, start[t], start[t + 1], work[t]);
+					moved.set(t, y);
+					for(int u = Math.max(0, t - 1); u <= Math.min(chunks - 1, t + 1); u++)
+						if(movedAround(u, y) && handed.getAndSet(u, y) != y) solve(u, y);
+				}
+				catch(Throwable e) { fail(e); }
+			});
+		}
+
+		/**
+		 * Whether chunk u's columns and those of the chunks either side are at row y's window.
+		 *
+		 * @param u the chunk
+		 * @param y the row
+		 * @return whether they are
+		 */
+		private boolean movedAround(int u, int y)
+		{
+			for(int v = Math.max(0, u - 1); v <= Math.min(chunks - 1, u + 1); v++) if(moved.get(v) != y) return false;
+			return true;
+		}
+
+		/**
+		 * Hands out solving chunk u's fits for row y.
+		 *
+		 * @param u the chunk
+		 * @param y the row
+		 */
+		private void solve(int u, int y)
+		{
+			ROW_POOL.execute(() ->
+			{
+				try
+				{
+					fit.solvePoints(y, first[u], first[u + 1], work[u]);
+					solved.set(u, y);
+					synchronized(this) { notifyAll(); }
+				}
+				catch(Throwable e) { fail(e); }
+			});
+		}
+
+		/**
+		 * Records a task's failure and wakes the decoder.
+		 *
+		 * @param e the failure
+		 */
+		private void fail(Throwable e)
+		{
+			synchronized(this) { if(failed == null) failed = e; notifyAll(); }
+		}
 	}
 
 	/**
