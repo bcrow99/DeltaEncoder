@@ -5,7 +5,7 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// SimpleWriter version 3.2 (writes Simple format 8: least squares alone, the
+// SimpleWriter version 3.3 (writes Simple format 8: least squares alone, the
 // wide clamp, centred resizing)
 //
 // A writer with one predictor and one entropy coder: every interior pixel is
@@ -22,8 +22,10 @@ import javax.swing.*;
 // (centred). The Bands menu splits the image into up to MAX_BANDS bands of
 // rows that a reader can decode at the same time, for a small cost per band
 // boundary (the fit and the contexts start again at each band's top); the
-// reader also decodes a band's three channels at the same time.
-// Files are read by SimpleReader.
+// reader also decodes a band's three channels at the same time. Save
+// analyses and codes the image twice (encode), printing both times (the
+// first includes compiling the code) and the decode check's apart. Files
+// are read by SimpleReader.
 public class SimpleWriter
 {
 	// File format: every file starts with FORMAT_ID ('S' = Simple format) and
@@ -465,14 +467,46 @@ public class SimpleWriter
 
 	class SaveHandler implements ActionListener
 	{
+		/**
+		 * A handler for the Save item.
+		 */
+		SaveHandler() {}
+
+		/**
+		 * Saves.
+		 *
+		 * @param event the menu item's event
+		 */
 		public void actionPerformed(ActionEvent event)
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
+			// The image is coded twice and the times of both printed: the first
+			// includes compiling the code (the first time it runs in this JVM;
+			// the preview's analysis has compiled some of it already), the
+			// second is the run time only. Each includes the analysis (the
+			// channel set and the window survey: encode does it again, the
+			// same as the preview's) but leaves out the decode check, which is
+			// timed on its own. Both give the same bytes.
 			File file = new File("foo");
-			try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))
+			long[] took = new long[2], check = new long[2];
+			int[]  size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
+			try
 			{
-				save(out);
+				int[]   min = new int[6];
+				int[][] qc  = quantizedChannels(size, pixel_quant, pixel_shift, min, new int[6]);
+				byte[]  data = null;
+				for(int pass = 0; pass < 2; pass++)
+				{
+					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+					long start = System.nanoTime();
+					check[pass] = encode(new DataOutputStream(bytes), qc, min, size[0], image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
+					took[pass] = System.nanoTime() - start - check[pass];
+					byte[] got = bytes.toByteArray();
+					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
+					data = got;
+				}
+				try(OutputStream out = new BufferedOutputStream(new FileOutputStream(file))) { out.write(data); }
 			}
 			catch(Exception e)
 			{
@@ -482,83 +516,115 @@ public class SimpleWriter
 				return;
 			}
 			int n = bandsUsed(), raw = image_xdim * image_ydim * 3;
-			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), describeBands(n, value_list[0].length / delta_xdim)));
+			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), describeBands(n, size[1])));
 			else      System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
+			System.out.println(String.format("Coded %d x %d (%,d pixels)", size[0], size[1], (long) size[0] * size[1]));
+			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
+			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
+			System.out.println("Decode check:               " + ViewerSupport.formatDuration(check[1]));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
 		}
+	}
 
-		/**
-		 * Format 8. Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
-		 * shorts), pixel_shift, pixel_quant, channel set; per channel (coding
-		 * order) int min and the window radius (an unsigned byte); the number of
-		 * bands n (an unsigned byte), n int lengths, and the n bands. Band b is
-		 * rows bandStart(b) to bandStart(b + 1) of the quantized image, coded as
-		 * an image of its own (the fit and the contexts start again at its
-		 * top): per channel, int init, then the least-squares deltas
-		 * mixed-context coded with the second opinions
-		 * (DeltaMapper.packMixedDeltas). Channels 1 and 2 use the ones before
-		 * them (their values in the fit, their deltas as context), so a band's
-		 * channels are decoded in order, each a couple of rows behind the one
-		 * before; the bands can be decoded at the same time. One band is what
-		 * the analysis already coded; more bands reuse the analysis's deltas
-		 * past each band's first rows (DeltaMapper.getLeastSquaresBandDeltas)
-		 * and are coded at the same time.
-		 *
-		 * @param out the stream
-		 * @throws IOException if the stream fails
-		 */
-		private void save(DataOutputStream out) throws IOException
+	/**
+	 * Analyses and codes the channels and writes the file. Format 8.
+	 * Header: FORMAT_ID, FORMAT_VERSION, width, height (unsigned shorts),
+	 * pixel_shift, pixel_quant, channel set; per channel (coding order) int
+	 * min and the window radius (an unsigned byte); the number of bands n (an
+	 * unsigned byte), n int lengths, and the n bands. Band b is rows
+	 * bandStart(b) to bandStart(b + 1) of the quantized image, coded as an
+	 * image of its own (the fit and the contexts start again at its top):
+	 * per channel, int init, then the least-squares deltas mixed-context
+	 * coded with the second opinions (DeltaMapper.packMixedDeltas). Channels
+	 * 1 and 2 use the ones before them (their values in the fit, their deltas
+	 * as context), so a band's channels are decoded in order, each a couple
+	 * of rows behind the one before; the bands can be decoded at the same
+	 * time.
+	 * <p>
+	 * The analysis as the preview's: the channel set with the smallest
+	 * estimate (bestSet), then each channel's window radius by the real
+	 * coded size (DeltaMapper.surveyWindows). One band is what the survey
+	 * already coded; more bands reuse its deltas past each band's first rows
+	 * (DeltaMapper.getLeastSquaresBandDeltas) and are coded at the same time.
+	 * Once everything is coded, each band's channels are checked by decoding
+	 * them back, at the same time; the time that took is returned, so the
+	 * coding can be timed without it.
+	 *
+	 * @param out         the stream
+	 * @param qc          the six candidate channels, quantized (DeltaMapper.getCandidateChannels)
+	 * @param min         their minimums
+	 * @param xdim        their width
+	 * @param image_xdim  the image's width
+	 * @param image_ydim  the image's height
+	 * @param pixel_shift the Color Resolution
+	 * @param pixel_quant the Pixel Resolution
+	 * @param n           the number of bands
+	 * @return the time the decode check took, in nanoseconds
+	 * @throws IOException if the stream fails
+	 */
+	static long encode(DataOutputStream out, int[][] qc, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n) throws IOException
+	{
+		int rows = qc[0].length / xdim;
+		int[] sum = new int[6];
+		ViewerSupport.parallel(6, i -> sum[i] = (int) Math.floor(CodeMapper.getShannonLimit(DeltaMapper.getIdealFrequency(qc[i], xdim, rows))));
+		int     set_id = bestSet(sum);
+		int[]   id = DeltaMapper.getChannels(set_id);
+		int[][] value = {qc[id[0]], qc[id[1]], qc[id[2]]};
+		DeltaMapper.WindowSurvey s = DeltaMapper.surveyWindows(value, xdim, rows, DeltaMapper.WINDOW_RADII);
+
+		int[][][]  ch = new int[n][3][], d = new int[n][3][];   // [band][channel]
+		byte[][][] coded = new byte[n][3][];
+		ViewerSupport.parallel(n, b ->
 		{
-			int n = bandsUsed(), xdim = delta_xdim, rows = value_list[0].length / xdim;
-			DeltaMapper.WindowSurvey s = survey;
-			byte[][] band = new byte[n][];
-			ViewerSupport.parallel(n, b ->
-			{
-				int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows);
-				int[][]  ch = new int[3][], d = new int[3][];
-				byte[][] coded = new byte[3][];
-				for(int i = 0; i < 3; i++)
-				{
-					ch[i] = Arrays.copyOfRange(value_list[i], y0 * xdim, y1 * xdim);
-					d[i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresBandDeltas(s.deltas[i], value_list[i], (i > 0) ? value_list[i - 1] : null, xdim, y0, y1, s.radius[i]);
-				}
-				ViewerSupport.parallel(3, i ->
-				{
-					try
-					{
-						int[][] previous = Arrays.copyOf(d, i);
-						coded[i] = (n == 1) ? s.coded[i] : DeltaMapper.packMixedDeltas(d[i], ch[i], previous, xdim, true);
-						int[] p = new int[ch[i].length];
-						for(int k = 0; k < p.length; k++) p[k] = ch[i][k] - d[i][k];
-						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[i], ch[i], previous, xdim, p), d[i]))
-							System.out.println("WARNING: band " + b + " channel " + i + " deltas do not decode back.");
-					}
-					catch(IOException e) { throw new UncheckedIOException(e); }
-				});
-				try
-				{
-					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-					DataOutputStream bo = new DataOutputStream(bytes);
-					for(int i = 0; i < 3; i++) { bo.writeInt(ch[i][0]); bo.write(coded[i]); }
-					band[b] = bytes.toByteArray();
-				}
-				catch(IOException e) { throw new UncheckedIOException(e); }
-			});
-
-			int[] channel_id = DeltaMapper.getChannels(min_set_id);
-			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
-			out.writeShort(image_xdim); out.writeShort(image_ydim);
-			out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(min_set_id);
+			int y0 = bandStart(b, n, rows), y1 = bandStart(b + 1, n, rows);
 			for(int i = 0; i < 3; i++)
 			{
-				out.writeInt(channel_min[channel_id[i]]);
-				out.writeByte(s.radius[i]);
+				ch[b][i] = (n == 1) ? value[i] : Arrays.copyOfRange(value[i], y0 * xdim, y1 * xdim);
+				d[b][i]  = (n == 1) ? s.deltas[i] : DeltaMapper.getLeastSquaresBandDeltas(s.deltas[i], value[i], (i > 0) ? value[i - 1] : null, xdim, y0, y1, s.radius[i]);
 			}
-			out.writeByte(n);
-			for(int b = 0; b < n; b++) out.writeInt(band[b].length);
-			for(int b = 0; b < n; b++) out.write(band[b]);
+			ViewerSupport.parallel(3, i ->
+			{
+				try { coded[b][i] = (n == 1) ? s.coded[i] : DeltaMapper.packMixedDeltas(d[b][i], ch[b][i], Arrays.copyOf(d[b], i), xdim, true); }
+				catch(IOException e) { throw new UncheckedIOException(e); }
+			});
+		});
+		// The check, once everything is coded (so its time can be told
+		// apart): each band's channels decoded back, at the same time.
+		long check = System.nanoTime();
+		ViewerSupport.parallel(n, b -> ViewerSupport.parallel(3, i ->
+		{
+			try
+			{
+				int[] c = ch[b][i], dd = d[b][i], p = new int[c.length];
+				for(int k = 0; k < p.length; k++) p[k] = c[k] - dd[k];
+				if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[b][i], c, Arrays.copyOf(d[b], i), xdim, p), dd))
+					System.out.println("WARNING: band " + b + " channel " + i + " deltas do not decode back.");
+			}
+			catch(IOException e) { throw new UncheckedIOException(e); }
+		}));
+		long check_time = System.nanoTime() - check;
+
+		byte[][] band = new byte[n][];
+		for(int b = 0; b < n; b++)
+		{
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			DataOutputStream bo = new DataOutputStream(bytes);
+			for(int i = 0; i < 3; i++) { bo.writeInt(ch[b][i][0]); bo.write(coded[b][i]); }
+			band[b] = bytes.toByteArray();
 		}
+		out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
+		out.writeShort(image_xdim); out.writeShort(image_ydim);
+		out.writeByte(pixel_shift); out.writeByte(pixel_quant); out.writeByte(set_id);
+		for(int i = 0; i < 3; i++)
+		{
+			out.writeInt(min[id[i]]);
+			out.writeByte(s.radius[i]);
+		}
+		out.writeByte(n);
+		for(int b = 0; b < n; b++) out.writeInt(band[b].length);
+		for(int b = 0; b < n; b++) out.write(band[b]);
+		return check_time;
 	}
 }
