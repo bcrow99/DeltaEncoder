@@ -266,7 +266,7 @@ public class SimpleReader
 				if(used[0] != end) throw new IOException(name + ": band " + b + " is not the length its header says.");
 			}
 		}
-		catch(IOException | RuntimeException e)
+		catch(Throwable e)   // any failure, an Error too (running out of memory, say): otherwise the band threads would wait forever for their bytes
 		{
 			for(int b = 0; b < bands; b++) for(int i = 0; i < 3; i++) coded[b][i].completeExceptionally(e);
 			for(ArithmeticMapper.Arriving a : arriving) a.fail(e);
