@@ -3972,9 +3972,11 @@ public class DeltaMapper
 	 * Least squares fitted from the rows above. At each interior pixel (y,
 	 * x), the linear predictor (with a constant term) that best fits the
 	 * pixels in the window -- the r rows above it (from row 1) and r columns
-	 * either side (the interior columns) -- from the same 8 neighbours as
-	 * LeastSquares and, after the first channel, the previous channel at the
-	 * pixel, to its left and above. The fit is solved at every every-th pixel
+	 * either side (the interior columns) -- from 6 of LeastSquares' 8
+	 * neighbours (W, N, NW, NE, WW and NNE: not NN and NEE, which cost a
+	 * quarter of the run time for about a quarter of a percent of the file)
+	 * and, after the first channel, the previous channel at the pixel, to its
+	 * left and above. The fit is solved at every every-th pixel
 	 * along a row, from column 1, and the pixels up to the next solved one
 	 * use its solution; where it can't be solved (fewer than twice as many
 	 * window pixels as unknowns, or a singular system) they are predicted by
@@ -3993,6 +3995,10 @@ public class DeltaMapper
 	 */
 	static final class RowFit
 	{
+		/**
+		 * The number of neighbours fitted: W, N, NW, NE, WW, NNE (features 0 to 5).
+		 */
+		static final int SPATIAL = 6;
 		/**
 		 * The channel (filled in as it decodes), and the previous channel (null for the first).
 		 */
@@ -4051,7 +4057,7 @@ public class DeltaMapper
 		RowFit(int[] v, int[] ref, int xdim, int radius, int every)
 		{
 			this.v = v; this.ref = ref; this.xdim = xdim; this.r = radius; this.every = every;
-			nf     = (ref == null) ? 8 : 11;
+			nf     = (ref == null) ? SPATIAL : SPATIAL + 3;
 			m      = nf + 2;
 			nt     = m * (m + 1) / 2;
 			n      = nf + 1;
@@ -4120,12 +4126,16 @@ public class DeltaMapper
 		 */
 		private void features(int y, int x, long[] zz)
 		{
-			zz[0] = at(y, x - 1); zz[1] = at(y - 1, x); zz[2] = at(y - 1, x - 1); zz[3] = at(y - 1, x + 1);
-			zz[4] = at(y, x - 2); zz[5] = at(y - 2, x); zz[6] = at(y - 1, x + 2); zz[7] = at(y - 2, x + 1);
+			zz[0] = at(y, x - 1);      // W
+			zz[1] = at(y - 1, x);      // N
+			zz[2] = at(y - 1, x - 1);  // NW
+			zz[3] = at(y - 1, x + 1);  // NE
+			zz[4] = at(y, x - 2);      // WW
+			zz[5] = at(y - 2, x + 1);  // NNE
 			if(ref != null)
 			{
 				int k = y * xdim + x;
-				zz[8] = ref[k]; zz[9] = ref[k - 1]; zz[10] = ref[k - xdim];
+				zz[6] = ref[k]; zz[7] = ref[k - 1]; zz[8] = ref[k - xdim];
 			}
 			zz[nf] = 1;
 			zz[nf + 1] = v[y * xdim + x];
@@ -4244,15 +4254,23 @@ public class DeltaMapper
 			if(y >= 2 && x >= 2 && x <= xdim - 3)
 			{
 				int up = k - xdim, up2 = up - xdim;
-				zz[0] = v[k - 1];  zz[1] = v[up];  zz[2] = v[up - 1];  zz[3] = v[up + 1];
-				zz[4] = v[k - 2];  zz[5] = v[up2]; zz[6] = v[up + 2];  zz[7] = v[up2 + 1];
+				zz[0] = v[k - 1];   // W
+				zz[1] = v[up];      // N
+				zz[2] = v[up - 1];  // NW
+				zz[3] = v[up + 1];  // NE
+				zz[4] = v[k - 2];   // WW
+				zz[5] = v[up2 + 1]; // NNE
 			}
 			else
 			{
-				zz[0] = at(y, x - 1); zz[1] = at(y - 1, x); zz[2] = at(y - 1, x - 1); zz[3] = at(y - 1, x + 1);
-				zz[4] = at(y, x - 2); zz[5] = at(y - 2, x); zz[6] = at(y - 1, x + 2); zz[7] = at(y - 2, x + 1);
+				zz[0] = at(y, x - 1);
+				zz[1] = at(y - 1, x);
+				zz[2] = at(y - 1, x - 1);
+				zz[3] = at(y - 1, x + 1);
+				zz[4] = at(y, x - 2);
+				zz[5] = at(y - 2, x + 1);
 			}
-			if(ref != null) { zz[8] = ref[k]; zz[9] = ref[k - 1]; zz[10] = ref[k - xdim]; }
+			if(ref != null) { zz[6] = ref[k]; zz[7] = ref[k - 1]; zz[8] = ref[k - xdim]; }
 			zz[nf] = 1;
 			zz[nf + 1] = v[k];
 		}
@@ -4378,8 +4396,11 @@ public class DeltaMapper
 			double[] coef = this.coef[y & 1];
 			double s = 0;
 			for(int i = 0, o = p * n; i < n; i++) s += coef[o + i] * z[i];
+			// The clamp is over all 8 neighbours, the two not fitted (NN, NEE) too.
+			int ww = (int) z[4], nne = (int) z[5], nn = at(y - 2, x), nee = at(y - 1, x + 2);
 			int lo = Math.min(Math.min(pa, pb), Math.min(pc, pd)), hi = Math.max(Math.max(pa, pb), Math.max(pc, pd));
-			for(int i = 4; i < 8; i++) { lo = (int) Math.min(lo, z[i]); hi = (int) Math.max(hi, z[i]); }
+			lo = Math.min(Math.min(lo, ww), Math.min(Math.min(nne, nn), nee));
+			hi = Math.max(Math.max(hi, ww), Math.max(Math.max(nne, nn), nee));
 			double w = Math.max(lo - 2, Math.min(hi + 2, s));
 			wide = (int) Math.floor(w + 0.5);
 			return wide;

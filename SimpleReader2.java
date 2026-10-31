@@ -2,7 +2,7 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// SimpleReader2 version 1.0 (reads Simple 2 format 1)
+// SimpleReader2 version 1.1 (reads Simple 2 format 2 only)
 //
 // Reads SimpleWriter2's files: the channels green, blue-green and red-green
 // (SimpleWriter2.SET_ID), every interior pixel predicted by the
@@ -28,9 +28,10 @@ public class SimpleReader2
 	static final char FORMAT_ID      = 'F';
 	/**
 	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or a coder's output changes.
+	 * whenever the file layout or a coder's output changes. 2: the fit from 6
+	 * neighbours, solved at every 4th pixel (1: 8 neighbours, every 3rd).
 	 */
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;
 
 	/**
 	 * The image's width and height, Color Resolution and Pixel Resolution.

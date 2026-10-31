@@ -42,6 +42,11 @@ public class SimpleWriter
 	 * get fewer bands.
 	 */
 	static final int  BAND_MIN_ROWS = 64;
+	/**
+	 * The channel set bestSet picks when it ties for the smallest estimate:
+	 * green, blue-green, red-green (DeltaMapper.getChannels).
+	 */
+	static final int  TIE_SET = 7;
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -279,9 +284,19 @@ public class SimpleWriter
 		return qc;
 	}
 
+	/**
+	 * The channel set with the smallest summed estimate: on a tie, set
+	 * TIE_SET if it is one of those tied (on an image where the estimates
+	 * can't tell the sets apart, such as a gray one, its difference channels
+	 * code smaller), otherwise the first.
+	 *
+	 * @param channel_sum each candidate channel's estimate
+	 * @return the channel set
+	 */
 	private static int bestSet(int[] channel_sum)
 	{
-		int best = 0, best_sum = Integer.MAX_VALUE;
+		int[] tie = DeltaMapper.getChannels(TIE_SET);
+		int best = TIE_SET, best_sum = channel_sum[tie[0]] + channel_sum[tie[1]] + channel_sum[tie[2]];
 		for(int s = 0; s < 10; s++)
 		{
 			int[] c = DeltaMapper.getChannels(s);

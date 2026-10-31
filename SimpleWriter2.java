@@ -6,7 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.swing.*;
 
-// SimpleWriter2 version 1.0 (writes Simple 2 format 1)
+// SimpleWriter2 version 1.1 (writes Simple 2 format 2: 1.0 wrote format 1,
+// whose fit had all 8 neighbours and was solved at every 3rd pixel)
 //
 // SimpleWriter without the analysis, for speed: one channel set, green,
 // blue-green and red-green (SET_ID; the set SimpleWriter's analysis picks
@@ -37,9 +38,10 @@ public class SimpleWriter2
 	static final char FORMAT_ID      = 'F';
 	/**
 	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or a coder's output changes.
+	 * whenever the file layout or a coder's output changes. 2: the fit from 6
+	 * neighbours, solved at every 4th pixel (1: 8 neighbours, every 3rd).
 	 */
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 2;
 	/**
 	 * The channel set coded: green, blue-green, red-green (see
 	 * DeltaMapper.getChannels).
@@ -57,7 +59,7 @@ public class SimpleWriter2
 	 * How often along a row the fit is solved: at every EVERY-th pixel, the
 	 * pixels between using the last solution (DeltaMapper.RowFit).
 	 */
-	static final int  EVERY = 3;
+	static final int  EVERY = 4;
 	/**
 	 * The most bands Save offers.
 	 */
@@ -392,7 +394,7 @@ public class SimpleWriter2
 	}
 
 	/**
-	 * Codes the channels and writes the file. Format 1. Header: FORMAT_ID,
+	 * Codes the channels and writes the file. Format 2. Header: FORMAT_ID,
 	 * FORMAT_VERSION, width, height (unsigned shorts), pixel_shift,
 	 * pixel_quant; per channel (coding order) int min; the number of bands n
 	 * (an unsigned byte), n int lengths, and the n bands. Band b is rows
