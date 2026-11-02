@@ -5,15 +5,16 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// PixelWriter version 1.4
+// PixelWriter version 1.5
 //
-// Codes the red, green and blue channels block by block with context-
-// adaptive arithmetic coding (see PixelMapper). Menus: File, View,
-// Quantization (Pixel Resolution and Color Resolution) and Block (Block
-// Size; Coding: the pixel values with an exact prediction or with
-// brightness bands as context, or the prediction errors; and Channels: red,
-// green and blue, or green and the differences red - green and blue -
-// green). Quantization > Average shrinks the red, green and blue channels
+// Codes the image's channels block by block with context-adaptive
+// arithmetic coding (see PixelMapper). Menus: File, View, Quantization
+// (Pixel Resolution, resized centred with ResizeMapper.resize2, and Color
+// Resolution) and Block (Block Size; Coding: the pixel values with an exact
+// prediction or with brightness bands as context, or the prediction errors;
+// Channels: green and the differences blue - green and red - green, or red,
+// green and blue; and Prediction: the median edge predictor or least
+// squares). Quantization > Average shrinks the red, green and blue channels
 // by averaging 2 x 2 squares (1 or 2 levels) and codes only the smallest
 // level, plus one sign bit per pixel per level to restore detail when
 // expanding (PixelMapper's averaging pyramid; DeltaWriter's old scheme, but
@@ -28,7 +29,7 @@ public class PixelWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or the coder's output changes.
 	static final char FORMAT_ID      = 'X';
-	static final int  FORMAT_VERSION = 4;   // 2 added the coding byte, 3 the channels byte, 4 the averaging pyramid
+	static final int  FORMAT_VERSION = 5;   // 2 added the coding byte, 3 the channels byte, 4 the averaging pyramid, 5 the prediction, each coded channel's offset and largest value, and centred resizing
 
 	// ---- Image state --------------------------------------------------------
 	ViewerSupport view;
@@ -44,20 +45,32 @@ public class PixelWriter
 	int pixel_shift = 3;
 	int block_size  = 64;   // replaced by init()
 	int coding      = PixelMapper.VALUES;
-	int channels    = PixelMapper.PRIMARY;
+	int channels    = PixelMapper.GREEN_DIFFERENCES;
+	/**
+	 * The prediction: PixelMapper.MED or PixelMapper.LS.
+	 */
+	int prediction  = PixelMapper.MED;
 	int     pixel_pyramid = 0;       // Average: levels of 2 x 2 averaging (0..PixelMapper.PYRAMID_MAX)
 	boolean use_saddle    = false;   // expand with the cross-derivative term too
 
 	JSlider pquant_slider, pshift_slider, block_slider;
 	JRadioButton[] coding_button  = new JRadioButton[PixelMapper.CODING_NAMES.length];
-	JRadioButton[] channel_button = new JRadioButton[PixelMapper.CHANNEL_SET_NAMES.length];
+	JRadioButton[] channel_button = new JRadioButton[PixelMapper.WRITER_CHANNEL_SETS.length];
+	/**
+	 * The Prediction dialog's buttons.
+	 */
+	JRadioButton[] prediction_button = new JRadioButton[PixelMapper.PREDICTION_NAMES.length];
 	boolean updating = false;   // set while the program moves a slider
 
 	// ---- Results of the last Apply (read by Save) ---------------------------
 	int[][]  quantized;          // red, green, blue at the quantized size
 	int      qxdim, qydim;
-	int[][]  top;                // the coded channels: quantized, or its averaged top level
+	int[][]  top;                // red, green, blue as coded: quantized, or its averaged top level
 	int      txdim, tydim;
+	/**
+	 * top as the channel set codes it (PixelMapper.prepare).
+	 */
+	PixelMapper.Prepared prepared;
 	boolean[][][] sign_bits = new boolean[3][][];   // per channel, per level (Average)
 	int[][]  shown;              // what the reader will show, at the quantized size
 	byte[][] coded;              // per channel, in PixelMapper.ORDER
@@ -124,16 +137,25 @@ public class PixelWriter
 		quant_menu.add(ViewerSupport.makeSliderDialog(frame, "Color Resolution", 0, 7, pixel_shift, v -> { pixel_shift = v; if(!updating) apply(); }, ss)); pshift_slider = ss[0];
 		quant_menu.add(makePyramidDialog(frame));
 
-		// Block size, coding and channels: the coded size changes, the picture
-		// doesn't. A new coding or channel choice has its own best block size,
-		// so choosing one runs the block size search again.
+		// Block size, coding, channels and prediction: the coded size changes,
+		// the picture doesn't. A new coding, channel set or prediction has its
+		// own best block size, so choosing one runs the block size search again.
 		JMenu block_menu = new JMenu("Block");
 		block_menu.add(ViewerSupport.makeSliderDialog(frame, "Block Size", PixelMapper.BLOCK_MIN, PixelMapper.blockLimit(image_xdim, image_ydim), block_size,
 			v -> { block_size = v; if(!updating) apply(); }, ss)); block_slider = ss[0];
 		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Coding", PixelMapper.CODING_NAMES, coding,
 			v -> { if(v != coding) { coding = v; findBlockSize(); } }, coding_button));
-		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Channels", PixelMapper.CHANNEL_SET_NAMES, channels,
-			v -> { if(v != channels) { channels = v; findBlockSize(); } }, channel_button));
+		String[] set_names = new String[PixelMapper.WRITER_CHANNEL_SETS.length];
+		int set_index = 0;
+		for(int i = 0; i < set_names.length; i++)
+		{
+			set_names[i] = PixelMapper.CHANNEL_SET_NAMES[PixelMapper.WRITER_CHANNEL_SETS[i]];
+			if(PixelMapper.WRITER_CHANNEL_SETS[i] == channels) set_index = i;
+		}
+		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Channels", set_names, set_index,
+			v -> { int set = PixelMapper.WRITER_CHANNEL_SETS[v]; if(set != channels) { channels = set; findBlockSize(); } }, channel_button));
+		block_menu.add(ViewerSupport.makeRadioDialog(frame, "Prediction", PixelMapper.PREDICTION_NAMES, prediction,
+			v -> { if(v != prediction) { prediction = v; findBlockSize(); } }, prediction_button));
 
 		menu_bar.add(file_menu); menu_bar.add(view.makeViewMenu()); menu_bar.add(quant_menu); menu_bar.add(block_menu);
 
@@ -209,8 +231,8 @@ public class PixelWriter
 	{
 		long t0 = System.nanoTime();
 		ArrayList<int[]> tried = new ArrayList<int[]>();
-		block_size = PixelMapper.findBestBlock(top, txdim, tydim, 255 >> pixel_shift, pixel_shift, coding, channels, tried);
-		System.out.println("Block sizes tried (" + PixelMapper.CODING_NAMES[coding] + "; " + PixelMapper.CHANNEL_SET_NAMES[channels]
+		block_size = PixelMapper.findBestBlock(prepared, pixel_shift, coding, tried);
+		System.out.println("Block sizes tried (" + PixelMapper.CODING_NAMES[coding] + "; " + PixelMapper.CHANNEL_SET_NAMES[channels] + "; " + PixelMapper.PREDICTION_NAMES[prediction]
 			+ "; Pixel Resolution " + pixel_quant + ", Color Resolution " + pixel_shift + ", Average " + pixel_pyramid + "):");
 		System.out.println("bytes for the 3 channels.");
 		System.out.println("<= marks the size chosen.");
@@ -249,12 +271,12 @@ public class PixelWriter
 			quantize();
 			blockRange();
 			long t0 = System.nanoTime();
-			coded = PixelMapper.encode(top, txdim, tydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+			coded = PixelMapper.encode(prepared, pixel_shift, block_size, coding);
 			long bytes = 0, sign = 0;
 			for(byte[] c : coded) bytes += c.length;
 			for(int i = 0; i < 3; i++) if(pixel_pyramid > 0) sign += PixelMapper.signBitBytes(sign_bits[i]);
-			System.out.println(String.format("%s; %s; Pixel Resolution %d, Color Resolution %d, Average %d%s, block size %d: %,d bytes coded%s (%.4f of the raw size) in %s",
-				PixelMapper.CODING_NAMES[coding], PixelMapper.CHANNEL_SET_NAMES[channels], pixel_quant, pixel_shift, pixel_pyramid, (pixel_pyramid > 0 && use_saddle) ? " (saddle)" : "",
+			System.out.println(String.format("%s; %s; %s; Pixel Resolution %d, Color Resolution %d, Average %d%s, block size %d: %,d bytes coded%s (%.4f of the raw size) in %s",
+				PixelMapper.CODING_NAMES[coding], PixelMapper.CHANNEL_SET_NAMES[channels], PixelMapper.PREDICTION_NAMES[prediction], pixel_quant, pixel_shift, pixel_pyramid, (pixel_pyramid > 0 && use_saddle) ? " (saddle)" : "",
 				block_size, bytes + sign, (pixel_pyramid > 0) ? String.format(" (%,d pixels + %,d sign bits)", bytes, sign) : "",
 				(double) (bytes + sign) / (3.0 * image_xdim * image_ydim), ViewerSupport.formatDuration(System.nanoTime() - t0)));
 			if(pixel_pyramid > 0) System.out.println(averageError());
@@ -264,7 +286,8 @@ public class PixelWriter
 		catch(Exception e) { System.out.println("Apply: " + e); e.printStackTrace(); }
 	}
 
-	// The channels resized (Pixel Resolution) and shifted (Color Resolution).
+	// The channels resized (Pixel Resolution, centred) and shifted (Color
+	// Resolution), averaged (Average), and prepared for coding.
 	private void quantize()
 	{
 		int[] size = DeltaMapper.getQuantizedSize(image_xdim, image_ydim, pixel_quant);
@@ -274,7 +297,7 @@ public class PixelWriter
 			int[] ch = source[i];
 			if(pixel_quant != 0)
 			{
-				ch = ResizeMapper.resize(ch, image_xdim, size[0], size[1]);
+				ch = ResizeMapper.resize2(ch, image_xdim, size[0], size[1]);
 				for(int k = 0; k < ch.length; k++) ch[k] = PixelMapper.clamp(ch[k]);
 			}
 			q[i] = DeltaMapper.quantizeChannel(ch, pixel_shift);
@@ -295,6 +318,7 @@ public class PixelWriter
 			sh[i]   = PixelMapper.expandPyramid(tp[i], qxdim, qydim, bits[i], max_value, use_saddle);
 		});
 		top = tp; txdim = t[0]; tydim = t[1]; sign_bits = bits; shown = sh;
+		prepared = PixelMapper.prepare(top, txdim, tydim, max_value, channels, prediction);
 	}
 
 	// How far the averaged and expanded channels are from the quantized ones
@@ -318,7 +342,7 @@ public class PixelWriter
 	// The quantized image as PixelReader will show it.
 	private void showPreview()
 	{
-		int[] rgb = PixelMapper.getRGB(shown, qxdim, image_xdim, image_ydim, pixel_quant, pixel_shift);
+		int[] rgb = PixelMapper.getRGB(shown, qxdim, image_xdim, image_ydim, pixel_quant, pixel_shift, true);
 		working_image.setRGB(0, 0, image_xdim, image_ydim, rgb, 0, image_xdim);
 		view.setImage(working_image);
 	}
@@ -326,10 +350,12 @@ public class PixelWriter
 	// ---- Save ---------------------------------------------------------------
 
 	// Writes "foo": FORMAT_ID, FORMAT_VERSION, width, height (unsigned
-	// shorts), pixel_shift, pixel_quant (bytes), block size (short), coding
-	// and channels (bytes), Average levels and saddle (bytes), then for each
-	// coded channel in order (green, then red and blue or their differences
-	// from green): its coded length (int) and coded bytes; then with Average,
+	// shorts), pixel_shift, pixel_quant (bytes), block size (short), coding,
+	// channels, prediction and the least-squares window radius (bytes),
+	// Average levels and saddle (bytes); for each coded channel in order
+	// (green, then the differences blue - green and red - green, or red and
+	// blue), its offset and largest value (ints: PixelMapper.Prepared); then
+	// for each, its coded length (int) and coded bytes; then with Average,
 	// the sign bits of red, green and blue (PixelMapper.writeSignBits).
 	// Checks the channels decode back first.
 	void save()
@@ -338,7 +364,7 @@ public class PixelWriter
 		if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 
 		long t0 = System.nanoTime();
-		int[][] back = PixelMapper.decode(coded, txdim, tydim, 255 >> pixel_shift, pixel_shift, block_size, coding, channels);
+		int[][] back = PixelMapper.decode(coded, txdim, tydim, pixel_shift, block_size, coding, channels, prediction, prepared.radius(), prepared.offset(), prepared.max());
 		for(int i = 0; i < 3; i++)
 			if(!Arrays.equals(back[i], top[i]))
 			{
@@ -356,7 +382,10 @@ public class PixelWriter
 			out.writeShort(block_size);
 			out.writeByte(coding);
 			out.writeByte(channels);
+			out.writeByte(prediction); out.writeByte(prepared.radius());
 			out.writeByte(pixel_pyramid); out.writeByte(use_saddle ? 1 : 0);
+			int[] offset = prepared.offset(), max = prepared.max();
+			for(int i = 0; i < 3; i++) { out.writeInt(offset[i]); out.writeInt(max[i]); }
 			for(int i = 0; i < 3; i++) { out.writeInt(coded[i].length); out.write(coded[i]); }
 			if(pixel_pyramid > 0) for(int i = 0; i < 3; i++) PixelMapper.writeSignBits(out, sign_bits[i]);
 		}
