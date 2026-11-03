@@ -25,19 +25,28 @@ WAIT_S=5
 # name | writer | fields
 JOBS="
 b     BlockWriter
-d13   DeltaWriter   delta_type=13 block_set=3
-d13c  DeltaWriter   delta_type=13 block_set=1 entropy_type=4
+b4    BlockWriter   bands=4
+d13   DeltaWriter   delta_type=13
+d13c  DeltaWriter   delta_type=13 entropy_type=4
 d2    DeltaWriter   delta_type=2
-d2_13 DeltaWriter2  delta_type=13 block_set=3
-p13   PacketWriter  delta_type=13 block_set=3
-s13   SimpleWriter  delta_type=13 block_set=3 entropy_type=4
-s13a  SimpleWriter  delta_type=13 block_set=0 entropy_type=2
+d2_13 DeltaWriter2  delta_type=13
+p13   PacketWriter  delta_type=13
+s     SimpleWriter
+s4    SimpleWriter  bands=4
+s2    SimpleWriter2
+s2_4  SimpleWriter2 bands=4
+px    PixelWriter
+px_ls PixelWriter   prediction=1
+px_rgb PixelWriter  channels=0
+px_ls0 PixelWriter  pixel_quant=0 pixel_shift=0 prediction=1 coding=2
 "
 
-# Sizes in bytes for coffee.png, with LS (predictor id 255).
+# Sizes in bytes for coffee.png, with LS (predictor id 255); b with Block format 9: the 225-entry predictor table, mixed context coding with second opinions, each channel's block size (4, 6, 8, 12 or 16) and set surveyed from the whole table; b4 the same in 4 bands (format 10); the delta type 13 jobs (D and P version 5) use the same survey's block maps; s with Simple format 8: least squares alone with the wide clamp, each channel's window radius (4, 8 or 16) chosen by the coded size, mixed context coding with second opinions, centred resizing (resize2); s4 the same in 4 bands; s2 with Simple 2 format 2: the same coding with the channels green, blue-green, red-green and window radius 10, the fit from the rows above only, from 6 neighbours (W, N, NW, NE, WW, NNE), solved at every 4th pixel, no analysis; s2_4 the same in 4 bands; px with Pixel format 5: green, blue - green, red - green less each difference's minimum, the median edge predictor, values with an exact prediction, blocks found by the search, centred resizing (resize2); px_ls the same with least squares (radius 8); px_rgb with red, green, blue; px_ls0 lossless with least squares and the errors coding.
 declare -A EXPECTED=(
-	[b]=89247 [d13]=101019 [d13c]=94427 [d2]=110560
-	[d2_13]=101019 [p13]=101910 [s13]=93715 [s13a]=104759
+	[b]=85838 [b4]=88232 [d13]=96368 [d13c]=89190 [d2]=110560
+	[d2_13]=96368 [p13]=97606 [s]=85535 [s4]=87702
+	[s2]=85375 [s2_4]=87496
+	[px]=103598 [px_ls]=90261 [px_rgb]=105549 [px_ls0]=332460
 )
 
 mkdir -p "$OUT/classes" || exit 1

@@ -837,7 +837,67 @@ public class ArithmeticMapper
 	}
 
 	/**
-	 * The decoder for {@link RangeEncoder}. Reads zeros past the end of its input.
+	 * Coded bytes still arriving: a buffer of a known length that one thread
+	 * fills in order, saying how much has arrived (arrived), while a
+	 * RangeDecoder reads it, waiting when it gets ahead (await).
+	 */
+	static final class Arriving
+	{
+		/**
+		 * The bytes (those below the count arrived).
+		 */
+		final byte[] bytes;
+		/**
+		 * How many have arrived (guarded by this).
+		 */
+		private int count;
+		/**
+		 * Why the rest won't arrive, if they won't (guarded by this).
+		 */
+		private Throwable failed;
+
+		/**
+		 * A buffer for bytes yet to arrive.
+		 *
+		 * @param length how many there will be
+		 */
+		Arriving(int length) { bytes = new byte[length]; }
+
+		/**
+		 * Says that the first count bytes have arrived.
+		 *
+		 * @param count how many
+		 */
+		synchronized void arrived(int count) { this.count = count; notifyAll(); }
+
+		/**
+		 * Says that the rest won't arrive.
+		 *
+		 * @param e why
+		 */
+		synchronized void fail(Throwable e) { if(failed == null) failed = e; notifyAll(); }
+
+		/**
+		 * Waits until byte pos has arrived.
+		 *
+		 * @param pos the byte (below bytes.length)
+		 * @return how many have arrived (more than pos)
+		 */
+		synchronized int await(int pos)
+		{
+			boolean interrupted = false;
+			while(count <= pos && failed == null)
+				try { wait(); } catch(InterruptedException e) { interrupted = true; }
+			if(interrupted) Thread.currentThread().interrupt();
+			if(count <= pos) throw new IllegalStateException("the coded bytes didn't all arrive", failed);
+			return count;
+		}
+	}
+
+	/**
+	 * The decoder for {@link RangeEncoder}. Reads zeros past the end of its
+	 * input. Its input can be still arriving (Arriving): then it waits for
+	 * each byte it gets to before it has arrived.
 	 */
 	static final class RangeDecoder
 	{
@@ -845,6 +905,14 @@ public class ArithmeticMapper
 		 * The coded bytes.
 		 */
 		final byte[] in;
+		/**
+		 * The bytes as they arrive, or null when they are all there.
+		 */
+		final Arriving arriving;
+		/**
+		 * How many bytes of in can be read without looking for more.
+		 */
+		int  limit;
 		/**
 		 * The next byte to read; the first byte written is always the initial cache.
 		 */
@@ -862,6 +930,22 @@ public class ArithmeticMapper
 		RangeDecoder(byte[] in)
 		{
 			this.in = in;
+			arriving = null;
+			limit = in.length;
+			for (int k = 0; k < 5; k++) code = (code << 8) | next();
+		}
+
+		/**
+		 * A decoder reading the first five code bytes, from bytes still
+		 * arriving (waiting for them if need be).
+		 *
+		 * @param in the coded bytes, as they arrive
+		 */
+		RangeDecoder(Arriving in)
+		{
+			this.in = in.bytes;
+			arriving = in;
+			limit = 0;
 			for (int k = 0; k < 5; k++) code = (code << 8) | next();
 		}
 
@@ -870,7 +954,20 @@ public class ArithmeticMapper
 		 *
 		 * @return the next input byte, or 0 past the end
 		 */
-		int next() { return (pos < in.length) ? (in[pos++] & 0xFF) : 0; }
+		int next() { return (pos < limit) ? (in[pos++] & 0xFF) : more(); }
+
+		/**
+		 * The next input byte, beyond those known to have arrived: 0 past the
+		 * end, otherwise once it has arrived.
+		 *
+		 * @return the byte
+		 */
+		private int more()
+		{
+			if(pos >= in.length) return 0;
+			limit = arriving.await(pos);
+			return in[pos++] & 0xFF;
+		}
 
 		/**
 		 * Where the code falls, as a count out of total. Must be followed by

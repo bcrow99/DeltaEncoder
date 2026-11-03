@@ -1,6 +1,6 @@
 import java.util.*;
 
-// PixelMapper version 1.3
+// PixelMapper version 1.4
 //
 // Codes the pixels of the red, green and blue channels with context-
 // adaptive arithmetic coding, for PixelWriter and PixelReader.
@@ -12,14 +12,25 @@ import java.util.*;
 // it only. Neighbours, though, are taken across block edges: they are
 // already decoded when the block is reached.
 //
-// The channels are coded green, red, blue. Every coding starts from the same
-// prediction: the median edge predictor (MED) of the left, upper and upper-
-// left neighbours, corrected (when coding red, green and blue; see
-// CHANNEL_SET_NAMES) by how far the earlier channels at the same pixel were
-// from their own MED predictions (the average of those errors).
-// The channels move together, so this removes much of the prediction error
-// of the second and third channels. "Activity" is how busy the neighbourhood
-// is: |left - upper-left| + |upper - upper-left| on the 0-255 scale.
+// The channels are coded green first, then red and blue or their
+// differences from green (CHANNEL_SET_NAMES). Every coding starts from a
+// prediction (PREDICTION_NAMES): the median edge predictor (MED) of the
+// left, upper and upper-left neighbours, or least squares (DeltaMapper's
+// LeastSquares, the wide clamp, as Simple codes with). With MED and red,
+// green and blue, the prediction is corrected by how far the earlier
+// channels at the same pixel were from their own MED predictions (the
+// average of those errors): the channels move together, so this removes
+// much of the prediction error of the second and third channels. (Least
+// squares fits from the previous channel itself.) "Activity" is how busy
+// the neighbourhood is: |left - upper-left| + |upper - upper-left| on the
+// 0-255 scale.
+//
+// With MED the blocks are coded one after another, each row by row. Least
+// squares fits from pixels above and to the right of the pixel, which in
+// that order may be in the next block, not yet decoded; so with least
+// squares the pixels are coded in raster order instead, each block keeping
+// its own models while the rows go through it -- the same models, in the
+// same order within each block, so the same probabilities.
 //
 // Three codings (CODING_NAMES):
 //
@@ -71,23 +82,59 @@ public class PixelMapper
 	static final int[]   CROSS_LIMIT    = {0, 2, 5, 12, 30};
 	static final int     BAND_BITS      = 2;   // bands of 4 on the 0-255 scale
 
-	// Coding order of the 3 channels, as indexes into {red, green, blue}
-	// (the writers' channel order: red holds bits 16-23 of a pixel).
-	public static final int[] ORDER = {1, 0, 2};
 	public static final String[] CHANNEL_NAMES = {"red", "green", "blue"};
 
-	// Channels coded (CHANNEL_SET_NAMES):
-	//   PRIMARY:    green, red, blue, with red's and blue's predictions
-	//               corrected by the earlier channels' errors (see above).
-	//   DIFFERENCE: green, red - green, blue - green (each difference offset
-	//               by max_value so it is never negative), with no correction:
-	//               the difference already removes what green shares with
-	//               red and blue, and correcting as well made files larger.
-	// Measured with DiffTest (7 photographs, blocks of 256): with the value
-	// codings, DIFFERENCE was 2.4% smaller lossless and 1.7% at Color
-	// Resolution 3; with Errors the two were within 0.3%.
-	public static final int PRIMARY = 0, DIFFERENCE = 1;
-	public static final String[] CHANNEL_SET_NAMES = {"Red, green, blue (corrected)", "Green, red - green, blue - green"};
+	/**
+	 * The channel sets (CHANNEL_SET_NAMES):
+	 * <ul>
+	 * <li>PRIMARY: green, red, blue, with (MED) red's and blue's predictions
+	 * corrected by the earlier channels' errors (see above).
+	 * <li>DIFFERENCE: green, red - green, blue - green, each difference plus
+	 * max_value so it is never negative (format versions 3 and 4;
+	 * GREEN_DIFFERENCES replaces it in the writer).
+	 * <li>GREEN_DIFFERENCES: green, blue - green, red - green (Simple 2's
+	 * set), each difference less its minimum, so a channel's values run from
+	 * 0 to the difference's range only: a smaller alphabet, whose counts (all
+	 * starting at 1 in every block) waste less. The differences aren't
+	 * corrected: they already remove what green shares with red and blue.
+	 * </ul>
+	 * Measured on bluejay, potter, finch and owl1 (blocks of 256, MED):
+	 * DIFFERENCE was 6-12% smaller than PRIMARY lossless, 2-6% at Pixel
+	 * Resolution 4 and Color Resolution 3, and GREEN_DIFFERENCES 2.3-4.2%
+	 * smaller than DIFFERENCE lossless, 0.7-0.9% at q4 s3. With least squares
+	 * instead of MED (GREEN_DIFFERENCES), 0.6-3.3% smaller lossless and 8-10%
+	 * at q4 s3.
+	 */
+	public static final int PRIMARY = 0, DIFFERENCE = 1, GREEN_DIFFERENCES = 2;
+	/**
+	 * The channel sets' names.
+	 */
+	public static final String[] CHANNEL_SET_NAMES = {"Red, green, blue (corrected)", "Green, red - green, blue - green (plus the maximum)", "Green, blue - green, red - green"};
+	/**
+	 * The sets the writer offers, in its menu's order.
+	 */
+	public static final int[] WRITER_CHANNEL_SETS = {GREEN_DIFFERENCES, PRIMARY};
+
+	/**
+	 * Each set's coding order, as indexes into {red, green, blue} (the
+	 * writers' channel order: red holds bits 16-23 of a pixel); after the
+	 * first, each is coded less green in the difference sets.
+	 */
+	static final int[][] ORDER = { {1, 0, 2}, {1, 0, 2}, {1, 2, 0} };
+
+	/**
+	 * The prediction (PREDICTION_NAMES): MED, or least squares with the
+	 * window radius LS_RADIUS (stored in the file).
+	 */
+	public static final int MED = 0, LS = 1;
+	/**
+	 * The predictions' names.
+	 */
+	public static final String[] PREDICTION_NAMES = {"Median edge (MED)", "Least squares"};
+	/**
+	 * The least-squares window radius the writer uses.
+	 */
+	public static final int LS_RADIUS = 8;
 
 	// The block sizes init() tries: powers of 2, then (if the largest is the
 	// best) doubling up to the whole frame, then the steps halfway (by ratio)
@@ -108,56 +155,322 @@ public class PixelMapper
 		return Math.max(BLOCK_MAX, Math.max(xdim, ydim));
 	}
 
+	// ---- The channels as coded ------------------------------------------------
+
+	/**
+	 * The three channels as they are coded, and what doesn't depend on the
+	 * block size or the coding (prepare): so the block size search makes
+	 * them, and the least-squares predictions, once.
+	 */
+	public static final class Prepared
+	{
+		/**
+		 * The width and height, the channel set, the prediction and the
+		 * least-squares window radius.
+		 */
+		final int xdim, ydim, channels, prediction, radius = LS_RADIUS;
+		/**
+		 * The coded channels, in coding order, each 0..max[i].
+		 */
+		final int[][] v;
+		/**
+		 * What was subtracted from each to make it so (a difference's
+		 * minimum, or minus max_value for DIFFERENCE; 0 for the others), and
+		 * its largest value: both go in the file.
+		 */
+		final int[] offset, max;
+		/**
+		 * With least squares, each channel's prediction at each pixel (-1 at
+		 * the edges, where MED predicts); null with MED.
+		 */
+		final int[][] pred;
+		/**
+		 * The first two channels' prediction errors (the later channels'
+		 * contexts use them).
+		 */
+		final int[][] error = new int[3][];
+
+		/**
+		 * The prepared channels (prepare makes them).
+		 *
+		 * @param xdim       the width
+		 * @param ydim       the height
+		 * @param channels   the channel set
+		 * @param prediction MED or LS
+		 * @param v          the coded channels
+		 * @param offset     what was subtracted from each
+		 * @param max        each one's largest value
+		 * @param pred       the least-squares predictions, or null
+		 */
+		Prepared(int xdim, int ydim, int channels, int prediction, int[][] v, int[] offset, int[] max, int[][] pred)
+		{
+			this.xdim = xdim; this.ydim = ydim; this.channels = channels; this.prediction = prediction;
+			this.v = v; this.offset = offset; this.max = max; this.pred = pred;
+		}
+
+		/**
+		 * The least-squares window radius, for the file.
+		 *
+		 * @return the radius
+		 */
+		public int radius() { return radius; }
+
+		/**
+		 * Each coded channel's offset, for the file.
+		 *
+		 * @return the offsets, in coding order
+		 */
+		public int[] offset() { return offset.clone(); }
+
+		/**
+		 * Each coded channel's largest value, for the file.
+		 *
+		 * @return the largest values, in coding order
+		 */
+		public int[] max() { return max.clone(); }
+	}
+
+	/**
+	 * The channels (values 0..max_value, red, green, blue) as the channel set
+	 * codes them, with the least-squares predictions if asked for.
+	 *
+	 * @param channel    red, green and blue
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param max_value  the largest value
+	 * @param channels   the channel set (PRIMARY, DIFFERENCE or GREEN_DIFFERENCES)
+	 * @param prediction MED or LS
+	 * @return the prepared channels
+	 */
+	public static Prepared prepare(int[][] channel, int xdim, int ydim, int max_value, int channels, int prediction)
+	{
+		int[]   order  = ORDER[channels];
+		int[][] v      = new int[3][];
+		int[]   offset = new int[3], max = new int[3];
+		for(int i = 0; i < 3; i++)
+		{
+			int[] c = channel[order[i]];
+			if(i == 0 || channels == PRIMARY) { v[i] = c; max[i] = max_value; continue; }
+			int[] green = channel[order[0]], d = new int[c.length];
+			for(int k = 0; k < d.length; k++) d[k] = c[k] - green[k];
+			int lo = -max_value, hi = max_value;   // DIFFERENCE: offset by max_value
+			if(channels == GREEN_DIFFERENCES)
+			{
+				lo = Integer.MAX_VALUE; hi = Integer.MIN_VALUE;
+				for(int x : d) { if(x < lo) lo = x; if(x > hi) hi = x; }
+				if(d.length == 0) { lo = 0; hi = 0; }
+			}
+			for(int k = 0; k < d.length; k++) d[k] -= lo;
+			v[i] = d; offset[i] = lo; max[i] = hi - lo;
+		}
+		int[][] pred = null;
+		if(prediction == LS)
+		{
+			pred = new int[3][];
+			int[][] p = pred;
+			ViewerSupport.parallel(3, i -> p[i] = leastSquaresPrediction(v[i], (i > 0) ? v[i - 1] : null, xdim, ydim, max[i]));
+		}
+		Prepared pr = new Prepared(xdim, ydim, channels, prediction, v, offset, max, pred);
+		for(int i = 0; i < 2; i++) pr.error[i] = predictionError(v[i], (pred == null) ? null : pred[i], xdim, ydim, max[i]);
+		return pr;
+	}
+
+	/**
+	 * A channel's least-squares predictions (LS wide, clamped to 0..max), -1
+	 * at the edges.
+	 *
+	 * @param v    the channel
+	 * @param ref  the channel before it, or null for the first
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @param max  its largest value
+	 * @return the predictions
+	 */
+	private static int[] leastSquaresPrediction(int[] v, int[] ref, int xdim, int ydim, int max)
+	{
+		int[] p = new int[v.length];
+		Arrays.fill(p, -1);
+		if(xdim < 3 || ydim < 2) return p;
+		short[] wide = DeltaMapper.LeastSquares.plane(v, ref, xdim, ydim, LS_RADIUS)[1];
+		for(int y = 1; y < ydim; y++)
+			for(int x = 1; x < xdim - 1; x++) { int k = y * xdim + x; p[k] = clamp(wide[k], max); }
+		return p;
+	}
+
 	// ---- Coding ---------------------------------------------------------------
 
-	// Codes 3 channels (values 0..max_value, in red, green, blue order) of an
-	// xdim x ydim image. Returns the coded bytes per channel, in ORDER. The
-	// channels are coded in parallel: the encoder has all of them.
-	public static byte[][] encode(int[][] channel, int xdim, int ydim, int max_value, int shift, int block, int coding, int channels)
+	/**
+	 * Codes the prepared channels. The channels are coded in parallel: the
+	 * encoder has all of them.
+	 *
+	 * @param pr     the channels (prepare)
+	 * @param shift  the Color Resolution (the contexts' bins are on the 0-255 scale)
+	 * @param block  the block size
+	 * @param coding VALUES, BANDS or ERRORS
+	 * @return the coded bytes per channel, in coding order
+	 */
+	public static byte[][] encode(Prepared pr, int shift, int block, int coding)
 	{
-		int[][] ordered = new int[3][];
-		for(int i = 0; i < 3; i++) ordered[i] = channel[ORDER[i]];
-		if(channels == DIFFERENCE)
-			for(int i = 1; i < 3; i++)
-			{
-				int[] d = new int[ordered[0].length];
-				for(int k = 0; k < d.length; k++) d[k] = ordered[i][k] - ordered[0][k] + max_value;
-				ordered[i] = d;
-			}
-		int[]   max   = channelMax(max_value, channels);
-		int[][] error = new int[3][];
-		for(int i = 0; i < 2; i++) error[i] = predictionError(ordered[i], xdim, ydim, max[i]);
-		byte[][] coded = new byte[3][];
-		ViewerSupport.parallel(3, i -> coded[i] = encodeChannel(ordered[i], i, error, xdim, ydim, max[i], shift, block, coding, channels == PRIMARY));
+		boolean correct = (pr.channels == PRIMARY && pr.prediction == MED);
+		byte[][] coded  = new byte[3][];
+		ViewerSupport.parallel(3, i -> coded[i] = (pr.pred == null)
+			? encodeChannel(pr.v[i], i, pr.error, pr.xdim, pr.ydim, pr.max[i], shift, block, coding, correct)
+			: encodeRaster(pr.v[i], i, pr.error, pr.pred[i], pr.xdim, pr.ydim, pr.max[i], shift, block, coding));
 		return coded;
 	}
 
-	// Decodes what encode() made; returns red, green, blue. The channels are
-	// decoded in order, since each one's contexts use the ones before it.
+	/**
+	 * Decodes what encode() made from a file of format version 4 or before:
+	 * MED, and the channel set's offsets and largest values (channelMax).
+	 *
+	 * @param coded     the coded bytes per channel, in coding order
+	 * @param xdim      the width
+	 * @param ydim      the height
+	 * @param max_value the largest value
+	 * @param shift     the Color Resolution
+	 * @param block     the block size
+	 * @param coding    the coding
+	 * @param channels  PRIMARY or DIFFERENCE
+	 * @return red, green, blue
+	 */
 	public static int[][] decode(byte[][] coded, int xdim, int ydim, int max_value, int shift, int block, int coding, int channels)
 	{
-		int[]   max     = channelMax(max_value, channels);
-		int[][] ordered = new int[3][];
-		int[][] error   = new int[3][];
+		int[] offset = (channels == DIFFERENCE) ? new int[] {0, -max_value, -max_value} : new int[3];
+		return decode(coded, xdim, ydim, shift, block, coding, channels, MED, LS_RADIUS, offset, channelMax(max_value, channels));
+	}
+
+	/**
+	 * Decodes what encode() made; returns red, green, blue. Each channel's
+	 * contexts (and least-squares fit) use the ones before it, so with them
+	 * the channels decode at the same time, each a row (or, with MED, a row
+	 * of blocks) behind the one before; when they don't (MED, the difference
+	 * sets and a value coding), each on its own.
+	 *
+	 * @param coded      the coded bytes per channel, in coding order
+	 * @param xdim       the width
+	 * @param ydim       the height
+	 * @param shift      the Color Resolution
+	 * @param block      the block size
+	 * @param coding     the coding
+	 * @param channels   the channel set
+	 * @param prediction MED or LS
+	 * @param radius     the least-squares window radius
+	 * @param offset     each coded channel's offset (Prepared.offset)
+	 * @param max        each coded channel's largest value
+	 * @return red, green, blue
+	 */
+	public static int[][] decode(byte[][] coded, int xdim, int ydim, int shift, int block, int coding, int channels, int prediction, int radius, int[] offset, int[] max)
+	{
+		int n = xdim * ydim;
+		int[][] ordered = new int[3][n], error = new int[3][];
+		for(int i = 0; i < 2; i++) error[i] = new int[n];
+		boolean correct = (channels == PRIMARY && prediction == MED);
+		if(prediction == MED && channels != PRIMARY && coding != ERRORS)
+			ViewerSupport.parallel(3, i -> decodeChannel(coded[i], i, error, ordered[i], xdim, ydim, max[i], shift, block, coding, false, null));
+		else
+		{
+			// Each channel waits for the one before it to be a row of blocks
+			// (MED) or a row (LS) ahead.
+			int step = (prediction == MED) ? block : 1;
+			RowGate gate = new RowGate();
+			Thread[] worker = new Thread[3];
+			for(int c = 0; c < 3; c++)
+			{
+				int i = c;
+				worker[i] = new Thread(() ->
+				{
+					try
+					{
+						if(prediction == MED) decodeChannel(coded[i], i, error, ordered[i], xdim, ydim, max[i], shift, block, coding, correct, gate);
+						else decodeRaster(coded[i], i, error, ordered, xdim, ydim, max[i], shift, block, coding, radius, gate);
+					}
+					catch(Throwable e) { gate.fail(e); }
+				});
+				worker[i].start();
+			}
+			for(Thread t : worker)
+				try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+			gate.check();
+		}
+		int[] order = ORDER[channels];
+		int[][] channel = new int[3][];
 		for(int i = 0; i < 3; i++)
 		{
-			ordered[i] = decodeChannel(coded[i], i, error, xdim, ydim, max[i], shift, block, coding, channels == PRIMARY);
-			if(i < 2) error[i] = predictionError(ordered[i], xdim, ydim, max[i]);
+			int[] v = ordered[i];
+			if(offset[i] != 0 || (i > 0 && channels != PRIMARY))
+				for(int k = 0; k < n; k++) v[k] += offset[i] + ((i > 0 && channels != PRIMARY) ? ordered[0][k] : 0);
+			channel[order[i]] = v;
 		}
-		if(channels == DIFFERENCE)
-			for(int i = 1; i < 3; i++)
-				for(int k = 0; k < ordered[i].length; k++) ordered[i][k] += ordered[0][k] - max_value;
-		int[][] channel = new int[3][];
-		for(int i = 0; i < 3; i++) channel[ORDER[i]] = ordered[i];
 		return channel;
 	}
 
-	// The largest value of each coded channel: a difference spans 0..2 * max_value.
+	/**
+	 * Each channel's rows decoded, for the decoder's channels to wait on the
+	 * ones before them, and the first failure.
+	 */
+	static final class RowGate
+	{
+		/**
+		 * Each channel's rows decoded.
+		 */
+		private final int[] done = new int[3];
+		/**
+		 * The first failure, if any.
+		 */
+		private Throwable failed;
+
+		/**
+		 * A gate with no rows decoded.
+		 */
+		RowGate() {}
+
+		/**
+		 * Waits until channel i - 1 has decoded rows to y (none for channel 0).
+		 *
+		 * @param i the channel
+		 * @param y the rows needed
+		 */
+		synchronized void await(int i, int y)
+		{
+			while(i > 0 && done[i - 1] < y && failed == null)
+				try { wait(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+			if(failed != null) throw new IllegalStateException("an earlier channel failed to decode", failed);
+		}
+
+		/**
+		 * Says channel i has decoded its first y rows.
+		 *
+		 * @param i the channel
+		 * @param y the rows
+		 */
+		synchronized void done(int i, int y) { done[i] = y; notifyAll(); }
+
+		/**
+		 * Records a failure, waking the channels waiting.
+		 *
+		 * @param e the failure
+		 */
+		synchronized void fail(Throwable e) { if(failed == null) failed = e; notifyAll(); }
+
+		/**
+		 * Throws the first failure, if any.
+		 */
+		synchronized void check()
+		{
+			if(failed instanceof RuntimeException) throw (RuntimeException) failed;
+			if(failed instanceof Error) throw (Error) failed;
+			if(failed != null) throw new RuntimeException(failed);
+		}
+	}
+
+	// The largest value of each coded channel of format versions 1 to 4: a
+	// difference spans 0..2 * max_value.
 	static int[] channelMax(int max_value, int channels)
 	{
 		return (channels == DIFFERENCE) ? new int[] {max_value, 2 * max_value, 2 * max_value} : new int[] {max_value, max_value, max_value};
 	}
 
+	// MED: the blocks one after another, each row by row.
 	private static byte[] encodeChannel(int[] v, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding, boolean correct)
 	{
 		Models models = new Models(max_value + 1);
@@ -171,7 +484,7 @@ public class PixelMapper
 				for(int y = by; y < y1; y++)
 					for(int x = bx; x < x1; x++)
 					{
-						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, cp);
+						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, -1, cp);
 						Model m = models.get(cp[0]);
 						int value = v[y * xdim + x];
 						int s = (coding == ERRORS) ? Math.floorMod(value - cp[1], max_value + 1) : value;
@@ -182,21 +495,26 @@ public class PixelMapper
 		return encoder.finish();
 	}
 
-	private static int[] decodeChannel(byte[] coded, int i, int[][] error, int xdim, int ydim, int max_value, int shift, int block, int coding, boolean correct)
+	// Decodes encodeChannel's coding into v; its MED errors into error[i] (for
+	// the first two channels) a row of blocks at a time, each once the
+	// channel before has done that row of blocks (gate, if not null).
+	private static void decodeChannel(byte[] coded, int i, int[][] error, int[] v, int xdim, int ydim, int max_value, int shift, int block, int coding, boolean correct, RowGate gate)
 	{
-		int[] v = new int[xdim * ydim];
 		Models models = new Models(max_value + 1);
 		ArithmeticMapper.RangeDecoder decoder = new ArithmeticMapper.RangeDecoder(coded);
 		int[] cp = new int[2];
 		for(int by = 0; by < ydim; by += block)
+		{
+			int y1 = Math.min(ydim, by + block);
+			if(gate != null) gate.await(i, y1);
 			for(int bx = 0; bx < xdim; bx += block)
 			{
 				models.restart();
-				int y1 = Math.min(ydim, by + block), x1 = Math.min(xdim, bx + block);
+				int x1 = Math.min(xdim, bx + block);
 				for(int y = by; y < y1; y++)
 					for(int x = bx; x < x1; x++)
 					{
-						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, cp);
+						context(v, i, error, x, y, xdim, max_value, shift, coding, correct, -1, cp);
 						Model m = models.get(cp[0]);
 						int s = m.find(decoder.target(m.total));
 						decoder.decode(m.start(s), m.f[s]);
@@ -204,21 +522,107 @@ public class PixelMapper
 						m.update(s);
 					}
 			}
-		return v;
+			if(i < 2) predictionError(v, null, xdim, by, y1, max_value, error[i]);
+			if(gate != null) gate.done(i, y1);
+		}
+	}
+
+	/**
+	 * Least squares: raster order, each block keeping its own models while
+	 * the rows go through it (new ones at the top of each row of blocks).
+	 *
+	 * @param v         the channel
+	 * @param i         its place in the coding order
+	 * @param error     the earlier channels' prediction errors
+	 * @param pred      its predictions (-1 where MED predicts)
+	 * @param xdim      the width
+	 * @param ydim      the height
+	 * @param max_value its largest value
+	 * @param shift     the Color Resolution
+	 * @param block     the block size
+	 * @param coding    the coding
+	 * @return the coded bytes
+	 */
+	private static byte[] encodeRaster(int[] v, int i, int[][] error, int[] pred, int xdim, int ydim, int max_value, int shift, int block, int coding)
+	{
+		Models[] models = new Models[(xdim + block - 1) / block];
+		ArithmeticMapper.RangeEncoder encoder = new ArithmeticMapper.RangeEncoder(v.length / 2);
+		int[] cp = new int[2];
+		for(int y = 0; y < ydim; y++)
+		{
+			if(y % block == 0) for(int b = 0; b < models.length; b++) models[b] = new Models(max_value + 1);
+			for(int x = 0; x < xdim; x++)
+			{
+				int k = y * xdim + x;
+				context(v, i, error, x, y, xdim, max_value, shift, coding, false, pred[k], cp);
+				Model m = models[x / block].get(cp[0]);
+				int s = (coding == ERRORS) ? Math.floorMod(v[k] - cp[1], max_value + 1) : v[k];
+				encoder.encode(m.start(s), m.f[s], m.total);
+				m.update(s);
+			}
+		}
+		return encoder.finish();
+	}
+
+	/**
+	 * Decodes encodeRaster's coding into value[i], fitting least squares as
+	 * it goes, a row at a time, each once the channel before has done that
+	 * row (its values are the fit's previous channel, its errors the
+	 * contexts'); its errors into error[i] (the first two channels).
+	 *
+	 * @param coded     the coded bytes
+	 * @param i         the channel's place in the coding order
+	 * @param error     the channels' prediction errors
+	 * @param value     the channels, filled in
+	 * @param xdim      the width
+	 * @param ydim      the height
+	 * @param max_value its largest value
+	 * @param shift     the Color Resolution
+	 * @param block     the block size
+	 * @param coding    the coding
+	 * @param radius    the least-squares window radius
+	 * @param gate      the channels' rows decoded
+	 */
+	private static void decodeRaster(byte[] coded, int i, int[][] error, int[][] value, int xdim, int ydim, int max_value, int shift, int block, int coding, int radius, RowGate gate)
+	{
+		int[] v = value[i], e = error[i];
+		DeltaMapper.LeastSquares ls = new DeltaMapper.LeastSquares(v, (i > 0) ? value[i - 1] : null, xdim, radius);
+		Models[] models = new Models[(xdim + block - 1) / block];
+		ArithmeticMapper.RangeDecoder decoder = new ArithmeticMapper.RangeDecoder(coded);
+		int[] cp = new int[2];
+		for(int y = 0; y < ydim; y++)
+		{
+			gate.await(i, y + 1);
+			if(y % block == 0) for(int b = 0; b < models.length; b++) models[b] = new Models(max_value + 1);
+			for(int x = 0; x < xdim; x++)
+			{
+				int k = y * xdim + x, p = -1;
+				if(y > 0 && x > 0 && x < xdim - 1) { ls.next(k); p = clamp(ls.wide, max_value); }
+				context(v, i, error, x, y, xdim, max_value, shift, coding, false, p, cp);
+				Model m = models[x / block].get(cp[0]);
+				int s = m.find(decoder.target(m.total));
+				decoder.decode(m.start(s), m.f[s]);
+				v[k] = (coding == ERRORS) ? (cp[1] + s) % (max_value + 1) : s;
+				m.update(s);
+				if(e != null) e[k] = v[k] - cp[1];
+			}
+			gate.done(i, y + 1);
+		}
 	}
 
 	// ---- Contexts ---------------------------------------------------------------
 
 	// For pixel (x, y) of channel i (in coding order), sets cp[0] to its
-	// context and cp[1] to its prediction. error[0..i-1] are the earlier
-	// channels' MED errors; correct says whether they correct the prediction.
-	static void context(int[] v, int i, int[][] error, int x, int y, int xdim, int max_value, int shift, int coding, boolean correct, int[] cp)
+	// context and cp[1] to its prediction: given, or (given < 0) MED.
+	// error[0..i-1] are the earlier channels' prediction errors; correct says
+	// whether they correct the prediction.
+	static void context(int[] v, int i, int[][] error, int x, int y, int xdim, int max_value, int shift, int coding, boolean correct, int given, int[] cp)
 	{
 		int k = y * xdim + x;
 		int a = (x > 0) ? v[k - 1] : (y > 0) ? v[k - xdim] : (max_value + 1) / 2;
 		int b = (y > 0) ? v[k - xdim] : a;
 		int c = (x > 0 && y > 0) ? v[k - xdim - 1] : b;
-		int p = med(a, b, c), cross = 0;
+		int p = (given >= 0) ? given : med(a, b, c), cross = 0;
 		if(i > 0)
 		{
 			int sum = 0, size = 0;
@@ -245,20 +649,38 @@ public class PixelMapper
 		return b;
 	}
 
-	// Each pixel's value minus its MED prediction (same neighbours as context()).
-	static int[] predictionError(int[] v, int xdim, int ydim, int max_value)
+	// Each pixel's value minus its prediction: pred's where it has one
+	// (least squares), MED (the same neighbours as context()) elsewhere.
+	static int[] predictionError(int[] v, int[] pred, int xdim, int ydim, int max_value)
 	{
 		int[] e = new int[v.length];
-		for(int y = 0; y < ydim; y++)
+		predictionError(v, pred, xdim, 0, ydim, max_value, e);
+		return e;
+	}
+
+	/**
+	 * As predictionError(int[], int[], int, int, int), rows y0 to y1 - 1 into e.
+	 *
+	 * @param v         the channel
+	 * @param pred      its predictions (-1 where MED predicts), or null for MED
+	 * @param xdim      the width
+	 * @param y0        the first row
+	 * @param y1        the row after the last
+	 * @param max_value its largest value
+	 * @param e         where the errors go
+	 */
+	static void predictionError(int[] v, int[] pred, int xdim, int y0, int y1, int max_value, int[] e)
+	{
+		for(int y = y0; y < y1; y++)
 			for(int x = 0; x < xdim; x++)
 			{
 				int k = y * xdim + x;
+				if(pred != null && pred[k] >= 0) { e[k] = v[k] - pred[k]; continue; }
 				int a = (x > 0) ? v[k - 1] : (y > 0) ? v[k - xdim] : (max_value + 1) / 2;
 				int b = (y > 0) ? v[k - xdim] : a;
 				int c = (x > 0 && y > 0) ? v[k - xdim - 1] : b;
 				e[k] = v[k] - med(a, b, c);
 			}
-		return e;
 	}
 
 	static int med(int a, int b, int c)
@@ -270,21 +692,22 @@ public class PixelMapper
 
 	// ---- Choosing the block size -------------------------------------------------
 
-	// The block size (BLOCK_MIN..blockLimit) that codes the channels smallest:
+	// The block size (BLOCK_MIN..blockLimit) that codes the prepared channels smallest:
 	// every size in SEARCH_SIZES; while the largest tried is the best and
 	// smaller than the frame, twice that (the last one the whole frame: the
 	// larger of xdim and ydim); then the sizes halfway (by ratio) to each
 	// neighbour of the best. tried, if not null, gets {size, coded bytes of
 	// the 3 channels} for every size tried, smallest size first.
-	public static int findBestBlock(int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, int channels, List<int[]> tried)
+	public static int findBestBlock(Prepared pr, int shift, int coding, List<int[]> tried)
 	{
+		int xdim = pr.xdim, ydim = pr.ydim;
 		TreeMap<Integer, Long> bytes = new TreeMap<Integer, Long>();
-		measure(SEARCH_SIZES, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
+		measure(SEARCH_SIZES, pr, shift, coding, bytes);
 		int best = bestOf(bytes), frame = Math.max(xdim, ydim);
 		for(int last = SEARCH_SIZES[SEARCH_SIZES.length - 1]; best == last && last < frame; best = bestOf(bytes))
 		{
 			last = Math.min(2 * last, frame);
-			measure(new int[] {last}, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
+			measure(new int[] {last}, pr, shift, coding, bytes);
 		}
 		ArrayList<Integer> more = new ArrayList<Integer>();
 		int lower = (int) Math.round(best / Math.sqrt(2)), upper = Math.min((int) Math.round(best * Math.sqrt(2)), blockLimit(xdim, ydim));
@@ -292,17 +715,17 @@ public class PixelMapper
 		if(upper > best && !bytes.containsKey(upper)) more.add(upper);
 		int[] extra = new int[more.size()];
 		for(int k = 0; k < extra.length; k++) extra[k] = more.get(k);
-		measure(extra, channel, xdim, ydim, max_value, shift, coding, channels, bytes);
+		measure(extra, pr, shift, coding, bytes);
 		if(tried != null) for(Map.Entry<Integer, Long> e : bytes.entrySet()) tried.add(new int[] {e.getKey(), (int) (long) e.getValue()});
 		return bestOf(bytes);
 	}
 
-	private static void measure(int[] sizes, int[][] channel, int xdim, int ydim, int max_value, int shift, int coding, int channels, TreeMap<Integer, Long> bytes)
+	private static void measure(int[] sizes, Prepared pr, int shift, int coding, TreeMap<Integer, Long> bytes)
 	{
 		long[] b = new long[sizes.length];
 		ViewerSupport.parallel(sizes.length, s ->
 		{
-			for(byte[] c : encode(channel, xdim, ydim, max_value, shift, sizes[s], coding, channels)) b[s] += c.length;
+			for(byte[] c : encode(pr, shift, sizes[s], coding)) b[s] += c.length;
 		});
 		for(int s = 0; s < sizes.length; s++) bytes.put(sizes[s], b[s]);
 	}
@@ -318,11 +741,13 @@ public class PixelMapper
 	// ---- Quantizing and assembling (shared by the writer and reader) ------------
 
 	// The image the reader shows: each channel (red, green, blue, at the
-	// quantized size) resized back to xdim x ydim, then shifted back up.
-	public static int[] getRGB(int[][] channel, int qxdim, int xdim, int ydim, int pixel_quant, int pixel_shift)
+	// quantized size) resized back to xdim x ydim (centred, ResizeMapper.resize2,
+	// from format version 5; ResizeMapper.resize before), then shifted back up.
+	public static int[] getRGB(int[][] channel, int qxdim, int xdim, int ydim, int pixel_quant, int pixel_shift, boolean centred)
 	{
 		int[][] c = new int[3][];
-		ViewerSupport.parallel(3, i -> c[i] = (pixel_quant != 0) ? ResizeMapper.resize(channel[i], qxdim, xdim, ydim) : channel[i]);
+		ViewerSupport.parallel(3, i -> c[i] = (pixel_quant == 0) ? channel[i]
+			: centred ? ResizeMapper.resize2(channel[i], qxdim, xdim, ydim) : ResizeMapper.resize(channel[i], qxdim, xdim, ydim));
 		int[] rgb = new int[xdim * ydim];
 		for(int k = 0; k < rgb.length; k++)
 		{
@@ -333,6 +758,15 @@ public class PixelMapper
 	}
 
 	static int clamp(int v) { return (v < 0) ? 0 : (v > 255) ? 255 : v; }
+
+	/**
+	 * v clamped to 0..max.
+	 *
+	 * @param v   the value
+	 * @param max the largest value
+	 * @return the clamped value
+	 */
+	static int clamp(int v, int max) { return (v < 0) ? 0 : (v > max) ? max : v; }
 
 	// ---- Averaging pyramid (the Quantization menu's Average) -------------------
 	//
