@@ -4875,8 +4875,7 @@ public class DeltaMapper
 							int k = y * xdim;
 							v[k] = v[k - xdim] + d[k];
 							for(int x = 1; x < xdim - 1; x++) { k++; v[k] = d[k] + fit.predict(y, x); }
-							k++;
-							v[k] = v[k - 1] + d[k];
+							if(xdim > 1) { k++; v[k] = v[k - 1] + d[k]; }   // (a band 1 wide has only column 0)
 						}
 						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
 					}
