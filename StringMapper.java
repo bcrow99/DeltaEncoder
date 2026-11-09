@@ -316,78 +316,32 @@ public class StringMapper
 				bitlength += table.length - 1;
 		}
 
-		// Byte length needed for the bit data, rounded up.
-		int bytelength = bitlength / 8;
-		if (bitlength % 8 != 0)
-			bytelength++;
-
 		// +1 for the trailing data byte written by setData().
-		byte[] dst = new byte[bytelength + 1];
+		byte[] dst = new byte[getBytelength(bitlength)];
 
-		int max_length = table.length - 1;
-		int[] mask = {1, 3, 7, 15, 31, 63, 127, 255};
-
-		int start = 0;
-		int stop  = 0;
-		int j     = 0;
-
+		// The bits go in from the low bit of each byte up, gathered in acc
+		// (held of them) and written out a byte at a time. A value of rank k
+		// is k ones and then a zero (already there), or just the ones for the
+		// last rank.
+		int  max_length = table.length - 1;
+		long acc  = 0;
+		int  held = 0, j = 0;
 		for (int i : src)
 		{
 			int k = table[i];
-			if (k == 0)
+			int ones = k;
+			for (; ones >= 32; ones -= 32)
 			{
-				start++;
-				if (start == 8)
-				{
-					j++;
-					start = 0;
-				}
+				acc |= 0xFFFFFFFFL << held;
+				held += 32;
+				for (; held >= 8; held -= 8, acc >>>= 8) dst[j++] = (byte) acc;
 			}
-			else
-			{
-				stop = (start + k + 1) % 8;
-				if (k == max_length)
-					stop = (stop > 0) ? stop - 1 : 7;
-
-				if (k <= 7)
-				{
-					dst[j] = (byte)((dst[j] | (mask[k - 1] << start)) & 0xFF);
-					if (stop <= start)
-					{
-						j++;
-						if (stop != 0)
-							dst[j] = (byte)((dst[j] | (mask[k - 1] >> (8 - start))) & 0xFF);
-					}
-				}
-				else
-				{
-					dst[j] = (byte)((dst[j] | (mask[7] << start)) & 0xFF);
-					int m = (k - 8) / 8;
-					for (int n = 0; n < m; n++)
-					{
-						j++;
-						dst[j] = (byte) mask[7];
-					}
-					j++;
-					if (start != 0)
-						dst[j] = (byte)((dst[j] | (mask[7] >> (8 - start))) & 0xFF);
-					if (k % 8 != 0)
-					{
-						m = k % 8 - 1;
-						dst[j] = (byte)((dst[j] | (mask[m] << start)) & 0xFF);
-						if (stop <= start)
-						{
-							j++;
-							if (stop != 0)
-								dst[j] = (byte)((dst[j] | (mask[m] >> (8 - start))) & 0xFF);
-						}
-					}
-					else if (stop <= start && k != max_length)
-						j++;
-				}
-				start = stop;
-			}
+			acc  |= ((1L << ones) - 1) << held;
+			held += ones + ((k != max_length) ? 1 : 0);
+			for (; held >= 8; held -= 8, acc >>>= 8) dst[j++] = (byte) acc;
 		}
+		if (held > 0)
+			dst[j] = (byte) acc;
 
 		double zero_ratio = getZeroRatio(dst, bitlength);
 		int type = (zero_ratio < .5) ? 1 : 0;
@@ -421,36 +375,61 @@ public class StringMapper
 		// from what was stored in channel_compressed_length, causing an AIOOBE.
 		bitlength = Math.min(bitlength, getBitlength(src));
 
-		int length    = 1;
-		int src_byte  = 0;
-		int dst_byte  = 0;
-		int bit       = 0;
-		int bits_read = 0;
+		// Bit by bit, "length" counts from 1: a one adds to it (up to
+		// max_length), a zero ends the value (rank length - 1), and a one when
+		// it's already max_length ends the last rank's value. Here the bits
+		// are taken up to 56 at a time, and each run of zeros or ones in them
+		// at once.
+		int length   = 1;
+		int dst_byte = 0;
+		int i        = 0;
 
 		try
 		{
-			while (dst_byte < size && bits_read < bitlength)
+			while (dst_byte < size && i < bitlength)
 			{
-				int non_zero = src[src_byte] & (1 << bit);
-				if (non_zero != 0 && length < max_length)
-					length++;
-				else if (non_zero == 0)
+				long x     = bitsFrom(src, i);
+				int  avail = Math.min(56, bitlength - i);
+				int  used  = 0;
+				while (used < avail && dst_byte < size)
 				{
-					dst[dst_byte++] = inverse_table[length - 1];
-					length = 1;
+					if ((x & 1) == 0)
+					{
+						// z zeros: the first ends the value under way, each
+						// other one is a value of rank 0.
+						int z = Math.min(Long.numberOfTrailingZeros(x), avail - used);
+						dst[dst_byte++] = inverse_table[length - 1];
+						length = 1;
+						for (int k = 1; k < z && dst_byte < size; k++)
+							dst[dst_byte++] = inverse_table[0];
+						x >>>= z;
+						used += z;
+					}
+					else
+					{
+						int ones = Math.min(Long.numberOfTrailingZeros(~x), avail - used);
+						x >>>= ones;
+						used += ones;
+						if (max_length < 1)
+							continue;   // one value: ones mean nothing
+						while (ones > 0 && dst_byte < size)
+						{
+							if (length < max_length)
+							{
+								int m = Math.min(max_length - length, ones);
+								length += m;
+								ones   -= m;
+							}
+							else
+							{
+								dst[dst_byte++] = inverse_table[length];
+								length = 1;
+								ones--;
+							}
+						}
+					}
 				}
-				else if (length == max_length)
-				{
-					dst[dst_byte++] = inverse_table[length];
-					length = 1;
-				}
-				bit++;
-				bits_read++;
-				if (bit == 8)
-				{
-					bit = 0;
-					src_byte++;
-				}
+				i += used;
 			}
 		}
 		catch (Exception e)
@@ -460,6 +439,26 @@ public class StringMapper
 			e.printStackTrace();
 		}
 		return dst;
+	}
+
+	/**
+	 * Up to 64 bits of a string from bit i on, the first in the low bit
+	 * (zeros past the end of src).
+	 *
+	 * @param src the string
+	 * @param i   the first bit
+	 * @return the bits
+	 */
+	private static long bitsFrom(byte[] src, int i)
+	{
+		int  start = i >>> 3, shift = i & 7;
+		long x     = 0;
+		for (int j = 0; j < 8 && start + j < src.length; j++)
+			x |= (long) (src[start + j] & 0xFF) << (8 * j);
+		x >>>= shift;
+		if (shift != 0 && start + 8 < src.length)
+			x |= (long) (src[start + 8] & 0xFF) << (64 - shift);
+		return x;
 	}
 
 	/**
@@ -534,6 +533,219 @@ public class StringMapper
 	}
 
 	// ---- Bit-pair compression: zero-bit and one-bit transforms, applied repeatedly ---
+	//
+	// Each transform, and each undoing of one, is a machine with two states:
+	// 0 at the start of a pair, 1 halfway through one (its first bit read).
+	// stepRule says what one input bit does: the bits it writes and the next
+	// state; an input ending halfway through a pair finishes with its lone
+	// bit's (endRule). The methods below run them a byte at a time through
+	// tables made from those rules (BYTE_STEP), a bit at a time only at the
+	// end of the input: the same bits as going a bit at a time throughout.
+
+	/** The transforms, as indices into the tables: compressZeroBits. */
+	private static final int COMPRESS_ZERO   = 0;
+	/** compressOneBits. */
+	private static final int COMPRESS_ONE    = 1;
+	/** decompressZeroBits. */
+	private static final int DECOMPRESS_ZERO = 2;
+	/** decompressOneBits. */
+	private static final int DECOMPRESS_ONE  = 3;
+
+	/**
+	 * What one input bit does in each transform and state: the bits written
+	 * (low 16 bits, the first in the lowest), how many (the next 8 bits) and
+	 * the next state (the top 8 bits). [transform][state][bit]
+	 */
+	private static final int[][][] BIT_STEP  = new int[4][2][2];
+
+	/** The same for a whole input byte (its bits from the low one up). [transform][state][byte] */
+	private static final int[][][] BYTE_STEP = new int[4][2][256];
+
+	/**
+	 * getCompressionAmount's count for a whole byte, from each "previous"
+	 * (low 8 bits: the amount + 128; the next 8 bits: the next "previous").
+	 * [transform_type][previous][byte]
+	 */
+	private static final int[][][] AMOUNT    = new int[2][2][256];
+
+	static
+	{
+		for (int t = 0; t < 4; t++)
+			for (int state = 0; state < 2; state++)
+				for (int bit = 0; bit < 2; bit++)
+					BIT_STEP[t][state][bit] = stepRule(t, state, bit);
+		for (int t = 0; t < 4; t++)
+			for (int state = 0; state < 2; state++)
+				for (int b = 0; b < 256; b++)
+				{
+					int s = state, pattern = 0, count = 0;
+					for (int j = 0; j < 8; j++)
+					{
+						int step = BIT_STEP[t][s][(b >> j) & 1];
+						pattern |= (step & 0xFFFF) << count;
+						count   += (step >>> 16) & 0xFF;
+						s        = step >>> 24;
+					}
+					BYTE_STEP[t][state][b] = pattern | (count << 16) | (s << 24);
+				}
+		for (int type = 0; type < 2; type++)
+			for (int previous = 0; previous < 2; previous++)
+				for (int b = 0; b < 256; b++)
+				{
+					int p = previous, sum = 0;
+					for (int j = 0; j < 8; j++)
+					{
+						int step = amountRule(type, p, (b >> j) & 1);
+						sum += (step & 0xFF) - 128;
+						p    = step >>> 8;
+					}
+					AMOUNT[type][previous][b] = (sum + 128) | (p << 8);
+				}
+	}
+
+	/**
+	 * One input bit of a transform: in state 0 a pair's first bit only moves
+	 * to state 1 (a bit that can't start a pair is written at once), in state
+	 * 1 the pair is complete.
+	 * <pre>
+	 * compressZeroBits    "00" -&gt; "0", "01" -&gt; "11", "1" -&gt; "10"
+	 * compressOneBits     "11" -&gt; "1", "10" -&gt; "01", "0" -&gt; "00"
+	 * decompressZeroBits  "0" -&gt; "00", "11" -&gt; "01", "10" -&gt; "1"
+	 * decompressOneBits   "1" -&gt; "11", "00" -&gt; "0", "01" -&gt; "10"
+	 * </pre>
+	 *
+	 * @param transform COMPRESS_ZERO, COMPRESS_ONE, DECOMPRESS_ZERO or DECOMPRESS_ONE
+	 * @param state     0 or 1
+	 * @param bit       the input bit
+	 * @return as BIT_STEP's entries
+	 */
+	private static int stepRule(int transform, int state, int bit)
+	{
+		// The bit that starts a pair (rather than standing alone).
+		int pair_start = (transform == COMPRESS_ZERO || transform == DECOMPRESS_ONE) ? 0 : 1;
+		int pattern, count;
+		if (state == 0)
+		{
+			if (bit == pair_start)
+				return 1 << 24;
+			count = 2;
+			pattern = (transform == COMPRESS_ZERO) ? 1 : (transform == DECOMPRESS_ONE) ? 3 : 0;   // "10", "11", "00"
+			return pattern | (count << 16);
+		}
+		switch (transform)
+		{
+			case COMPRESS_ZERO:   pattern = bit == 1 ? 3 : 0; count = bit == 1 ? 2 : 1; break;   // "01" -> "11", "00" -> "0"
+			case COMPRESS_ONE:    pattern = bit == 1 ? 1 : 2; count = bit == 1 ? 1 : 2; break;   // "11" -> "1",  "10" -> "01"
+			case DECOMPRESS_ZERO: pattern = bit == 1 ? 2 : 1; count = bit == 1 ? 2 : 1; break;   // "11" -> "01", "10" -> "1"
+			default:              pattern = bit == 1 ? 1 : 0; count = bit == 1 ? 2 : 1; break;   // "01" -> "10", "00" -> "0"
+		}
+		return pattern | (count << 16);
+	}
+
+	/**
+	 * The bit a transform writes for an input ending halfway through a pair
+	 * (its lone last bit): compressZeroBits "0" -&gt; "1", compressOneBits
+	 * "1" -&gt; "0", decompressZeroBits "1" -&gt; "0", decompressOneBits
+	 * "0" -&gt; "1".
+	 *
+	 * @param transform COMPRESS_ZERO, COMPRESS_ONE, DECOMPRESS_ZERO or DECOMPRESS_ONE
+	 * @return the bit
+	 */
+	private static int endRule(int transform)
+	{
+		return (transform == COMPRESS_ZERO || transform == DECOMPRESS_ONE) ? 1 : 0;
+	}
+
+	/**
+	 * Runs a transform over size bits of src into dst (zeroed first). The
+	 * undoing ones stop early rather than write a one into dst's last byte;
+	 * as the bit-at-a-time code did, zeros past dst's end are only counted.
+	 *
+	 * @param transform COMPRESS_ZERO, COMPRESS_ONE, DECOMPRESS_ZERO or DECOMPRESS_ONE
+	 * @param src       the input bits
+	 * @param size      the number of input bits
+	 * @param dst       the output
+	 * @param lone      if not null, gets 1 in lone[0] if the input ended in a lone bit (else 0)
+	 * @return the number of output bits
+	 */
+	private static int transformBits(int transform, byte[] src, int size, byte[] dst, int[] lone)
+	{
+		Arrays.fill(dst, (byte) 0);
+		int[][] table   = BYTE_STEP[transform];
+		boolean undoing = transform == DECOMPRESS_ZERO || transform == DECOMPRESS_ONE;
+		int     limit   = dst.length - 1;   // where the undoing ones stop
+		long    acc     = 0;                // output bits waiting (held of them)
+		int     held    = 0, out = 0, state = 0, i = 0;
+
+		// Whole bytes, while no stop could come in one (a byte writes at most 2).
+		for (; i + 8 <= size && (!undoing || out + 3 < limit); i += 8)
+		{
+			int step = table[state][src[i >>> 3] & 0xFF];
+			acc  |= (long) (step & 0xFFFF) << held;
+			held += (step >>> 16) & 0xFF;
+			state = step >>> 24;
+			for (; held >= 8; held -= 8, acc >>>= 8, out++) if (out < dst.length) dst[out] = (byte) acc;
+		}
+		// The rest a bit at a time, checking for the stop before each one.
+		boolean stopped = false;
+		for (; i < size && !stopped; i++)
+		{
+			int step  = BIT_STEP[transform][state][(src[i >>> 3] >> (i & 7)) & 1];
+			int count = (step >>> 16) & 0xFF;
+			state     = step >>> 24;
+			for (int j = 0; j < count; j++)
+			{
+				int bit = (step >> j) & 1;
+				if (undoing && bit == 1 && out >= limit) { stopped = true; break; }
+				acc  |= (long) bit << held;
+				held++;
+				for (; held >= 8; held -= 8, acc >>>= 8, out++) if (out < dst.length) dst[out] = (byte) acc;
+			}
+		}
+		if (!stopped && state == 1)
+		{
+			int bit = endRule(transform);
+			if (!(undoing && bit == 1 && out >= limit))
+			{
+				acc |= (long) bit << held;
+				held++;
+				for (; held >= 8; held -= 8, acc >>>= 8, out++) if (out < dst.length) dst[out] = (byte) acc;
+			}
+		}
+		if (held > 0 && out < dst.length)
+			dst[out] = (byte) acc;
+		if (lone != null)
+			lone[0] = (!stopped && state == 1) ? 1 : 0;
+		return out * 8 + held;
+	}
+
+	/**
+	 * One bit of getCompressionAmount's count, its four cases.
+	 *
+	 * @param type     0 for the zero-bit transform, 1 for the one-bit
+	 * @param previous the count's "previous" (0 or 1)
+	 * @param k        the bit
+	 * @return the amount + 128 (low 8 bits) and the next "previous" (the next 8)
+	 */
+	private static int amountRule(int type, int previous, int k)
+	{
+		int amount;
+		if (type == 0)
+		{
+			if      (k != 0 && previous != 0) amount = 1;
+			else if (k != 0)                { amount = 0; previous = 1; }
+			else if (previous != 0)         { amount = 0; previous = 0; }
+			else                            { amount = -1; previous = 1; }
+		}
+		else
+		{
+			if      (k == 0 && previous == 0) amount = 1;
+			else if (k == 0)                { amount = 0; previous = 0; }
+			else if (previous == 0)         { amount = 0; previous = 1; }
+			else                            { amount = -1; previous = 0; }
+		}
+		return (amount + 128) | (previous << 8);
+	}
 
 	/**
 	 * One pass of the zero-bit transform. Reading the input bits in order: "00"
@@ -550,53 +762,11 @@ public class StringMapper
 	public static int[] compressZeroBits(byte src[], int size, byte dst[])
 	{
 		int[] result = new int[2];
-		for (int i = 0; i < dst.length; i++) dst[i] = 0;
-		int current_byte = 0, current_bit = 0;
-		byte mask = 0x01;
-		dst[0] = 0;
-
-		int i = 0, j = 0, k = 0;
 		try
 		{
-			for (i = 0; i < size; i++)
-			{
-				if ((src[k] & (mask << j)) == 0 && i < size - 1)
-				{
-					i++; j++;
-					if (j == 8) { j = 0; k++; }
-					if ((src[k] & (mask << j)) == 0)
-					{
-						current_bit++;
-						if (current_bit == 8) { current_byte++; current_bit = 0; }
-					}
-					else
-					{
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) { current_byte++; current_bit = dst[current_byte] = 0; }
-						dst[current_byte] |= (byte) mask << current_bit;
-						current_bit++;
-						if (current_bit == 8) { current_byte++; current_bit = 0; }
-					}
-				}
-				else if ((src[k] & (mask << j)) == 0 && i == size - 1)
-				{
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					result[1] = 1;
-				}
-				else
-				{
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-				j++;
-				if (j == 8) { j = 0; k++; }
-			}
+			int[] lone = new int[1];
+			result[0] = transformBits(COMPRESS_ZERO, src, size, dst, lone);
+			result[1] = lone[0];
 		}
 		catch (Exception e)
 		{
@@ -604,7 +774,6 @@ public class StringMapper
 			System.out.println("Exiting compressZeroBits with an exception.");
 			e.printStackTrace();
 		}
-		result[0] = current_byte * 8 + current_bit;
 		return result;
 	}
 
@@ -620,54 +789,7 @@ public class StringMapper
 	 */
 	public static int decompressZeroBits(byte src[], int size, byte dst[])
 	{
-		for (int i = 0; i < dst.length; i++) dst[i] = 0;
-		int current_byte = 0, current_bit = 0;
-		byte mask = 0x01;
-
-		int i = 0, j = 0, k = 0;
-		for (i = 0; i < size; i++)
-		{
-			if ((src[k] & (mask << j)) != 0 && i < size - 1)
-			{
-				i++; j++;
-				if (j == 8) { j = 0; k++; }
-				if ((src[k] & (mask << j)) != 0)
-				{
-					// "11" -> "01"
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					if (current_byte >= dst.length - 1) break;
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-				else
-				{
-					// "10" -> "1"
-					if (current_byte >= dst.length - 1) break;
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-			}
-			else if ((src[k] & (mask << j)) != 0 && i == size - 1)
-			{
-				// "1" at end -> "0"
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			else
-			{
-				// "0" -> "00"
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			j++;
-			if (j == 8) { j = 0; k++; }
-		}
-		return current_byte * 8 + current_bit;
+		return transformBits(DECOMPRESS_ZERO, src, size, dst, null);
 	}
 
 	/**
@@ -686,49 +808,9 @@ public class StringMapper
 	public static int[] compressOneBits(byte src[], int size, byte dst[])
 	{
 		int[] result = new int[2];
-		for (int i = 0; i < dst.length; i++) dst[i] = 0;
-		int current_byte = 0, current_bit = 0;
-		byte mask = 0x01;
-
-		int i = 0, j = 0, k = 0;
-		for (i = 0; i < size; i++)
-		{
-			if ((src[k] & (mask << j)) != 0 && i < size - 1)
-			{
-				i++; j++;
-				if (j == 8) { j = 0; k++; }
-				if ((src[k] & (mask << j)) != 0)
-				{
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-				else
-				{
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-			}
-			else if ((src[k] & (mask << j)) != 0 && i == size - 1)
-			{
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				result[1] = 1;
-			}
-			else
-			{
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			j++;
-			if (j == 8) { j = 0; k++; }
-		}
-		result[0] = current_byte * 8 + current_bit;
+		int[] lone = new int[1];
+		result[0] = transformBits(COMPRESS_ONE, src, size, dst, lone);
+		result[1] = lone[0];
 		return result;
 	}
 
@@ -744,58 +826,7 @@ public class StringMapper
 	 */
 	public static int decompressOneBits(byte src[], int size, byte dst[])
 	{
-		for (int i = 0; i < dst.length; i++) dst[i] = 0;
-		int current_byte = 0, current_bit = 0;
-		byte mask = 0x01;
-
-		int i = 0, j = 0, k = 0;
-		for (i = 0; i < size; i++)
-		{
-			if ((src[k] & (mask << j)) == 0 && i < size - 1)
-			{
-				i++; j++;
-				if (j == 8) { j = 0; k++; }
-				if ((src[k] & (mask << j)) == 0)
-				{
-					// "00" -> "0"
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-				else
-				{
-					// "01" -> "10"
-					if (current_byte >= dst.length - 1) break;
-					dst[current_byte] |= (byte) mask << current_bit;
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-					current_bit++;
-					if (current_bit == 8) { current_byte++; current_bit = 0; }
-				}
-			}
-			else if ((src[k] & (mask << j)) == 0 && i == size - 1)
-			{
-				// "0" at end -> "1"
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			else
-			{
-				// "1" -> "11"
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-				if (current_byte >= dst.length - 1) break;
-				dst[current_byte] |= (byte) mask << current_bit;
-				current_bit++;
-				if (current_bit == 8) { current_byte++; current_bit = 0; }
-			}
-			j++;
-			if (j == 8) { j = 0; k++; }
-		}
-		return current_byte * 8 + current_bit;
+		return transformBits(DECOMPRESS_ONE, src, size, dst, null);
 	}
 
 	/**
@@ -811,55 +842,24 @@ public class StringMapper
 	 */
 	public static int getCompressionAmount(byte[] string, int bit_length, int transform_type)
 	{
-		int positive = 0, negative = 0;
-		byte mask       = 1;
-		int  byte_length = bit_length / 8;
-
-		if (transform_type == 0)
+		int[][] table    = AMOUNT[(transform_type == 0) ? 0 : 1];
+		int     type     = (transform_type == 0) ? 0 : 1;
+		int     previous = (type == 0) ? 1 : 0;
+		int     amount   = 0;
+		int     byte_length = bit_length / 8;
+		for (int i = 0; i < byte_length; i++)
 		{
-			int previous = 1;
-			for (int i = 0; i < byte_length; i++)
-				for (int j = 0; j < 8; j++)
-				{
-					int k = string[i] & (mask << j);
-					if      (k != 0 && previous != 0) positive++;
-					else if (k != 0)                  previous = 1;
-					else if (k == 0 && previous != 0) previous = 0;
-					else                             { negative++; previous = 1; }
-				}
-			int remainder = bit_length % 8;
-			for (int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & (mask << i);
-				if      (j != 0 && previous != 0) positive++;
-				else if (j != 0)                  previous = 1;
-				else if (j == 0 && previous != 0) previous = 0;
-				else                            { negative++; previous = 1; }
-			}
+			int step = table[previous][string[i] & 0xFF];
+			amount  += (step & 0xFF) - 128;
+			previous = step >>> 8;
 		}
-		else
+		for (int i = byte_length * 8; i < bit_length; i++)
 		{
-			int previous = 0;
-			for (int i = 0; i < byte_length; i++)
-				for (int j = 0; j < 8; j++)
-				{
-					int k = string[i] & (mask << j);
-					if      (k == 0 && previous == 0) positive++;
-					else if (k == 0)                  previous = 0;
-					else if (k != 0 && previous == 0) previous = 1;
-					else                            { negative++; previous = 0; }
-				}
-			int remainder = bit_length % 8;
-			for (int i = 0; i < remainder; i++)
-			{
-				int j = string[byte_length] & (mask << i);
-				if      (j == 0 && previous == 0) positive++;
-				else if (j == 0)                  previous = 0;
-				else if (j != 0 && previous == 0) previous = 1;
-				else                            { negative++; previous = 0; }
-			}
+			int step = amountRule(type, previous, (string[byte_length] >> (i & 7)) & 1);
+			amount  += (step & 0xFF) - 128;
+			previous = step >>> 8;
 		}
-		return positive - negative;
+		return amount;
 	}
 
 	/**
