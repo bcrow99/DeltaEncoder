@@ -193,7 +193,7 @@ public class HuffmanReader
 		int[]   radius = {HuffmanWriter.RADIUS, HuffmanWriter.RADIUS, HuffmanWriter.RADIUS};
 		int[][] channel = new int[3][w * h];
 		int[][] init = new int[bands][3];
-		byte[][][] coded = new byte[bands][3][];
+		HuffmanWriter.HuffmanChannel[][] coded = new HuffmanWriter.HuffmanChannel[bands][3];
 		long start = System.nanoTime();
 		DataInputStream in = new DataInputStream(new BufferedInputStream(raw, CHUNK));
 		int xd = xdim, yd = ydim, nb = bands;
@@ -205,23 +205,11 @@ public class HuffmanReader
 			byte[] band = new byte[length[b]];
 			in.readFully(band);
 			DataInputStream bi = new DataInputStream(new ByteArrayInputStream(band));
-			// Each channel: init, then huffmanCode's bytes, whose lengths say where they end.
+			// Each channel: init, then huffmanCode's bytes.
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				ByteArrayOutputStream copy = new ByteArrayOutputStream();
-				DataOutputStream co = new DataOutputStream(copy);
-				co.writeInt(bi.readInt()); co.writeInt(bi.readInt());
-				int[] table = DeltaMapper.readTable(bi);
-				DeltaMapper.writeTable(co, table);
-				co.writeInt(bi.readInt());
-				for(int part = 0; part < 2; part++)
-				{
-					byte[] bytes = new byte[bi.readInt()];
-					bi.readFully(bytes);
-					co.writeInt(bytes.length); co.write(bytes);
-				}
-				coded[b][i] = copy.toByteArray();
+				coded[b][i] = HuffmanWriter.huffmanRead(bi);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}
@@ -234,8 +222,7 @@ public class HuffmanReader
 		{
 			int b = j / 3, i = j % 3;
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-			try { delta[b][i] = HuffmanWriter.huffmanDecode(new DataInputStream(new ByteArrayInputStream(coded[b][i])), w * (y1 - y0)); }
-			catch(IOException e) { throw new UncheckedIOException(name + ": band " + b + ", channel " + i, e); }
+			delta[b][i] = HuffmanWriter.huffmanDecode(coded[b][i], w * (y1 - y0));
 		});
 		ViewerSupport.parallel(bands, b ->
 		{

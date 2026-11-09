@@ -536,7 +536,52 @@ public class HuffmanWriter
 	}
 
 	/**
-	 * Reads a channel's deltas huffmanCode wrote.
+	 * A channel's Huffman coding as huffmanCode wrote it (read by
+	 * huffmanRead, its code lengths inflated).
+	 */
+	static final class HuffmanChannel
+	{
+		/** The deltas' minimum. */
+		int    min;
+		/** The untransformed string's bits. */
+		int    bits;
+		/** The (transformed) string's bytes. */
+		int    length;
+		/** The rank table. */
+		int[]  table;
+		/** Each byte value's code length (256 of them). */
+		byte[] lengths;
+		/** The Huffman code. */
+		byte[] code;
+
+		/** An empty one, for huffmanRead to fill in. */
+		HuffmanChannel() { }
+	}
+
+	/**
+	 * Reads a channel's coding huffmanCode wrote.
+	 *
+	 * @param in the stream, at the start of it
+	 * @return the coding
+	 * @throws IOException if the stream fails or isn't what huffmanCode writes
+	 */
+	static HuffmanChannel huffmanRead(DataInputStream in) throws IOException
+	{
+		HuffmanChannel h = new HuffmanChannel();
+		h.min    = in.readInt();
+		h.bits   = in.readInt();
+		h.table  = DeltaMapper.readTable(in);
+		h.length = in.readInt();
+		byte[] tables = new byte[in.readInt()]; in.readFully(tables);
+		h.code   = new byte[in.readInt()]; in.readFully(h.code);
+		try { h.lengths = CodeMapper.unpackRegularTables(tables, 1)[0]; }
+		catch(java.util.zip.DataFormatException e) { throw new IOException("bad Huffman tables", e); }
+		return h;
+	}
+
+	/**
+	 * Reads a channel's deltas huffmanCode wrote (huffmanRead, then
+	 * huffmanDecode).
 	 *
 	 * @param in the stream, at the start of them
 	 * @param n  how many deltas
@@ -545,19 +590,22 @@ public class HuffmanWriter
 	 */
 	static int[] huffmanDecode(DataInputStream in, int n) throws IOException
 	{
-		int    min    = in.readInt();
-		int    bits   = in.readInt();
-		int[]  table  = DeltaMapper.readTable(in);
-		int    length = in.readInt();
-		byte[] tables = new byte[in.readInt()]; in.readFully(tables);
-		byte[] code   = new byte[in.readInt()]; in.readFully(code);
-		byte[] lengths;
-		try { lengths = CodeMapper.unpackRegularTables(tables, 1)[0]; }
-		catch(java.util.zip.DataFormatException e) { throw new IOException("bad Huffman tables", e); }
-		byte[] string = CodeMapper.unpackRegularCode(code, lengths, length);
-		int[]  delta  = StringMapper.unpackStrings(StringMapper.decompressStrings(string), table, n, bits);
+		return huffmanDecode(huffmanRead(in), n);
+	}
+
+	/**
+	 * A channel's deltas from its Huffman coding.
+	 *
+	 * @param h the coding
+	 * @param n how many deltas
+	 * @return the deltas (delta 0 is 0)
+	 */
+	static int[] huffmanDecode(HuffmanChannel h, int n)
+	{
+		byte[] string = CodeMapper.unpackRegularCode(h.code, h.lengths, h.length);
+		int[]  delta  = StringMapper.unpackStrings(StringMapper.decompressStrings(string), h.table, n, h.bits);
 		delta[0] = 0;
-		for(int k = 1; k < delta.length; k++) delta[k] += min;
+		for(int k = 1; k < delta.length; k++) delta[k] += h.min;
 		return delta;
 	}
 

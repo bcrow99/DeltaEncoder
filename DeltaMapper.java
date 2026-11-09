@@ -3954,9 +3954,12 @@ public class DeltaMapper
 			mix.next(k, delta, dst, p);
 			dst[k] = delta[k] + p;
 		}
-		k++;
-		mix.next(k, delta, dst);
-		dst[k] = dst[k - 1] + delta[k];
+		if(xdim > 1)   // (a band 1 wide has only column 0)
+		{
+			k++;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - 1] + delta[k];
+		}
 	}
 
 	// ---- Least squares from the rows above (the Simple 2 format) ---------------
@@ -4736,9 +4739,12 @@ public class DeltaMapper
 				}
 			}
 			if(ahead) move(chunks - 1, y + 1);
-			k++;
-			mix.next(k, delta, dst);
-			dst[k] = dst[k - 1] + delta[k];
+			if(xdim > 1)   // (a band 1 wide has only column 0)
+			{
+				k++;
+				mix.next(k, delta, dst);
+				dst[k] = dst[k - 1] + delta[k];
+			}
 		}
 
 		/**
@@ -4930,9 +4936,12 @@ public class DeltaMapper
 			mix.next(k, delta, dst, p);
 			dst[k] = delta[k] + p;
 		}
-		k++;
-		mix.next(k, delta, dst);
-		dst[k] = dst[k - 1] + delta[k];
+		if(xdim > 1)   // (a band 1 wide has only column 0)
+		{
+			k++;
+			mix.next(k, delta, dst);
+			dst[k] = dst[k - 1] + delta[k];
+		}
 	}
 
 	/**
@@ -6604,9 +6613,12 @@ public class DeltaMapper
 				dst[k] = delta[k] + p;
 				ps.commit(k);
 			}
-			k++;
-			if(mix != null) mix.next(k, delta, dst);
-			dst[k] = dst[k - 1] + delta[k];
+			if(xdim > 1)   // (a band 1 wide has only column 0)
+			{
+				k++;
+				if(mix != null) mix.next(k, delta, dst);
+				dst[k] = dst[k - 1] + delta[k];
+			}
 		}
 		return dst;
 	}
