@@ -4828,6 +4828,72 @@ public class DeltaMapper
 	}
 
 	/**
+	 * The values of a band's channels from their RowFit deltas, all known
+	 * (HuffmanReader's: getRowFitDeltas undone, without decoding). As
+	 * getValuesFromRowFitChannels rebuilds them: row 0 horizontal, column 0
+	 * vertical, the last column horizontal, the interior from the fit, a row
+	 * at a time (each row's fits solved on every core first). The channels
+	 * are rebuilt at the same time, each a row behind the one before (the
+	 * fit at row y uses the channel before's row y).
+	 *
+	 * @param delta  each channel's deltas, in coding order
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value
+	 * @param radius each channel's window radius
+	 * @param every  how often along a row the fit was solved
+	 * @return each channel's values
+	 */
+	public static int[][] getValuesFromRowFitDeltas(int[][] delta, int xdim, int ydim, int[] init, int[] radius, int every)
+	{
+		int n = delta.length;
+		int[][] value = new int[n][xdim * ydim];
+		int[]   done  = new int[n];          // each channel's rows rebuilt (guarded by done)
+		Throwable[] failed = new Throwable[1];
+		Thread[] worker = new Thread[n];
+		for(int c = 0; c < n; c++)
+		{
+			final int i = c;
+			worker[i] = new Thread(() ->
+			{
+				try
+				{
+					int[] d = delta[i], v = value[i];
+					RowFit fit = new RowFit(v, (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
+					for(int y = 0; y < ydim; y++)
+					{
+						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 1));
+						if(y == 0)
+						{
+							v[0] = init[i];
+							for(int x = 1; x < xdim; x++) v[x] = v[x - 1] + d[x];
+						}
+						else
+						{
+							fit.moveTo(y, true);
+							fit.solveRow(y, true);
+							int k = y * xdim;
+							v[k] = v[k - xdim] + d[k];
+							for(int x = 1; x < xdim - 1; x++) { k++; v[k] = d[k] + fit.predict(y, x); }
+							k++;
+							v[k] = v[k - 1] + d[k];
+						}
+						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
+					}
+				}
+				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
+			});
+			worker[i].start();
+		}
+		for(Thread t : worker)
+			try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+		if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+		if(failed[0] instanceof Error) throw (Error) failed[0];
+		if(failed[0] != null) throw new RuntimeException(failed[0]);
+		return value;
+	}
+
+	/**
 	 * Decodes row y of a channel's RowFit deltas and rebuilds it (rows in
 	 * order): row 0 horizontal, column 0 vertical, the last column
 	 * horizontal, the interior from the fit, its fits solved first.

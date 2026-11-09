@@ -23,6 +23,7 @@ you don't give one. **File > Save** writes the compressed image to a file called
 |---|---|
 | SimpleWriter | SimpleReader |
 | SimpleWriter2 | SimpleReader2 |
+| HuffmanWriter | HuffmanReader |
 | PacketWriter | PacketReader |
 | DeltaWriter, DeltaWriter2 | DeltaReader |
 | BlockWriter | BlockReader |
