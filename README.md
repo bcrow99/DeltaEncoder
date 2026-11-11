@@ -11,13 +11,15 @@ It runs on Java 8 or later; a Java runtime (JRE) is enough. To check what you ha
 
 ```
 java -jar DeltaEncoder.jar                        # lists the programs
-java -jar DeltaEncoder.jar DeltaWriter image.png  # compress an image
+java -jar DeltaEncoder.jar DeltaWriter image.png  # compress an image (Save writes foo)
+java -jar DeltaEncoder.jar DeltaWriter image.png out.dw  # ... Save writes out.dw
 java -jar DeltaEncoder.jar DeltaReader foo        # view a compressed file
 ```
 
 The writers take an image file (PNG, JPEG, GIF or BMP), or open a file chooser if
-you don't give one. **File > Save** writes the compressed image to a file called
-`foo` in the current folder, which the matching reader opens.
+you don't give one, and optionally after it the file to save to. **File > Save**
+writes the compressed image to that file, or if none was given to a file called
+`foo` in the current folder; the matching reader opens it.
 
 | Writer | Reader |
 |---|---|

@@ -16,6 +16,9 @@ import javax.swing.*;
 // closes.
 public class ViewerSupport
 {
+	/** The file a writer's Save writes when no other is given (after the image, on the command line). */
+	public static final String DEFAULT_OUTPUT = "foo";
+
 	public static final double ZOOM_FACTOR = 1.25;
 	public static final double ZOOM_MIN    = 0.05;
 	public static final double ZOOM_MAX    = 32.0;

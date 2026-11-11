@@ -82,6 +82,8 @@ public class HuffmanWriter
 	 * The image's file.
 	 */
 	String        filename;
+	/** The file Save writes (ViewerSupport.DEFAULT_OUTPUT, "foo", unless another is given). */
+	String        output_file;
 	/**
 	 * The image's width and height.
 	 */
@@ -148,7 +150,8 @@ public class HuffmanWriter
 	public static void main(String[] args)
 	{
 		ViewerSupport.applyHiDpiFontScaleIfNeeded();
-		if(args.length == 1) { new HuffmanWriter(args[0]); return; }
+		// The image, and the file Save writes ("foo" if none is given).
+		if(args.length >= 1) { new HuffmanWriter(args[0], (args.length > 1) ? args[1] : ViewerSupport.DEFAULT_OUTPUT); return; }
 		FileDialog fd = new FileDialog((java.awt.Frame) null, "Open Image", FileDialog.LOAD);
 		fd.setVisible(true);
 		if(fd.getFile() != null) new HuffmanWriter(new File(fd.getDirectory(), fd.getFile()).getPath());
@@ -162,7 +165,19 @@ public class HuffmanWriter
 	 */
 	public HuffmanWriter(String _filename)
 	{
-		filename = _filename;
+		this(_filename, ViewerSupport.DEFAULT_OUTPUT);
+	}
+
+	/**
+	 * Loads an image and opens its window; Save writes output_file.
+	 *
+	 * @param _filename    the image
+	 * @param _output_file the file Save writes
+	 */
+	public HuffmanWriter(String _filename, String _output_file)
+	{
+		filename    = _filename;
+		output_file = _output_file;
 		try
 		{
 			file_length    = new File(filename).length();
@@ -327,7 +342,7 @@ public class HuffmanWriter
 	// ---- Save ---------------------------------------------------------------
 
 	/**
-	 * File &gt; Save: codes the image (encode) into the file "foo", twice, and
+	 * File &gt; Save: codes the image (encode) into output_file ("foo" unless another is given), twice, and
 	 * prints both times (the first includes compiling the code), without the
 	 * decode check, and the check's time.
 	 */
@@ -351,7 +366,7 @@ public class HuffmanWriter
 			// includes compiling the code (the first time it runs in this JVM),
 			// the second is the run time only. Both leave out the decode check,
 			// which is timed on its own. Both give the same bytes.
-			File file = new File("foo");
+			File file = new File(output_file);
 			long[] took = new long[2], check = new long[2];
 			try
 			{

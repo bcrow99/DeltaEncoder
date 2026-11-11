@@ -26,6 +26,8 @@ public class PacketWriter
 	BufferedImage original_image;
 	BufferedImage working_image;
 	String        filename;
+	/** The file Save writes (ViewerSupport.DEFAULT_OUTPUT, "foo", unless another is given). */
+	String        output_file;
 	int           image_xdim, image_ydim;
 	int[][]       source;   // blue, green, red of the original
 
@@ -112,7 +114,8 @@ public class PacketWriter
 	public static void main(String[] args)
 	{
 		ViewerSupport.applyHiDpiFontScaleIfNeeded();
-		if(args.length == 1) { new PacketWriter(args[0]); return; }
+		// The image, and the file Save writes ("foo" if none is given).
+		if(args.length >= 1) { new PacketWriter(args[0], (args.length > 1) ? args[1] : ViewerSupport.DEFAULT_OUTPUT); return; }
 		FileDialog fd = new FileDialog((java.awt.Frame) null, "Open Image", FileDialog.LOAD);
 		fd.setVisible(true);
 		if(fd.getFile() != null) new PacketWriter(new File(fd.getDirectory(), fd.getFile()).getPath());
@@ -221,7 +224,19 @@ public class PacketWriter
 
 	public PacketWriter(String _filename)
 	{
-		filename = _filename;
+		this(_filename, ViewerSupport.DEFAULT_OUTPUT);
+	}
+
+	/**
+	 * Loads an image and opens its window; Save writes output_file.
+	 *
+	 * @param _filename    the image
+	 * @param _output_file the file Save writes
+	 */
+	public PacketWriter(String _filename, String _output_file)
+	{
+		filename    = _filename;
+		output_file = _output_file;
 		try
 		{
 			file_length    = new File(filename).length();
@@ -700,7 +715,7 @@ public class PacketWriter
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
-			File     file   = new File("foo");
+			File     file   = new File(output_file);
 			Packet[] packet = new Packet[3];
 			byte[][] coded  = new byte[3][];
 			try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))

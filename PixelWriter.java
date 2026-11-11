@@ -20,7 +20,7 @@ import javax.swing.*;
 // expanding (PixelMapper's averaging pyramid; DeltaWriter's old scheme, but
 // on the primary channels only). At start-up, init() finds the block size
 // that codes the image smallest; changing the coding, the channels or the
-// averaging finds it again. Save writes the file "foo", which PixelReader
+// averaging finds it again. Save writes output_file ("foo" unless another is given), which PixelReader
 // reads.
 public class PixelWriter
 {
@@ -36,6 +36,8 @@ public class PixelWriter
 	BufferedImage original_image;
 	BufferedImage working_image;
 	String        filename;
+	/** The file Save writes (ViewerSupport.DEFAULT_OUTPUT, "foo", unless another is given). */
+	String        output_file;
 	int           image_xdim, image_ydim;
 	int[][]       source;   // red, green, blue of the original
 	long          file_length;
@@ -79,7 +81,8 @@ public class PixelWriter
 	public static void main(String[] args)
 	{
 		ViewerSupport.applyHiDpiFontScaleIfNeeded();
-		if(args.length == 1) { new PixelWriter(args[0]); return; }
+		// The image, and the file Save writes ("foo" if none is given).
+		if(args.length >= 1) { new PixelWriter(args[0], (args.length > 1) ? args[1] : ViewerSupport.DEFAULT_OUTPUT); return; }
 		FileDialog fd = new FileDialog((java.awt.Frame) null, "Open Image", FileDialog.LOAD);
 		fd.setVisible(true);
 		if(fd.getFile() != null) new PixelWriter(new File(fd.getDirectory(), fd.getFile()).getPath());
@@ -88,7 +91,19 @@ public class PixelWriter
 
 	public PixelWriter(String _filename)
 	{
-		filename = _filename;
+		this(_filename, ViewerSupport.DEFAULT_OUTPUT);
+	}
+
+	/**
+	 * Loads an image and opens its window; Save writes output_file.
+	 *
+	 * @param _filename    the image
+	 * @param _output_file the file Save writes
+	 */
+	public PixelWriter(String _filename, String _output_file)
+	{
+		filename    = _filename;
+		output_file = _output_file;
 		try
 		{
 			file_length    = new File(filename).length();
@@ -349,7 +364,7 @@ public class PixelWriter
 
 	// ---- Save ---------------------------------------------------------------
 
-	// Writes "foo": FORMAT_ID, FORMAT_VERSION, width, height (unsigned
+	// Writes output_file: FORMAT_ID, FORMAT_VERSION, width, height (unsigned
 	// shorts), pixel_shift, pixel_quant (bytes), block size (short), coding,
 	// channels, prediction and the least-squares window radius (bytes),
 	// Average levels and saddle (bytes); for each coded channel in order
@@ -373,7 +388,7 @@ public class PixelWriter
 			}
 		System.out.println("Decode check took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
 
-		File file = new File("foo");
+		File file = new File(output_file);
 		try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))
 		{
 			out.writeByte(FORMAT_ID); out.writeByte(FORMAT_VERSION);
