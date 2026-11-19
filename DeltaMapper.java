@@ -554,37 +554,55 @@ public class DeltaMapper
 	public static ArrayList getAverageDeltasFromValues(int src[], int xdim, int ydim)
 	{
 		int[] dst = new int[xdim * ydim];
-		int sum = 0;
-		int init_value = src[0];
+		int sum = getAverageDeltas(src, 0, xdim, ydim, dst);
+		ArrayList result = new ArrayList();
+		result.add(sum);
+		result.add(dst);
+		result.add(src[0]);
+		return result;
+	}
 
-		int k = 0;
+	/**
+	 * The average deltas (getAverageDeltasFromValues) of ydim rows of src
+	 * starting at offset, as an image of their own (its first row from the
+	 * left, its first column from above), into dst: so a band's deltas
+	 * without copying the band out first.
+	 *
+	 * @param src    the channel
+	 * @param offset where the rows start in src
+	 * @param xdim   the width
+	 * @param ydim   the rows
+	 * @param dst    gets the deltas (xdim * ydim; dst[0] is 0)
+	 * @return the sum of |delta|
+	 */
+	public static int getAverageDeltas(int[] src, int offset, int xdim, int ydim, int[] dst)
+	{
+		int sum = 0;
+		int k = 0, s = offset;   // (k in dst, s the same pixel in src)
 		dst[k++] = 0;
-		for(int i = 1; i < xdim; i++)
+		s++;
+		for(int i = 1; i < xdim; i++, s++)
 		{
-			int delta = src[k] - src[k - 1];
+			int delta = src[s] - src[s - 1];
 			dst[k++] = delta;
 			sum += Math.abs(delta);
 		}
 
 		for(int i = 1; i < ydim; i++)
 		{
-			int delta = src[k] - src[k - xdim];
+			int delta = src[s] - src[s - xdim];
 			dst[k++] = delta;
 			sum += Math.abs(delta);
+			s++;
 
-			for(int j = 1; j < xdim; j++)
+			for(int j = 1; j < xdim; j++, s++)
 			{
-				delta = src[k] - (src[k - 1] + src[k - xdim]) / 2;
+				delta = src[s] - (src[s - 1] + src[s - xdim]) / 2;
 				dst[k++] = delta;
 				sum += Math.abs(delta);
 			}
 		}
-
-		ArrayList result = new ArrayList();
-		result.add(sum);
-		result.add(dst);
-		result.add(init_value);
-		return result;
+		return sum;
 	}
 
 	/**
@@ -599,27 +617,38 @@ public class DeltaMapper
 	public static int[] getValuesFromAverageDeltas(int src[], int xdim, int ydim, int init_value)
 	{
 		int[] dst = new int[xdim * ydim];
-		int k = 0;
-		dst[k++] = init_value;
+		getValuesFromAverageDeltas(src, xdim, ydim, init_value, dst, 0);
+		return dst;
+	}
 
-		for(int i = 1; i < xdim; i++)
-		{
-			int value = dst[k - 1] + src[k];
-			dst[k++] = value;
-		}
+	/**
+	 * getValuesFromAverageDeltas into dst, starting at offset: so a band's
+	 * values straight into the whole channel, without a copy.
+	 *
+	 * @param src        the deltas (xdim * ydim)
+	 * @param xdim       the width
+	 * @param ydim       the rows
+	 * @param init_value the first value
+	 * @param dst        gets the values
+	 * @param offset     where they start in dst
+	 */
+	public static void getValuesFromAverageDeltas(int[] src, int xdim, int ydim, int init_value, int[] dst, int offset)
+	{
+		int k = 0, o = offset;   // (k in src, o the same pixel in dst)
+		dst[o++] = init_value;
+		k++;
+
+		for(int i = 1; i < xdim; i++, k++, o++)
+			dst[o] = dst[o - 1] + src[k];
 
 		for(int i = 1; i < ydim; i++)
 		{
-			int value = dst[k - xdim] + src[k];
-			dst[k++] = value;
-			for(int j = 1; j < xdim; j++)
-			{
-				value = (dst[k - 1] + dst[k - xdim]) / 2 + src[k];
-				dst[k++] = value;
-			}
+			dst[o] = dst[o - xdim] + src[k];
+			k++;
+			o++;
+			for(int j = 1; j < xdim; j++, k++, o++)
+				dst[o] = (dst[o - 1] + dst[o - xdim]) / 2 + src[k];
 		}
-
-		return dst;
 	}
 
 	/**
@@ -4635,6 +4664,67 @@ public class DeltaMapper
 					{
 						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
 						wave.row(mix, delta[i], value[i], y, init[i]);
+						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
+					}
+				}
+				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
+			});
+			worker[i].start();
+		}
+		for(Thread t : worker)
+			try { t.join(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new RuntimeException(e); }
+		if(failed[0] instanceof RuntimeException) throw (RuntimeException) failed[0];
+		if(failed[0] instanceof Error) throw (Error) failed[0];
+		if(failed[0] != null) throw new RuntimeException(failed[0]);
+		return new int[][][] {delta, value};
+	}
+
+	/**
+	 * Decodes channels {@link #packMixedDeltas} coded (with the second
+	 * opinions) from their average deltas ({@link #getAverageDeltasFromValues}:
+	 * each pixel from the average of the pixels left and above), rebuilding
+	 * them as it goes: each channel's contexts use the deltas of the ones
+	 * before it, so each decodes in its own thread, two rows behind the one
+	 * before, starting as soon as its coded bytes start to arrive.
+	 *
+	 * @param md   each channel's rank table and coded bytes, when read, in coding order
+	 * @param xdim the width
+	 * @param ydim the height
+	 * @param init each channel's first value (set before md[i] is done)
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromAverageChannels(java.util.concurrent.Future<MixedDeltas>[] md, int xdim, int ydim, int[] init)
+	{
+		int n = md.length;
+		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
+		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
+		Throwable[] failed = new Throwable[1];
+		Thread[] worker = new Thread[n];
+		for(int c = 0; c < n; c++)
+		{
+			final int i = c;
+			worker[i] = new Thread(() ->
+			{
+				try
+				{
+					MixedDecoder mix = new MixedDecoder(md[i].get(), Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					int[] d = delta[i], v = value[i];
+					for(int y = 0; y < ydim; y++)
+					{
+						// The channel before must be two rows ahead: this
+						// row's contexts use its rows y and y + 1.
+						if(i > 0) awaitRows(done, failed, i - 1, Math.min(ydim, y + 2));
+						for(int x = 0, k = y * xdim; x < xdim; x++, k++)
+						{
+							// getAverageDeltasFromValues' prediction.
+							int p;
+							if(k == 0)      p = init[i];
+							else if(y == 0) p = v[k - 1];
+							else if(x == 0) p = v[k - xdim];
+							else            p = (v[k - 1] + v[k - xdim]) / 2;
+							mix.next(k, d, v, p);
+							v[k] = (k == 0) ? init[i] : p + d[k];
+						}
 						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
 					}
 				}

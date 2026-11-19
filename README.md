@@ -20,19 +20,29 @@ The writers take an image file (PNG, JPEG, GIF or BMP), or open a file chooser i
 you don't give one, and optionally after it the file to save to. **File > Save**
 writes the compressed image to that file, or if none was given to a file called
 `foo` in the current folder; the matching reader opens it. In SimpleWriter,
-SimpleWriter2, HuffmanWriter and PixelWriter, **File > Decode Check** (off unless
-switched on) makes Save also decode what it coded and say whether it comes back
-the same: Save is faster without it, and if a file doesn't decode right in its
-reader, switching it on tells whether the writer or the reader is at fault.
+SimpleWriter2, HuffmanWriter, GenericWriter and PixelWriter, **File > Decode
+Check** (off unless switched on) makes Save also decode what it coded and say
+whether it comes back the same: Save is faster without it, and if a file doesn't
+decode right in its reader, switching it on tells whether the writer or the
+reader is at fault.
 
 | Writer | Reader |
 |---|---|
 | SimpleWriter | SimpleReader |
 | SimpleWriter2 | SimpleReader2 |
 | HuffmanWriter | HuffmanReader |
+| GenericWriter | GenericReader |
 | PacketWriter | PacketReader |
 | DeltaWriter, DeltaWriter2 | DeltaReader |
 | BlockWriter | BlockReader |
+
+GenericWriter and GenericReader are NativeEncoder's NativeWriter and
+NativeReader in Java alone (no C library to build): SimpleWriter2's and
+HuffmanWriter's codings in one program (the **Entropy** menu), each with the
+least-squares deltas or the average filter (the **Delta** menu), in up to 64
+bands. They write and read the same files as NativeWriter and NativeReader, byte
+for byte; with the least-squares deltas those are SimpleWriter2's and
+HuffmanWriter's files, so GenericReader opens those too.
 
 Program names aren't case sensitive (`deltawriter` works too). To build it
 yourself instead, compile the `.java` files with any JDK 8 or later
