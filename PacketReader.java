@@ -282,13 +282,6 @@ public class PacketReader
 		int[]   size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
 		int[][] bgr  = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
 		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize(bgr[c], size[0], xdim, ydim));
-		// setRGB would convert each pixel through the image's colour model, one
-		// at a time; a TYPE_INT_RGB raster holds a pixel's low 24 bits as they
-		// are (what setRGB stores), so they're copied in directly.
-		int[] pixel = DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift);
-		for(int i = 0; i < pixel.length; i++) pixel[i] &= 0xFFFFFF;
-		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		image.getRaster().setDataElements(0, 0, xdim, ydim, pixel);
-		return image;
+		return ViewerSupport.makeImage(bgr[0], bgr[1], bgr[2], xdim, ydim, pixel_shift);
 	}
 }

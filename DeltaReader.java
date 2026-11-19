@@ -234,8 +234,6 @@ public class DeltaReader
 		int[]   size = DeltaMapper.getQuantizedSize(xdim, ydim, pixel_quant);
 		int[][] bgr  = DeltaMapper.getBlueGreenRed(set_id, channel[0], channel[1], channel[2]);
 		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize(bgr[c], size[0], xdim, ydim));
-		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		image.setRGB(0, 0, xdim, ydim, DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift), 0, xdim);
-		return image;
+		return ViewerSupport.makeImage(bgr[0], bgr[1], bgr[2], xdim, ydim, pixel_shift);
 	}
 }

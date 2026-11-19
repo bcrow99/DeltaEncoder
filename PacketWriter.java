@@ -258,7 +258,7 @@ public class PacketWriter
 			source[0][i] = (pixel[i] >> 16) & 0xff; source[1][i] = (pixel[i] >> 8) & 0xff; source[2][i] = pixel[i] & 0xff;
 		}
 		working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
-		working_image.setRGB(0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, pixel);
 
 		view = new ViewerSupport("Packet Writer  " + filename, image_xdim, image_ydim);
 		JFrame   frame    = view.frame;
@@ -454,7 +454,7 @@ public class PacketWriter
 			if(correction != 0) { b += (int)((source[0][i] - b) * f); g += (int)((source[1][i] - g) * f); r += (int)((source[2][i] - r) * f); }
 			rgb[i] = (b << 16) + (g << 8) + r;
 		}
-		working_image.setRGB(0, 0, image_xdim, image_ydim, rgb, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, rgb);
 		view.setImage(working_image);
 	}
 

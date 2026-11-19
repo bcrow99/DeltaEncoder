@@ -61,9 +61,11 @@ public class SimpleWriter2
 	 */
 	static final int  EVERY = 4;
 	/**
-	 * The most bands Save offers.
+	 * The most bands Save offers: enough for a reader to use about 96 cores
+	 * (three channels' threads a band) on a big image, as NativeWriter's.
+	 * (The file holds the number in a byte: at most 255.)
 	 */
-	static final int  MAX_BANDS = 16;
+	static final int  MAX_BANDS = 64;
 	/**
 	 * The fewest rows (of the quantized image) a band may have: smaller images
 	 * get fewer bands.
@@ -116,6 +118,15 @@ public class SimpleWriter2
 	 * and fewer if bands would have under BAND_MIN_ROWS rows.
 	 */
 	int bands       = 1;
+	/**
+	 * Whether Save checks its coding by decoding it back (the Decode Check
+	 * item in the File menu): off unless switched on. The check decodes
+	 * every band again, which takes about as long as decoding the file; off,
+	 * Save is that much faster, and a file that doesn't decode right is
+	 * found by its reader instead (then, with the check back on, Save says
+	 * whether the writer or the reader is at fault).
+	 */
+	boolean decode_check = false;
 
 	/**
 	 * The Quantization sliders (Reset moves them).
@@ -205,7 +216,7 @@ public class SimpleWriter2
 			source[0][i] = (pixel[i] >> 16) & 0xff; source[1][i] = (pixel[i] >> 8) & 0xff; source[2][i] = pixel[i] & 0xff;
 		}
 		working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
-		working_image.setRGB(0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, pixel);
 
 		view = new ViewerSupport("Simple Writer 2  " + filename, image_xdim, image_ydim);
 		JFrame   frame    = view.frame;
@@ -220,6 +231,9 @@ public class SimpleWriter2
 		reset_item.addActionListener(e -> { pixel_quant = 0; pixel_shift = 0; correction = 0; pquant_slider.setValue(0); pshift_slider.setValue(0); corr_slider.setValue(0); apply(); });
 		file_menu.add(reset_item);
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(new SaveHandler()); file_menu.add(save_item);
+		JCheckBoxMenuItem check_item = new JCheckBoxMenuItem("Decode Check", decode_check);
+		check_item.addActionListener(e -> decode_check = check_item.isSelected());
+		file_menu.add(check_item);
 
 		JMenu quant_menu = new JMenu("Quantization");
 		JSlider[] ss = new JSlider[1];
@@ -340,7 +354,7 @@ public class SimpleWriter2
 			if(correction != 0) { b += (int)((source[0][i] - b) * f); g += (int)((source[1][i] - g) * f); r += (int)((source[2][i] - r) * f); }
 			rgb[i] = (b << 16) + (g << 8) + r;
 		}
-		working_image.setRGB(0, 0, image_xdim, image_ydim, rgb, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, rgb);
 		view.setImage(working_image);
 	}
 
@@ -369,8 +383,8 @@ public class SimpleWriter2
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 			// The image is coded twice and the times of both printed: the first
 			// includes compiling the code (the first time it runs in this JVM),
-			// the second is the run time only. Both leave out the decode check,
-			// which is timed on its own. Both give the same bytes.
+			// the second is the run time only. Both leave out the decode check
+			// (if it's on: the Decode Check item), which is timed on its own. Both give the same bytes.
 			File file = new File(output_file);
 			long[] took = new long[2], check = new long[2];
 			try
@@ -380,7 +394,7 @@ public class SimpleWriter2
 				{
 					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 					long start = System.nanoTime();
-					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed());
+					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed(), decode_check);
 					took[pass] = System.nanoTime() - start - check[pass];
 					byte[] got = bytes.toByteArray();
 					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
@@ -401,7 +415,7 @@ public class SimpleWriter2
 			System.out.println(String.format("Coded %d x %d (%,d pixels)", delta_xdim, rows, (long) delta_xdim * rows));
 			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
 			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
-			System.out.println("Decode check:               " + ViewerSupport.formatDuration(check[1]));
+			System.out.println("Decode check:               " + (decode_check ? ViewerSupport.formatDuration(check[1]) : "off"));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
@@ -415,22 +429,22 @@ public class SimpleWriter2
 	 * (an unsigned byte), n int lengths, and the n bands. Band b is rows
 	 * SimpleWriter.bandStart(b) to bandStart(b + 1) of the quantized image,
 	 * coded as an image of its own (the fit and the contexts start again at
-	 * its top): per channel (green, blue-green, red-green), int init, then
-	 * the deltas of the least-squares fit from the rows above (DeltaMapper.RowFit:
-	 * radius RADIUS, solved at every EVERY-th pixel along a row) mixed-context coded with the second opinions
-	 * (DeltaMapper.packMixedDeltas). Channels 1 and 2 use the ones before
-	 * them (their values in the fit, their deltas as context), so a band's
-	 * channels are decoded in order, each a couple of rows behind the one
-	 * before; the bands can be decoded at the same time.
+	 * its top): per channel (green, blue-green, red-green), int init, then the
+	 * deltas of the least-squares fit from the rows above (DeltaMapper.RowFit:
+	 * radius RADIUS, solved at every EVERY-th pixel along a row) mixed-context
+	 * coded with the second opinions (DeltaMapper.packMixedDeltas). Channels 1
+	 * and 2 use the ones before them (their values in the fit, their deltas as
+	 * context), so a band's channels are decoded in order, each a couple of
+	 * rows behind the one before; the bands can be decoded at the same time.
 	 * <p>
 	 * Each channel is fitted once over the whole image (the fit splits itself
-	 * across the cores); the bands' deltas come from it, with only each
-	 * band's first rows fitted again (DeltaMapper.getRowFitBandDeltas).
-	 * A channel's coding needs only the deltas of the channels before it, so
-	 * its bands are coded while the next channel is fitted. Once everything
-	 * is coded, each band's channels are checked by decoding them back, at
-	 * the same time; the time that took is returned, so the coding can be
-	 * timed without it.
+	 * across the cores); the bands' deltas come from it, with only each band's
+	 * first rows fitted again (DeltaMapper.getRowFitBandDeltas), the bands at
+	 * the same time. A channel's coding needs only the deltas of the channels
+	 * before it, so its bands are coded while the next channel is fitted. Once
+	 * everything is coded, if check is set, each band's channels are checked
+	 * by decoding them back, at the same time; the time that took is returned,
+	 * so the coding can be timed without it.
 	 *
 	 * @param out         the stream
 	 * @param value       the channels as quantized, in coding order (difference channels less their minimum)
@@ -441,10 +455,11 @@ public class SimpleWriter2
 	 * @param pixel_shift the Color Resolution
 	 * @param pixel_quant the Pixel Resolution
 	 * @param n           the number of bands
-	 * @return the time the decode check took, in nanoseconds
+	 * @param check       whether to check the coding by decoding it back (the Decode Check menu item)
+	 * @return the time the decode check took, in nanoseconds (0 without it)
 	 * @throws IOException if the stream fails
 	 */
-	static long encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n) throws IOException
+	static long encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n, boolean check) throws IOException
 	{
 		long check_time = 0;
 		int rows = value[0].length / xdim;
@@ -459,11 +474,14 @@ public class SimpleWriter2
 				int   fi = i;
 				int[] ref = (i > 0) ? value[i - 1] : null;
 				int[] whole = DeltaMapper.getRowFitDeltas(value[i], ref, xdim, rows, RADIUS, EVERY);
-				for(int b = 0; b < n; b++)
+				// Each band's deltas from the whole channel's: only its first
+				// rows fitted again, all the bands at the same time.
+				if(n == 1) d[0][i] = whole;
+				else ViewerSupport.parallel(n, b ->
 				{
 					int y0 = SimpleWriter.bandStart(b, n, rows), y1 = SimpleWriter.bandStart(b + 1, n, rows);
-					d[b][i] = (n == 1) ? whole : DeltaMapper.getRowFitBandDeltas(whole, value[i], ref, xdim, y0, y1, RADIUS, EVERY);
-				}
+					d[b][fi] = DeltaMapper.getRowFitBandDeltas(whole, value[fi], ref, xdim, y0, y1, RADIUS, EVERY);
+				});
 				for(int b = 0; b < n; b++)
 				{
 					int fb = b;
@@ -479,29 +497,32 @@ public class SimpleWriter2
 				}
 			}
 			waitFor(jobs);
-			// The check, once everything is coded (so its time can be told
-			// apart): each band's channels decoded back, at the same time.
-			long check = System.nanoTime();
-			jobs.clear();
-			for(int b = 0; b < n; b++)
-				for(int i = 0; i < 3; i++)
-				{
-					int fb = b, fi = i;
-					jobs.add(coder.submit(() ->
+			if(check)
+			{
+				// The check, once everything is coded (so its time can be told
+				// apart): each band's channels decoded back, at the same time.
+				long check_start = System.nanoTime();
+				jobs.clear();
+				for(int b = 0; b < n; b++)
+					for(int i = 0; i < 3; i++)
 					{
-						int y0 = SimpleWriter.bandStart(fb, n, rows), y1 = SimpleWriter.bandStart(fb + 1, n, rows);
-						int[]   ch = (n == 1) ? value[fi] : Arrays.copyOfRange(value[fi], y0 * xdim, y1 * xdim);
-						int[]   dd = d[fb][fi];
-						int[][] previous = Arrays.copyOf(d[fb], fi);
-						int[] p = new int[ch.length];
-						for(int k = 0; k < p.length; k++) p[k] = ch[k] - dd[k];
-						if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[fb][fi], ch, previous, xdim, p), dd))
-							System.out.println("WARNING: band " + fb + " channel " + fi + " deltas do not decode back.");
-						return null;
-					}));
-				}
-			waitFor(jobs);
-			check_time = System.nanoTime() - check;
+						int fb = b, fi = i;
+						jobs.add(coder.submit(() ->
+						{
+							int y0 = SimpleWriter.bandStart(fb, n, rows), y1 = SimpleWriter.bandStart(fb + 1, n, rows);
+							int[]   ch = (n == 1) ? value[fi] : Arrays.copyOfRange(value[fi], y0 * xdim, y1 * xdim);
+							int[]   dd = d[fb][fi];
+							int[][] previous = Arrays.copyOf(d[fb], fi);
+							int[] p = new int[ch.length];
+							for(int k = 0; k < p.length; k++) p[k] = ch[k] - dd[k];
+							if(!Arrays.equals(DeltaMapper.unpackMixedDeltas(coded[fb][fi], ch, previous, xdim, p), dd))
+								System.out.println("WARNING: band " + fb + " channel " + fi + " deltas do not decode back.");
+							return null;
+						}));
+					}
+				waitFor(jobs);
+				check_time = System.nanoTime() - check_start;
+			}
 		}
 		finally { coder.shutdownNow(); }
 

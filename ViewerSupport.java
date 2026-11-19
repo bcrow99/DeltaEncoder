@@ -129,9 +129,7 @@ public class ViewerSupport
 		}
 		else src.getRGB(0, 0, w, h, pixel, 0, w);
 
-		BufferedImage rgb = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-		rgb.setRGB(0, 0, w, h, pixel, 0, w);
-		return rgb;
+		return makeImage(pixel, w, h);
 	}
 
 	// A JPEG with its ICC profile segments (APP2 "ICC_PROFILE") removed;
@@ -201,6 +199,94 @@ public class ViewerSupport
 		try { SwingUtilities.invokeAndWait(r); }
 		catch(java.lang.reflect.InvocationTargetException e) { throw new RuntimeException(e.getCause()); }
 		catch(InterruptedException e) { Thread.currentThread().interrupt(); }
+	}
+
+	// Puts packed pixels (0xRRGGBB, as setRGB takes them) into a w x h image.
+	// setRGB converts each pixel through the image's colour model, one at a
+	// time; a TYPE_INT_RGB image holds a pixel's low 24 bits as they are
+	// (what setRGB stores), so for one of those they're copied straight into
+	// its own array, masked to 24 bits. Any other image gets setRGB.
+	public static void setPixels(BufferedImage image, int[] pixel)
+	{
+		int w = image.getWidth(), h = image.getHeight();
+		if(image.getType() != BufferedImage.TYPE_INT_RGB || !(image.getRaster().getDataBuffer() instanceof DataBufferInt))
+		{
+			image.setRGB(0, 0, w, h, pixel, 0, w);
+			return;
+		}
+		int[] p = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+		for(int k = 0; k < w * h; k++) p[k] = pixel[k] & 0xFFFFFF;
+	}
+
+	// A new TYPE_INT_RGB image of packed pixels (setPixels).
+	public static BufferedImage makeImage(int[] pixel, int w, int h)
+	{
+		BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		setPixels(image, pixel);
+		return image;
+	}
+
+	// A new TYPE_INT_RGB image of three channels, each shifted left by
+	// pixel_shift: the pixels DeltaMapper.getPixel packs (first channel in
+	// the high byte), written straight into the image's own array (masked to
+	// 24 bits, as setRGB would store them), in bands of rows in parallel:
+	// no pixel array of its own and no copy afterwards.
+	public static BufferedImage makeImage(int[] first, int[] second, int[] third, int w, int h, int pixel_shift)
+	{
+		BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+		int[] p = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+		int high = pixel_shift + 16, middle = pixel_shift + 8, low = pixel_shift;
+		int parts = Math.max(1, Math.min(h, Runtime.getRuntime().availableProcessors()));
+		parallel(parts, part ->
+		{
+			int start = (int) ((long) h * part / parts) * w, end = (int) ((long) h * (part + 1) / parts) * w;
+			for(int k = start; k < end; k++)
+				p[k] = ((first[k] << high) + (second[k] << middle) + (third[k] << low)) & 0xFFFFFF;
+		});
+		return image;
+	}
+
+	// How many bands of a least-squares coding (SimpleReader, SimpleReader2,
+	// HuffmanReader) a reader decodes at the same time: one for each 6
+	// processors, rounded up, at most bands. Each band's channels have threads
+	// of their own and solve their fits on the cores too, so with more bands
+	// at once their threads take turns on the same processors, each turn
+	// bringing another band's fits back into the caches, and waiting threads
+	// wake each other more often. Measured with NativeReader (the same
+	// decoding, in C): with all of a 64-band file's bands at once, LS
+	// decoding was up to 3 times slower than in 1 band (16 threads, Windows)
+	// and a quarter slower (4, Linux); one band for each 6 processors was
+	// fastest, or close, of one for each 3, 6 and 12 on a Ryzen 7 5700G (8
+	// cores, 16 threads).
+	public static int lsBandsAtOnce(int bands)
+	{
+		int cores = Runtime.getRuntime().availableProcessors();
+		return Math.max(1, Math.min(bands, (cores + 5) / 6));
+	}
+
+	// Starts at_once threads that run body(0), body(1), ... body(bands - 1)
+	// between them, in order: each takes the next band when it's done with
+	// one (so the bands are decoded in the order a file holds them, and can
+	// start while the later ones are still being read). Returns the threads,
+	// to join.
+	public static Thread[] startBandThreads(int bands, int at_once, java.util.function.IntConsumer body)
+	{
+		java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+		Thread[] thread = new Thread[at_once];
+		for(int t = 0; t < at_once; t++)
+		{
+			thread[t] = new Thread(() -> { for(int b = next.getAndIncrement(); b < bands; b = next.getAndIncrement()) body.accept(b); });
+			thread[t].start();
+		}
+		return thread;
+	}
+
+	// Runs body(0..bands-1), at_once at a time, in order (startBandThreads),
+	// and waits for them; exceptions reach the caller.
+	public static void forBands(int bands, int at_once, java.util.function.IntConsumer body)
+	{
+		java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+		parallel(at_once, t -> { for(int b = next.getAndIncrement(); b < bands; b = next.getAndIncrement()) body.accept(b); });
 	}
 
 	// Runs body(0..n-1) on the shared pool; exceptions reach the caller.

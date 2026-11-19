@@ -2342,6 +2342,22 @@ public class DeltaMapper
 	}
 
 	/**
+	 * The median edge detector (LOCO-I's, blockPredictor 11): min(a, b) if
+	 * c &gt;= max(a, b), max(a, b) if c &lt;= min(a, b), else a + b - c.
+	 *
+	 * @param a left
+	 * @param b above
+	 * @param c above-left
+	 * @return the prediction
+	 */
+	static int med(int a, int b, int c)
+	{
+		if(c >= Math.max(a, b)) return Math.min(a, b);
+		if(c <= Math.min(a, b)) return Math.max(a, b);
+		return a + b - c;
+	}
+
+	/**
 	 * Primitives 0-27 from left a, above b, above-left c and above-right d (see
 	 * {@link #PRIMITIVE_NAMES} and {@link #EXTRA_PRIMITIVE_NAMES}); 22-27 are the
 	 * selection predictors.
@@ -2368,7 +2384,7 @@ public class DeltaMapper
 			case  8: return (c + d) >> 1;
 			case  9: return (a + b + c + d + 2) >> 2;
 			case 10: return a + b - c;
-			case 11: if(c >= Math.max(a, b)) return Math.min(a, b); if(c <= Math.min(a, b)) return Math.max(a, b); return a + b - c;
+			case 11: return med(a, b, c);
 			case 12: return (a * 3 + b + 2) >> 2;
 			case 13: return (a + b * 3 + 2) >> 2;
 			case 14: return (a * 3 + d + 2) >> 2;
@@ -3181,6 +3197,26 @@ public class DeltaMapper
 	{
 		int dh = Math.abs(w - ww) + Math.abs(n - nw) + Math.abs(n - ne);
 		int dv = Math.abs(w - nw) + Math.abs(n - nn) + Math.abs(ne - nne);
+		return gapFrom(dh, dv, w, n, nw, ne, t1, t2, t3);
+	}
+
+	/**
+	 * gap, given its horizontal and vertical gradients dh and dv (for a
+	 * caller that has them already).
+	 *
+	 * @param dh  the horizontal gradient: |w - ww| + |n - nw| + |n - ne|
+	 * @param dv  the vertical gradient: |w - nw| + |n - nn| + |ne - nne|
+	 * @param w   left (a)
+	 * @param n   above (b)
+	 * @param nw  above-left (c)
+	 * @param ne  above-right (d)
+	 * @param t1  the largest threshold
+	 * @param t2  the middle one
+	 * @param t3  the smallest
+	 * @return the prediction
+	 */
+	private static int gapFrom(int dh, int dv, int w, int n, int nw, int ne, int t1, int t2, int t3)
+	{
 		if(dv - dh > t1) return w;
 		if(dh - dv > t1) return n;
 		int p = (2 * (w + n) + ne - nw) >> 2;
@@ -7298,6 +7334,7 @@ public class DeltaMapper
 	 */
 	static final int MIX_RANK_SHIFT = 5, MIX_BLOCKS_MAKE = 16 << MIX_RANK_SHIFT, MIX_BLOCKS_FIRST = 8 << MIX_RANK_SHIFT;
 
+
 	/**
 	 * The smallest a mixing weight can be.
 	 */
@@ -7442,6 +7479,10 @@ public class DeltaMapper
 		 */
 		int cross_rows = 0, earlier_rows = 0, earlier_end = 0;
 		/**
+		 * earlierRows' scratch: a row's column sums of cross over three rows.
+		 */
+		int[] col;
+		/**
 		 * Whether the contexts include the second opinions (see the section comment).
 		 */
 		final boolean opinions;
@@ -7450,6 +7491,21 @@ public class DeltaMapper
 		 * before encode or decode when opinions is true).
 		 */
 		int prediction;
+		/**
+		 * Where the row of the pixel being coded starts, and whether it has
+		 * interior pixels (see startRow).
+		 */
+		int row_start = Integer.MIN_VALUE / 2;
+		/**
+		 * Whether the row of the pixel being coded has interior pixels.
+		 */
+		boolean row_interior;
+		/**
+		 * By column, the terms of the interior contexts from the rows above
+		 * (see rowAbove): the activity's, and gap's horizontal and vertical
+		 * gradients'. Made when first needed.
+		 */
+		int[] above_act, above_h, above_v;
 
 		/**
 		 * Models with every count 1 and equal weights.
@@ -7517,12 +7573,23 @@ public class DeltaMapper
 					for(int[] p : previous) t += Math.abs(p[k]);
 					cross[k] = t;
 				}
+			// The 3x3 sums (s9) from the columns' sums over the three rows
+			// (col), each added in once rather than in each of its three
+			// neighbours' sums.
+			if(col == null || col.length < xdim) col = new int[xdim];
 			for(int y = earlier_rows; y < y1; y++)
+			{
+				int y0 = Math.max(0, y - 1), y2 = Math.min(ydim, y + 2);
 				for(int x = 0; x < xdim; x++)
 				{
-					int k = y * xdim + x, s9 = 0, sum = 0;
-					for(int yy = Math.max(0, y - 1); yy < Math.min(ydim, y + 2); yy++)
-						for(int xx = Math.max(0, x - 1); xx < Math.min(xdim, x + 2); xx++) s9 += cross[yy * xdim + xx];
+					int t = 0;
+					for(int yy = y0; yy < y2; yy++) t += cross[yy * xdim + x];
+					col[x] = t;
+				}
+				for(int x = 0; x < xdim; x++)
+				{
+					int k = y * xdim + x, sum = 0;
+					int s9 = col[x] + ((x > 0) ? col[x - 1] : 0) + ((x + 1 < xdim) ? col[x + 1] : 0);
 					if(x + 1 < xdim) sum += cross[k + 1];
 					if(y + 1 < ydim)
 					{
@@ -7534,6 +7601,7 @@ public class DeltaMapper
 					c9b[k] = MIX_CROSS_TABLE[Math.min(s9 / 3, top)];
 					fwd[k] = sum;
 				}
+			}
 			earlier_rows = Math.max(earlier_rows, y1);
 			earlier_end  = (earlier_rows >= ydim) ? Integer.MAX_VALUE : earlier_rows * xdim;
 		}
@@ -7548,7 +7616,12 @@ public class DeltaMapper
 		void contexts(int k, int[] d, int[] v)
 		{
 			if(k >= earlier_end) earlierRows(k / xdim + 1);
-			int x = k % xdim, act = 0, g = 0, top = MIX_ACTIVITY_TABLE.length - 1;
+			// The column, without dividing: the pixels come in order, so a new
+			// row starts where the last one ended (anything else finds it).
+			if(k - row_start >= xdim || k < row_start) startRow(k, d, v);
+			int x = k - row_start;
+			if(row_interior && x >= 2 && x < xdim - 1) { contextsInterior(k, x, d, v); return; }
+			int act = 0, g = 0, top = MIX_ACTIVITY_TABLE.length - 1;
 			if(x > 0) act += Math.abs(d[k - 1]);
 			if(k >= xdim)
 			{
@@ -7579,13 +7652,91 @@ public class DeltaMapper
 					boolean up2 = k >= 2 * xdim;
 					int aa = (x >= 2) ? v[k - 2] : a, bb = up2 ? v[k - 2 * xdim] : b, nne = up2 ? v[k - 2 * xdim + 1] : dd;
 					o0 = gradientLevel(gap(a, aa, b, bb, cc, dd, nne, 10, 4, 1) - prediction) + mid;
-					o1 = gradientLevel(blockPredictor(11, a, b, cc, dd) - prediction) + mid;
+					o1 = gradientLevel(med(a, b, cc) - prediction) + mid;
 					o2 = gradientLevel(a - prediction) + mid;
 				}
 				ctx[0] = ctx[0] * MIX_OPINION_LEVELS + o0;
 				ctx[1] = ctx[1] * MIX_OPINION_LEVELS + o1;
 				if(m == 3) ctx[2] = ctx[2] * MIX_OPINION_LEVELS + o2;
 			}
+		}
+
+		/**
+		 * The row of pixel k, for contexts: where it starts, whether it has
+		 * interior pixels (two rows down at least), and, if so, the terms of
+		 * their contexts from the rows above (rowAbove). The rows above are
+		 * done by now (the pixels are coded in order).
+		 *
+		 * @param k the pixel
+		 * @param d the deltas (read above k's row only)
+		 * @param v the channel's values (read above k's row only)
+		 */
+		void startRow(int k, int[] d, int[] v)
+		{
+			int y = k / xdim;
+			row_start    = y * xdim;
+			row_interior = y >= 2 && xdim >= 4;
+			if(row_interior) rowAbove(y, d, v);
+		}
+
+		/**
+		 * The parts of row y's interior contexts (see contextsInterior) that
+		 * come from the rows above, by column: worked out once a row, in a
+		 * loop of their own, rather than in each pixel's.
+		 *
+		 * @param y the row (at least 2)
+		 * @param d the deltas
+		 * @param v the channel's values
+		 */
+		void rowAbove(int y, int[] d, int[] v)
+		{
+			if(above_act == null) { above_act = new int[xdim]; above_h = new int[xdim]; above_v = new int[xdim]; }
+			int n = (y - 1) * xdim, nn = (y - 2) * xdim;
+			for(int x = 1; x < xdim - 1; x++)
+			{
+				int N = v[n + x], NE = v[n + x + 1];
+				above_act[x] = Math.abs(d[n + x]) + Math.abs(d[n + x - 1]) + Math.abs(d[n + x + 1]);
+				above_h[x]   = Math.abs(N - v[n + x - 1]) + Math.abs(N - NE);
+				above_v[x]   = Math.abs(N - v[nn + x]) + Math.abs(NE - v[nn + x + 1]);
+			}
+		}
+
+		/**
+		 * contexts at an interior pixel (two rows down, two columns in, not
+		 * the last column), where every term is there: the same contexts,
+		 * without the tests for the edges, with the terms from the rows above
+		 * from rowAbove. There the activity's gradient g is the sum of gap's
+		 * two, dh and dv, so gap's are worked out once for both.
+		 *
+		 * @param k the pixel
+		 * @param x its column
+		 * @param d the deltas (read below k only)
+		 * @param v the channel's values (read below k only)
+		 */
+		void contextsInterior(int k, int x, int[] d, int[] v)
+		{
+			int top = MIX_ACTIVITY_TABLE.length - 1, cross_buckets = CROSS_LIMIT.length;
+			int W = v[k - 1], WW = v[k - 2], NW = v[k - xdim - 1];
+			int act = Math.abs(d[k - 1]) + above_act[x];
+			int dh  = Math.abs(W - WW) + above_h[x], dv = Math.abs(W - NW) + above_v[x];
+			int c   = cb[k];
+			int c0  = MIX_ACTIVITY_TABLE[Math.min((act + dh + dv) >> 1, top)] * cross_buckets + c, c1, c2 = 0;
+			if(m == 3)
+			{
+				c1 = MIX_ACTIVITY_TABLE[Math.min(act + (fwd[k] >> 1), top)] * cross_buckets + c;
+				c2 = MIX_ACTIVITY_TABLE[Math.min(act, top)] * cross_buckets + c9b[k];
+			}
+			else c1 = MIX_ACTIVITY_TABLE[Math.min(act, top)] * cross_buckets + c;
+			if(opinions)
+			{
+				int mid = MIX_OPINION_LEVELS / 2, N = v[k - xdim], NE = v[k - xdim + 1];
+				c0 = c0 * MIX_OPINION_LEVELS + gradientLevel(gapFrom(dh, dv, W, N, NW, NE, 10, 4, 1) - prediction) + mid;
+				c1 = c1 * MIX_OPINION_LEVELS + gradientLevel(med(W, N, NW) - prediction) + mid;
+				c2 = c2 * MIX_OPINION_LEVELS + gradientLevel(W - prediction) + mid;
+			}
+			ctx[0] = c0;
+			ctx[1] = c1;
+			if(m == 3) ctx[2] = c2;
 		}
 
 		/**
@@ -7687,8 +7838,7 @@ public class DeltaMapper
 			long t  = dec.target((1L << MIX_R_BITS) + n_symbols);
 			int  s  = 0;
 			long lo = 0, hi;
-			Arrays.fill(cum, 0);
-			Arrays.fill(c1, 0);
+			for(int j = 0; j < m; j++) { cum[j] = 0; c1[j] = 0; }
 			// The symbol is the first whose interval's top is above t (the tops
 			// rise with the symbol), found a symbol at a time; but once the
 			// block sums are made, while the symbols have been large, first

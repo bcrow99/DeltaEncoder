@@ -54,6 +54,7 @@ public class PixelWriter
 	int prediction  = PixelMapper.MED;
 	int     pixel_pyramid = 0;       // Average: levels of 2 x 2 averaging (0..PixelMapper.PYRAMID_MAX)
 	boolean use_saddle    = false;   // expand with the cross-derivative term too
+	boolean decode_check  = false;   // Save decodes the channels back first (File > Decode Check: off unless switched on)
 
 	JSlider pquant_slider, pshift_slider, block_slider;
 	JRadioButton[] coding_button  = new JRadioButton[PixelMapper.CODING_NAMES.length];
@@ -125,7 +126,7 @@ public class PixelWriter
 			source[0][i] = (pixel[i] >> 16) & 0xff; source[1][i] = (pixel[i] >> 8) & 0xff; source[2][i] = pixel[i] & 0xff;
 		}
 		working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
-		working_image.setRGB(0, 0, image_xdim, image_ydim, pixel, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, pixel);
 
 		view = new ViewerSupport("Pixel Writer  " + filename, image_xdim, image_ydim);
 		JFrame   frame    = view.frame;
@@ -145,6 +146,9 @@ public class PixelWriter
 		});
 		file_menu.add(reset_item);
 		JMenuItem save_item = new JMenuItem("Save"); save_item.addActionListener(e -> save()); file_menu.add(save_item);
+		JCheckBoxMenuItem check_item = new JCheckBoxMenuItem("Decode Check", decode_check);
+		check_item.addActionListener(e -> decode_check = check_item.isSelected());
+		file_menu.add(check_item);
 
 		JSlider[] ss = new JSlider[1];
 		JMenu quant_menu = new JMenu("Quantization");
@@ -358,7 +362,7 @@ public class PixelWriter
 	private void showPreview()
 	{
 		int[] rgb = PixelMapper.getRGB(shown, qxdim, image_xdim, image_ydim, pixel_quant, pixel_shift, true);
-		working_image.setRGB(0, 0, image_xdim, image_ydim, rgb, 0, image_xdim);
+		ViewerSupport.setPixels(working_image, rgb);
 		view.setImage(working_image);
 	}
 
@@ -372,21 +376,24 @@ public class PixelWriter
 	// blue), its offset and largest value (ints: PixelMapper.Prepared); then
 	// for each, its coded length (int) and coded bytes; then with Average,
 	// the sign bits of red, green and blue (PixelMapper.writeSignBits).
-	// Checks the channels decode back first.
+	// With Decode Check on, checks the channels decode back first.
 	void save()
 	{
 		if(!applied) apply();
 		if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
 
-		long t0 = System.nanoTime();
-		int[][] back = PixelMapper.decode(coded, txdim, tydim, pixel_shift, block_size, coding, channels, prediction, prepared.radius(), prepared.offset(), prepared.max());
-		for(int i = 0; i < 3; i++)
-			if(!Arrays.equals(back[i], top[i]))
-			{
-				ViewerSupport.showError(view.frame, "Nothing saved: the " + PixelMapper.CHANNEL_NAMES[i] + " channel does not decode back.");
-				return;
-			}
-		System.out.println("Decode check took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
+		if(decode_check)
+		{
+			long t0 = System.nanoTime();
+			int[][] back = PixelMapper.decode(coded, txdim, tydim, pixel_shift, block_size, coding, channels, prediction, prepared.radius(), prepared.offset(), prepared.max());
+			for(int i = 0; i < 3; i++)
+				if(!Arrays.equals(back[i], top[i]))
+				{
+					ViewerSupport.showError(view.frame, "Nothing saved: the " + PixelMapper.CHANNEL_NAMES[i] + " channel does not decode back.");
+					return;
+				}
+			System.out.println("Decode check took " + ViewerSupport.formatDuration(System.nanoTime() - t0));
+		}
 
 		File file = new File(output_file);
 		try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(file))))

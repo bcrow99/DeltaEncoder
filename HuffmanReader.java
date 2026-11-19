@@ -10,7 +10,8 @@ import javax.swing.*;
 // strings), all bands and channels at the same time; then each band's
 // channels are rebuilt from them with the least-squares fit from the rows
 // above (DeltaMapper.getValuesFromRowFitDeltas: the channels at the same
-// time, each a row behind the one before; the bands at the same time), and
+// time, each a row behind the one before; ViewerSupport.lsBandsAtOnce
+// bands at a time), and
 // blue, green and red rebuilt, resized back and packed as SimpleReader2 does.
 // See HuffmanWriter.encode and huffmanCode for the layout.
 /**
@@ -177,8 +178,8 @@ public class HuffmanReader
 	 * Reads a Huffman file from a stream and decodes it: reads it all, then
 	 * decodes every band's channels' deltas at the same time
 	 * (HuffmanWriter.huffmanDecode), then rebuilds each band's channels from
-	 * them (DeltaMapper.getValuesFromRowFitDeltas), the bands at the same
-	 * time; then blue, green and red are rebuilt, resized and shifted.
+	 * them (DeltaMapper.getValuesFromRowFitDeltas), ViewerSupport.lsBandsAtOnce
+	 * bands at a time; then blue, green and red are rebuilt, resized and shifted.
 	 * Leaves the time the reading took in read_time.
 	 *
 	 * @param raw  the stream (from the start of the file)
@@ -216,7 +217,7 @@ public class HuffmanReader
 		read_time = System.nanoTime() - start;
 
 		// Every band's channels' deltas at the same time, then each band's
-		// channels rebuilt, the bands at the same time.
+		// channels rebuilt, ViewerSupport.lsBandsAtOnce bands at a time.
 		int[][][] delta = new int[bands][3][];
 		ViewerSupport.parallel(3 * bands, j ->
 		{
@@ -224,7 +225,7 @@ public class HuffmanReader
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
 			delta[b][i] = HuffmanWriter.huffmanDecode(coded[b][i], w * (y1 - y0));
 		});
-		ViewerSupport.parallel(bands, b ->
+		ViewerSupport.forBands(bands, ViewerSupport.lsBandsAtOnce(bands), b ->
 		{
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
 			int[][] v = DeltaMapper.getValuesFromRowFitDeltas(delta[b], w, y1 - y0, init[b], radius, HuffmanWriter.EVERY);
@@ -236,8 +237,7 @@ public class HuffmanReader
 		for(int i = 0; i < 3; i++) if(HuffmanWriter.CHANNELS[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
 		int[][] bgr = DeltaMapper.getBlueGreenRed(HuffmanWriter.SET_ID, channel[0], channel[1], channel[2]);
 		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize2(bgr[c], w, xdim, ydim));
-		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		image.setRGB(0, 0, xdim, ydim, DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift), 0, xdim);
+		BufferedImage image = ViewerSupport.makeImage(bgr[0], bgr[1], bgr[2], xdim, ydim, pixel_shift);
 		return image;
 	}
 }

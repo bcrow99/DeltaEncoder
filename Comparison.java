@@ -311,10 +311,9 @@ public class Comparison
 
 	static byte[] writeJpeg(Img m, float quality) throws IOException
 	{
-		BufferedImage img = new BufferedImage(m.w, m.h, BufferedImage.TYPE_INT_RGB);
 		int[] p = new int[m.w * m.h];
 		for(int k = 0; k < p.length; k++) p[k] = (m.c[0][k] << 16) | (m.c[1][k] << 8) | m.c[2][k];
-		img.setRGB(0, 0, m.w, m.h, p, 0, m.w);
+		BufferedImage img = ViewerSupport.makeImage(p, m.w, m.h);
 		ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
 		ImageWriteParam param = writer.getDefaultWriteParam();
 		param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);

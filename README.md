@@ -19,7 +19,11 @@ java -jar DeltaEncoder.jar DeltaReader foo        # view a compressed file
 The writers take an image file (PNG, JPEG, GIF or BMP), or open a file chooser if
 you don't give one, and optionally after it the file to save to. **File > Save**
 writes the compressed image to that file, or if none was given to a file called
-`foo` in the current folder; the matching reader opens it.
+`foo` in the current folder; the matching reader opens it. In SimpleWriter,
+SimpleWriter2, HuffmanWriter and PixelWriter, **File > Decode Check** (off unless
+switched on) makes Save also decode what it coded and say whether it comes back
+the same: Save is faster without it, and if a file doesn't decode right in its
+reader, switching it on tells whether the writer or the reader is at fault.
 
 | Writer | Reader |
 |---|---|

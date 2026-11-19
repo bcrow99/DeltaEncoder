@@ -71,8 +71,7 @@ public class PixelReader
 			});
 
 			int[] rgb = decodeRGB();
-			decoded_image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-			decoded_image.setRGB(0, 0, xdim, ydim, rgb, 0, xdim);
+			decoded_image = ViewerSupport.makeImage(rgb, xdim, ydim);
 			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
 		}
 		catch(Exception e)

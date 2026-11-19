@@ -178,15 +178,15 @@ public class SimpleReader2
 	static final int CHUNK = 1 << 16;
 
 	/**
-	 * Reads a Simple 2 file from a stream and decodes it, in stages: the
-	 * bands start decoding at once, each in its own thread (each band's
-	 * channels in threads of their own, each a couple of rows behind the one
-	 * before: a channel's fit and contexts use the ones before it), and each
-	 * channel starts as soon as this thread has read the start of it (its
-	 * rank table), decoding its coded bytes as they arrive, a chunk at a
-	 * time, while the rest are read (ArithmeticMapper.Arriving). Then blue,
-	 * green and red are rebuilt, resized and shifted. Leaves the time the
-	 * reading took in read_time.
+	 * Reads a Simple 2 file from a stream and decodes it, in stages: the bands
+	 * decode in order, ViewerSupport.lsBandsAtOnce of them at a time, each in
+	 * a thread of its own (each band's channels in threads of their own, each
+	 * a couple of rows behind the one before: a channel's fit and contexts use
+	 * the ones before it), and each channel starts as soon as this thread has
+	 * read the start of it (its rank table), decoding its coded bytes as they
+	 * arrive, a chunk at a time, while the rest are read
+	 * (ArithmeticMapper.Arriving). Then blue, green and red are rebuilt,
+	 * resized and shifted. Leaves the time the reading took in read_time.
 	 *
 	 * @param raw  the stream (from the start of the file)
 	 * @param name its name, for messages
@@ -204,22 +204,18 @@ public class SimpleReader2
 		java.util.concurrent.CompletableFuture<DeltaMapper.MixedDeltas>[][] coded = new java.util.concurrent.CompletableFuture[bands][3];
 		for(int b = 0; b < bands; b++) for(int i = 0; i < 3; i++) coded[b][i] = new java.util.concurrent.CompletableFuture<>();
 		Throwable[] failed = new Throwable[1];
-		Thread[] worker = new Thread[bands];
-		for(int b = 0; b < bands; b++)
+		// The bands' threads: ViewerSupport.lsBandsAtOnce of them, each
+		// taking the next band, in order, when it's done with one.
+		Thread[] worker = ViewerSupport.startBandThreads(bands, ViewerSupport.lsBandsAtOnce(bands), fb ->
 		{
-			int fb = b;
-			worker[b] = new Thread(() ->
+			try
 			{
-				try
-				{
-					int y0 = SimpleWriter.bandStart(fb, bands, h), y1 = SimpleWriter.bandStart(fb + 1, bands, h);
-					int[][] v = DeltaMapper.getValuesFromRowFitChannels(coded[fb], w, y1 - y0, init[fb], radius, SimpleWriter2.EVERY)[1];
-					for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
-				}
-				catch(Throwable e) { synchronized(failed) { if(failed[0] == null) failed[0] = e; } }
-			});
-			worker[b].start();
-		}
+				int y0 = SimpleWriter.bandStart(fb, bands, h), y1 = SimpleWriter.bandStart(fb + 1, bands, h);
+				int[][] v = DeltaMapper.getValuesFromRowFitChannels(coded[fb], w, y1 - y0, init[fb], radius, SimpleWriter2.EVERY)[1];
+				for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
+			}
+			catch(Throwable e) { synchronized(failed) { if(failed[0] == null) failed[0] = e; } }
+		});
 		long start = System.nanoTime();
 		java.util.List<ArithmeticMapper.Arriving> arriving = new java.util.ArrayList<>();
 		long[] used = new long[1];   // the bytes read so far
@@ -272,8 +268,7 @@ public class SimpleReader2
 		for(int i = 0; i < 3; i++) if(SimpleWriter2.CHANNELS[i] > 2) for(int k = 0; k < channel[i].length; k++) channel[i][k] += min[i];
 		int[][] bgr = DeltaMapper.getBlueGreenRed(SimpleWriter2.SET_ID, channel[0], channel[1], channel[2]);
 		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize2(bgr[c], w, xdim, ydim));
-		BufferedImage image = new BufferedImage(xdim, ydim, BufferedImage.TYPE_INT_RGB);
-		image.setRGB(0, 0, xdim, ydim, DeltaMapper.getPixel(bgr[0], bgr[1], bgr[2], xdim, pixel_shift), 0, xdim);
+		BufferedImage image = ViewerSupport.makeImage(bgr[0], bgr[1], bgr[2], xdim, ydim, pixel_shift);
 		return image;
 	}
 }
