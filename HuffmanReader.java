@@ -5,7 +5,7 @@ import javax.swing.*;
 // HuffmanReader version 1.0 (reads Huffman format 1 only)
 //
 // Reads HuffmanWriter's files: SimpleReader2 with the Huffman decoding in
-// place of the mixed context decoding. Each band's channels' deltas are
+// place of the context aware decoding. Each band's channels' deltas are
 // decoded (CodeMapper's regular Huffman code, then StringMapper's unary
 // strings), all bands and channels at the same time; then each band's
 // channels are rebuilt from them with the least-squares fit from the rows
@@ -103,23 +103,22 @@ public class HuffmanReader
 				view.show();
 			});
 
-			// Read and decoded twice, the times of both printed: the first
-			// includes compiling the code (the first time it runs in this
-			// JVM), the second is the run time only. The image shows after
-			// the first.
-			long start = System.nanoTime();
+			// Read and decoded twice (ViewerSupport.printRunTimes: the first
+			// decoding in this Java process includes the JIT's warm-up, so the
+			// times are printed apart, the second as the run time). The image
+			// shows after the first.
+			long start = System.nanoTime(), all = start;
 			decoded_image = decodeFile(filename);
 			long first = System.nanoTime() - start, first_read = read_time;
 			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
 			start = System.nanoTime();
 			BufferedImage again = decodeFile(filename);
-			long second = System.nanoTime() - start;
+			long second = System.nanoTime() - start, both = System.nanoTime() - all;
 			int[] p = decoded_image.getRGB(0, 0, xdim, ydim, null, 0, xdim), q = again.getRGB(0, 0, xdim, ydim, null, 0, xdim);
 			if(!java.util.Arrays.equals(p, q)) System.out.println("WARNING: the second decoding differs from the first.");
 			System.out.println("Image rebuilt (" + xdim + " x " + ydim + "); the file read in " + ViewerSupport.formatDuration(first_read) + ", then "
 				+ ViewerSupport.formatDuration(read_time) + ".");
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(first));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(second));
+			ViewerSupport.printRunTimes("HuffmanReader", first, second, both);
 		}
 		catch(Exception e)
 		{

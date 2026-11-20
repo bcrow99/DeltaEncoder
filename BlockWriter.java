@@ -5,12 +5,12 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockWriter version 2.5 (writes Block format 9: mixed context coding with
+// BlockWriter version 2.5 (writes Block format 9: context aware coding with
 // second opinions, a block size per channel, the 225-entry predictor table;
 // or format 10, the same in bands)
 //
 // A writer with one delta type and one entropy coder: the block map (delta
-// type 13) with mixed-context-coded deltas (DeltaMapper.packMixedDeltas)
+// type 13) with context-aware-coded deltas (DeltaMapper.packMixedDeltas)
 // and a coded map. Each block uses one predictor from its channel's set, and a
 // set can be any of the 225 predictors in DeltaMapper.PREDICTOR_TABLE (id
 // 223 is the least-squares predictor, LS: see DeltaMapper.LeastSquares; 224
@@ -37,7 +37,7 @@ public class BlockWriter
 	// FORMAT_VERSION. Bump FORMAT_VERSION in the writer and reader together
 	// whenever the file layout or a coder's output changes.
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
+	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: context aware coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The version written with one band: the layout before bands.
 	 */
@@ -580,7 +580,7 @@ public class BlockWriter
 		 * min, int init, the block map (DeltaMapper.writeMap, type 13; it
 		 * carries the channel's block size and predictor ids; its context lines
 		 * up the previous channel's map, DeltaMapper.alignMap), then the deltas,
-		 * mixed-context coded with the second opinions (DeltaMapper.packMixedDeltas).
+		 * context-aware coded with the second opinions (DeltaMapper.packMixedDeltas).
 		 * Channels 1 and 2 use
 		 * the ones before them as context, so the reader decodes in order.
 		 *

@@ -289,6 +289,31 @@ public class ViewerSupport
 		parallel(at_once, t -> { for(int b = next.getAndIncrement(); b < bands; b = next.getAndIncrement()) body.accept(b); });
 	}
 
+	// The codings (or decodings) that have run in this Java process, by name
+	// (e.g. "GenericWriter Avg Huffman"): see printRunTimes.
+	private static final java.util.Set<String> ran = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+	// Prints the times of the two runs of a coding (or a decoding) that key
+	// names, and returns whether it printed their average. first and second
+	// are each run's time, both a single timing of the two runs together. The
+	// first time it runs in this Java process, Java compiles its code while
+	// it runs (the JIT starts it interpreted, and compiles the busy methods
+	// along the way), so the first run is printed on its own, and the second,
+	// compiled, as the run time. Every time after that both runs are
+	// compiled, so the run time printed is the single timing of the two,
+	// halved: less noise than either run alone.
+	public static boolean printRunTimes(String key, long first, long second, long both)
+	{
+		if(ran.add(key))
+		{
+			System.out.println("First run (includes JIT warm-up): " + formatDuration(first));
+			System.out.println("Run time:                         " + formatDuration(second));
+			return false;
+		}
+		System.out.println("Run time (2 runs timed, halved):  " + formatDuration(both / 2));
+		return true;
+	}
+
 	// Runs body(0..n-1) on the shared pool; exceptions reach the caller.
 	public static void parallel(int n, java.util.function.IntConsumer body)
 	{

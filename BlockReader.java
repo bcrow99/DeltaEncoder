@@ -4,19 +4,19 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 
-// BlockReader version 2.5 (reads Block formats 3 to 10; 5: mixed context
+// BlockReader version 2.5 (reads Block formats 3 to 10; 5: context aware
 // coding, a block size per channel; 6: bands of rows, decoded at the same
 // time; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10:
 // 7 and 8 with the 225-entry predictor table)
 //
 // Reads BlockWriter's files: block map deltas (delta type 13), Context
-// coded (format version 3) or mixed-context coded (versions 4 and 5; in 5
+// coded (format version 3) or context-aware coded (versions 4 and 5; in 5
 // each channel has its own block size). See
 // BlockWriter.SaveHandler.save for the layout.
 public class BlockReader
 {
 	static final char FORMAT_ID      = 'B';
-	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: mixed context coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
+	static final int  FORMAT_VERSION = 10;  // 3: one predictor table (DeltaMapper.PREDICTOR_TABLE_256) and cross-channel block maps; 4: context aware coding; 5: a block size per channel; 6: independently decodable bands; 7 and 8: 5 and 6 with the mixed coder's second opinions; 9 and 10: 7 and 8 with the 225-entry predictor table (DeltaMapper.PREDICTOR_TABLE)
 	/**
 	 * The oldest format version read (the block predictors changed in version 3).
 	 */

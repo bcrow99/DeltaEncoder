@@ -3777,7 +3777,7 @@ public class DeltaMapper
 	// clamp (LeastSquares; the LS_WIDE primitive's value), with no blocks and
 	// no map: per channel only the window radius. The edges are as the block
 	// map's (row 0 horizontal, column 0 vertical, last column horizontal), and
-	// the deltas are mixed-context coded with the second opinions (the
+	// the deltas are context-aware coded with the second opinions (the
 	// prediction is the fit's). surveyWindows picks each channel's radius by
 	// the real coded size.
 
@@ -7365,7 +7365,7 @@ public class DeltaMapper
 	}
 
 	// =========================================================================
-	// Mixed context coding (Block format 4)
+	// Context aware coding (Block format 4)
 	//
 	// The deltas as ranks (as packContextDeltas), coded with a mixture of
 	// adaptive context models. Each model is the context coder's (counts from
@@ -8001,7 +8001,7 @@ public class DeltaMapper
 	}
 
 	/**
-	 * A channel's deltas, mixed-context coded: int min, the rank table (as
+	 * A channel's deltas, context-aware coded: int min, the rank table (as
 	 * {@link #packContextDeltas}), int coded length, coded bytes.
 	 *
 	 * @param delta    the deltas

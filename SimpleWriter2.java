@@ -17,7 +17,7 @@ import javax.swing.*;
 // with none of the pixel's own row, so a reader solves a whole row's fits at
 // the same time before decoding it) with one window radius for every
 // channel and image, solved at every EVERY-th pixel along a row, and the
-// deltas mixed-context coded
+// deltas context-aware coded
 // with the second opinions (DeltaMapper.packMixedDeltas). As in
 // SimpleWriter, a channel's fit uses the channel before it and its contexts
 // the deltas of the channels before it. Nothing is fitted or coded until
@@ -381,25 +381,31 @@ public class SimpleWriter2
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
-			// The image is coded twice and the times of both printed: the first
-			// includes compiling the code (the first time it runs in this JVM),
-			// the second is the run time only. Both leave out the decode check
-			// (if it's on: the Decode Check item), which is timed on its own. Both give the same bytes.
+			// The image is coded twice (ViewerSupport.printRunTimes: the first
+			// Save's first run includes the JIT's warm-up, so its times are printed
+			// apart; after that, the two timed together, halved). Both leave out the
+			// decode check (if it's on: the Decode Check item), which is timed on
+			// its own. Both give the same bytes.
 			File file = new File(output_file);
 			long[] took = new long[2], check = new long[2];
+			long   both;
 			try
 			{
-				byte[] data = null;
+				// Each run timed, and the two together (the decode checks taken
+				// out of both); the bytes compared after them.
+				byte[][] got = new byte[2][];
+				long all = System.nanoTime();
 				for(int pass = 0; pass < 2; pass++)
 				{
 					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 					long start = System.nanoTime();
 					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed(), decode_check);
 					took[pass] = System.nanoTime() - start - check[pass];
-					byte[] got = bytes.toByteArray();
-					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
-					data = got;
+					got[pass] = bytes.toByteArray();
 				}
+				both = System.nanoTime() - all - check[0] - check[1];
+				if(!Arrays.equals(got[0], got[1])) System.out.println("WARNING: the second coding differs from the first.");
+				byte[] data = got[1];
 				try(OutputStream out = new BufferedOutputStream(new FileOutputStream(file))) { out.write(data); }
 			}
 			catch(Exception e)
@@ -413,9 +419,9 @@ public class SimpleWriter2
 			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), SimpleWriter.describeBands(n, rows)));
 			else      System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
 			System.out.println(String.format("Coded %d x %d (%,d pixels)", delta_xdim, rows, (long) delta_xdim * rows));
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
-			System.out.println("Decode check:               " + (decode_check ? ViewerSupport.formatDuration(check[1]) : "off"));
+			boolean averaged = ViewerSupport.printRunTimes("SimpleWriter2", took[0], took[1], both);
+			long    check_time = averaged ? (check[0] + check[1]) / 2 : check[1];
+			System.out.println("Decode check:                     " + (decode_check ? ViewerSupport.formatDuration(check_time) : "off"));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
@@ -431,7 +437,7 @@ public class SimpleWriter2
 	 * coded as an image of its own (the fit and the contexts start again at
 	 * its top): per channel (green, blue-green, red-green), int init, then the
 	 * deltas of the least-squares fit from the rows above (DeltaMapper.RowFit:
-	 * radius RADIUS, solved at every EVERY-th pixel along a row) mixed-context
+	 * radius RADIUS, solved at every EVERY-th pixel along a row) context-aware
 	 * coded with the second opinions (DeltaMapper.packMixedDeltas). Channels 1
 	 * and 2 use the ones before them (their values in the fit, their deltas as
 	 * context), so a band's channels are decoded in order, each a couple of

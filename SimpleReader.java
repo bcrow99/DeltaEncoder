@@ -7,7 +7,7 @@ import javax.swing.*;
 //
 // Reads SimpleWriter's files: every interior pixel predicted by the
 // least-squares fit (the wide clamp) with each channel's window radius, the deltas
-// mixed-context coded with the second opinions, in bands of rows decoded at
+// context-aware coded with the second opinions, in bands of rows decoded at
 // the same time, resized back with ResizeMapper.resize2 (centred). The file
 // is read in stages: each band's channels start decoding as soon as the
 // start of them has been read, and decode their coded bytes as they arrive,
@@ -108,23 +108,22 @@ public class SimpleReader
 				view.show();
 			});
 
-			// Read and decoded twice, the times of both printed: the first
-			// includes compiling the code (the first time it runs in this
-			// JVM), the second is the run time only. The image shows after
-			// the first.
-			long start = System.nanoTime();
+			// Read and decoded twice (ViewerSupport.printRunTimes: the first
+			// decoding in this Java process includes the JIT's warm-up, so the
+			// times are printed apart, the second as the run time). The image
+			// shows after the first.
+			long start = System.nanoTime(), all = start;
 			decoded_image = decodeFile(filename);
 			long first = System.nanoTime() - start, first_read = read_time;
 			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
 			start = System.nanoTime();
 			BufferedImage again = decodeFile(filename);
-			long second = System.nanoTime() - start;
+			long second = System.nanoTime() - start, both = System.nanoTime() - all;
 			int[] p = decoded_image.getRGB(0, 0, xdim, ydim, null, 0, xdim), q = again.getRGB(0, 0, xdim, ydim, null, 0, xdim);
 			if(!java.util.Arrays.equals(p, q)) System.out.println("WARNING: the second decoding differs from the first.");
 			System.out.println("Image rebuilt (" + xdim + " x " + ydim + "); the file read in " + ViewerSupport.formatDuration(first_read) + ", then "
 				+ ViewerSupport.formatDuration(read_time) + ", while decoding.");
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(first));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(second));
+			ViewerSupport.printRunTimes("SimpleReader", first, second, both);
 		}
 		catch(Exception e)
 		{

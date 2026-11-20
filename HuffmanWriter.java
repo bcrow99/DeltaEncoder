@@ -12,7 +12,7 @@ import javax.swing.*;
 // coding: the same channels (green, blue-green and red-green, SET_ID), the
 // same least-squares fit from the rows above (DeltaMapper.RowFit: the window
 // is the RADIUS rows above, solved at every EVERY-th pixel along a row), the
-// same bands, Apply and Save. Then, in place of the mixed context coding,
+// same bands, Apply and Save. Then, in place of the context aware coding,
 // each band's channel's deltas are coded as DeltaWriter2 codes them: unary
 // strings by frequency rank (StringMapper.getStringList), with StringMapper's
 // bit-pair transform kept only if it saves enough (its rule), then a
@@ -22,7 +22,7 @@ import javax.swing.*;
 // than Simple 2 (on the test photos the files are 9-29% bigger), faster to
 // decode. Files are read by HuffmanReader (and NativeEncoder's).
 /**
- * SimpleWriter2 with Huffman coding in place of the mixed context coding
+ * SimpleWriter2 with Huffman coding in place of the context aware coding
  * (see the comment above).
  */
 public class HuffmanWriter
@@ -376,25 +376,31 @@ public class HuffmanWriter
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
-			// The image is coded twice and the times of both printed: the first
-			// includes compiling the code (the first time it runs in this JVM),
-			// the second is the run time only. Both leave out the decode check
-			// (if it's on: the Decode Check item), which is timed on its own. Both give the same bytes.
+			// The image is coded twice (ViewerSupport.printRunTimes: the first
+			// Save's first run includes the JIT's warm-up, so its times are printed
+			// apart; after that, the two timed together, halved). Both leave out the
+			// decode check (if it's on: the Decode Check item), which is timed on
+			// its own. Both give the same bytes.
 			File file = new File(output_file);
 			long[] took = new long[2], check = new long[2];
+			long   both;
 			try
 			{
-				byte[] data = null;
+				// Each run timed, and the two together (the decode checks taken
+				// out of both); the bytes compared after them.
+				byte[][] got = new byte[2][];
+				long all = System.nanoTime();
 				for(int pass = 0; pass < 2; pass++)
 				{
 					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 					long start = System.nanoTime();
 					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed(), decode_check);
 					took[pass] = System.nanoTime() - start - check[pass];
-					byte[] got = bytes.toByteArray();
-					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
-					data = got;
+					got[pass] = bytes.toByteArray();
 				}
+				both = System.nanoTime() - all - check[0] - check[1];
+				if(!Arrays.equals(got[0], got[1])) System.out.println("WARNING: the second coding differs from the first.");
+				byte[] data = got[1];
 				try(OutputStream out = new BufferedOutputStream(new FileOutputStream(file))) { out.write(data); }
 			}
 			catch(Exception e)
@@ -408,9 +414,9 @@ public class HuffmanWriter
 			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), SimpleWriter.describeBands(n, rows)));
 			else      System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
 			System.out.println(String.format("Coded %d x %d (%,d pixels)", delta_xdim, rows, (long) delta_xdim * rows));
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
-			System.out.println("Decode check:               " + (decode_check ? ViewerSupport.formatDuration(check[1]) : "off"));
+			boolean averaged = ViewerSupport.printRunTimes("HuffmanWriter", took[0], took[1], both);
+			long    check_time = averaged ? (check[0] + check[1]) / 2 : check[1];
+			System.out.println("Decode check:                     " + (decode_check ? ViewerSupport.formatDuration(check_time) : "off"));
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();

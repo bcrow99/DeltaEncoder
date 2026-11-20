@@ -13,7 +13,7 @@ import javax.swing.*;
 // time), resized back with ResizeMapper.resize2 (centred). The file's first
 // byte says how its deltas were coded:
 //
-//   Simple 2 ('F', mixed context): the file is read in stages: each band's
+//   Simple 2 ('F', context aware): the file is read in stages: each band's
 //   channels start decoding as soon as the start of them has been read, and
 //   decode their coded bytes as they arrive, while the rest of the file is
 //   read; a band's channels are decoded at the same time, each a couple of
@@ -116,23 +116,22 @@ public class GenericReader
 				view.show();
 			});
 
-			// Read and decoded twice, the times of both printed: the first
-			// includes compiling the code (the first time it runs in this
-			// JVM), the second is the run time only. The image shows after
-			// the first.
-			long start = System.nanoTime();
+			// Read and decoded twice (ViewerSupport.printRunTimes: the first
+			// decoding in this Java process includes the JIT's warm-up, so the
+			// times are printed apart, the second as the run time). The image
+			// shows after the first.
+			long start = System.nanoTime(), all = start;
 			decoded_image = decodeFile(filename);
 			long first = System.nanoTime() - start, first_read = read_time;
 			SwingUtilities.invokeLater(() -> { view.setImage(decoded_image); view.setStatus(null); view.fitAndShrink(); });
 			start = System.nanoTime();
 			BufferedImage again = decodeFile(filename);
-			long second = System.nanoTime() - start;
+			long second = System.nanoTime() - start, both = System.nanoTime() - all;
 			int[] p = decoded_image.getRGB(0, 0, xdim, ydim, null, 0, xdim), q = again.getRGB(0, 0, xdim, ydim, null, 0, xdim);
 			if(!java.util.Arrays.equals(p, q)) System.out.println("WARNING: the second decoding differs from the first.");
 			System.out.println("Image rebuilt (" + xdim + " x " + ydim + "); the file read in " + ViewerSupport.formatDuration(first_read) + ", then "
 				+ ViewerSupport.formatDuration(read_time) + ((entropy_type == GenericWriter.ENTROPY_MIXED) ? ", while decoding." : "."));
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(first));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(second));
+			ViewerSupport.printRunTimes("GenericReader " + GenericWriter.DELTA_NAMES[delta_type] + " " + GenericWriter.ENTROPY_NAMES[entropy_type], first, second, both);
 		}
 		catch(Exception e)
 		{
@@ -250,7 +249,7 @@ public class GenericReader
 	}
 
 	/**
-	 * decode for a Simple 2 file (mixed context): reads it and decodes it into
+	 * decode for a Simple 2 file (context aware): reads it and decodes it into
 	 * channel, in stages. The bands decode in order, in threads of their own:
 	 * all at once with the average deltas, ViewerSupport.lsBandsAtOnce at a
 	 * time with LS (each band's channels in threads of their own, each a

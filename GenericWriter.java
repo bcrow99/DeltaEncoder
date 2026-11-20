@@ -32,7 +32,7 @@ import javax.swing.*;
 //        each pixel from (left + above) / 2), no fit.
 //
 // The Entropy menu chooses the coding:
-//   Mixed context: the deltas mixed-context coded with the second opinions
+//   Context aware: the deltas context-aware coded with the second opinions
 //        (DeltaMapper.packMixedDeltas; a channel's contexts use the deltas
 //        of the channels before it). Simple 2 format: 2 with LS, the same
 //        files as SimpleWriter2; 3 with Avg (the delta type after the Pixel
@@ -48,13 +48,13 @@ import javax.swing.*;
 // HuffmanReader too), and by NativeEncoder's NativeReader: GenericWriter's
 // files are NativeWriter's, byte for byte.
 /**
- * The generic writer: LS or average deltas, mixed context or Huffman coded
+ * The generic writer: LS or average deltas, context aware or Huffman coded
  * (see the comment above).
  */
 public class GenericWriter
 {
 	/**
-	 * A mixed context coded file starts with SIMPLE_ID ('F' = Simple 2
+	 * A context aware coded file starts with SIMPLE_ID ('F' = Simple 2
 	 * format) and its version: SIMPLE_VERSION for the LS deltas,
 	 * SIMPLE_VERSION_DELTA_TYPE for the others. Bump them in the writer and
 	 * reader together whenever the file layout or a coder's output changes.
@@ -87,7 +87,7 @@ public class GenericWriter
 	 */
 	static final int  HUFFMAN_VERSION_DELTA_TYPE = 2;
 	/**
-	 * The entropy types (the Entropy menu): mixed context coding
+	 * The entropy types (the Entropy menu): context aware coding
 	 * (DeltaMapper.packMixedDeltas), the Simple 2 format.
 	 */
 	static final int  ENTROPY_MIXED = 0;
@@ -99,7 +99,7 @@ public class GenericWriter
 	/**
 	 * The Entropy menu's names for them.
 	 */
-	static final String[] ENTROPY_NAMES = {"Mixed context", "Huffman"};
+	static final String[] ENTROPY_NAMES = {"Context aware", "Huffman"};
 	/**
 	 * The delta types (the Delta menu): the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit).
@@ -347,7 +347,7 @@ public class GenericWriter
 			delta_menu.add(item);
 		}
 
-		// Entropy menu: mixed context or Huffman coding. It too only takes
+		// Entropy menu: context aware or Huffman coding. It too only takes
 		// effect at Save.
 		JMenu entropy_menu = new JMenu("Entropy");
 		ButtonGroup entropy_group = new ButtonGroup();
@@ -488,26 +488,31 @@ public class GenericWriter
 		{
 			if(!applied) apply();
 			if(!applied) { ViewerSupport.showError(view.frame, "Nothing saved: the last Apply failed."); return; }
-			// The image is coded twice and the times of both printed: the first
-			// includes compiling the code (the first time it runs in this JVM),
-			// the second is the run time only. Both leave out the decode check
-			// (if it's on: the Decode Check item), which is timed on its own.
-			// Both give the same bytes.
+			// The image is coded twice (ViewerSupport.printRunTimes: the first run
+			// of each coding's first Save includes the JIT's warm-up, so its times
+			// are printed apart; after that, the two timed together, halved). Both
+			// leave out the decode check (if it's on: the Decode Check item), which
+			// is timed on its own. Both give the same bytes.
 			File file = new File(output_file);
 			long[] took = new long[2], check = new long[2];
+			long   both;
 			try
 			{
-				byte[] data = null;
+				// Each run timed, and the two together (the decode checks taken
+				// out of both); the bytes compared after them.
+				byte[][] got = new byte[2][];
+				long all = System.nanoTime();
 				for(int pass = 0; pass < 2; pass++)
 				{
 					ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 					long start = System.nanoTime();
 					check[pass] = encode(new DataOutputStream(bytes), value_list, channel_min, delta_xdim, image_xdim, image_ydim, pixel_shift, pixel_quant, bandsUsed(), delta_type, entropy_type, decode_check);
 					took[pass] = System.nanoTime() - start - check[pass];
-					byte[] got = bytes.toByteArray();
-					if(data != null && !Arrays.equals(data, got)) System.out.println("WARNING: the second coding differs from the first.");
-					data = got;
+					got[pass] = bytes.toByteArray();
 				}
+				both = System.nanoTime() - all - check[0] - check[1];
+				if(!Arrays.equals(got[0], got[1])) System.out.println("WARNING: the second coding differs from the first.");
+				byte[] data = got[1];
 				try(OutputStream out = new BufferedOutputStream(new FileOutputStream(file))) { out.write(data); }
 			}
 			catch(Exception e)
@@ -521,9 +526,9 @@ public class GenericWriter
 			if(n > 1) System.out.println(String.format("Saved %s: %,d bytes (%s)", file.getName(), file.length(), SimpleWriter.describeBands(n, rows)));
 			else      System.out.println(String.format("Saved %s: %,d bytes", file.getName(), file.length()));
 			System.out.println(String.format("Coded %d x %d (%,d pixels), %s deltas, %s", delta_xdim, rows, (long) delta_xdim * rows, DELTA_NAMES[delta_type], ENTROPY_NAMES[entropy_type]));
-			System.out.println("Run time plus compile time: " + ViewerSupport.formatDuration(took[0]));
-			System.out.println("Run time only:              " + ViewerSupport.formatDuration(took[1]));
-			System.out.println("Decode check:               " + (decode_check ? ViewerSupport.formatDuration(check[1]) : "off"));
+			boolean averaged = ViewerSupport.printRunTimes("GenericWriter " + DELTA_NAMES[delta_type] + " " + ENTROPY_NAMES[entropy_type], took[0], took[1], both);
+			long    check_time = averaged ? (check[0] + check[1]) / 2 : check[1];
+			System.out.println("Decode check:                     " + (decode_check ? ViewerSupport.formatDuration(check_time) : "off"));
 			System.out.println("Timeline (run time only):   " + last_timeline);
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
@@ -548,13 +553,13 @@ public class GenericWriter
 	 * SimpleWriter.bandStart(b) to bandStart(b + 1) of the quantized image,
 	 * coded as an image of its own (the fit and the contexts start again at
 	 * its top): per channel (green, blue-green, red-green), int init, then its
-	 * deltas coded: mixed context (DeltaMapper.packMixedDeltas, with the
+	 * deltas coded: context aware (DeltaMapper.packMixedDeltas, with the
 	 * second opinions) or Huffman (HuffmanWriter.huffmanCode, see there for
 	 * the layout). The deltas: LS, from the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit: radius RADIUS, solved at every EVERY-th pixel
 	 * along a row; channels 1 and 2 use the ones before them), or the average
 	 * of the pixels left and above (DeltaMapper.getAverageDeltasFromValues).
-	 * With the mixed context coding a channel's contexts use the deltas of the
+	 * With the context aware coding a channel's contexts use the deltas of the
 	 * channels before it, so a band's channels are decoded in order, each a
 	 * couple of rows behind the one before; the bands can be decoded at the
 	 * same time.
@@ -564,7 +569,7 @@ public class GenericWriter
 	 * only each band's first rows fitted again
 	 * (DeltaMapper.getRowFitBandDeltas). The average deltas are found a band
 	 * at a time, all at once. A channel's coding needs only the deltas of the
-	 * channels before it (mixed context) or its own (Huffman), so its bands
+	 * channels before it (context aware) or its own (Huffman), so its bands
 	 * are coded while the next channel is fitted. Once everything is coded,
 	 * each band's channels are checked by decoding them back, at the same time
 	 * (unless check is false); the time that took is returned, so the coding
@@ -616,7 +621,7 @@ public class GenericWriter
 			// The three channels' fits at the same time: each needs only its
 			// channel and the one before, all known (each still splits into
 			// bands of rows on every core). The coding of channel i waits only
-			// for the fits of channels 0 to i (mixed context: its contexts use
+			// for the fits of channels 0 to i (context aware: its contexts use
 			// their deltas), or its own (Huffman).
 			java.util.List<Future<int[]>> fits = new ArrayList<>();
 			for(int i = 0; i < 3 && delta_type == DELTA_LS; i++)
