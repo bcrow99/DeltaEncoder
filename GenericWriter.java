@@ -529,7 +529,7 @@ public class GenericWriter
 			boolean averaged = ViewerSupport.printRunTimes("GenericWriter " + DELTA_NAMES[delta_type] + " " + ENTROPY_NAMES[entropy_type], took[0], took[1], both);
 			long    check_time = averaged ? (check[0] + check[1]) / 2 : check[1];
 			System.out.println("Decode check:                     " + (decode_check ? ViewerSupport.formatDuration(check_time) : "off"));
-			System.out.println("Timeline (run time only):   " + last_timeline);
+			System.out.println("Timeline (second run):            " + last_timeline);
 			System.out.println("Original compression rate: " + String.format("%.4f", (double) file_length / raw));
 			System.out.println("Output  compression rate:  " + String.format("%.4f", (double) file.length() / raw));
 			System.out.println();
