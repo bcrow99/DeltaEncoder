@@ -213,7 +213,7 @@ public class HuffmanWriter
 		working_image = new BufferedImage(image_xdim, image_ydim, BufferedImage.TYPE_INT_RGB);
 		ViewerSupport.setPixels(working_image, pixel);
 
-		view = new ViewerSupport("Simple Writer 2  " + filename, image_xdim, image_ydim);
+		view = new ViewerSupport("Huffman Writer  " + filename, image_xdim, image_ydim);
 		JFrame   frame    = view.frame;
 		JMenuBar menu_bar = frame.getJMenuBar();
 
