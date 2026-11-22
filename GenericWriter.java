@@ -6,8 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.swing.*;
 
-// GenericWriter version 1.1 (writes Simple 2 formats 2 and 3, Huffman formats 1
-// and 2, and Neighbour Huffman format 1)
+// GenericWriter version 1.2 (writes Simple 2 formats 2 and 3, Huffman formats 3
+// and 4, and Neighbour Huffman format 1)
 //
 // NativeEncoder's NativeWriter in Java alone: the same program and the same
 // files, with nothing in C. SimpleWriter2 and HuffmanWriter in one, with a
@@ -40,9 +40,10 @@ import javax.swing.*;
 //   Huffman: each channel's deltas as HuffmanWriter codes them
 //        (HuffmanWriter.huffmanCode: unary strings by frequency rank, then a
 //        canonical Huffman code over the strings' bytes); no contexts, so a
-//        channel's coding uses no other channel. Huffman format: 1 with LS,
-//        the same files as HuffmanWriter; 2 with Avg. Bigger files (on the
-//        test photos 9-29% with LS), faster to decode.
+//        channel's coding uses no other channel. Huffman format: 3 with LS,
+//        the same files as HuffmanWriter; 4 with Avg (1 and 2 had the code
+//        lengths Deflated: read, not written). Bigger files (on the test
+//        photos 9-29% with LS), faster to decode.
 //   Neighbour Huffman: each channel's deltas Huffman coded with tables chosen
 //        from the neighbours, a run mode and pairs in the quiet parts
 //        (NeighbourMapper.neighbourCode). Neighbour Huffman format ('N') 1,
@@ -84,14 +85,22 @@ public class GenericWriter
 	 */
 	static final char HUFFMAN_ID      = 'H';
 	/**
-	 * The Huffman format's version for the LS deltas: 1 (HuffmanWriter's).
+	 * The Huffman format's version for the LS deltas: 3 (HuffmanWriter's),
+	 * the code lengths coded compactly, with no Deflate
+	 * (NeighbourMapper.packLengths).
 	 */
-	static final int  HUFFMAN_VERSION = 1;
+	static final int  HUFFMAN_VERSION = 3;
 	/**
-	 * The Huffman format with the delta type: version 1 with a byte, the
+	 * The Huffman format with the delta type: version 3 with a byte, the
 	 * delta type, after the Pixel Resolution. Written for the average deltas.
 	 */
-	static final int  HUFFMAN_VERSION_DELTA_TYPE = 2;
+	static final int  HUFFMAN_VERSION_DELTA_TYPE = 4;
+	/**
+	 * The Huffman format's versions before, the same with the code lengths
+	 * Deflated (CodeMapper.packRegularTables): 1 for the LS deltas, 2 with
+	 * the delta type. Read, not written.
+	 */
+	static final int  HUFFMAN_VERSION_DEFLATE = 1, HUFFMAN_VERSION_DEFLATE_DELTA_TYPE = 2;
 	/**
 	 * The entropy types (the Entropy menu): context aware coding
 	 * (DeltaMapper.packMixedDeltas), the Simple 2 format.

@@ -485,13 +485,8 @@ public class NeighbourMapper
 
 	/**
 	 * Writes the tables' code lengths (all TABLES of them, one after another,
-	 * each of its tableSize): coded with the code lengths' own symbols
-	 * (LENGTH_SYMBOLS: a length, the last length again 3 to 6 times, or a run
-	 * of zeros), themselves Huffman coded; first that code's lengths, 4 bits
-	 * each, then the symbols, each followed by its extra bits (2, 3 or 7).
-	 * A run of a length is written as the length, then repeats of 6 (the last
-	 * fewer), with any one or two left over as lengths; zeros as runs of 138
-	 * or fewer, then 10 or fewer, then any one or two left over as zeros.
+	 * each of its tableSize), with writeLengthSymbols (lengths up to
+	 * MAX_CODE_LENGTH).
 	 *
 	 * @param bits   the bit stream
 	 * @param length the tables' code lengths
@@ -502,41 +497,7 @@ public class NeighbourMapper
 		for(int[] l : length) total += l.length;
 		int[] all = new int[total];
 		for(int t = 0, at = 0; t < length.length; at += length[t].length, t++) System.arraycopy(length[t], 0, all, at, length[t].length);
-
-		// The symbols (and their extra bits), then their code.
-		int[] symbol = new int[total], extra = new int[total];
-		int m = 0;
-		for(int i = 0; i < total; )
-		{
-			int v = all[i], run = 1;
-			while(i + run < total && all[i + run] == v) run++;
-			i += run;
-			if(v == 0)
-			{
-				while(run >= 11) { int r = Math.min(run, 138); symbol[m] = LENGTH_MANY_ZEROS; extra[m++] = r - 11; run -= r; }
-				if(run >= 3)     { symbol[m] = LENGTH_ZEROS; extra[m++] = run - 3; run = 0; }
-				while(run > 0)   { symbol[m++] = 0; run--; }
-			}
-			else
-			{
-				symbol[m++] = v;
-				run--;
-				while(run >= 3) { int r = Math.min(run, 6); symbol[m] = LENGTH_REPEAT; extra[m++] = r - 3; run -= r; }
-				while(run > 0)  { symbol[m++] = v; run--; }
-			}
-		}
-		int[] frequency = new int[LENGTH_SYMBOLS];
-		for(int j = 0; j < m; j++) frequency[symbol[j]]++;
-		int[] code_length = codeLengths(frequency, MAX_LENGTH_CODE_LENGTH);
-		for(int s = 0; s < LENGTH_SYMBOLS; s++) bits.write(code_length[s], 4);
-		Table table = new Table(code_length);
-		for(int j = 0; j < m; j++)
-		{
-			table.write(bits, symbol[j]);
-			if(symbol[j] == LENGTH_REPEAT)     bits.write(extra[j], 2);
-			else if(symbol[j] == LENGTH_ZEROS) bits.write(extra[j], 3);
-			else if(symbol[j] == LENGTH_MANY_ZEROS) bits.write(extra[j], 7);
-		}
+		writeLengthSymbols(bits, all, MAX_CODE_LENGTH);
 	}
 
 	/**
@@ -549,25 +510,137 @@ public class NeighbourMapper
 	 */
 	static int[][] readLengths(BitReader bits, int values) throws IOException
 	{
-		int[] code_length = new int[LENGTH_SYMBOLS];
-		for(int s = 0; s < LENGTH_SYMBOLS; s++) code_length[s] = bits.read(4);
-		Table table = new Table(code_length);
 		int[][] length = new int[TABLES][];
 		int total = 0;
 		for(int t = 0; t < TABLES; t++) { length[t] = new int[tableSize(t, values)]; total += length[t].length; }
+		int[] all = readLengthSymbols(bits, total, MAX_CODE_LENGTH);
+		for(int t = 0, at = 0; t < TABLES; at += length[t].length, t++) System.arraycopy(all, at, length[t], 0, length[t].length);
+		return length;
+	}
+
+	/**
+	 * Code lengths (0 to max_length each) written compactly: coded with the
+	 * code lengths' own symbols (max_length + 4 of them: a length, 0 to
+	 * max_length; the last length again, 3 to 6 times, 2 bits more; 3 to 10
+	 * zeros, 3 bits more; 11 to 138 zeros, 7 bits more), themselves Huffman
+	 * coded: first that code's lengths, 4 bits each, then the symbols, each
+	 * followed by its extra bits. A run of a length is written as the
+	 * length, then repeats of 6 (the last fewer), with any one or two left
+	 * over as lengths; zeros as runs of 138 or fewer, then 10 or fewer, then
+	 * any one or two left over as zeros. With max_length MAX_CODE_LENGTH,
+	 * the neighbour Huffman tables' (writeLengths); with
+	 * CodeMapper.REGULAR_MAX_CODE_LENGTH, the Huffman coding's code lengths
+	 * (packLengths).
+	 *
+	 * @param bits       the bit stream
+	 * @param all        the code lengths
+	 * @param max_length the longest length there can be
+	 */
+	static void writeLengthSymbols(BitWriter bits, int[] all, int max_length)
+	{
+		int repeat = max_length + 1, zeros = repeat + 1, many_zeros = zeros + 1, symbols = many_zeros + 1;
+		int total = all.length;
+
+		// The symbols (and their extra bits), then their code.
+		int[] symbol = new int[total], extra = new int[total];
+		int m = 0;
+		for(int i = 0; i < total; )
+		{
+			int v = all[i], run = 1;
+			while(i + run < total && all[i + run] == v) run++;
+			i += run;
+			if(v == 0)
+			{
+				while(run >= 11) { int r = Math.min(run, 138); symbol[m] = many_zeros; extra[m++] = r - 11; run -= r; }
+				if(run >= 3)     { symbol[m] = zeros; extra[m++] = run - 3; run = 0; }
+				while(run > 0)   { symbol[m++] = 0; run--; }
+			}
+			else
+			{
+				symbol[m++] = v;
+				run--;
+				while(run >= 3) { int r = Math.min(run, 6); symbol[m] = repeat; extra[m++] = r - 3; run -= r; }
+				while(run > 0)  { symbol[m++] = v; run--; }
+			}
+		}
+		int[] frequency = new int[symbols];
+		for(int j = 0; j < m; j++) frequency[symbol[j]]++;
+		int[] code_length = codeLengths(frequency, MAX_LENGTH_CODE_LENGTH);
+		for(int s = 0; s < symbols; s++) bits.write(code_length[s], 4);
+		Table table = new Table(code_length);
+		for(int j = 0; j < m; j++)
+		{
+			table.write(bits, symbol[j]);
+			if(symbol[j] == repeat)          bits.write(extra[j], 2);
+			else if(symbol[j] == zeros)      bits.write(extra[j], 3);
+			else if(symbol[j] == many_zeros) bits.write(extra[j], 7);
+		}
+	}
+
+	/**
+	 * Reads total code lengths writeLengthSymbols wrote.
+	 *
+	 * @param bits       the bit stream
+	 * @param total      how many
+	 * @param max_length the longest length there can be (as written)
+	 * @return the code lengths
+	 * @throws IOException if they aren't what writeLengthSymbols writes
+	 */
+	static int[] readLengthSymbols(BitReader bits, int total, int max_length) throws IOException
+	{
+		int repeat = max_length + 1, zeros = repeat + 1, symbols = zeros + 2;
+		int[] code_length = new int[symbols];
+		for(int s = 0; s < symbols; s++) code_length[s] = bits.read(4);
+		Table table = new Table(code_length);
 		int[] all = new int[total];
 		for(int i = 0, last = -1; i < total; )
 		{
 			int s = table.read(bits), run;
-			if(s <= MAX_CODE_LENGTH)      { all[i++] = s; last = s; continue; }
-			if(s == LENGTH_REPEAT)        { if(last < 0) throw new IOException("bad code lengths"); run = 3 + bits.read(2); s = last; }
-			else if(s == LENGTH_ZEROS)    { run = 3 + bits.read(3); s = 0; last = 0; }
-			else                          { run = 11 + bits.read(7); s = 0; last = 0; }
+			if(s <= max_length)  { all[i++] = s; last = s; continue; }
+			if(s == repeat)      { if(last < 0) throw new IOException("bad code lengths"); run = 3 + bits.read(2); s = last; }
+			else if(s == zeros)  { run = 3 + bits.read(3); s = 0; last = 0; }
+			else                 { run = 11 + bits.read(7); s = 0; last = 0; }
 			if(i + run > total || bits.overrun()) throw new IOException("bad code lengths");
 			for(int j = 0; j < run; j++) all[i++] = s;
 		}
-		for(int t = 0, at = 0; t < TABLES; at += length[t].length, t++) System.arraycopy(all, at, length[t], 0, length[t].length);
-		return length;
+		return all;
+	}
+
+	/**
+	 * A code length table written compactly, on its own (writeLengthSymbols:
+	 * no Deflate, so it doesn't depend on a zlib): the Huffman coding's code
+	 * lengths (HuffmanWriter.huffmanCode).
+	 *
+	 * @param lengths    the code lengths
+	 * @param max_length the longest length there can be
+	 * @return the bytes (the last filled out with 0 bits)
+	 */
+	public static byte[] packLengths(byte[] lengths, int max_length)
+	{
+		int[] all = new int[lengths.length];
+		for(int s = 0; s < all.length; s++) all[s] = lengths[s];
+		BitWriter bits = new BitWriter(64);
+		writeLengthSymbols(bits, all, max_length);
+		return bits.toByteArray();
+	}
+
+	/**
+	 * Reads a code length table packLengths wrote.
+	 *
+	 * @param packed     the bytes
+	 * @param size       how many lengths
+	 * @param max_length the longest length there can be (as written)
+	 * @return the code lengths
+	 * @throws IOException if they aren't what packLengths writes
+	 */
+	public static byte[] unpackLengths(byte[] packed, int size, int max_length) throws IOException
+	{
+		BitReader bits = new BitReader(packed);
+		int[] all = readLengthSymbols(bits, size, max_length);
+		if(bits.overrun()) throw new IOException("bad code lengths: they end too soon");
+		byte[] lengths = new byte[size];
+		for(int s = 0; s < size; s++) lengths[s] = (byte) all[s];
+		return lengths;
 	}
 
 	// ---- Tables and bits ------------------------------------------------------

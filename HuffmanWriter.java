@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.swing.*;
 
-// HuffmanWriter version 1.0 (writes Huffman format 1)
+// HuffmanWriter version 1.1 (writes Huffman format 3)
 //
 // HuffmanWriter is SimpleWriter2 (Simple 2 format 2) up to the entropy
 // coding: the same channels (green, blue-green and red-green, SET_ID), the
@@ -34,9 +34,17 @@ public class HuffmanWriter
 	static final char FORMAT_ID      = 'H';
 	/**
 	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or a coder's output changes. 1: the first.
+	 * whenever the file layout or a coder's output changes. 3: the code
+	 * lengths coded compactly, with no Deflate (NeighbourMapper.packLengths),
+	 * so the files don't depend on a zlib. 1: the first, the code lengths
+	 * Deflated (HuffmanReader reads it too). (2 is GenericWriter's version 1
+	 * with the delta type.)
 	 */
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = 3;
+	/**
+	 * The format before, with the code lengths Deflated: read too.
+	 */
+	static final int  FORMAT_VERSION_DEFLATE = 1;
 	/**
 	 * The channel set coded: green, blue-green, red-green (see
 	 * DeltaMapper.getChannels).
@@ -547,8 +555,9 @@ public class HuffmanWriter
 	 * over the string's bytes (CodeMapper's regular Huffman code). Layout:
 	 * int the deltas' minimum, int the unary string's bit length, its rank
 	 * table (DeltaMapper.writeTable), int the (transformed) string's byte
-	 * length, int and the Huffman code lengths (CodeMapper.packRegularTables),
-	 * int and the code. Delta 0 isn't used (the band's first value is
+	 * length, int and the Huffman code lengths (NeighbourMapper.packLengths:
+	 * compactly, with no Deflate; the formats before had them Deflated,
+	 * CodeMapper.packRegularTables), int and the code. Delta 0 isn't used (the band's first value is
 	 * written instead).
 	 *
 	 * @param delta the deltas (not changed)
@@ -565,7 +574,7 @@ public class HuffmanWriter
 		int[]  frequency = ArithmeticMapper.getFrequency(string);
 		byte[] lengths = CodeMapper.getRegularHuffmanLength(frequency);
 		byte[] code    = CodeMapper.packRegularCode(string, lengths);
-		byte[] tables  = CodeMapper.packRegularTables(new byte[][] {lengths}, java.util.zip.Deflater.BEST_COMPRESSION);
+		byte[] tables  = NeighbourMapper.packLengths(lengths, CodeMapper.REGULAR_MAX_CODE_LENGTH);   // (no Deflate)
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		DataOutputStream out = new DataOutputStream(bytes);
 		out.writeInt(min);
@@ -579,7 +588,7 @@ public class HuffmanWriter
 
 	/**
 	 * A channel's Huffman coding as huffmanCode wrote it (read by
-	 * huffmanRead, its code lengths inflated).
+	 * huffmanRead, its code lengths unpacked).
 	 */
 	static final class HuffmanChannel
 	{
@@ -609,6 +618,21 @@ public class HuffmanWriter
 	 */
 	static HuffmanChannel huffmanRead(DataInputStream in) throws IOException
 	{
+		return huffmanRead(in, false);
+	}
+
+	/**
+	 * Reads a channel's coding huffmanCode wrote, or (deflated) the one the
+	 * formats before wrote: the same, the code lengths Deflated
+	 * (CodeMapper.packRegularTables).
+	 *
+	 * @param in       the stream, at the start of it
+	 * @param deflated whether the code lengths are Deflated (a file of the formats before)
+	 * @return the coding
+	 * @throws IOException if the stream fails or isn't what huffmanCode writes
+	 */
+	static HuffmanChannel huffmanRead(DataInputStream in, boolean deflated) throws IOException
+	{
 		HuffmanChannel h = new HuffmanChannel();
 		h.min    = in.readInt();
 		h.bits   = in.readInt();
@@ -616,8 +640,12 @@ public class HuffmanWriter
 		h.length = in.readInt();
 		byte[] tables = new byte[in.readInt()]; in.readFully(tables);
 		h.code   = new byte[in.readInt()]; in.readFully(h.code);
-		try { h.lengths = CodeMapper.unpackRegularTables(tables, 1)[0]; }
-		catch(java.util.zip.DataFormatException e) { throw new IOException("bad Huffman tables", e); }
+		if(!deflated) h.lengths = NeighbourMapper.unpackLengths(tables, 256, CodeMapper.REGULAR_MAX_CODE_LENGTH);
+		else
+		{
+			try { h.lengths = CodeMapper.unpackRegularTables(tables, 1)[0]; }
+			catch(java.util.zip.DataFormatException e) { throw new IOException("bad Huffman tables", e); }
+		}
 		return h;
 	}
 

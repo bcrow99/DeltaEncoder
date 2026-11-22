@@ -2,7 +2,7 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// HuffmanReader version 1.0 (reads Huffman format 1 only)
+// HuffmanReader version 1.1 (reads Huffman formats 3 and 1)
 //
 // Reads HuffmanWriter's files: SimpleReader2 with the Huffman decoding in
 // place of the context aware decoding. Each band's channels' deltas are
@@ -25,11 +25,15 @@ public class HuffmanReader
 	 */
 	static final char FORMAT_ID      = HuffmanWriter.FORMAT_ID;
 	/**
-	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or a coder's output changes. 2: the fit from 6
-	 * neighbours, solved at every 4th pixel (1: 8 neighbours, every 3rd).
+	 * The file format's version (HuffmanWriter.FORMAT_VERSION: 3, the code
+	 * lengths coded compactly); version 1 (the code lengths Deflated) is
+	 * read too.
 	 */
 	static final int  FORMAT_VERSION = HuffmanWriter.FORMAT_VERSION;
+	/**
+	 * Whether the file's code lengths are Deflated (format version 1).
+	 */
+	boolean deflated;
 
 	/**
 	 * The image's width and height, Color Resolution and Pixel Resolution.
@@ -140,10 +144,12 @@ public class HuffmanReader
 	private void readHeader(DataInputStream in, String filename) throws IOException
 	{
 		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		if(id != FORMAT_ID || (version != FORMAT_VERSION && version != HuffmanWriter.FORMAT_VERSION_DEFLATE))
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Huffman file."
-				: filename + " is Huffman format version " + version + "; this reader reads version " + FORMAT_VERSION + " only.");
+				: filename + " is Huffman format version " + version + "; this reader reads versions " + FORMAT_VERSION + " and "
+				  + HuffmanWriter.FORMAT_VERSION_DEFLATE + " only.");
+		deflated = version == HuffmanWriter.FORMAT_VERSION_DEFLATE;
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -209,7 +215,7 @@ public class HuffmanReader
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				coded[b][i] = HuffmanWriter.huffmanRead(bi);
+				coded[b][i] = HuffmanWriter.huffmanRead(bi, deflated);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}

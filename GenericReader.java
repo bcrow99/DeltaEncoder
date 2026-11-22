@@ -2,12 +2,12 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// GenericReader version 1.1 (reads Simple 2 formats 2 and 3, Huffman formats 1
-// and 2, and Neighbour Huffman format 1)
+// GenericReader version 1.2 (reads Simple 2 formats 2 and 3, Huffman formats 1
+// to 4, and Neighbour Huffman format 1)
 //
 // NativeEncoder's NativeReader in Java alone. Reads GenericWriter's files
 // (and NativeWriter's, the same files, and SimpleWriter2's and
-// HuffmanWriter's: Simple 2 format 2 and Huffman format 1): the channels
+// HuffmanWriter's: Simple 2 format 2 and Huffman formats 3 and 1): the channels
 // green, blue-green and red-green (GenericWriter.SET_ID), in bands of rows
 // decoded at the same time (with LS deltas, ViewerSupport.lsBandsAtOnce at a
 // time), resized back with ResizeMapper.resize2 (centred). The file's first
@@ -52,6 +52,11 @@ public class GenericReader
 	 * (Huffman format) or ENTROPY_NEIGHBOUR (Neighbour Huffman format).
 	 */
 	int entropy_type;
+	/**
+	 * A Huffman file's code lengths are Deflated (its versions before
+	 * GenericWriter.HUFFMAN_VERSION).
+	 */
+	boolean huffman_deflated;
 	/**
 	 * Each channel's minimum (added back to the difference channels), in
 	 * coding order.
@@ -166,9 +171,13 @@ public class GenericReader
 		}
 		else if(id == GenericWriter.HUFFMAN_ID)
 		{
+			// The versions before, with the code lengths Deflated, are read
+			// too: as the ones they came before.
 			entropy_type = GenericWriter.ENTROPY_HUFFMAN;
 			ls_version   = GenericWriter.HUFFMAN_VERSION;
 			type_version = GenericWriter.HUFFMAN_VERSION_DELTA_TYPE;
+			huffman_deflated = version == GenericWriter.HUFFMAN_VERSION_DEFLATE || version == GenericWriter.HUFFMAN_VERSION_DEFLATE_DELTA_TYPE;
+			if(huffman_deflated) version += GenericWriter.HUFFMAN_VERSION - GenericWriter.HUFFMAN_VERSION_DEFLATE;
 		}
 		else
 		{
@@ -383,7 +392,7 @@ public class GenericReader
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				coded[b][i] = HuffmanWriter.huffmanRead(bi);
+				coded[b][i] = HuffmanWriter.huffmanRead(bi, huffman_deflated);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}

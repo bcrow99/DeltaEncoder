@@ -52,3 +52,8 @@ symbol (as in lossless JPEG-LS) and other deltas two at a time. Its files are
 smaller than HuffmanWriter's on the test photos (7-12% lossless, 1-5% at the
 default quantization), and with the average deltas it codes and decodes about
 twice as fast. It doesn't use Deflate, so the files don't depend on a zlib.
+
+HuffmanWriter's and GenericWriter's Huffman files (Huffman formats 3 and 4)
+don't use Deflate either: their code lengths are coded the same compact way.
+HuffmanReader, GenericReader and NativeReader still read the earlier versions
+(1 and 2), whose code lengths were Deflated.
