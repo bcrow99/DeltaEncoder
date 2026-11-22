@@ -7412,17 +7412,6 @@ public class DeltaMapper
 	 * The mixing weights sum to 2<sup>MIX_W_BITS</sup>.
 	 */
 	static final int MIX_W_BITS = 16;
-	/**
-	 * The symbols in a block of MixedModels' block sums (fb), and its log 2:
-	 * decoding passes over whole blocks.
-	 */
-	static final int MIX_BLOCK_SHIFT = 3, MIX_BLOCK = 1 << MIX_BLOCK_SHIFT;
-	/**
-	 * MixedModels.rank_average's scale (log 2); above what (16 symbols on
-	 * average) decode makes the block sums, and, once it has, above what (8)
-	 * it passes over blocks first.
-	 */
-	static final int MIX_RANK_SHIFT = 5, MIX_BLOCKS_MAKE = 16 << MIX_RANK_SHIFT, MIX_BLOCKS_FIRST = 8 << MIX_RANK_SHIFT;
 
 
 	/**
@@ -7493,6 +7482,29 @@ public class DeltaMapper
 	static final class MixedModels
 	{
 		/**
+		 * The margins of the divisions done by multiplying by inverses
+		 * (decode2, decode3, update2 and update3, as the C's div_by_inverse):
+		 * a 64-bit division takes many cycles, and decoding a symbol needs
+		 * about ten. num / den, rounded down (num at least 0, den at least
+		 * 1), is (long) (num * (1.0 / den) + eps), exactly, when eps is more
+		 * than the product's rounding error (at most the quotient times
+		 * 2<sup>-52</sup>) and eps plus that error is less than 1 / den: a
+		 * whole quotient q then comes out at least q, and anything less than
+		 * q + 1 (at least 1 / den less) stays under q + 1. EPS_COUNT, for a
+		 * model's scaled counts, cum 2<sup>16</sup> / total, with cum at most
+		 * total, at most 2<sup>16</sup> + CONTEXT_INCREMENT (a context is
+		 * halved past CONTEXT_LIMIT): quotients up to 2<sup>16</sup> (error
+		 * under 2<sup>-36</sup>) and 1 / total over 2<sup>-17</sup>.
+		 * EPS_WEIGHT, for a weight's step, w |q - qm| / (qm MIX_RATE), with w,
+		 * q and qm at most 2<sup>16</sup> and qm at least 1: quotients up to
+		 * 2<sup>27</sup> (error under 2<sup>-25</sup>) and 1 / den over
+		 * 2<sup>-21</sup>. EPS_SCALE, for the weights' scaling, w
+		 * 2<sup>16</sup> / t, with w at most t, their sum, under
+		 * 2<sup>29</sup>: quotients up to 2<sup>16</sup> and 1 / t over
+		 * 2<sup>-29</sup>.
+		 */
+		static final double EPS_COUNT = 1.0 / (1 << 30), EPS_WEIGHT = 1.0 / (1 << 23), EPS_SCALE = 1.0 / (1L << 32);
+		/**
 		 * The number of models: 3, or 2 for the first channel.
 		 */
 		final int m;
@@ -7513,25 +7525,10 @@ public class DeltaMapper
 		 */
 		final int[][] total;
 		/**
-		 * The counts summed by blocks of MIX_BLOCK symbols, by model and
-		 * context, so that decode can pass over whole blocks of symbols: made
-		 * once the decoded symbols have been large (most channels never do, and
-		 * encoding never does), then kept by update.
+		 * 1 / the range coder's total (2<sup>MIX_R_BITS</sup> + n_symbols),
+		 * for RangeDecoder.target(total, inv_total).
 		 */
-		int[][][] fb;
-		/**
-		 * The number of blocks of symbols.
-		 */
-		final int blocks;
-		/**
-		 * The decoded symbols' running average, times 2<sup>MIX_RANK_SHIFT</sup>
-		 * (only to choose how decode searches: any way finds the same symbol).
-		 */
-		long rank_average = 0;
-		/**
-		 * The bottom of the interval of the block passBlocks stopped at.
-		 */
-		long block_lo;
+		final double inv_range_total;
 		/**
 		 * The mixing weights (summing to 2<sup>MIX_W_BITS</sup>).
 		 */
@@ -7541,14 +7538,9 @@ public class DeltaMapper
 		 */
 		final int[] ctx = new int[3];
 		/**
-		 * Each model's scaled count of the symbol just coded.
+		 * Each model's scaled count of the symbol just coded (encode's, for update).
 		 */
 		final long[] q;
-		/**
-		 * Decoding scratch: each model's cumulative count, and its scaled
-		 * cumulative count below and through the symbol being tried.
-		 */
-		final long[] cum, c0, c1;
 		/**
 		 * Per pixel, from the earlier channels: the cross bucket, the forward sum
 		 * (E, SW, S, SE), and the 3x3 cross bucket; filled a row at a time as
@@ -7631,12 +7623,11 @@ public class DeltaMapper
 			total = new int[m][contexts];
 			for(int[][] fm : f) for(int[] fc : fm) Arrays.fill(fc, 1);
 			for(int[] t : total) Arrays.fill(t, n_symbols);
-			blocks = (n_symbols + MIX_BLOCK - 1) / MIX_BLOCK;
 			w = new long[m];
 			Arrays.fill(w, (1L << MIX_W_BITS) / m);
 			w[0] += (1L << MIX_W_BITS) - (1L << MIX_W_BITS) / m * m;
 			q = new long[m];
-			cum = new long[m]; c0 = new long[m]; c1 = new long[m];
+			inv_range_total = 1.0 / ((1L << MIX_R_BITS) + n_symbols);
 			cb = new int[n]; fwd = new int[n]; c9b = new int[n];
 			this.previous = previous;
 			cross = (m == 3) ? new int[n] : null;
@@ -7830,58 +7821,119 @@ public class DeltaMapper
 		}
 
 		/**
-		 * After coding symbol s (with q set): moves the weights, then counts s.
+		 * After coding symbol s (with q set): moves the weights, then counts s
+		 * (update2 or update3, by the number of models).
 		 *
 		 * @param s the symbol
 		 */
 		void update(int s)
 		{
-			long qm = 0;
-			for(int j = 0; j < m; j++) qm += w[j] * q[j];
-			qm >>= MIX_W_BITS;
-			if(qm < 1) qm = 1;
-			long t = 0;
-			for(int j = 0; j < m; j++)
-			{
-				w[j] += w[j] * (q[j] - qm) / (qm * MIX_RATE);
-				if(w[j] < MIX_WMIN) w[j] = MIX_WMIN;
-				t += w[j];
-			}
-			long t2 = 0;
-			int  big = 0;
-			for(int j = 0; j < m; j++)
-			{
-				w[j] = (w[j] << MIX_W_BITS) / t;
-				t2  += w[j];
-				if(w[j] > w[big]) big = j;
-			}
-			w[big] += (1L << MIX_W_BITS) - t2;
-			for(int j = 0; j < m; j++)
-			{
-				int[] fc = f[j][ctx[j]];
-				fc[s] += ArithmeticMapper.CONTEXT_INCREMENT;
-				total[j][ctx[j]] += ArithmeticMapper.CONTEXT_INCREMENT;
-				if(total[j][ctx[j]] > ArithmeticMapper.CONTEXT_LIMIT)
-				{
-					int u = 0;
-					for(int i = 0; i < n_symbols; i++) { fc[i] = (fc[i] + 1) >> 1; u += fc[i]; }
-					total[j][ctx[j]] = u;
-					if(fb != null) blockSums(fc, fb[j][ctx[j]]);
-				}
-				else if(fb != null) fb[j][ctx[j]][s >> MIX_BLOCK_SHIFT] += ArithmeticMapper.CONTEXT_INCREMENT;
-			}
+			if(m == 3) update3(s, q[0], q[1], q[2]);
+			else       update2(s, q[0], q[1]);
 		}
 
 		/**
-		 * Sums one model and context's counts by blocks.
+		 * update with three models, given each one's scaled count of s: each
+		 * weight moved towards the models that gave s more than the mixture
+		 * did (moved), the weights scaled back to 2<sup>MIX_W_BITS</sup>
+		 * (their divisions by multiplying: EPS_SCALE), the rounding's rest
+		 * added to the largest (the first of the largest), then s counted in
+		 * each model's context (count). Written out for three models, as
+		 * decode3 is, so that the weights stay in registers.
 		 *
-		 * @param fc the counts
-		 * @param bc their block sums
+		 * @param s  the symbol
+		 * @param q0 model 0's scaled count of s
+		 * @param q1 model 1's
+		 * @param q2 model 2's
 		 */
-		void blockSums(int[] fc, int[] bc)
+		void update3(int s, long q0, long q1, long q2)
 		{
-			Arrays.fill(bc, 0);
-			for(int i = 0; i < n_symbols; i++) bc[i >> MIX_BLOCK_SHIFT] += fc[i];
+			long w0 = w[0], w1 = w[1], w2 = w[2];
+			long qm = (w0 * q0 + w1 * q1 + w2 * q2) >> MIX_W_BITS;
+			if(qm < 1) qm = 1;
+			double inv_step = 1.0 / (qm * MIX_RATE);
+			w0 = moved(w0, q0, qm, inv_step);
+			w1 = moved(w1, q1, qm, inv_step);
+			w2 = moved(w2, q2, qm, inv_step);
+			double inv_t = 1.0 / (w0 + w1 + w2);
+			w0 = (long) ((w0 << MIX_W_BITS) * inv_t + EPS_SCALE);
+			w1 = (long) ((w1 << MIX_W_BITS) * inv_t + EPS_SCALE);
+			w2 = (long) ((w2 << MIX_W_BITS) * inv_t + EPS_SCALE);
+			long rest = (1L << MIX_W_BITS) - (w0 + w1 + w2);
+			if(w2 > Math.max(w0, w1))  w2 += rest;
+			else if(w1 > w0)           w1 += rest;
+			else                       w0 += rest;
+			w[0] = w0; w[1] = w1; w[2] = w2;
+			count(0, s);
+			count(1, s);
+			count(2, s);
+		}
+
+		/**
+		 * update3 with two models.
+		 *
+		 * @param s  the symbol
+		 * @param q0 model 0's scaled count of s
+		 * @param q1 model 1's
+		 */
+		void update2(int s, long q0, long q1)
+		{
+			long w0 = w[0], w1 = w[1];
+			long qm = (w0 * q0 + w1 * q1) >> MIX_W_BITS;
+			if(qm < 1) qm = 1;
+			double inv_step = 1.0 / (qm * MIX_RATE);
+			w0 = moved(w0, q0, qm, inv_step);
+			w1 = moved(w1, q1, qm, inv_step);
+			double inv_t = 1.0 / (w0 + w1);
+			w0 = (long) ((w0 << MIX_W_BITS) * inv_t + EPS_SCALE);
+			w1 = (long) ((w1 << MIX_W_BITS) * inv_t + EPS_SCALE);
+			long rest = (1L << MIX_W_BITS) - (w0 + w1);
+			if(w1 > w0) w1 += rest;
+			else        w0 += rest;
+			w[0] = w0; w[1] = w1;
+			count(0, s);
+			count(1, s);
+		}
+
+		/**
+		 * A weight moved by its model's scaled count of the symbol, q, against
+		 * the mixture's, qm: w + w (q - qm) / (qm MIX_RATE), the division
+		 * truncated towards zero (worked out on |w (q - qm)| by multiplying:
+		 * EPS_WEIGHT), and at least MIX_WMIN.
+		 *
+		 * @param w        the weight
+		 * @param q        its model's scaled count of the symbol
+		 * @param qm       the mixture's (at least 1)
+		 * @param inv_step 1.0 / (qm MIX_RATE)
+		 * @return the weight moved
+		 */
+		static long moved(long w, long q, long qm, double inv_step)
+		{
+			long num  = w * (q - qm);
+			long step = (long) (Math.abs(num) * inv_step + EPS_WEIGHT);
+			w += (num < 0) ? -step : step;
+			return Math.max(w, MIX_WMIN);
+		}
+
+		/**
+		 * Counts symbol s in model j's context (ctx[j]), halving the context's
+		 * counts (rounding up) once their total passes CONTEXT_LIMIT.
+		 *
+		 * @param j the model
+		 * @param s the symbol
+		 */
+		void count(int j, int s)
+		{
+			int   c  = ctx[j];
+			int[] fc = f[j][c];
+			fc[s] += ArithmeticMapper.CONTEXT_INCREMENT;
+			total[j][c] += ArithmeticMapper.CONTEXT_INCREMENT;
+			if(total[j][c] > ArithmeticMapper.CONTEXT_LIMIT)
+			{
+				int u = 0;
+				for(int i = 0; i < n_symbols; i++) { fc[i] = (fc[i] + 1) >> 1; u += fc[i]; }
+				total[j][c] = u;
+			}
 		}
 
 		/**
@@ -7914,7 +7966,8 @@ public class DeltaMapper
 		}
 
 		/**
-		 * Decodes the symbol at pixel k and updates the models.
+		 * Decodes the symbol at pixel k and updates the models (decode2 or
+		 * decode3, by the number of models).
 		 *
 		 * @param dec the decoder
 		 * @param k   the pixel
@@ -7925,77 +7978,101 @@ public class DeltaMapper
 		int decode(ArithmeticMapper.RangeDecoder dec, int k, int[] d, int[] v)
 		{
 			contexts(k, d, v);
-			long t  = dec.target((1L << MIX_R_BITS) + n_symbols);
-			int  s  = 0;
-			long lo = 0, hi;
-			for(int j = 0; j < m; j++) { cum[j] = 0; c1[j] = 0; }
-			// The symbol is the first whose interval's top is above t (the tops
-			// rise with the symbol), found a symbol at a time; but once the
-			// block sums are made, while the symbols have been large, first
-			// pass over whole blocks to the one holding it (passBlocks).
-			if(fb != null && rank_average > MIX_BLOCKS_FIRST)
+			long t = dec.target((1L << MIX_R_BITS) + n_symbols, inv_range_total);
+			return (m == 3) ? decode3(dec, t) : decode2(dec, t);
+		}
+
+		/**
+		 * decode with three models, given the target t: the symbol is the
+		 * first whose interval's top, hi = (the sum of w<sub>j</sub>
+		 * c<sub>j</sub>) / 2<sup>MIX_W_BITS</sup> + s + 1, is above t, where
+		 * c<sub>j</sub> = cum<sub>j</sub> 2<sup>MIX_R_BITS</sup> /
+		 * total<sub>j</sub> is model j's scaled cumulative count through s.
+		 * First a pass without dividing (as the C's MixedModels_decode): as
+		 * c<sub>j</sub> is at most cum<sub>j</sub> 2<sup>MIX_R_BITS</sup> /
+		 * total<sub>j</sub> unrounded, hi is at most the same sum in floating
+		 * point (its rounding far under the 10<sup>-6</sup> added), so the
+		 * symbols where that bound isn't above t are passed over; then the
+		 * exact hi from there on, each division by multiplying (EPS_COUNT),
+		 * and the interval's bottom, the symbol before's top, the same way.
+		 * The same symbol and interval as dividing a symbol at a time.
+		 * Written out for three models, each model's numbers in variables of
+		 * their own rather than arrays, so that they stay in registers.
+		 *
+		 * @param dec the decoder
+		 * @param t   the target
+		 * @return the symbol
+		 */
+		int decode3(ArithmeticMapper.RangeDecoder dec, long t)
+		{
+			int[]  f0 = f[0][ctx[0]], f1 = f[1][ctx[1]], f2 = f[2][ctx[2]];
+			double i0 = 1.0 / total[0][ctx[0]], i1 = 1.0 / total[1][ctx[1]], i2 = 1.0 / total[2][ctx[2]];
+			long   w0 = w[0], w1 = w[1], w2 = w[2];
+			double one = 1 << MIX_R_BITS, s0 = w0 * one * i0, s1 = w1 * one * i1, s2 = w2 * one * i2;
+			long   cum0 = 0, cum1 = 0, cum2 = 0;
+			int    s = 0, last = n_symbols - 1;
+			for(;; s++)
 			{
-				s  = passBlocks(t);
-				lo = block_lo;
+				cum0 += f0[s]; cum1 += f1[s]; cum2 += f2[s];
+				long bound = (long) ((cum0 * s0 + cum1 * s1 + cum2 * s2) * (1.0 / (1 << MIX_W_BITS)) + 1e-6) + s + 1;
+				if(bound > t || s == last) break;
 			}
+			long hi, c0, c1, c2;
 			while(true)
 			{
-				long a = 0;
-				for(int j = 0; j < m; j++)
-				{
-					c0[j]   = c1[j];
-					cum[j] += f[j][ctx[j]][s];
-					c1[j]   = (cum[j] << MIX_R_BITS) / total[j][ctx[j]];
-					a      += w[j] * c1[j];
-				}
-				hi = (a >> MIX_W_BITS) + s + 1;
-				if(t < hi || s == n_symbols - 1) break;
-				lo = hi;
+				c0 = (long) ((cum0 << MIX_R_BITS) * i0 + EPS_COUNT);
+				c1 = (long) ((cum1 << MIX_R_BITS) * i1 + EPS_COUNT);
+				c2 = (long) ((cum2 << MIX_R_BITS) * i2 + EPS_COUNT);
+				hi = ((w0 * c0 + w1 * c1 + w2 * c2) >> MIX_W_BITS) + s + 1;
+				if(t < hi || s == last) break;
 				s++;
+				cum0 += f0[s]; cum1 += f1[s]; cum2 += f2[s];
 			}
-			for(int j = 0; j < m; j++) q[j] = c1[j] - c0[j];
+			long b0 = (long) (((cum0 - f0[s]) << MIX_R_BITS) * i0 + EPS_COUNT);
+			long b1 = (long) (((cum1 - f1[s]) << MIX_R_BITS) * i1 + EPS_COUNT);
+			long b2 = (long) (((cum2 - f2[s]) << MIX_R_BITS) * i2 + EPS_COUNT);
+			long lo = ((w0 * b0 + w1 * b1 + w2 * b2) >> MIX_W_BITS) + s;
 			dec.decode(lo, hi - lo);
-			update(s);
-			rank_average += s - (rank_average >> MIX_RANK_SHIFT);
-			if(fb == null && rank_average > MIX_BLOCKS_MAKE)
-			{
-				fb = new int[m][total[0].length][blocks];
-				for(int j = 0; j < m; j++) for(int c = 0; c < fb[j].length; c++) blockSums(f[j][c], fb[j][c]);
-			}
+			update3(s, c0 - b0, c1 - b1, c2 - b2);
 			return s;
 		}
 
 		/**
-		 * For decode: passes over whole blocks of symbols while t is above
-		 * their tops (from the block sums: the same numbers as a symbol at a
-		 * time), never the last block (it ends the search), leaving cum and
-		 * c1 as a symbol at a time would at the start of the block it stops at.
-		 * Kept out of decode so that decode stays as small as before for the
-		 * channels that never use it (most of them).
+		 * decode3 with two models.
 		 *
-		 * @param t the target
-		 * @return the first symbol of the block holding the symbol (its interval's bottom in block_lo)
+		 * @param dec the decoder
+		 * @param t   the target
+		 * @return the symbol
 		 */
-		int passBlocks(long t)
+		int decode2(ArithmeticMapper.RangeDecoder dec, long t)
 		{
-			int  s  = 0;
-			long lo = 0;
-			for(int b = 0; b < blocks - 1; b++)
+			int[]  f0 = f[0][ctx[0]], f1 = f[1][ctx[1]];
+			double i0 = 1.0 / total[0][ctx[0]], i1 = 1.0 / total[1][ctx[1]];
+			long   w0 = w[0], w1 = w[1];
+			double one = 1 << MIX_R_BITS, s0 = w0 * one * i0, s1 = w1 * one * i1;
+			long   cum0 = 0, cum1 = 0;
+			int    s = 0, last = n_symbols - 1;
+			for(;; s++)
 			{
-				int  e  = (b << MIX_BLOCK_SHIFT) + MIX_BLOCK - 1;
-				long ab = 0;
-				for(int j = 0; j < m; j++)
-				{
-					c0[j] = ((cum[j] + fb[j][ctx[j]][b]) << MIX_R_BITS) / total[j][ctx[j]];
-					ab   += w[j] * c0[j];
-				}
-				long he = (ab >> MIX_W_BITS) + e + 1;
-				if(t < he) break;
-				for(int j = 0; j < m; j++) { cum[j] += fb[j][ctx[j]][b]; c1[j] = c0[j]; }
-				lo = he;
-				s  = e + 1;
+				cum0 += f0[s]; cum1 += f1[s];
+				long bound = (long) ((cum0 * s0 + cum1 * s1) * (1.0 / (1 << MIX_W_BITS)) + 1e-6) + s + 1;
+				if(bound > t || s == last) break;
 			}
-			block_lo = lo;
+			long hi, c0, c1;
+			while(true)
+			{
+				c0 = (long) ((cum0 << MIX_R_BITS) * i0 + EPS_COUNT);
+				c1 = (long) ((cum1 << MIX_R_BITS) * i1 + EPS_COUNT);
+				hi = ((w0 * c0 + w1 * c1) >> MIX_W_BITS) + s + 1;
+				if(t < hi || s == last) break;
+				s++;
+				cum0 += f0[s]; cum1 += f1[s];
+			}
+			long b0 = (long) (((cum0 - f0[s]) << MIX_R_BITS) * i0 + EPS_COUNT);
+			long b1 = (long) (((cum1 - f1[s]) << MIX_R_BITS) * i1 + EPS_COUNT);
+			long lo = ((w0 * b0 + w1 * b1) >> MIX_W_BITS) + s;
+			dec.decode(lo, hi - lo);
+			update2(s, c0 - b0, c1 - b1);
 			return s;
 		}
 	}

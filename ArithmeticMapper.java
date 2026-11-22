@@ -902,6 +902,18 @@ public class ArithmeticMapper
 	static final class RangeDecoder
 	{
 		/**
+		 * The margins of target(total, inv_total)'s divisions by multiplying
+		 * (DeltaMapper.MixedModels.EPS_COUNT says why a margin makes them
+		 * exact): range / total, with range under 2<sup>40</sup> and total
+		 * at most 2<sup>17</sup>, has quotients under 2<sup>24</sup>
+		 * (rounding error under 2<sup>-28</sup>) and 1 / total at least
+		 * 2<sup>-17</sup>; code / r, with code under range, has a quotient at
+		 * most total (error under 2<sup>-35</sup>) and 1 / r over
+		 * 2<sup>-24</sup>. (In a damaged file code can reach range: a quotient
+		 * that big is past total - 1 either way, and is cut back to it.)
+		 */
+		static final double EPS_RANGE = 1.0 / (1 << 24), EPS_TARGET = 1.0 / (1 << 28);
+		/**
 		 * The coded bytes.
 		 */
 		final byte[] in;
@@ -980,6 +992,23 @@ public class ArithmeticMapper
 		{
 			r = range / total;
 			long t = code / r;
+			return (int) Math.min(t, total - 1);
+		}
+
+		/**
+		 * As {@link #target(long)}, its two divisions done by multiplying by
+		 * inverses, which is faster (as the C's MixedModels_decode): the same
+		 * target. Exact for total at most 2<sup>17</sup> (a mixed coder's: see
+		 * EPS_RANGE and EPS_TARGET).
+		 *
+		 * @param total     the total count
+		 * @param inv_total 1.0 / total
+		 * @return the count the code falls on
+		 */
+		int target(long total, double inv_total)
+		{
+			r = (long) (range * inv_total + EPS_RANGE);
+			long t = (long) (code * (1.0 / r) + EPS_TARGET);
 			return (int) Math.min(t, total - 1);
 		}
 
