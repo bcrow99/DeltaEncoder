@@ -6,8 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.swing.*;
 
-// GenericWriter version 1.0 (writes Simple 2 formats 2 and 3, and Huffman
-// formats 1 and 2)
+// GenericWriter version 1.1 (writes Simple 2 formats 2 and 3, Huffman formats 1
+// and 2, and Neighbour Huffman format 1)
 //
 // NativeEncoder's NativeWriter in Java alone: the same program and the same
 // files, with nothing in C. SimpleWriter2 and HuffmanWriter in one, with a
@@ -43,6 +43,12 @@ import javax.swing.*;
 //        channel's coding uses no other channel. Huffman format: 1 with LS,
 //        the same files as HuffmanWriter; 2 with Avg. Bigger files (on the
 //        test photos 9-29% with LS), faster to decode.
+//   Neighbour Huffman: each channel's deltas Huffman coded with tables chosen
+//        from the neighbours, a run mode and pairs in the quiet parts
+//        (NeighbourMapper.neighbourCode). Neighbour Huffman format ('N') 1,
+//        the same files as HuffmanWriter2.
+//        No contexts across channels, as with Huffman; the format always
+//        has the delta type, after the Pixel Resolution.
 //
 // Files are read by GenericReader (formats 2 and 1 by SimpleReader2 and
 // HuffmanReader too), and by NativeEncoder's NativeReader: GenericWriter's
@@ -97,9 +103,24 @@ public class GenericWriter
 	 */
 	static final int  ENTROPY_HUFFMAN = 1;
 	/**
+	 * The entropy types (the Entropy menu): neighbour Huffman coding
+	 * (NeighbourMapper.neighbourCode), the Neighbour Huffman format.
+	 */
+	static final int  ENTROPY_NEIGHBOUR = 2;
+	/**
 	 * The Entropy menu's names for them.
 	 */
-	static final String[] ENTROPY_NAMES = {"Context aware", "Huffman"};
+	static final String[] ENTROPY_NAMES = {"Context aware", "Huffman", "Neighbour Huffman"};
+	/**
+	 * The formats' ids by entropy type, for the ones after Huffman: the
+	 * Neighbour Huffman format, 'N' (HuffmanWriter2's); its version is
+	 * FORMAT_VERSION, with the delta type always after the Pixel Resolution.
+	 */
+	static final char[] FORMAT_IDS = {0, 0, 'N'};
+	/**
+	 * Its version: 1.
+	 */
+	static final int  FORMAT_VERSION = 1;
 	/**
 	 * The delta types (the Delta menu): the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit).
@@ -195,8 +216,8 @@ public class GenericWriter
 	 */
 	int delta_type  = DELTA_LS;
 	/**
-	 * The coding Save uses: ENTROPY_MIXED or ENTROPY_HUFFMAN (the Entropy
-	 * menu).
+	 * The coding Save uses: ENTROPY_MIXED, ENTROPY_HUFFMAN or
+	 * ENTROPY_NEIGHBOUR (the Entropy menu).
 	 */
 	int entropy_type = ENTROPY_MIXED;
 	/**
@@ -347,8 +368,8 @@ public class GenericWriter
 			delta_menu.add(item);
 		}
 
-		// Entropy menu: context aware or Huffman coding. It too only takes
-		// effect at Save.
+		// Entropy menu: context aware, Huffman or neighbour Huffman coding. It
+		// too only takes effect at Save.
 		JMenu entropy_menu = new JMenu("Entropy");
 		ButtonGroup entropy_group = new ButtonGroup();
 		for(int t = 0; t < ENTROPY_NAMES.length; t++)
@@ -545,17 +566,17 @@ public class GenericWriter
 
 	/**
 	 * Codes the channels and writes the file. Header: the format's id and
-	 * version (SIMPLE_ID or HUFFMAN_ID; the version for LS, or the one with
-	 * the delta type), width, height (unsigned shorts), pixel_shift,
-	 * pixel_quant, the delta type (an unsigned byte, only in the versions with
-	 * it); per channel (coding order) int min; the number of bands n (an
+	 * version (SIMPLE_ID or HUFFMAN_ID: the version for LS, or the one with
+	 * the delta type; or FORMAT_IDS[entropy_type] and FORMAT_VERSION), width,
+	 * height (unsigned shorts), pixel_shift, pixel_quant, the delta type (an
+	 * unsigned byte, only in the versions with it); per channel (coding order) int min; the number of bands n (an
 	 * unsigned byte), n int lengths, and the n bands. Band b is rows
 	 * SimpleWriter.bandStart(b) to bandStart(b + 1) of the quantized image,
 	 * coded as an image of its own (the fit and the contexts start again at
 	 * its top): per channel (green, blue-green, red-green), int init, then its
 	 * deltas coded: context aware (DeltaMapper.packMixedDeltas, with the
-	 * second opinions) or Huffman (HuffmanWriter.huffmanCode, see there for
-	 * the layout). The deltas: LS, from the least-squares fit from the rows
+	 * second opinions), or on its own (codeChannel: Huffman or neighbour
+	 * Huffman; see there). The deltas: LS, from the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit: radius RADIUS, solved at every EVERY-th pixel
 	 * along a row; channels 1 and 2 use the ones before them), or the average
 	 * of the pixels left and above (DeltaMapper.getAverageDeltasFromValues).
@@ -585,7 +606,7 @@ public class GenericWriter
 	 * @param pixel_quant  the Pixel Resolution
 	 * @param n            the number of bands
 	 * @param delta_type   DELTA_LS or DELTA_AVERAGE
-	 * @param entropy_type ENTROPY_MIXED or ENTROPY_HUFFMAN
+	 * @param entropy_type ENTROPY_MIXED, ENTROPY_HUFFMAN or ENTROPY_NEIGHBOUR
 	 * @param check        whether to check the coding by decoding it back (the Decode Check menu item)
 	 * @return the time the decode check took, in nanoseconds (0 without it)
 	 * @throws IOException if the stream fails
@@ -593,7 +614,7 @@ public class GenericWriter
 	static long encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n,
 	                   int delta_type, int entropy_type, boolean check) throws IOException
 	{
-		boolean huffman = entropy_type == ENTROPY_HUFFMAN;
+		boolean alone = entropy_type != ENTROPY_MIXED;   // each channel coded on its own
 		long check_time = 0, start = System.nanoTime();
 		long[] fit_done = new long[3], code_done = new long[3];   // when each channel's deltas, and its last band's coding, were done
 		int rows = value[0].length / xdim;
@@ -655,7 +676,7 @@ public class GenericWriter
 					int fb = b;
 					jobs.add(coder.submit(() ->
 					{
-						if(huffman) coded[fb][fi] = HuffmanWriter.huffmanCode(d[fb][fi]);
+						if(alone) coded[fb][fi] = codeChannel(entropy_type, d[fb][fi], xdim);
 						else
 						{
 							int     y0 = SimpleWriter.bandStart(fb, n, rows), y1 = SimpleWriter.bandStart(fb + 1, n, rows);
@@ -682,9 +703,10 @@ public class GenericWriter
 					{
 						int[] dd = d[fb][fi];
 						boolean same;
-						if(huffman)
+						if(alone)
 						{
-							int[] back = HuffmanWriter.huffmanDecode(new DataInputStream(new ByteArrayInputStream(coded[fb][fi])), dd.length);
+							int[] back = decodeChannel(entropy_type, readChannel(entropy_type, new DataInputStream(new ByteArrayInputStream(coded[fb][fi]))),
+							                           xdim, dd.length / xdim);
 							// (Delta 0 isn't coded: the band's first value, init, is written instead.)
 							same = back.length == dd.length;
 							for(int k = 1; k < dd.length && same; k++) same = back[k] == dd[k];
@@ -720,16 +742,79 @@ public class GenericWriter
 			for(int i = 0; i < 3; i++) { bo.writeInt(value[i][y0 * xdim]); bo.write(coded[b][i]); }
 			band[b] = bytes.toByteArray();
 		}
-		if(huffman) { out.writeByte(HUFFMAN_ID); out.writeByte((delta_type == DELTA_LS) ? HUFFMAN_VERSION : HUFFMAN_VERSION_DELTA_TYPE); }
-		else        { out.writeByte(SIMPLE_ID);  out.writeByte((delta_type == DELTA_LS) ? SIMPLE_VERSION  : SIMPLE_VERSION_DELTA_TYPE); }
+		boolean with_type = delta_type != DELTA_LS;
+		if(entropy_type == ENTROPY_HUFFMAN)    { out.writeByte(HUFFMAN_ID); out.writeByte(with_type ? HUFFMAN_VERSION_DELTA_TYPE : HUFFMAN_VERSION); }
+		else if(entropy_type == ENTROPY_MIXED) { out.writeByte(SIMPLE_ID);  out.writeByte(with_type ? SIMPLE_VERSION_DELTA_TYPE  : SIMPLE_VERSION); }
+		else                                   { out.writeByte(FORMAT_IDS[entropy_type]); out.writeByte(FORMAT_VERSION); with_type = true; }
 		out.writeShort(image_xdim); out.writeShort(image_ydim);
 		out.writeByte(pixel_shift); out.writeByte(pixel_quant);
-		if(delta_type != DELTA_LS) out.writeByte(delta_type);
+		if(with_type) out.writeByte(delta_type);
 		for(int i = 0; i < 3; i++) out.writeInt(min[i]);
 		out.writeByte(n);
 		for(int b = 0; b < n; b++) out.writeInt(band[b].length);
 		for(int b = 0; b < n; b++) out.write(band[b]);
 		return check_time;
+	}
+
+	// ---- The codings that code a channel on its own --------------------------
+
+	/**
+	 * A channel's deltas coded on their own: Huffman (HuffmanWriter.huffmanCode) or neighbour
+	 * Huffman (NeighbourMapper.neighbourCode); see there for the layouts.
+	 *
+	 * @param entropy_type the coding (not ENTROPY_MIXED)
+	 * @param delta        the deltas
+	 * @param xdim         their width
+	 * @return the coded bytes
+	 * @throws IOException never in practice (a byte stream)
+	 */
+	static byte[] codeChannel(int entropy_type, int[] delta, int xdim) throws IOException
+	{
+		switch(entropy_type)
+		{
+			case ENTROPY_HUFFMAN:         return HuffmanWriter.huffmanCode(delta);
+			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourCode(delta, xdim);
+			default: throw new IllegalArgumentException("not a coding of a channel on its own: " + entropy_type);
+		}
+	}
+
+	/**
+	 * Reads a channel's coding codeChannel wrote (the coded bytes, read into
+	 * the coding's own form, to be decoded by decodeChannel).
+	 *
+	 * @param entropy_type the coding (not ENTROPY_MIXED)
+	 * @param in           the stream, at the start of it
+	 * @return the coding
+	 * @throws IOException if the stream fails or isn't what codeChannel writes
+	 */
+	static Object readChannel(int entropy_type, DataInputStream in) throws IOException
+	{
+		switch(entropy_type)
+		{
+			case ENTROPY_HUFFMAN:         return HuffmanWriter.huffmanRead(in);
+			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourRead(in);
+			default: throw new IllegalArgumentException("not a coding of a channel on its own: " + entropy_type);
+		}
+	}
+
+	/**
+	 * A channel's deltas from its coding (readChannel's).
+	 *
+	 * @param entropy_type the coding (not ENTROPY_MIXED)
+	 * @param coding       readChannel's result
+	 * @param xdim         the width
+	 * @param ydim         the band's height
+	 * @return the deltas (delta 0 is 0)
+	 * @throws IOException if the coding isn't what codeChannel writes
+	 */
+	static int[] decodeChannel(int entropy_type, Object coding, int xdim, int ydim) throws IOException
+	{
+		switch(entropy_type)
+		{
+			case ENTROPY_HUFFMAN:         return HuffmanWriter.huffmanDecode((HuffmanWriter.HuffmanChannel) coding, xdim * ydim);
+			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourDecode((NeighbourMapper.NeighbourChannel) coding, xdim, ydim);
+			default: throw new IllegalArgumentException("not a coding of a channel on its own: " + entropy_type);
+		}
 	}
 
 	// ---- Huffman coding -----------------------------------------------------

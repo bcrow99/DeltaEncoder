@@ -2,8 +2,8 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// GenericReader version 1.0 (reads Simple 2 formats 2 and 3, and Huffman
-// formats 1 and 2)
+// GenericReader version 1.1 (reads Simple 2 formats 2 and 3, Huffman formats 1
+// and 2, and Neighbour Huffman format 1)
 //
 // NativeEncoder's NativeReader in Java alone. Reads GenericWriter's files
 // (and NativeWriter's, the same files, and SimpleWriter2's and
@@ -22,6 +22,10 @@ import javax.swing.*;
 //   Huffman ('H'): the file is read, then each band's channels' deltas are
 //   decoded (HuffmanWriter.huffmanDecode) and the channels rebuilt from them,
 //   the bands at the same time (LS: ViewerSupport.lsBandsAtOnce at a time).
+//
+//   Neighbour Huffman ('N'): as Huffman, the file is read, then each band's
+//   channels' deltas are decoded (NeighbourMapper.neighbourDecode) and the
+//   channels rebuilt from them.
 //
 // The deltas: LS, every interior pixel predicted by the least-squares fit
 // from the rows above (DeltaMapper.RowFit, window radius GenericWriter.RADIUS,
@@ -44,8 +48,8 @@ public class GenericReader
 	 */
 	int delta_type;
 	/**
-	 * The coding: GenericWriter.ENTROPY_MIXED (Simple 2 format) or
-	 * ENTROPY_HUFFMAN (Huffman format).
+	 * The coding: GenericWriter.ENTROPY_MIXED (Simple 2 format), ENTROPY_HUFFMAN
+	 * (Huffman format) or ENTROPY_NEIGHBOUR (Neighbour Huffman format).
 	 */
 	int entropy_type;
 	/**
@@ -166,11 +170,19 @@ public class GenericReader
 			ls_version   = GenericWriter.HUFFMAN_VERSION;
 			type_version = GenericWriter.HUFFMAN_VERSION_DELTA_TYPE;
 		}
-		else throw new IOException(filename + " is neither a Simple 2 nor a Huffman file.");
-		String format = (id == GenericWriter.SIMPLE_ID) ? "Simple 2" : "Huffman";
+		else
+		{
+			// Neighbour Huffman: one version, the delta type always there.
+			entropy_type = -1;
+			for(int t = 0; t < GenericWriter.FORMAT_IDS.length; t++) if(GenericWriter.FORMAT_IDS[t] != 0 && id == GenericWriter.FORMAT_IDS[t]) entropy_type = t;
+			if(entropy_type < 0) throw new IOException(filename + " is not a file GenericWriter writes.");
+			ls_version   = -1;
+			type_version = GenericWriter.FORMAT_VERSION;
+		}
+		String format = (id == GenericWriter.SIMPLE_ID) ? "Simple 2" : (id == GenericWriter.HUFFMAN_ID) ? "Huffman" : GenericWriter.ENTROPY_NAMES[entropy_type];
 		if(version != ls_version && version != type_version)
-			throw new IOException(filename + " is " + format + " format version " + version + "; this reader reads versions " + ls_version + " and "
-			                      + type_version + " only.");
+			throw new IOException(filename + " is " + format + " format version " + version + "; this reader reads "
+			                      + ((ls_version < 0) ? "version " + type_version : "versions " + ls_version + " and " + type_version) + " only.");
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -238,7 +250,8 @@ public class GenericReader
 		int     w = size[0];
 		int[][] channel = new int[3][w * size[1]];
 		if(entropy_type == GenericWriter.ENTROPY_MIXED) decodeMixed(raw, name, w, size[1], channel);
-		else                                           decodeHuffman(raw, name, w, size[1], channel);
+		else if(entropy_type == GenericWriter.ENTROPY_HUFFMAN) decodeHuffman(raw, name, w, size[1], channel);
+		else                                           decodeAlone(raw, name, w, size[1], channel);
 
 		// The minimums are added back to the difference channels, then blue,
 		// green and red rebuilt, resized back and packed.
@@ -397,6 +410,66 @@ public class GenericReader
 			int[][] delta = new int[3][];
 			ViewerSupport.parallel(3, i -> delta[i] = HuffmanWriter.huffmanDecode(coded[b][i], w * (y1 - y0)));
 			int[][] v = DeltaMapper.getValuesFromRowFitDeltas(delta, w, y1 - y0, init[b], radius, GenericWriter.EVERY);
+			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
+		});
+	}
+
+	/**
+	 * decode for a Neighbour Huffman file: reads it all, then decodes it into
+	 * channel: every band's channels' deltas decoded at the same time
+	 * (GenericWriter.decodeChannel), then each band's channels rebuilt from them,
+	 * with the average deltas each on its own (at the same time as the
+	 * decoding), with LS by DeltaMapper.getValuesFromRowFitDeltas,
+	 * ViewerSupport.lsBandsAtOnce bands at a time. Leaves the time the reading took in read_time.
+	 *
+	 * @param raw     the stream (from the start of the file)
+	 * @param name    its name, for messages
+	 * @param w       the quantized width
+	 * @param h       the quantized height
+	 * @param channel gets the channels (w * h each)
+	 * @throws IOException if it can't be read, or isn't the file the header was read from
+	 */
+	private void decodeAlone(InputStream raw, String name, int w, int h, int[][] channel) throws IOException
+	{
+		int[]      radius = {GenericWriter.RADIUS, GenericWriter.RADIUS, GenericWriter.RADIUS};
+		int[][]    init = new int[bands][3];
+		Object[][] coded = new Object[bands][3];
+		long start = System.nanoTime();
+		DataInputStream in = new DataInputStream(new BufferedInputStream(raw, CHUNK));
+		checkHeader(in, name);
+		for(int b = 0; b < bands; b++)
+		{
+			byte[] band = new byte[length[b]];
+			in.readFully(band);
+			DataInputStream bi = new DataInputStream(new ByteArrayInputStream(band));
+			// Each channel: init, then its coding's bytes.
+			for(int i = 0; i < 3; i++)
+			{
+				init[b][i] = bi.readInt();
+				coded[b][i] = GenericWriter.readChannel(entropy_type, bi);
+			}
+			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
+		}
+		read_time = System.nanoTime() - start;
+
+		// Every band's channels' deltas at the same time; with the average
+		// deltas, each channel rebuilt straight away, into the channel.
+		int[][][] delta = new int[bands][3][];
+		ViewerSupport.parallel(bands * 3, job ->
+		{
+			int b = job / 3, i = job % 3;
+			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+			try { delta[b][i] = GenericWriter.decodeChannel(entropy_type, coded[b][i], w, y1 - y0); }
+			catch(IOException e) { throw new UncheckedIOException(e); }
+			if(delta_type == GenericWriter.DELTA_AVERAGE)
+				DeltaMapper.getValuesFromAverageDeltas(delta[b][i], w, y1 - y0, init[b][i], channel[i], y0 * w);
+		});
+
+		// The fit's deltas: each band's channels rebuilt, ViewerSupport.lsBandsAtOnce bands at a time.
+		if(delta_type == GenericWriter.DELTA_LS) ViewerSupport.forBands(bands, ViewerSupport.lsBandsAtOnce(bands), b ->
+		{
+			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+			int[][] v = DeltaMapper.getValuesFromRowFitDeltas(delta[b], w, y1 - y0, init[b], radius, GenericWriter.EVERY);
 			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
 		});
 	}

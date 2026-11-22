@@ -40,7 +40,8 @@ HuffmanWriter's codings in one program (the **Entropy** menu), each with the
 least-squares deltas or the average filter (the **Delta** menu), in up to 64
 bands. They write and read the same files as NativeWriter and NativeReader, byte
 for byte; with the least-squares deltas those are SimpleWriter2's and
-HuffmanWriter's files, so GenericReader opens those too.
+HuffmanWriter's files, so GenericReader opens those too. The Entropy menu also
+has Neighbour Huffman, HuffmanWriter2's coding (and files).
 
 HuffmanWriter2 and HuffmanReader2 have a Huffman coding of their own: the
 deltas (least-squares or average, the **Delta** menu) are coded directly, with

@@ -5,7 +5,7 @@ import javax.swing.*;
 // HuffmanReader2 version 1.0 (reads Neighbour Huffman format 1 only)
 //
 // Reads HuffmanWriter2's files: HuffmanReader with the neighbour Huffman
-// decoding (HuffmanWriter2.neighbourDecode) in place of the unary strings,
+// decoding (NeighbourMapper.neighbourDecode) in place of the unary strings,
 // and either delta type. With the LS deltas, each band's channels' deltas
 // are decoded, all bands and channels at the same time, then each band's
 // channels are rebuilt from them with the least-squares fit from the rows
@@ -14,7 +14,7 @@ import javax.swing.*;
 // bands at a time); with the average deltas, every band's channels are
 // decoded and rebuilt, each on its own, all at the same time. Then blue,
 // green and red are rebuilt, resized back and packed as HuffmanReader does.
-// See HuffmanWriter2.encode and neighbourCode for the layout.
+// See HuffmanWriter2.encode and NeighbourMapper.neighbourCode for the layout.
 /**
  * Reads HuffmanWriter2's files (see the comment above).
  */
@@ -181,7 +181,7 @@ public class HuffmanReader2
 	/**
 	 * Reads a Neighbour Huffman file from a stream and decodes it: reads it
 	 * all, then (LS deltas) decodes every band's channels' deltas at the same
-	 * time (HuffmanWriter2.neighbourDecode) and rebuilds each band's channels
+	 * time (NeighbourMapper.neighbourDecode) and rebuilds each band's channels
 	 * from them (DeltaMapper.getValuesFromRowFitDeltas),
 	 * ViewerSupport.lsBandsAtOnce bands at a time, or (average deltas)
 	 * decodes and rebuilds every band's channels at the same time; then blue,
@@ -200,7 +200,7 @@ public class HuffmanReader2
 		int[]   radius = {HuffmanWriter2.RADIUS, HuffmanWriter2.RADIUS, HuffmanWriter2.RADIUS};
 		int[][] channel = new int[3][w * h];
 		int[][] init = new int[bands][3];
-		HuffmanWriter2.NeighbourChannel[][] coded = new HuffmanWriter2.NeighbourChannel[bands][3];
+		NeighbourMapper.NeighbourChannel[][] coded = new NeighbourMapper.NeighbourChannel[bands][3];
 		long start = System.nanoTime();
 		DataInputStream in = new DataInputStream(new BufferedInputStream(raw, CHUNK));
 		int xd = xdim, yd = ydim, nb = bands, dt = delta_type;
@@ -216,7 +216,7 @@ public class HuffmanReader2
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				coded[b][i] = HuffmanWriter2.neighbourRead(bi);
+				coded[b][i] = NeighbourMapper.neighbourRead(bi);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}
@@ -263,7 +263,7 @@ public class HuffmanReader2
 	}
 
 	/**
-	 * A band's channel's deltas (HuffmanWriter2.neighbourDecode), its failure
+	 * A band's channel's deltas (NeighbourMapper.neighbourDecode), its failure
 	 * passed on unchecked (the decoding runs in ViewerSupport.parallel's
 	 * jobs).
 	 *
@@ -272,9 +272,9 @@ public class HuffmanReader2
 	 * @param ydim the band's height
 	 * @return the deltas
 	 */
-	private static int[] decodeDeltas(HuffmanWriter2.NeighbourChannel h, int xdim, int ydim)
+	private static int[] decodeDeltas(NeighbourMapper.NeighbourChannel h, int xdim, int ydim)
 	{
-		try { return HuffmanWriter2.neighbourDecode(h, xdim, ydim); }
+		try { return NeighbourMapper.neighbourDecode(h, xdim, ydim); }
 		catch(IOException e) { throw new UncheckedIOException(e); }
 	}
 }
