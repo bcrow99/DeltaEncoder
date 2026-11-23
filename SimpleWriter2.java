@@ -444,10 +444,12 @@ public class SimpleWriter2
 	 * rows behind the one before; the bands can be decoded at the same time.
 	 * <p>
 	 * Each channel is fitted once over the whole image (the fit splits itself
-	 * across the cores); the bands' deltas come from it, with only each band's
-	 * first rows fitted again (DeltaMapper.getRowFitBandDeltas), the bands at
-	 * the same time. A channel's coding needs only the deltas of the channels
-	 * before it, so its bands are coded while the next channel is fitted. Once
+	 * across the cores), the three channels at the same time (each needs only
+	 * its channel and the one before, all known: as GenericWriter.encode);
+	 * the bands' deltas come from it, with only each band's first rows fitted
+	 * again (DeltaMapper.getRowFitBandDeltas), the bands at the same time. A
+	 * channel's coding needs only the deltas of the channels before it, so its
+	 * bands are coded while the later channels' fits finish. Once
 	 * everything is coded, if check is set, each band's channels are checked
 	 * by decoding them back, at the same time; the time that took is returned,
 	 * so the coding can be timed without it.
@@ -472,14 +474,24 @@ public class SimpleWriter2
 		int[][][]  d = new int[n][3][];      // [band][channel]
 		byte[][][] coded = new byte[n][3][];
 		ExecutorService coder = Executors.newFixedThreadPool(Math.max(1, Math.min(3 * n, Runtime.getRuntime().availableProcessors())));
+		ExecutorService fitter = Executors.newFixedThreadPool(3);
 		java.util.List<Future<?>> jobs = new ArrayList<>();
 		try
 		{
+			// The three channels' fits at the same time; the coding of channel
+			// i waits only for the fits of channels 0 to i (its contexts use
+			// their deltas).
+			java.util.List<Future<int[]>> fits = new ArrayList<>();
+			for(int i = 0; i < 3; i++)
+			{
+				int[] v = value[i], ref = (i > 0) ? value[i - 1] : null;
+				fits.add(fitter.submit(() -> DeltaMapper.getRowFitDeltas(v, ref, xdim, rows, RADIUS, EVERY)));
+			}
 			for(int i = 0; i < 3; i++)
 			{
 				int   fi = i;
 				int[] ref = (i > 0) ? value[i - 1] : null;
-				int[] whole = DeltaMapper.getRowFitDeltas(value[i], ref, xdim, rows, RADIUS, EVERY);
+				int[] whole = result(fits.get(i));
 				// Each band's deltas from the whole channel's: only its first
 				// rows fitted again, all the bands at the same time.
 				if(n == 1) d[0][i] = whole;
@@ -530,7 +542,7 @@ public class SimpleWriter2
 				check_time = System.nanoTime() - check_start;
 			}
 		}
-		finally { coder.shutdownNow(); }
+		finally { coder.shutdownNow(); fitter.shutdownNow(); }
 
 		byte[][] band = new byte[n][];
 		for(int b = 0; b < n; b++)
@@ -559,18 +571,29 @@ public class SimpleWriter2
 	 */
 	private static void waitFor(java.util.List<Future<?>> jobs) throws IOException
 	{
-		for(Future<?> f : jobs)
+		for(Future<?> f : jobs) result(f);
+	}
+
+	/**
+	 * A job's result, waiting for it; if it failed, its failure is thrown
+	 * as waitFor throws it.
+	 *
+	 * @param job the job
+	 * @param <T> its result's type
+	 * @return its result
+	 * @throws IOException if it failed with one, or the wait was interrupted
+	 */
+	private static <T> T result(Future<T> job) throws IOException
+	{
+		try { return job.get(); }
+		catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException(e); }
+		catch(ExecutionException e)
 		{
-			try { f.get(); }
-			catch(InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException(e); }
-			catch(ExecutionException e)
-			{
-				Throwable c = e.getCause();
-				if(c instanceof IOException) throw (IOException) c;
-				if(c instanceof RuntimeException) throw (RuntimeException) c;
-				if(c instanceof Error) throw (Error) c;
-				throw new IOException(c);
-			}
+			Throwable c = e.getCause();
+			if(c instanceof IOException) throw (IOException) c;
+			if(c instanceof RuntimeException) throw (RuntimeException) c;
+			if(c instanceof Error) throw (Error) c;
+			throw new IOException(c);
 		}
 	}
 }
