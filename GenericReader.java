@@ -2,8 +2,8 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// GenericReader version 1.2 (reads Simple 2 formats 2 and 3, Huffman formats 1
-// to 4, and Neighbour Huffman format 1)
+// GenericReader version 1.3 (reads Simple 2 formats 2 and 3, Context tables
+// format 1, Huffman formats 1 to 4, and Neighbour Huffman formats 1 to 3)
 //
 // NativeEncoder's NativeReader in Java alone. Reads GenericWriter's files
 // (and NativeWriter's, the same files, and SimpleWriter2's and
@@ -18,6 +18,12 @@ import javax.swing.*;
 //   decode their coded bytes as they arrive, while the rest of the file is
 //   read; a band's channels are decoded at the same time, each a couple of
 //   rows behind the one before (its contexts use their deltas).
+//
+//   Context tables ('T'): the file is read, then each band's channels are
+//   decoded as they're rebuilt, a band's channels at the same time, each a
+//   couple of rows behind the one before (as context aware: its contexts use
+//   their deltas), the bands at the same time (LS: ViewerSupport.lsBandsAtOnce
+//   at a time).
 //
 //   Huffman ('H'): the file is read, then each band's channels' deltas are
 //   decoded (HuffmanWriter.huffmanDecode) and the channels rebuilt from them,
@@ -48,8 +54,9 @@ public class GenericReader
 	 */
 	int delta_type;
 	/**
-	 * The coding: GenericWriter.ENTROPY_MIXED (Simple 2 format), ENTROPY_HUFFMAN
-	 * (Huffman format) or ENTROPY_NEIGHBOUR (Neighbour Huffman format).
+	 * The coding: GenericWriter.ENTROPY_MIXED (Simple 2 format),
+	 * ENTROPY_TABLES (Context tables format), ENTROPY_HUFFMAN (Huffman
+	 * format) or ENTROPY_NEIGHBOUR (Neighbour Huffman format).
 	 */
 	int entropy_type;
 	/**
@@ -58,8 +65,9 @@ public class GenericReader
 	 */
 	boolean huffman_deflated;
 	/**
-	 * A Neighbour Huffman file's version (GenericWriter.FORMAT_VERSION, or
-	 * FORMAT_VERSION_UNFLIPPED: its signs not flipped).
+	 * A Neighbour Huffman file's version (GenericWriter.FORMAT_VERSION,
+	 * FORMAT_VERSION_FLIPPED: no second opinions, or FORMAT_VERSION_UNFLIPPED:
+	 * nor its signs flipped).
 	 */
 	int neighbour_version = GenericWriter.FORMAT_VERSION;
 	/**
@@ -186,15 +194,20 @@ public class GenericReader
 		}
 		else
 		{
-			// Neighbour Huffman: the delta type always there; the version
-			// before, its signs not flipped, read too, as this one.
+			// Context tables and Neighbour Huffman: the delta type always
+			// there. Neighbour Huffman's versions before (without the second
+			// opinions; nor the signs flipped) are read too, as this one.
 			entropy_type = -1;
 			for(int t = 0; t < GenericWriter.FORMAT_IDS.length; t++) if(GenericWriter.FORMAT_IDS[t] != 0 && id == GenericWriter.FORMAT_IDS[t]) entropy_type = t;
 			if(entropy_type < 0) throw new IOException(filename + " is not a file GenericWriter writes.");
-			ls_version   = -1;
-			type_version = GenericWriter.FORMAT_VERSION;
-			neighbour_version = version;
-			if(version == GenericWriter.FORMAT_VERSION_UNFLIPPED) version = GenericWriter.FORMAT_VERSION;
+			ls_version = -1;
+			if(entropy_type == GenericWriter.ENTROPY_TABLES) type_version = GenericWriter.TABLES_VERSION;
+			else
+			{
+				type_version = GenericWriter.FORMAT_VERSION;
+				neighbour_version = version;
+				if(version == GenericWriter.FORMAT_VERSION_FLIPPED || version == GenericWriter.FORMAT_VERSION_UNFLIPPED) version = GenericWriter.FORMAT_VERSION;
+			}
 		}
 		String format = (id == GenericWriter.SIMPLE_ID) ? "Simple 2" : (id == GenericWriter.HUFFMAN_ID) ? "Huffman" : GenericWriter.ENTROPY_NAMES[entropy_type];
 		if(version != ls_version && version != type_version)
@@ -432,6 +445,96 @@ public class GenericReader
 	}
 
 	/**
+	 * Every band's neighbour Huffman coded channels decoded and rebuilt into
+	 * the channels (the readers' decoding, this one's and HuffmanReader2's):
+	 * with the average deltas, each band's channel on its own, all at the
+	 * same time (version 3: NeighbourMapper.neighbourAverage; 1 and 2:
+	 * NeighbourMapper.neighbourDecode, then
+	 * DeltaMapper.getValuesFromAverageDeltas); with the fit's, each band's
+	 * channels rebuilt, ViewerSupport.lsBandsAtOnce bands at a time
+	 * (version 3: decoded inside the rebuilding, each channel in a thread of
+	 * its own, DeltaMapper.getValuesFromRowFitChannels with
+	 * NeighbourMapper.NeighbourDecoder; 1 and 2: every band's
+	 * channels' deltas first, all at the same time, then
+	 * DeltaMapper.getValuesFromRowFitDeltas).
+	 *
+	 * @param coded   each band's channels' codings (all of one version)
+	 * @param init    each band's channels' first values
+	 * @param w       the width
+	 * @param h       the height
+	 * @param average whether the deltas are the average deltas (else the fit's)
+	 * @param radius  each channel's fit's window radius
+	 * @param every   how often along a row the fit was solved
+	 * @param channel gets the channels (w * h each)
+	 */
+	static void neighbourBands(NeighbourMapper.NeighbourChannel[][] coded, int[][] init, int w, int h, boolean average, int[] radius, int every, int[][] channel)
+	{
+		int bands = coded.length;
+		boolean v3 = coded[0][0].version >= 3;
+		if(average)
+		{
+			ViewerSupport.parallel(3 * bands, j ->
+			{
+				int b = j / 3, i = j % 3;
+				int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+				try
+				{
+					if(v3) NeighbourMapper.neighbourAverage(coded[b][i], w, y1 - y0, init[b][i], channel[i], y0 * w);   // (straight into the channel)
+					else   DeltaMapper.getValuesFromAverageDeltas(NeighbourMapper.neighbourDecode(coded[b][i], w, y1 - y0), w, y1 - y0, init[b][i], channel[i], y0 * w);
+				}
+				catch(IOException e) { throw new UncheckedIOException(e); }
+			});
+			return;
+		}
+		int[][][] delta = new int[bands][3][];
+		if(!v3) ViewerSupport.parallel(3 * bands, j ->
+		{
+			int b = j / 3, i = j % 3;
+			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+			try { delta[b][i] = NeighbourMapper.neighbourDecode(coded[b][i], w, y1 - y0); }
+			catch(IOException e) { throw new UncheckedIOException(e); }
+		});
+		ViewerSupport.forBands(bands, ViewerSupport.lsBandsAtOnce(bands), b ->
+		{
+			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+			int[][] v = v3 ? DeltaMapper.getValuesFromRowFitChannels((i, previous) -> new NeighbourMapper.NeighbourDecoder(coded[b][i], w, 0), 3, w, y1 - y0, init[b], radius, every)[1]
+			               : DeltaMapper.getValuesFromRowFitDeltas(delta[b], w, y1 - y0, init[b], radius, every);
+			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
+		});
+	}
+
+	/**
+	 * Every band's Context tables coded channels decoded and rebuilt into the
+	 * channels: each band's channels decoded inside the rebuilding, each in a
+	 * thread of its own, a couple of rows behind the one before
+	 * (ContextTables.TablesDecoder; DeltaMapper.getValuesFromAverageChannels
+	 * or getValuesFromRowFitChannels); with the average deltas all the bands
+	 * at the same time, with the fit's ViewerSupport.lsBandsAtOnce bands at a
+	 * time.
+	 *
+	 * @param coded   each band's channels' codings
+	 * @param init    each band's channels' first values
+	 * @param w       the width
+	 * @param h       the height
+	 * @param average whether the deltas are the average deltas (else the fit's)
+	 * @param radius  each channel's fit's window radius
+	 * @param every   how often along a row the fit was solved
+	 * @param channel gets the channels (w * h each)
+	 */
+	static void tablesBands(ContextTables.TablesChannel[][] coded, int[][] init, int w, int h, boolean average, int[] radius, int every, int[][] channel)
+	{
+		int bands = coded.length;
+		ViewerSupport.forBands(bands, average ? bands : ViewerSupport.lsBandsAtOnce(bands), b ->
+		{
+			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h), n = (y1 - y0) * w;
+			DeltaMapper.DecoderSource source = (i, previous) -> new ContextTables.TablesDecoder(coded[b][i], previous, w, n);
+			int[][] v = average ? DeltaMapper.getValuesFromAverageChannels(source, 3, w, y1 - y0, init[b])[1]
+			                    : DeltaMapper.getValuesFromRowFitChannels(source, 3, w, y1 - y0, init[b], radius, every)[1];
+			for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
+		});
+	}
+
+	/**
 	 * decode for a Neighbour Huffman file: reads it all, then decodes it into
 	 * channel: every band's channels' deltas decoded at the same time
 	 * (GenericWriter.decodeChannel), then each band's channels rebuilt from them,
@@ -468,6 +571,21 @@ public class GenericReader
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}
 		read_time = System.nanoTime() - start;
+
+		if(entropy_type == GenericWriter.ENTROPY_NEIGHBOUR)
+		{
+			NeighbourMapper.NeighbourChannel[][] nc = new NeighbourMapper.NeighbourChannel[bands][3];
+			for(int b = 0; b < bands; b++) for(int i = 0; i < 3; i++) nc[b][i] = (NeighbourMapper.NeighbourChannel) coded[b][i];
+			neighbourBands(nc, init, w, h, delta_type == GenericWriter.DELTA_AVERAGE, radius, GenericWriter.EVERY, channel);
+			return;
+		}
+		if(entropy_type == GenericWriter.ENTROPY_TABLES)
+		{
+			ContextTables.TablesChannel[][] tc = new ContextTables.TablesChannel[bands][3];
+			for(int b = 0; b < bands; b++) for(int i = 0; i < 3; i++) tc[b][i] = (ContextTables.TablesChannel) coded[b][i];
+			tablesBands(tc, init, w, h, delta_type == GenericWriter.DELTA_AVERAGE, radius, GenericWriter.EVERY, channel);
+			return;
+		}
 
 		// Every band's channels' deltas at the same time; with the average
 		// deltas, each channel rebuilt straight away, into the channel.

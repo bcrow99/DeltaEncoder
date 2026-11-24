@@ -3201,7 +3201,7 @@ public class DeltaMapper
 	 * @param g a gradient
 	 * @return its level, -4 to 4
 	 */
-	private static int gradientLevel(int g)
+	static int gradientLevel(int g)
 	{
 		int m = Math.abs(g), l = (m == 0) ? 0 : (m < 3) ? 1 : (m < 7) ? 2 : (m < 21) ? 3 : 4;
 		return (g < 0) ? -l : l;
@@ -4645,7 +4645,27 @@ public class DeltaMapper
 	 */
 	public static int[][][] getValuesFromRowFitChannels(java.util.concurrent.Future<MixedDeltas>[] md, int xdim, int ydim, int[] init, int[] radius, int every)
 	{
-		int n = md.length;
+		return getValuesFromRowFitChannels((i, previous) -> new MixedDecoder(md[i].get(), previous, xdim, xdim * ydim, true), md.length, xdim, ydim,
+		                                   init, radius, every);
+	}
+
+	/**
+	 * As {@link #getValuesFromRowFitChannels(java.util.concurrent.Future[], int, int, int[], int[], int)},
+	 * with each channel's deltas from the decoder the source gives it
+	 * (context aware, Context tables, or neighbour Huffman version 3),
+	 * finished once its rows are.
+	 *
+	 * @param source each channel's decoder
+	 * @param n      the number of channels
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value (set before its decoder is made)
+	 * @param radius each channel's window radius
+	 * @param every  how often along a row the fit was solved
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromRowFitChannels(DecoderSource source, int n, int xdim, int ydim, int[] init, int[] radius, int every)
+	{
 		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
 		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
 		Throwable[] failed = new Throwable[1];
@@ -4657,7 +4677,7 @@ public class DeltaMapper
 			{
 				try
 				{
-					MixedDecoder mix = new MixedDecoder(md[i].get(), Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					DeltaDecoder mix = source.decoder(i, Arrays.copyOf(delta, i));
 					RowFit fit = new RowFit(value[i], (i > 0) ? value[i - 1] : null, xdim, radius[i], every);
 					RowWave wave = new RowWave(fit, ydim);
 					for(int y = 0; y < ydim; y++)
@@ -4666,6 +4686,7 @@ public class DeltaMapper
 						wave.row(mix, delta[i], value[i], y, init[i]);
 						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
 					}
+					mix.finish();
 				}
 				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
 			});
@@ -4695,7 +4716,23 @@ public class DeltaMapper
 	 */
 	public static int[][][] getValuesFromAverageChannels(java.util.concurrent.Future<MixedDeltas>[] md, int xdim, int ydim, int[] init)
 	{
-		int n = md.length;
+		return getValuesFromAverageChannels((i, previous) -> new MixedDecoder(md[i].get(), previous, xdim, xdim * ydim, true), md.length, xdim, ydim, init);
+	}
+
+	/**
+	 * As {@link #getValuesFromAverageChannels(java.util.concurrent.Future[], int, int, int[])},
+	 * with each channel's deltas from the decoder the source gives it
+	 * (context aware, or Context tables), finished once its rows are.
+	 *
+	 * @param source each channel's decoder
+	 * @param n      the number of channels
+	 * @param xdim   the width
+	 * @param ydim   the height
+	 * @param init   each channel's first value (set before its decoder is made)
+	 * @return {deltas, values}, each per channel
+	 */
+	public static int[][][] getValuesFromAverageChannels(DecoderSource source, int n, int xdim, int ydim, int[] init)
+	{
 		int[][] delta = new int[n][xdim * ydim], value = new int[n][xdim * ydim];
 		int[]   done  = new int[n];          // each channel's rows decoded (guarded by done)
 		Throwable[] failed = new Throwable[1];
@@ -4707,7 +4744,7 @@ public class DeltaMapper
 			{
 				try
 				{
-					MixedDecoder mix = new MixedDecoder(md[i].get(), Arrays.copyOf(delta, i), xdim, xdim * ydim, true);
+					DeltaDecoder mix = source.decoder(i, Arrays.copyOf(delta, i));
 					int[] d = delta[i], v = value[i];
 					for(int y = 0; y < ydim; y++)
 					{
@@ -4727,6 +4764,7 @@ public class DeltaMapper
 						}
 						synchronized(done) { done[i] = y + 1; done.notifyAll(); }
 					}
+					mix.finish();
 				}
 				catch(Throwable e) { synchronized(done) { if(failed[0] == null) failed[0] = e; done.notifyAll(); } }
 			});
@@ -4836,7 +4874,7 @@ public class DeltaMapper
 		 * @param y     the row
 		 * @param init  the first value
 		 */
-		void row(MixedDecoder mix, int[] delta, int[] dst, int y, int init)
+		void row(DeltaDecoder mix, int[] delta, int[] dst, int y, int init)
 		{
 			int xdim = fit.xdim;
 			if(y == 0 || xdim <= 2 || fit.points == 0) { rowFitRow(mix, fit, delta, dst, xdim, y, init); return; }
@@ -5037,7 +5075,7 @@ public class DeltaMapper
 	 * @param y     the row
 	 * @param init  the first value
 	 */
-	private static void rowFitRow(MixedDecoder mix, RowFit fit, int[] delta, int[] dst, int xdim, int y, int init)
+	private static void rowFitRow(DeltaDecoder mix, RowFit fit, int[] delta, int[] dst, int xdim, int y, int init)
 	{
 		if(y == 0)
 		{
@@ -7252,7 +7290,7 @@ public class DeltaMapper
 	/**
 	 * Lower limits of the 5 buckets for the size of the deltas at the same pixel in the channels coded before.
 	 */
-	private static final int[] CROSS_LIMIT    = {0, 1, 3, 6, 12};
+	static final int[] CROSS_LIMIT    = {0, 1, 3, 6, 12};
 
 	/**
 	 * The number of delta contexts.
@@ -7460,7 +7498,7 @@ public class DeltaMapper
 	 * @param min   set to the smallest delta, in min[0]
 	 * @return the rank of each value, indexed by value - min
 	 */
-	private static int[] rankTable(int[] delta, int[] min)
+	static int[] rankTable(int[] delta, int[] min)
 	{
 		int lo = Integer.MAX_VALUE, hi = Integer.MIN_VALUE;
 		for(int v : delta) { if(v < lo) lo = v; if(v > hi) hi = v; }
@@ -7740,6 +7778,35 @@ public class DeltaMapper
 				ctx[1] = ctx[1] * MIX_OPINION_LEVELS + o1;
 				if(m == 3) ctx[2] = ctx[2] * MIX_OPINION_LEVELS + o2;
 			}
+		}
+
+		/**
+		 * Model j's context at pixel k alone, with the second opinions (the
+		 * Context tables decoder's, ContextTables.TablesDecoder: it needs only
+		 * its model's): as contexts gives it, but at the interior pixels,
+		 * for models 1 and 2, without gap's terms (model 0's).
+		 *
+		 * @param k the pixel
+		 * @param d the deltas (read below k only)
+		 * @param v the channel's values (read below k only)
+		 * @param j the model
+		 * @return its context
+		 */
+		int context(int k, int[] d, int[] v, int j)
+		{
+			if(k >= earlier_end) earlierRows(k / xdim + 1);
+			if(k - row_start >= xdim || k < row_start) startRow(k, d, v);
+			int x = k - row_start;
+			if(j == 0 || !row_interior || x < 2 || x >= xdim - 1) { contexts(k, d, v); return ctx[j]; }
+			int top = MIX_ACTIVITY_TABLE.length - 1, cross_buckets = CROSS_LIMIT.length, mid = MIX_OPINION_LEVELS / 2;
+			int W = v[k - 1], N = v[k - xdim], NW = v[k - xdim - 1];
+			int act = Math.abs(d[k - 1]) + above_act[x];
+			if(j == 1)
+			{
+				int a = (m == 3) ? act + (fwd[k] >> 1) : act;
+				return (MIX_ACTIVITY_TABLE[Math.min(a, top)] * cross_buckets + cb[k]) * MIX_OPINION_LEVELS + gradientLevel(med(W, N, NW) - prediction) + mid;
+			}
+			return (MIX_ACTIVITY_TABLE[Math.min(act, top)] * cross_buckets + c9b[k]) * MIX_OPINION_LEVELS + gradientLevel(W - prediction) + mid;
 		}
 
 		/**
@@ -8247,9 +8314,67 @@ public class DeltaMapper
 	}
 
 	/**
+	 * A decoder of a channel's deltas a pixel at a time, as the channel is
+	 * rebuilt (the rebuilding loops: RowWave.row, rowFitRow and the average
+	 * loop): the delta at k into d[k], with the deltas and values below k
+	 * there, and, at the pixels with one, the rebuilding's prediction (which
+	 * the second opinions compare with). MixedDecoder (context aware),
+	 * ContextTables.TablesDecoder (Context tables) and
+	 * NeighbourMapper.NeighbourDecoder (neighbour Huffman, version 3).
+	 */
+	interface DeltaDecoder
+	{
+		/**
+		 * Decodes delta k into d[k], at a pixel with no prediction given (an
+		 * edge's).
+		 *
+		 * @param k the pixel (0, 1, 2, ... in turn)
+		 * @param d the deltas (filled below k)
+		 * @param v the channel's values (filled below k)
+		 */
+		void next(int k, int[] d, int[] v);
+
+		/**
+		 * Decodes delta k into d[k], given the rebuilding's prediction at k.
+		 *
+		 * @param k          the pixel (0, 1, 2, ... in turn)
+		 * @param d          the deltas (filled below k)
+		 * @param v          the channel's values (filled below k)
+		 * @param prediction the prediction at k
+		 */
+		void next(int k, int[] d, int[] v, int prediction);
+
+		/**
+		 * After the last delta: checks the coding was all there (nothing, by
+		 * default).
+		 *
+		 * @throws java.io.IOException if it wasn't
+		 */
+		default void finish() throws java.io.IOException { }
+	}
+
+	/**
+	 * Makes channel i's decoder for the rebuilding loops, given the deltas
+	 * of the channels before it (being filled in as they decode); waits, if
+	 * it must, for the channel's coding.
+	 */
+	interface DecoderSource
+	{
+		/**
+		 * Channel i's decoder.
+		 *
+		 * @param i        the channel
+		 * @param previous the deltas of the channels before it
+		 * @return its decoder
+		 * @throws Exception if its coding can't be had
+		 */
+		DeltaDecoder decoder(int i, int[][] previous) throws Exception;
+	}
+
+	/**
 	 * Decodes a channel's mixed-coded deltas one at a time, in order.
 	 */
-	static final class MixedDecoder
+	static final class MixedDecoder implements DeltaDecoder
 	{
 		/**
 		 * The models.
@@ -8287,7 +8412,7 @@ public class DeltaMapper
 		 * @param d the deltas (filled below k)
 		 * @param v the channel's values (filled below k)
 		 */
-		void next(int k, int[] d, int[] v) { d[k] = value[models.decode(dec, k, d, v)]; }
+		@Override public void next(int k, int[] d, int[] v) { d[k] = value[models.decode(dec, k, d, v)]; }
 
 		/**
 		 * As {@link #next(int, int[], int[])}, given the block's prediction at
@@ -8298,7 +8423,7 @@ public class DeltaMapper
 		 * @param v          the channel's values (filled below k)
 		 * @param prediction the block's prediction at k
 		 */
-		void next(int k, int[] d, int[] v, int prediction) { models.prediction = prediction; next(k, d, v); }
+		@Override public void next(int k, int[] d, int[] v, int prediction) { models.prediction = prediction; next(k, d, v); }
 	}
 
 	/**

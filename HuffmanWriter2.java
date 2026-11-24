@@ -54,10 +54,11 @@ public class HuffmanWriter2
 	static final char FORMAT_ID      = 'N';
 	/**
 	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or the coder's output changes. 2: the single
-	 * deltas' signs flipped where their neighbours' is negative
-	 * (NeighbourMapper.flipped); 1: the first, without (still read). The
-	 * coding's own versions (NeighbourMapper.VERSION).
+	 * whenever the file layout or the coder's output changes. 3: with the
+	 * second opinions (NeighbourMapper.opinion); 2: the single deltas' signs
+	 * flipped where their neighbours' is negative (NeighbourMapper.flipped);
+	 * 1: the first, without; 1 and 2 still read. The coding's own versions
+	 * (NeighbourMapper.VERSION).
 	 */
 	static final int  FORMAT_VERSION = NeighbourMapper.VERSION;
 	/**
@@ -552,7 +553,7 @@ public class HuffmanWriter2
 					int fb = b;
 					jobs.add(coder.submit(() ->
 					{
-						coded[fb][fi] = NeighbourMapper.neighbourCode(d[fb][fi], xdim);
+						coded[fb][fi] = NeighbourMapper.neighbourCode(d[fb][fi], value[fi], SimpleWriter.bandStart(fb, n, rows) * xdim, xdim);
 						return null;
 					}));
 				}
@@ -571,7 +572,8 @@ public class HuffmanWriter2
 						jobs.add(coder.submit(() ->
 						{
 							int[] dd = d[fb][fi];
-							int[] back = NeighbourMapper.neighbourDecode(NeighbourMapper.neighbourRead(new DataInputStream(new ByteArrayInputStream(coded[fb][fi]))), xdim, dd.length / xdim);
+							int[] back = NeighbourMapper.neighbourDecodeKnown(NeighbourMapper.neighbourRead(new DataInputStream(new ByteArrayInputStream(coded[fb][fi]))),
+							                                                  value[fi], SimpleWriter.bandStart(fb, n, rows) * xdim, dd, xdim);
 							// (Delta 0 isn't coded: the band's first value, init, is written instead.)
 							boolean same = back.length == dd.length;
 							for(int k = 1; k < dd.length && same; k++) same = back[k] == dd[k];

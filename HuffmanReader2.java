@@ -26,8 +26,8 @@ public class HuffmanReader2
 	 */
 	static final char FORMAT_ID      = HuffmanWriter2.FORMAT_ID;
 	/**
-	 * The file format's version (HuffmanWriter2.FORMAT_VERSION); the one
-	 * before, NeighbourMapper.VERSION_UNFLIPPED, is read too.
+	 * The file format's version (HuffmanWriter2.FORMAT_VERSION); the ones
+	 * before, from NeighbourMapper.VERSION_UNFLIPPED, are read too.
 	 */
 	static final int  FORMAT_VERSION = HuffmanWriter2.FORMAT_VERSION;
 
@@ -41,7 +41,7 @@ public class HuffmanReader2
 	int delta_type;
 	/**
 	 * The file's format version, which is its coding's
-	 * (NeighbourMapper.VERSION or VERSION_UNFLIPPED).
+	 * (NeighbourMapper.VERSION, VERSION_FLIPPED or VERSION_UNFLIPPED).
 	 */
 	int version;
 	/**
@@ -150,11 +150,11 @@ public class HuffmanReader2
 	{
 		int id = in.readUnsignedByte();
 		version = in.readUnsignedByte();
-		if(id != FORMAT_ID || (version != FORMAT_VERSION && version != NeighbourMapper.VERSION_UNFLIPPED))
+		if(id != FORMAT_ID || version < NeighbourMapper.VERSION_UNFLIPPED || version > FORMAT_VERSION)
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Neighbour Huffman file."
 				: filename + " is Neighbour Huffman format version " + version + "; this reader reads versions "
-				  + NeighbourMapper.VERSION_UNFLIPPED + " and " + FORMAT_VERSION + " only.");
+				  + NeighbourMapper.VERSION_UNFLIPPED + " to " + FORMAT_VERSION + " only.");
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -230,36 +230,8 @@ public class HuffmanReader2
 		}
 		read_time = System.nanoTime() - start;
 
-		if(delta_type == HuffmanWriter2.DELTA_AVERAGE)
-		{
-			// The average deltas: every band's channels decoded and rebuilt,
-			// each on its own, all at the same time.
-			ViewerSupport.parallel(3 * bands, j ->
-			{
-				int b = j / 3, i = j % 3;
-				int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-				int[] delta = decodeDeltas(coded[b][i], w, y1 - y0);
-				DeltaMapper.getValuesFromAverageDeltas(delta, w, y1 - y0, init[b][i], channel[i], y0 * w);   // (straight into the channel)
-			});
-		}
-		else
-		{
-			// Every band's channels' deltas at the same time, then each band's
-			// channels rebuilt, ViewerSupport.lsBandsAtOnce bands at a time.
-			int[][][] delta = new int[bands][3][];
-			ViewerSupport.parallel(3 * bands, j ->
-			{
-				int b = j / 3, i = j % 3;
-				int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-				delta[b][i] = decodeDeltas(coded[b][i], w, y1 - y0);
-			});
-			ViewerSupport.forBands(bands, ViewerSupport.lsBandsAtOnce(bands), b ->
-			{
-				int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
-				int[][] v = DeltaMapper.getValuesFromRowFitDeltas(delta[b], w, y1 - y0, init[b], radius, HuffmanWriter2.EVERY);
-				for(int i = 0; i < 3; i++) System.arraycopy(v[i], 0, channel[i], y0 * w, v[i].length);
-			});
-		}
+		// Every band's channels decoded and rebuilt (GenericReader.neighbourBands).
+		GenericReader.neighbourBands(coded, init, w, h, delta_type == HuffmanWriter2.DELTA_AVERAGE, radius, HuffmanWriter2.EVERY, channel);
 
 		// The minimums are added back to the difference channels, then blue,
 		// green and red rebuilt, resized back and packed.
@@ -268,21 +240,5 @@ public class HuffmanReader2
 		if(pixel_quant != 0) ViewerSupport.parallel(3, c -> bgr[c] = ResizeMapper.resize2(bgr[c], w, xdim, ydim));
 		BufferedImage image = ViewerSupport.makeImage(bgr[0], bgr[1], bgr[2], xdim, ydim, pixel_shift);
 		return image;
-	}
-
-	/**
-	 * A band's channel's deltas (NeighbourMapper.neighbourDecode), its failure
-	 * passed on unchecked (the decoding runs in ViewerSupport.parallel's
-	 * jobs).
-	 *
-	 * @param h    the channel's coding
-	 * @param xdim the width
-	 * @param ydim the band's height
-	 * @return the deltas
-	 */
-	private static int[] decodeDeltas(NeighbourMapper.NeighbourChannel h, int xdim, int ydim)
-	{
-		try { return NeighbourMapper.neighbourDecode(h, xdim, ydim); }
-		catch(IOException e) { throw new UncheckedIOException(e); }
 	}
 }
