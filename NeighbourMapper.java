@@ -12,7 +12,11 @@ import java.util.*;
 // least would be too much: a run mode (where the neighbourhood is all zeros,
 // the number of zero deltas that follow, to the row's end at most, coded as
 // one symbol), and pairs (in contexts 1 to PAIR_CONTEXTS, two deltas as one
-// symbol). Each channel has its own tables, made from its own deltas; their
+// symbol). A single delta is coded with its sign flipped where its
+// neighbours' (left + above) is negative (version 2: flipped), so a delta
+// going the way its neighbours go is always coded as positive, and a table
+// can give its short codes to one side. Each channel has its own tables,
+// made from its own deltas; their
 // code lengths are coded compactly (writeLengths), with no Deflate, so the
 // coding doesn't depend on a zlib. See neighbourCode for the layout.
 /**
@@ -99,6 +103,14 @@ public class NeighbourMapper
 	 * are found from the canonical code (Table.decode).
 	 */
 	static final int   LOOKUP_BITS = 10;
+	/**
+	 * The coding's versions, which are those of the files that hold it
+	 * (HuffmanWriter2's and GenericWriter's Neighbour Huffman formats): 2,
+	 * each single delta's sign flipped where its neighbours' is negative
+	 * (flipped), which neighbourCode writes; 1, the first, without, which
+	 * neighbourDecode still reads.
+	 */
+	static final int   VERSION = 2, VERSION_UNFLIPPED = 1;
 
 	/**
 	 * A delta's neighbourhood activity: how big the deltas already coded near
@@ -123,6 +135,26 @@ public class NeighbourMapper
 		int two_above = (y >= 2) ? d[k - 2 * xdim] : d[k - xdim];
 		return 2 * Math.abs(d[k - 1]) + 2 * Math.abs(d[k - xdim]) + Math.abs(d[k - xdim - 1]) + Math.abs(d[k - xdim + 1])
 		       + Math.abs(d[k - 2]) + Math.abs(two_above);
+	}
+
+	/**
+	 * Whether a single delta's sign is flipped in the coding (version 2): if
+	 * its neighbours', left + above (0 for one off the image), is negative.
+	 * About as many deltas then go each way, but those going the way their
+	 * neighbours go (most of them, with the average deltas) are all coded as
+	 * positive: about 1 to 3% smaller with the average deltas, a few tenths
+	 * of a percent with LS (its fit has taken most of that out).
+	 *
+	 * @param d    the deltas (d[0] is 0)
+	 * @param k    the delta's index (at least 1)
+	 * @param x    its column
+	 * @param y    its row
+	 * @param xdim the width
+	 * @return whether it's flipped
+	 */
+	static boolean flipped(int[] d, int k, int x, int y, int xdim)
+	{
+		return ((x > 0) ? d[k - 1] : 0) + ((y > 0) ? d[k - xdim] : 0) < 0;
 	}
 
 	/**
@@ -160,10 +192,13 @@ public class NeighbourMapper
 	 * they are), then, if the run stopped before the row's end, the delta
 	 * that stopped it (stop table); in contexts 1 to PAIR_CONTEXTS, if the
 	 * next delta is in the same row, the two as one pair symbol (pair table),
-	 * then any escaped ones (escape table); otherwise the delta (its
-	 * context's table). The single, stop and escape tables code delta - lo,
-	 * lo the smallest delta. Layout: int lo, int the number of delta values
-	 * (hi - lo + 1), int the number of bytes that follow, and those bytes: a
+	 * then any escaped ones (escape table); otherwise the delta, its sign
+	 * flipped if its neighbours' is negative (flipped), from its context's
+	 * table. The single, stop and escape tables code delta - lo, lo the
+	 * smallest delta either way round (lo = -max(|smallest|, |largest|), so
+	 * that a flipped delta is in range too). This is version VERSION of the
+	 * coding. Layout: int lo, int the number of delta values
+	 * (-2 lo + 1), int the number of bytes that follow, and those bytes: a
 	 * bit stream (most significant bit first) of the tables' code lengths
 	 * (writeLengths), then the codes. Delta 0 isn't coded (the band's first
 	 * value is written instead) and is taken as 0.
@@ -184,6 +219,9 @@ public class NeighbourMapper
 			lo = hi = d[1];
 			for(int k = 2; k < n; k++) { if(d[k] < lo) lo = d[k]; else if(d[k] > hi) hi = d[k]; }
 		}
+		// Either way round: a flipped delta is in range too.
+		hi = Math.max(-lo, hi);
+		lo = -hi;
 		int values = hi - lo + 1;
 
 		// The symbols counted, the tables made, then the symbols coded.
@@ -308,8 +346,9 @@ public class NeighbourMapper
 				k += 2;
 				continue;
 			}
-			if(counting) frequency[c][d[k] - lo]++;
-			else         table[c].write(bits, d[k] - lo);
+			int e = flipped(d, k, x, y, xdim) ? -d[k] : d[k];
+			if(counting) frequency[c][e - lo]++;
+			else         table[c].write(bits, e - lo);
 			k++;
 		}
 	}
@@ -325,13 +364,15 @@ public class NeighbourMapper
 		int    values;
 		/** The bit stream. */
 		byte[] code;
+		/** Whether the single deltas' signs are flipped (version 2: flipped). */
+		boolean flip;
 
 		/** An empty one, for neighbourRead to fill in. */
 		NeighbourChannel() { }
 	}
 
 	/**
-	 * Reads a channel's coding neighbourCode wrote.
+	 * Reads a channel's coding neighbourCode wrote (this version's).
 	 *
 	 * @param in the stream, at the start of it
 	 * @return the coding
@@ -339,7 +380,22 @@ public class NeighbourMapper
 	 */
 	static NeighbourChannel neighbourRead(DataInputStream in) throws IOException
 	{
+		return neighbourRead(in, VERSION);
+	}
+
+	/**
+	 * Reads a channel's coding of a version (the file's: VERSION, or
+	 * VERSION_UNFLIPPED).
+	 *
+	 * @param in      the stream, at the start of it
+	 * @param version the coding's version
+	 * @return the coding
+	 * @throws IOException if the stream fails or isn't what neighbourCode writes
+	 */
+	static NeighbourChannel neighbourRead(DataInputStream in, int version) throws IOException
+	{
 		NeighbourChannel h = new NeighbourChannel();
+		h.flip   = version >= VERSION;
 		h.lo     = in.readInt();
 		h.values = in.readInt();
 		int length = in.readInt();
@@ -351,7 +407,7 @@ public class NeighbourMapper
 
 	/**
 	 * A channel's deltas from its neighbour Huffman coding: neighbourCode's
-	 * walk, the other way.
+	 * walk, the other way (the single deltas' signs flipped back if h.flip).
 	 *
 	 * @param h    the coding
 	 * @param xdim the width
@@ -391,7 +447,9 @@ public class NeighbourMapper
 				k += 2;
 				continue;
 			}
-			d[k++] = table[c].read(bits) + lo;
+			int e = table[c].read(bits) + lo;
+			d[k] = (h.flip && flipped(d, k, x, y, xdim)) ? -e : e;
+			k++;
 		}
 		if(bits.overrun()) throw new IOException("bad neighbour Huffman coding: it ends too soon");
 		return d;

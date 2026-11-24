@@ -58,6 +58,11 @@ public class GenericReader
 	 */
 	boolean huffman_deflated;
 	/**
+	 * A Neighbour Huffman file's version (GenericWriter.FORMAT_VERSION, or
+	 * FORMAT_VERSION_UNFLIPPED: its signs not flipped).
+	 */
+	int neighbour_version = GenericWriter.FORMAT_VERSION;
+	/**
 	 * Each channel's minimum (added back to the difference channels), in
 	 * coding order.
 	 */
@@ -181,12 +186,15 @@ public class GenericReader
 		}
 		else
 		{
-			// Neighbour Huffman: one version, the delta type always there.
+			// Neighbour Huffman: the delta type always there; the version
+			// before, its signs not flipped, read too, as this one.
 			entropy_type = -1;
 			for(int t = 0; t < GenericWriter.FORMAT_IDS.length; t++) if(GenericWriter.FORMAT_IDS[t] != 0 && id == GenericWriter.FORMAT_IDS[t]) entropy_type = t;
 			if(entropy_type < 0) throw new IOException(filename + " is not a file GenericWriter writes.");
 			ls_version   = -1;
 			type_version = GenericWriter.FORMAT_VERSION;
+			neighbour_version = version;
+			if(version == GenericWriter.FORMAT_VERSION_UNFLIPPED) version = GenericWriter.FORMAT_VERSION;
 		}
 		String format = (id == GenericWriter.SIMPLE_ID) ? "Simple 2" : (id == GenericWriter.HUFFMAN_ID) ? "Huffman" : GenericWriter.ENTROPY_NAMES[entropy_type];
 		if(version != ls_version && version != type_version)
@@ -455,7 +463,7 @@ public class GenericReader
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				coded[b][i] = GenericWriter.readChannel(entropy_type, bi);
+				coded[b][i] = GenericWriter.readChannel(entropy_type, bi, neighbour_version);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}

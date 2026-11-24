@@ -26,7 +26,8 @@ public class HuffmanReader2
 	 */
 	static final char FORMAT_ID      = HuffmanWriter2.FORMAT_ID;
 	/**
-	 * The file format's version (HuffmanWriter2.FORMAT_VERSION).
+	 * The file format's version (HuffmanWriter2.FORMAT_VERSION); the one
+	 * before, NeighbourMapper.VERSION_UNFLIPPED, is read too.
 	 */
 	static final int  FORMAT_VERSION = HuffmanWriter2.FORMAT_VERSION;
 
@@ -38,6 +39,11 @@ public class HuffmanReader2
 	 * The deltas: HuffmanWriter2.DELTA_LS or DELTA_AVERAGE.
 	 */
 	int delta_type;
+	/**
+	 * The file's format version, which is its coding's
+	 * (NeighbourMapper.VERSION or VERSION_UNFLIPPED).
+	 */
+	int version;
 	/**
 	 * Each channel's minimum (added back to the difference channels), in
 	 * coding order.
@@ -142,11 +148,13 @@ public class HuffmanReader2
 	 */
 	private void readHeader(DataInputStream in, String filename) throws IOException
 	{
-		int id = in.readUnsignedByte(), version = in.readUnsignedByte();
-		if(id != FORMAT_ID || version != FORMAT_VERSION)
+		int id = in.readUnsignedByte();
+		version = in.readUnsignedByte();
+		if(id != FORMAT_ID || (version != FORMAT_VERSION && version != NeighbourMapper.VERSION_UNFLIPPED))
 			throw new IOException(id != FORMAT_ID
 				? filename + " is not a Neighbour Huffman file."
-				: filename + " is Neighbour Huffman format version " + version + "; this reader reads version " + FORMAT_VERSION + " only.");
+				: filename + " is Neighbour Huffman format version " + version + "; this reader reads versions "
+				  + NeighbourMapper.VERSION_UNFLIPPED + " and " + FORMAT_VERSION + " only.");
 		xdim        = in.readUnsignedShort();
 		ydim        = in.readUnsignedShort();
 		pixel_shift = in.readByte();
@@ -216,7 +224,7 @@ public class HuffmanReader2
 			for(int i = 0; i < 3; i++)
 			{
 				init[b][i] = bi.readInt();
-				coded[b][i] = NeighbourMapper.neighbourRead(bi);
+				coded[b][i] = NeighbourMapper.neighbourRead(bi, version);
 			}
 			if(bi.available() != 0) throw new IOException(name + ": band " + b + " is not the length its header says.");
 		}

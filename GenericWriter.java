@@ -127,9 +127,11 @@ public class GenericWriter
 	 */
 	static final char[] FORMAT_IDS = {0, 0, 'N'};
 	/**
-	 * Its version: 1.
+	 * Its version, its coding's (NeighbourMapper.VERSION): 2, the single
+	 * deltas' signs flipped where their neighbours' is negative; and the one
+	 * before, 1, without (still read).
 	 */
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = NeighbourMapper.VERSION, FORMAT_VERSION_UNFLIPPED = NeighbourMapper.VERSION_UNFLIPPED;
 	/**
 	 * The delta types (the Delta menu): the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit).
@@ -798,10 +800,24 @@ public class GenericWriter
 	 */
 	static Object readChannel(int entropy_type, DataInputStream in) throws IOException
 	{
+		return readChannel(entropy_type, in, FORMAT_VERSION);
+	}
+
+	/**
+	 * readChannel for a file of an earlier Neighbour Huffman version.
+	 *
+	 * @param entropy_type the coding (not ENTROPY_MIXED)
+	 * @param in           the stream, at the start of it
+	 * @param version      the Neighbour Huffman file's version (FORMAT_VERSION or FORMAT_VERSION_UNFLIPPED; for it only)
+	 * @return the coding
+	 * @throws IOException if the stream fails or isn't what codeChannel writes
+	 */
+	static Object readChannel(int entropy_type, DataInputStream in, int version) throws IOException
+	{
 		switch(entropy_type)
 		{
 			case ENTROPY_HUFFMAN:         return HuffmanWriter.huffmanRead(in);
-			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourRead(in);
+			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourRead(in, version);
 			default: throw new IllegalArgumentException("not a coding of a channel on its own: " + entropy_type);
 		}
 	}

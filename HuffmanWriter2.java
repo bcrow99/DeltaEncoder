@@ -54,9 +54,12 @@ public class HuffmanWriter2
 	static final char FORMAT_ID      = 'N';
 	/**
 	 * The file format's version: bump it in the writer and reader together
-	 * whenever the file layout or the coder's output changes. 1: the first.
+	 * whenever the file layout or the coder's output changes. 2: the single
+	 * deltas' signs flipped where their neighbours' is negative
+	 * (NeighbourMapper.flipped); 1: the first, without (still read). The
+	 * coding's own versions (NeighbourMapper.VERSION).
 	 */
-	static final int  FORMAT_VERSION = 1;
+	static final int  FORMAT_VERSION = NeighbourMapper.VERSION;
 	/**
 	 * The channel set coded: green, blue-green, red-green (see
 	 * DeltaMapper.getChannels).

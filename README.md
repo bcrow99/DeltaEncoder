@@ -48,7 +48,12 @@ deltas (least-squares or average, the **Delta** menu) are coded directly, with
 no unary strings, by Huffman tables chosen from each delta's neighbours (how big
 the deltas already coded to its left and above are), so the file needn't say
 which table is used where. In the quietest parts runs of zeros are coded as one
-symbol (as in lossless JPEG-LS) and other deltas two at a time. Its files are
+symbol (as in lossless JPEG-LS) and other deltas two at a time. A delta coded
+on its own has its sign flipped where its neighbours' (left + above) is
+negative, so the tables can give their short codes to the way the
+neighbours go (format version 2: about 1-3% smaller with the average deltas,
+a few tenths of a percent with least squares; version 1 files, without it,
+are still read). Its files are
 smaller than HuffmanWriter's on the test photos (7-12% lossless, 1-5% at the
 default quantization), and with the average deltas it codes and decodes about
 twice as fast. It doesn't use Deflate, so the files don't depend on a zlib.
