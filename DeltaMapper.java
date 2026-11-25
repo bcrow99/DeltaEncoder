@@ -7470,7 +7470,7 @@ public class DeltaMapper
 	/**
 	 * The activity bucket of each value 0 to 255 (larger values use the last).
 	 */
-	private static final int[] MIX_ACTIVITY_TABLE = bucketTable(ACTIVITY_LIMIT, 256);
+	static final int[] MIX_ACTIVITY_TABLE = bucketTable(ACTIVITY_LIMIT, 256);
 
 	/**
 	 * The cross bucket of each value 0 to 63 (larger values use the last).

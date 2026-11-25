@@ -2,8 +2,8 @@ import java.awt.image.*;
 import java.io.*;
 import javax.swing.*;
 
-// GenericReader version 1.3 (reads Simple 2 formats 2 and 3, Context tables
-// format 1, Huffman formats 1 to 4, and Neighbour Huffman formats 1 to 3)
+// GenericReader version 1.4 (reads Simple 2 formats 2 and 3, Context tables
+// formats 1 and 2, Huffman formats 1 to 4, and Neighbour Huffman formats 1 to 3)
 //
 // NativeEncoder's NativeReader in Java alone. Reads GenericWriter's files
 // (and NativeWriter's, the same files, and SimpleWriter2's and
@@ -20,10 +20,13 @@ import javax.swing.*;
 //   rows behind the one before (its contexts use their deltas).
 //
 //   Context tables ('T'): the file is read, then each band's channels are
-//   decoded as they're rebuilt, a band's channels at the same time, each a
-//   couple of rows behind the one before (as context aware: its contexts use
-//   their deltas), the bands at the same time (LS: ViewerSupport.lsBandsAtOnce
-//   at a time).
+//   decoded as they're rebuilt. Version 2: with Avg every band's channels
+//   at the same time, each on its own (its contexts are its own); with LS
+//   a band's channels at the same time, each a row behind the one before
+//   (its fit uses it), the bands ViewerSupport.lsBandsAtOnce at a time.
+//   Version 1 (the context aware coding's contexts): a band's channels
+//   each a couple of rows behind the one before (its contexts use their
+//   deltas), the bands at the same time (LS: lsBandsAtOnce at a time).
 //
 //   Huffman ('H'): the file is read, then each band's channels' deltas are
 //   decoded (HuffmanWriter.huffmanDecode) and the channels rebuilt from them,
@@ -201,7 +204,11 @@ public class GenericReader
 			for(int t = 0; t < GenericWriter.FORMAT_IDS.length; t++) if(GenericWriter.FORMAT_IDS[t] != 0 && id == GenericWriter.FORMAT_IDS[t]) entropy_type = t;
 			if(entropy_type < 0) throw new IOException(filename + " is not a file GenericWriter writes.");
 			ls_version = -1;
-			if(entropy_type == GenericWriter.ENTROPY_TABLES) type_version = GenericWriter.TABLES_VERSION;
+			if(entropy_type == GenericWriter.ENTROPY_TABLES)
+			{
+				type_version = GenericWriter.TABLES_VERSION;
+				if(version == ContextTables.VERSION_MIXED) version = type_version;   // (each channel's coding says which)
+			}
 			else
 			{
 				type_version = GenericWriter.FORMAT_VERSION;
@@ -505,12 +512,17 @@ public class GenericReader
 
 	/**
 	 * Every band's Context tables coded channels decoded and rebuilt into the
-	 * channels: each band's channels decoded inside the rebuilding, each in a
-	 * thread of its own, a couple of rows behind the one before
-	 * (ContextTables.TablesDecoder; DeltaMapper.getValuesFromAverageChannels
-	 * or getValuesFromRowFitChannels); with the average deltas all the bands
-	 * at the same time, with the fit's ViewerSupport.lsBandsAtOnce bands at a
-	 * time.
+	 * channels, each decoded inside the rebuilding
+	 * (ContextTables.TablesDecoder). Version 2's (the channel's own
+	 * contexts): with the average deltas, every band's channels at the same
+	 * time, each on its own (ContextTables.average); with the fit's,
+	 * ViewerSupport.lsBandsAtOnce bands at a time, a band's channels each in
+	 * a thread of its own, behind the one before
+	 * (DeltaMapper.getValuesFromRowFitChannels). Version 1's (the context
+	 * aware coding's contexts, which use the channels before): a band's
+	 * channels as with the fit's, a couple of rows behind
+	 * (getValuesFromAverageChannels or getValuesFromRowFitChannels), with the
+	 * average deltas all the bands at the same time.
 	 *
 	 * @param coded   each band's channels' codings
 	 * @param init    each band's channels' first values
@@ -524,6 +536,19 @@ public class GenericReader
 	static void tablesBands(ContextTables.TablesChannel[][] coded, int[][] init, int w, int h, boolean average, int[] radius, int every, int[][] channel)
 	{
 		int bands = coded.length;
+		boolean own = true;
+		for(ContextTables.TablesChannel[] band : coded) for(ContextTables.TablesChannel c : band) own &= c.model == ContextTables.OWN;
+		if(own && average)
+		{
+			ViewerSupport.parallel(bands * 3, job ->
+			{
+				int b = job / 3, i = job % 3;
+				int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h);
+				try { ContextTables.average(coded[b][i], w, y1 - y0, init[b][i], channel[i], y0 * w); }
+				catch(IOException e) { throw new UncheckedIOException(e); }
+			});
+			return;
+		}
 		ViewerSupport.forBands(bands, average ? bands : ViewerSupport.lsBandsAtOnce(bands), b ->
 		{
 			int y0 = SimpleWriter.bandStart(b, bands, h), y1 = SimpleWriter.bandStart(b + 1, bands, h), n = (y1 - y0) * w;

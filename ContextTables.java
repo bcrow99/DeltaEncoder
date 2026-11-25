@@ -2,26 +2,32 @@ import java.io.*;
 import java.util.Arrays;
 
 // ContextTables: the Context tables coding of a channel's deltas
-// (GenericWriter's and NativeEncoder's NativeWriter's "Context tables"). The
-// context aware coding's contexts (DeltaMapper.MixedModels: the activity,
-// the earlier channels' deltas and a second opinion), with fixed tables in
-// place of its adaptive models: the deltas are counted once, by context,
+// (GenericWriter's and NativeEncoder's NativeWriter's "Context tables"):
+// fixed tables chosen by each delta's context, in place of the context
+// aware coding's adaptive models. The deltas are counted once, by context,
 // the counts written as tables, and the deltas coded with them by rANS
 // (range asymmetric numeral systems), which decodes a symbol with a table
 // lookup and a multiply, and no division. Smaller than the Huffman codings,
-// a little bigger than context aware (whose models adapt, and mix three
-// opinions), and several times faster to decode.
+// a little bigger than context aware, and several times faster to decode.
+//
+// Version 2 (written): each delta's context is the channel's own, cheap to
+// work out (ownContext): the activity bucket of its neighbours' deltas (the
+// context aware coding's buckets) and its second opinion, the median edge
+// detector's distance from the prediction, as a gradient level (9 levels):
+// OWN_CONTEXTS of them. No other channel is used, so the channels (and the
+// bands) decode independently, all at the same time. Version 1 (still
+// read): the context aware coding's contexts (DeltaMapper.MixedModels: with
+// the earlier channels' deltas too), one model's, chosen, with its cross
+// buckets merged or not, by the coded size: a little smaller on some
+// images, about three times slower to decode.
 //
 // The symbols are the deltas' ranks (as the context aware coding's: the
-// most frequent value is 0). One model's contexts are used: model 0, 1 or,
-// after the first channel, 2 (MIX_OPINION_LEVELS times CONTEXTS of them),
-// or the same with the earlier channels' cross buckets merged (merged:
-// fewer tables, for a small image). Each context's table is its symbols'
+// most frequent value is 0). Each context's table is its symbols'
 // probabilities to a step of a factor of 2 (steps 1) or of the square root
-// of 2 (steps 2), as levels 1 to LEVEL_RANGE times steps (0: a symbol that
-// isn't there), from which coder and decoder make the same frequencies,
-// out of 2^precision (normalize). The model, the merging and the steps are
-// chosen by the coded size. See code for the layout.
+// of 2 (steps 2: chosen by the coded size), as levels 1 to LEVEL_RANGE
+// times steps (0: a symbol that isn't there), from which coder and decoder
+// make the same frequencies, out of 2^precision (normalize). See code for
+// the layout.
 /**
  * The Context tables coding of a channel's deltas (see the comment above).
  */
@@ -31,12 +37,24 @@ public class ContextTables
 	private ContextTables() { }
 
 	/**
-	 * The coding's version, the Context tables format's ('T').
+	 * The coding's version, the Context tables format's ('T'): 2, the
+	 * channel's own contexts; and the one before, 1, the context aware
+	 * coding's (still read).
 	 */
-	static final int VERSION = 1;
+	static final int VERSION = 2, VERSION_MIXED = 1;
 	/**
-	 * The number of contexts (each model's: the context aware coding's with
-	 * the second opinions).
+	 * The model byte of version 2: the channel's own contexts (version 1's
+	 * are the context aware coding's models, 0 to 2).
+	 */
+	static final int OWN = 3;
+	/**
+	 * The number of the channel's own contexts: the activity buckets times
+	 * the opinion levels.
+	 */
+	static final int OWN_CONTEXTS = DeltaMapper.CONTEXTS / DeltaMapper.CROSS_LIMIT.length * DeltaMapper.MIX_OPINION_LEVELS;
+	/**
+	 * Version 1's number of contexts (each model's: the context aware
+	 * coding's with the second opinions).
 	 */
 	static final int CONTEXTS = DeltaMapper.CONTEXTS * DeltaMapper.MIX_OPINION_LEVELS;
 	/**
@@ -70,7 +88,46 @@ public class ContextTables
 	static final long RANS_LOW = 1L << 23;
 
 	/**
-	 * A context, merged: its cross bucket left out (a context is (activity
+	 * A delta's own context (version 2): the activity bucket
+	 * (DeltaMapper.MIX_ACTIVITY_TABLE) of its neighbours' deltas (left, above,
+	 * above left and above right, those there are), times the opinion
+	 * levels, plus its second opinion inside the image (row 1 on, but the
+	 * first and last columns): the gradient level of the median edge
+	 * detector's prediction less the rebuilding's (DeltaMapper.med,
+	 * gradientLevel); elsewhere level 0. The middle level is 0.
+	 *
+	 * @param d          the deltas (read below k only)
+	 * @param v          the values (read below k only)
+	 * @param k          the pixel
+	 * @param x          its column
+	 * @param y          its row
+	 * @param xdim       the width
+	 * @param prediction the rebuilding's prediction at k (used inside the image only)
+	 * @return the context
+	 */
+	static int ownContext(int[] d, int[] v, int k, int x, int y, int xdim, int prediction)
+	{
+		int levels = DeltaMapper.MIX_OPINION_LEVELS, top = DeltaMapper.MIX_ACTIVITY_TABLE.length - 1, a, o = levels / 2;
+		if(y >= 1 && x >= 1 && x < xdim - 1)
+		{
+			a = Math.abs(d[k - 1]) + Math.abs(d[k - xdim]) + Math.abs(d[k - xdim - 1]) + Math.abs(d[k - xdim + 1]);
+			o += DeltaMapper.gradientLevel(DeltaMapper.med(v[k - 1], v[k - xdim], v[k - xdim - 1]) - prediction);
+		}
+		else
+		{
+			a = (x > 0) ? Math.abs(d[k - 1]) : 0;
+			if(y > 0)
+			{
+				a += Math.abs(d[k - xdim]);
+				if(x > 0) a += Math.abs(d[k - xdim - 1]);
+				if(x < xdim - 1) a += Math.abs(d[k - xdim + 1]);
+			}
+		}
+		return DeltaMapper.MIX_ACTIVITY_TABLE[Math.min(a, top)] * levels + o;
+	}
+
+	/**
+	 * A context, merged (version 1): its cross bucket left out (a context is (activity
 	 * bucket * cross buckets + cross bucket) * opinion levels + opinion level).
 	 *
 	 * @param c the context
@@ -329,8 +386,8 @@ public class ContextTables
 	}
 
 	/**
-	 * The context aware coding's contexts (with the second opinions, from
-	 * the prediction, value - delta): its models with no symbols, for their
+	 * Version 1's contexts, the context aware coding's (with the second
+	 * opinions, from the prediction): its models with no symbols, for their
 	 * contexts alone.
 	 *
 	 * @param previous the deltas of the channels coded before this one
@@ -344,73 +401,59 @@ public class ContextTables
 	}
 
 	/**
-	 * A channel's deltas Context tables coded (see the comment at the top).
-	 * Each delta's rank is counted in each model's context; for each model,
-	 * merged or not, and steps (in that order) the tables are made and the
-	 * coded size worked out (Tables.size), and the first smallest is used.
-	 * The ranks are then rANS coded, the last first, so that the decoder
-	 * reads them first to last. Layout: int the smallest delta, the rank
-	 * table (DeltaMapper.writeTable), byte the model, byte 1 if merged (else
-	 * 0), byte the steps, byte the precision, int the tables' length, the
-	 * tables, int the coded length, and the coded bytes: rANS's final state
-	 * (4 bytes, the low first), then the bytes it gave out, in the order the
-	 * decoder reads them. The tables: a bit stream (most significant bit
-	 * first) of each context's number of levels (its last symbol + 1; 0 for
-	 * a context not used) plus 1, in gamma code (writeGamma), then the used
-	 * contexts' levels, one table after another, as chain writes them
-	 * (NeighbourMapper.writeLengthSymbols, up to twice the top level).
+	 * A channel's deltas Context tables coded, version 2 (see the comment at
+	 * the top). Each delta's rank is counted in its own context; the tables
+	 * are made with steps 1 and 2 and the coded size worked out
+	 * (Tables.size), and the smaller used (1 if the same). The ranks are then
+	 * rANS coded, the last first, so that the decoder reads them first to
+	 * last. Layout: int the smallest delta, the rank table
+	 * (DeltaMapper.writeTable), byte the model (OWN; version 1: the context
+	 * aware coding's model, 0 to 2), byte 0 (version 1: 1 if its contexts
+	 * are merged), byte the steps, byte the precision, int the tables'
+	 * length, the tables, int the coded length, and the coded bytes: rANS's
+	 * final state (4 bytes, the low first), then the bytes it gave out, in
+	 * the order the decoder reads them. The tables: a bit stream (most
+	 * significant bit first) of each context's number of levels (its last
+	 * symbol + 1; 0 for a context not used) plus 1, in gamma code
+	 * (writeGamma), then the used contexts' levels, one table after another,
+	 * as chain writes them (NeighbourMapper.writeLengthSymbols, up to twice
+	 * the top level).
 	 *
-	 * @param delta    the deltas
-	 * @param value    the band's values, as the decoder rebuilds them
-	 * @param previous the deltas of the channels coded before this one
-	 * @param xdim     the width
+	 * @param delta  the deltas
+	 * @param value  the channel's values, as the decoder rebuilds them (the
+	 *               predictions are value - delta)
+	 * @param offset where the deltas' first value is in value
+	 * @param xdim   the width
 	 * @return the coded bytes
 	 * @throws IOException never in practice (a byte stream)
 	 */
-	static byte[] code(int[] delta, int[] value, int[][] previous, int xdim) throws IOException
+	static byte[] code(int[] delta, int[] value, int offset, int xdim) throws IOException
 	{
 		int n = delta.length;
 		int[] min = new int[1], rank = DeltaMapper.rankTable(delta, min);
 		int symbols = rank.length, precision = precision(symbols);
 
-		// Each model's counts, by context, and merged.
-		DeltaMapper.MixedModels mm = contextModels(previous, xdim, n);
-		int models = mm.m;
-		int[][][][] count = new int[models][2][][];
-		for(int j = 0; j < models; j++) { count[j][0] = new int[CONTEXTS][symbols]; count[j][1] = new int[MERGED_CONTEXTS][symbols]; }
-		for(int k = 0; k < n; k++)
-		{
-			mm.prediction = value[k] - delta[k];
-			mm.contexts(k, delta, value);
-			int s = rank[delta[k] - min[0]];
-			for(int j = 0; j < models; j++) count[j][0][mm.ctx[j]][s]++;
-		}
-		for(int j = 0; j < models; j++)
-			for(int c = 0; c < CONTEXTS; c++)
-				for(int s = 0; s < symbols; s++) count[j][1][merged(c)][s] += count[j][0][c][s];
-
-		// The smallest.
-		int model = 0, merge = 0, steps = 1;
-		Tables best = null;
-		long smallest = Long.MAX_VALUE;
-		for(int j = 0; j < models; j++)
-			for(int g = 0; g <= 1; g++)
-				for(int st = 1; st <= 2; st++)
-				{
-					Tables t = new Tables(count[j][g], st, precision);
-					long size = t.size(count[j][g], precision);
-					if(size < smallest) { smallest = size; best = t; model = j; merge = g; steps = st; }
-				}
-
-		// Its contexts again (kept this time), then the coding, from the last.
+		// The contexts and the counts.
+		int[] v = Arrays.copyOfRange(value, offset, offset + n);
 		char[] ctx = new char[n];
-		mm = contextModels(previous, xdim, n);
-		for(int k = 0; k < n; k++)
+		int[][] count = new int[OWN_CONTEXTS][symbols];
+		for(int y = 0, k = 0; k < n; y++)
+			for(int x = 0; x < xdim; x++, k++)
+			{
+				ctx[k] = (char) ownContext(delta, v, k, x, y, xdim, v[k] - delta[k]);
+				count[ctx[k]][rank[delta[k] - min[0]]]++;
+			}
+
+		// The smaller.
+		Tables best = null;
+		int steps = 1;
+		for(int st = 1; st <= 2; st++)
 		{
-			mm.prediction = value[k] - delta[k];
-			mm.contexts(k, delta, value);
-			ctx[k] = (char) ((merge == 1) ? merged(mm.ctx[model]) : mm.ctx[model]);
+			Tables t = new Tables(count, st, precision);
+			if(best == null || t.size(count, precision) < best.size(count, precision)) { best = t; steps = st; }
 		}
+
+		// The coding, from the last.
 		int[][] cum = cumulative(best.freq);
 		byte[] buf = new byte[2 * n + 16];
 		int p = buf.length;
@@ -429,8 +472,8 @@ public class ContextTables
 		DataOutputStream out = new DataOutputStream(bytes);
 		out.writeInt(min[0]);
 		DeltaMapper.writeTable(out, rank);
-		out.writeByte(model);
-		out.writeByte(merge);
+		out.writeByte(OWN);
+		out.writeByte(0);
 		out.writeByte(steps);
 		out.writeByte(precision);
 		out.writeInt(best.bytes.length);
@@ -466,9 +509,9 @@ public class ContextTables
 	{
 		/** The delta value of each rank. */
 		int[]   value;
-		/** The model whose contexts are used. */
+		/** The model whose contexts are used: OWN (version 2), or the context aware coding's (version 1). */
 		int     model;
-		/** Whether its contexts are merged. */
+		/** Whether its contexts are merged (version 1). */
 		boolean merged;
 		/** The tables' steps a power of 2. */
 		int     steps;
@@ -501,7 +544,7 @@ public class ContextTables
 		int merge   = in.readUnsignedByte();
 		h.steps     = in.readUnsignedByte();
 		h.precision = in.readUnsignedByte();
-		if(h.model > 2 || merge > 1 || h.steps < 1 || h.steps > 2 || h.precision < MIN_PRECISION || h.precision > MAX_PRECISION)
+		if(h.model > OWN || merge > ((h.model == OWN) ? 0 : 1) || h.steps < 1 || h.steps > 2 || h.precision < MIN_PRECISION || h.precision > MAX_PRECISION)
 			throw new IOException("bad Context tables coding: model " + h.model + ", merged " + merge + ", steps " + h.steps + ", precision " + h.precision);
 		h.merged = merge == 1;
 		int length = in.readInt();
@@ -518,14 +561,18 @@ public class ContextTables
 	/**
 	 * Decodes a channel's Context tables coding a pixel at a time, inside the
 	 * rebuilding (DeltaMapper.DeltaDecoder: the contexts' second opinions
-	 * need the rebuilding's predictions; and the earlier channels' deltas,
-	 * which DeltaMapper.MixedModels reads as they are decoded, a row or two
-	 * ahead).
+	 * need the rebuilding's predictions; and, version 1, the earlier
+	 * channels' deltas, which DeltaMapper.MixedModels reads as they are
+	 * decoded, a row or two ahead).
 	 */
 	static final class TablesDecoder implements DeltaMapper.DeltaDecoder
 	{
-		/** The contexts. */
+		/** Version 1's contexts (null for version 2's, the channel's own). */
 		private final DeltaMapper.MixedModels mm;
+		/** The width. */
+		private final int xdim;
+		/** The rebuilding's prediction at the pixel, and its column and row (version 2). */
+		private int prediction, column, row;
 		/** The model whose contexts are used, and the precision. */
 		private final int model, precision;
 		/** Whether its contexts are merged. */
@@ -547,17 +594,18 @@ public class ContextTables
 		 * A decoder at the start of a channel's coding.
 		 *
 		 * @param h        the coding
-		 * @param previous the deltas of the channels before this one (filled in as they decode)
+		 * @param previous the deltas of the channels before this one (filled in as they decode; version 1 only)
 		 * @param xdim     the width
 		 * @param n        the number of deltas
 		 * @throws IOException if the tables aren't what code writes
 		 */
 		TablesDecoder(TablesChannel h, int[][] previous, int xdim, int n) throws IOException
 		{
-			mm = contextModels(previous, xdim, n);
-			if(h.model >= mm.m) throw new IOException("bad Context tables coding: model " + h.model + " of " + mm.m);
+			this.xdim = xdim;
+			mm = (h.model == OWN) ? null : contextModels(previous, xdim, n);
+			if(mm != null && h.model >= mm.m) throw new IOException("bad Context tables coding: model " + h.model + " of " + mm.m);
 			model = h.model; merged = h.merged; precision = h.precision; value = h.value;
-			int contexts = merged ? MERGED_CONTEXTS : CONTEXTS, symbols = value.length, top = LEVEL_RANGE * h.steps;
+			int contexts = (mm == null) ? OWN_CONTEXTS : merged ? MERGED_CONTEXTS : CONTEXTS, symbols = value.length, top = LEVEL_RANGE * h.steps;
 			NeighbourMapper.BitReader bits = new NeighbourMapper.BitReader(h.tables);
 			int[] length = new int[contexts];
 			int total = 0, used = 0;
@@ -592,7 +640,12 @@ public class ContextTables
 
 		@Override public void next(int k, int[] d, int[] v) { decode(k, d, v); }
 
-		@Override public void next(int k, int[] d, int[] v, int prediction) { mm.prediction = prediction; decode(k, d, v); }
+		@Override public void next(int k, int[] d, int[] v, int prediction)
+		{
+			if(mm != null) mm.prediction = prediction;
+			this.prediction = prediction;
+			decode(k, d, v);
+		}
 
 		/**
 		 * Decodes delta k into d[k]: its context, its symbol from the
@@ -604,8 +657,17 @@ public class ContextTables
 		 */
 		private void decode(int k, int[] d, int[] v)
 		{
-			int c = mm.context(k, d, v, model);
-			if(merged) c = merged(c);
+			int c;
+			if(mm == null)
+			{
+				c = ownContext(d, v, k, column, row, xdim, prediction);
+				if(++column == xdim) { column = 0; row++; }
+			}
+			else
+			{
+				c = mm.context(k, d, v, model);
+				if(merged) c = merged(c);
+			}
 			char[] look = lookup[c];
 			if(look == null) throw new UncheckedIOException(new IOException("bad Context tables coding: a context with no table"));
 			int low = (int) (x & ((1 << precision) - 1));
@@ -622,23 +684,60 @@ public class ContextTables
 	}
 
 	/**
+	 * A band's channel decoded (version 2: the channel's own contexts) and
+	 * rebuilt from its average deltas (DeltaMapper.getAverageDeltasFromValues'
+	 * prediction), a pixel at a time, into dst from offset on.
+	 *
+	 * @param h      the coding
+	 * @param xdim   the width
+	 * @param ydim   the band's height
+	 * @param init   the first value
+	 * @param dst    gets the values
+	 * @param offset where the band's first value goes in dst
+	 * @throws IOException if the coding isn't what code writes
+	 */
+	static void average(TablesChannel h, int xdim, int ydim, int init, int[] dst, int offset) throws IOException
+	{
+		int n = xdim * ydim;
+		TablesDecoder dec = new TablesDecoder(h, null, xdim, n);
+		int[] d = new int[n], v = new int[n];
+		try
+		{
+			for(int y = 0, k = 0; y < ydim; y++)
+				for(int x = 0; x < xdim; x++, k++)
+				{
+					int p;
+					if(k == 0)      p = init;
+					else if(y == 0) p = v[k - 1];
+					else if(x == 0) p = v[k - xdim];
+					else            p = (v[k - 1] + v[k - xdim]) / 2;
+					dec.next(k, d, v, p);
+					v[k] = (k == 0) ? init : p + d[k];
+				}
+		}
+		catch(UncheckedIOException e) { throw e.getCause(); }
+		dec.finish();
+		System.arraycopy(v, 0, dst, offset, n);
+	}
+
+	/**
 	 * A band's channel's deltas decoded with its values and predictions known
 	 * (the writers' check: the coding decodes back to the deltas, given what
-	 * the decoder would have).
+	 * the decoder would have; version 2).
 	 *
-	 * @param h        the coding
-	 * @param value    the band's values
-	 * @param delta    the deltas it was coded from (for the predictions, value - delta)
-	 * @param previous the deltas of the channels coded before this one
-	 * @param xdim     the width
+	 * @param h      the coding
+	 * @param value  the channel's values
+	 * @param offset where the band's first value is in value
+	 * @param delta  the deltas it was coded from (for the predictions, value - delta)
+	 * @param xdim   the width
 	 * @return the deltas decoded
 	 * @throws IOException if the coding isn't what code writes
 	 */
-	static int[] decodeKnown(TablesChannel h, int[] value, int[] delta, int[][] previous, int xdim) throws IOException
+	static int[] decodeKnown(TablesChannel h, int[] value, int offset, int[] delta, int xdim) throws IOException
 	{
-		TablesDecoder dec = new TablesDecoder(h, previous, xdim, delta.length);
-		int[] d = new int[delta.length];
-		try { for(int k = 0; k < d.length; k++) dec.next(k, d, value, value[k] - delta[k]); }
+		TablesDecoder dec = new TablesDecoder(h, null, xdim, delta.length);
+		int[] d = new int[delta.length], v = Arrays.copyOfRange(value, offset, offset + delta.length);
+		try { for(int k = 0; k < d.length; k++) dec.next(k, d, v, v[k] - delta[k]); }
 		catch(UncheckedIOException e) { throw e.getCause(); }
 		dec.finish();
 		return d;

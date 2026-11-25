@@ -6,8 +6,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import javax.swing.*;
 
-// GenericWriter version 1.3 (writes Simple 2 formats 2 and 3, Context tables
-// format 1, Huffman formats 3 and 4, and Neighbour Huffman format 3)
+// GenericWriter version 1.4 (writes Simple 2 formats 2 and 3, Context tables
+// format 2, Huffman formats 3 and 4, and Neighbour Huffman format 3)
 //
 // NativeEncoder's NativeWriter in Java alone: the same program and the same
 // files, with nothing in C. SimpleWriter2 and HuffmanWriter in one, with a
@@ -37,11 +37,14 @@ import javax.swing.*;
 //        of the channels before it). Simple 2 format: 2 with LS, the same
 //        files as SimpleWriter2; 3 with Avg (the delta type after the Pixel
 //        Resolution). The default.
-//   Context tables: the context aware coding's contexts with fixed tables:
+//   Context tables: fixed tables chosen by each delta's context (its
+//        neighbours' activity and its second opinion, the channel's own):
 //        each channel's deltas counted by context, the counts written as
-//        tables, the deltas rANS coded with them (ContextTables.code).
-//        Context tables format ('T') 1, always with the delta type. A
-//        little bigger than context aware, several times faster to decode.
+//        tables, the deltas rANS coded with them (ContextTables.code); a
+//        channel's coding uses no other channel. Context tables format
+//        ('T') 2, always with the delta type (1, the context aware coding's
+//        contexts: read, not written). A little bigger than context aware,
+//        several times faster to decode.
 //   Huffman: each channel's deltas as HuffmanWriter codes them
 //        (HuffmanWriter.huffmanCode: unary strings by frequency rank, then a
 //        canonical Huffman code over the strings' bytes); no contexts, so a
@@ -123,9 +126,8 @@ public class GenericWriter
 	 */
 	static final int  ENTROPY_NEIGHBOUR = 2;
 	/**
-	 * The entropy types (the Entropy menu): the context aware coding's
-	 * contexts with fixed tables (ContextTables.code), the Context tables
-	 * format.
+	 * The entropy types (the Entropy menu): fixed tables chosen by each
+	 * delta's context (ContextTables.code), the Context tables format.
 	 */
 	static final int  ENTROPY_TABLES = 3;
 	/**
@@ -612,12 +614,12 @@ public class GenericWriter
 	 * coded as an image of its own (the fit and the contexts start again at
 	 * its top): per channel (green, blue-green, red-green), int init, then its
 	 * deltas coded: context aware (DeltaMapper.packMixedDeltas, with the
-	 * second opinions), Context tables (ContextTables.code), or on its own
-	 * (codeChannel: Huffman or neighbour Huffman; see there). The deltas: LS, from the least-squares fit from the rows
+	 * second opinions), or on its own (codeChannel: Context tables, Huffman
+	 * or neighbour Huffman; see there). The deltas: LS, from the least-squares fit from the rows
 	 * above (DeltaMapper.RowFit: radius RADIUS, solved at every EVERY-th pixel
 	 * along a row; channels 1 and 2 use the ones before them), or the average
 	 * of the pixels left and above (DeltaMapper.getAverageDeltasFromValues).
-	 * With the context codings a channel's contexts use the deltas of the
+	 * With the context aware coding a channel's contexts use the deltas of the
 	 * channels before it, so a band's channels are decoded in order, each a
 	 * couple of rows behind the one before; the bands can be decoded at the
 	 * same time.
@@ -627,7 +629,7 @@ public class GenericWriter
 	 * only each band's first rows fitted again
 	 * (DeltaMapper.getRowFitBandDeltas). The average deltas are found a band
 	 * at a time, all at once. A channel's coding needs only the deltas of the
-	 * channels before it (the context codings) or its own (Huffman), so its bands
+	 * channels before it (context aware) or its own (the others), so its bands
 	 * are coded while the next channel is fitted. Once everything is coded,
 	 * each band's channels are checked by decoding them back, at the same time
 	 * (unless check is false); the time that took is returned, so the coding
@@ -651,7 +653,7 @@ public class GenericWriter
 	static long encode(DataOutputStream out, int[][] value, int[] min, int xdim, int image_xdim, int image_ydim, int pixel_shift, int pixel_quant, int n,
 	                   int delta_type, int entropy_type, boolean check) throws IOException
 	{
-		boolean alone = entropy_type == ENTROPY_HUFFMAN || entropy_type == ENTROPY_NEIGHBOUR;   // each channel coded on its own
+		boolean alone = entropy_type != ENTROPY_MIXED;   // each channel coded on its own
 		long check_time = 0, start = System.nanoTime();
 		long[] fit_done = new long[3], code_done = new long[3];   // when each channel's deltas, and its last band's coding, were done
 		int rows = value[0].length / xdim;
@@ -719,8 +721,7 @@ public class GenericWriter
 							int     y0 = SimpleWriter.bandStart(fb, n, rows), y1 = SimpleWriter.bandStart(fb + 1, n, rows);
 							int[]   ch = (n == 1) ? value[fi] : Arrays.copyOfRange(value[fi], y0 * xdim, y1 * xdim);
 							int[][] previous = Arrays.copyOf(d[fb], fi);
-							coded[fb][fi] = (entropy_type == ENTROPY_TABLES) ? ContextTables.code(d[fb][fi], ch, previous, xdim)
-							                                                 : DeltaMapper.packMixedDeltas(d[fb][fi], ch, previous, xdim, true);
+							coded[fb][fi] = DeltaMapper.packMixedDeltas(d[fb][fi], ch, previous, xdim, true);
 						}
 						long now = System.nanoTime();
 						synchronized(code_done) { code_done[fi] = Math.max(code_done[fi], now); }
@@ -744,9 +745,10 @@ public class GenericWriter
 						if(alone)
 						{
 							Object coding = readChannel(entropy_type, new DataInputStream(new ByteArrayInputStream(coded[fb][fi])));
-							int[] back = (entropy_type == ENTROPY_NEIGHBOUR)
-								? NeighbourMapper.neighbourDecodeKnown((NeighbourMapper.NeighbourChannel) coding, value[fi], SimpleWriter.bandStart(fb, n, rows) * xdim, dd, xdim)
-								: decodeChannel(entropy_type, coding, xdim, dd.length / xdim);
+							int offset = SimpleWriter.bandStart(fb, n, rows) * xdim;
+							int[] back = (entropy_type == ENTROPY_NEIGHBOUR) ? NeighbourMapper.neighbourDecodeKnown((NeighbourMapper.NeighbourChannel) coding, value[fi], offset, dd, xdim)
+							           : (entropy_type == ENTROPY_TABLES)    ? ContextTables.decodeKnown((ContextTables.TablesChannel) coding, value[fi], offset, dd, xdim)
+							           : decodeChannel(entropy_type, coding, xdim, dd.length / xdim);
 							// (Delta 0 isn't coded: the band's first value, init, is written instead.)
 							same = back.length == dd.length;
 							for(int k = 1; k < dd.length && same; k++) same = back[k] == dd[k];
@@ -758,9 +760,7 @@ public class GenericWriter
 							int[] ch = (n == 1) ? value[fi] : Arrays.copyOfRange(value[fi], y0 * xdim, y1 * xdim);
 							int[] p = new int[ch.length];
 							for(int k = 0; k < p.length; k++) p[k] = ch[k] - dd[k];
-							int[] back = (entropy_type == ENTROPY_TABLES)
-								? ContextTables.decodeKnown(ContextTables.read(new DataInputStream(new ByteArrayInputStream(coded[fb][fi]))), ch, dd, previous, xdim)
-								: DeltaMapper.unpackMixedDeltas(coded[fb][fi], ch, previous, xdim, p);
+							int[] back = DeltaMapper.unpackMixedDeltas(coded[fb][fi], ch, previous, xdim, p);
 							same = Arrays.equals(back, dd);
 						}
 						if(!same)
@@ -802,9 +802,10 @@ public class GenericWriter
 	// ---- The codings that code a channel on its own --------------------------
 
 	/**
-	 * A channel's deltas coded on their own: Huffman (HuffmanWriter.huffmanCode) or neighbour
-	 * Huffman (NeighbourMapper.neighbourCode, which uses the values too: its
-	 * second opinions); see there for the layouts.
+	 * A channel's deltas coded on their own: Context tables
+	 * (ContextTables.code), Huffman (HuffmanWriter.huffmanCode) or neighbour
+	 * Huffman (NeighbourMapper.neighbourCode); the first and last use the
+	 * values too (their second opinions). See there for the layouts.
 	 *
 	 * @param entropy_type the coding (not ENTROPY_MIXED)
 	 * @param delta        the deltas
@@ -818,6 +819,7 @@ public class GenericWriter
 	{
 		switch(entropy_type)
 		{
+			case ENTROPY_TABLES:          return ContextTables.code(delta, value, offset, xdim);
 			case ENTROPY_HUFFMAN:         return HuffmanWriter.huffmanCode(delta);
 			case ENTROPY_NEIGHBOUR:       return NeighbourMapper.neighbourCode(delta, value, offset, xdim);
 			default: throw new IllegalArgumentException("not a coding of a channel on its own: " + entropy_type);

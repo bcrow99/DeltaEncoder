@@ -42,15 +42,18 @@ bands. They write and read the same files as NativeWriter and NativeReader, byte
 for byte; with the least-squares deltas those are SimpleWriter2's and
 HuffmanWriter's files, so GenericReader opens those too. The Entropy menu also
 has Huffman tables (neighbour Huffman), HuffmanWriter2's coding (and files),
-and Context tables (ContextTables): the context aware coding's contexts with
-fixed tables in place of its adaptive models. Each channel's deltas are
-counted once by context (one model's contexts, chosen, with whether the
-earlier channels' cross buckets are merged and how finely the tables are
-written, by the coded size), the counts written as tables, and the deltas
-rANS coded with them (a table lookup and a multiply a symbol, no division).
-The files are about 1-3% bigger than context aware's (smaller than both
-Huffman codings'), and decode about twice as fast (Context tables format 'T'
-1).
+and Context tables (ContextTables): fixed tables chosen by each delta's
+context in place of the context aware coding's adaptive models. A delta's
+context is the channel's own: its neighbours' activity (the context aware
+coding's buckets) and its second opinion (the median edge detector's distance
+from the prediction). Each channel's deltas are counted once by context, the
+counts written as tables (how finely chosen by the coded size), and the
+deltas rANS coded with them (a table lookup and a multiply a symbol, no
+division). No other channel is used, so all the channels and bands decode at
+the same time. The files are about 1-8% bigger than context aware's (more
+when quantized; smaller than both Huffman codings'), and decode about three
+times as fast (Context tables format 'T' 2; GenericReader still reads
+version 1, which used the context aware coding's contexts).
 
 HuffmanWriter2 and HuffmanReader2 have a Huffman coding of their own: the
 deltas (least-squares or average, the **Delta** menu) are coded directly, with
