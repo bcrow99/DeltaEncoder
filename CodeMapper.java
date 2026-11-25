@@ -464,12 +464,19 @@ public class CodeMapper
 	}
 
 	/**
-	 * Decodes {@link #packRegularCode}'s output.
+	 * How many leading bits {@link #unpackRegularCode} looks up at once.
+	 */
+	private static final int LOOKUP_BITS = 11;
+
+	/**
+	 * Decodes {@link #packRegularCode}'s output. Each code is looked up from
+	 * its first LOOKUP_BITS bits; a longer one is read bit by bit.
 	 *
 	 * @param src    the coded bytes
 	 * @param length the code lengths it was coded with (256 entries)
 	 * @param n      the number of bytes coded
 	 * @return the decoded bytes
+	 * @throws ArrayIndexOutOfBoundsException if src ends early or holds a code that isn't one
 	 */
 	public static byte[] unpackRegularCode(byte[] src, byte[] length, int n)
 	{
@@ -500,23 +507,79 @@ public class CodeMapper
 					order[index++] = s;
 			code_word = (code_word + count[len]) << 1;
 		}
-		long position = 0;
-		for(int k = 0; k < n; k++)
+		// What reading bit by bit (as below, for the longer codes) does with
+		// each LOOKUP_BITS-bit start: the byte value and its code's length
+		// (value | length << 8), 0 if the code is longer, or -1 if it isn't a
+		// code.
+		int[] lookup = new int[1 << LOOKUP_BITS];
+		for(int p = 0; p < lookup.length; p++)
 		{
 			int c = 0;
-			for(int len = 1; ; len++)
+			for(int len = 1; len <= LOOKUP_BITS; len++)
 			{
-				c = (c << 1) | ((src[(int) (position >>> 3)] >>> (7 - (position & 7))) & 1);
-				position++;
+				c = (c << 1) | ((p >>> (LOOKUP_BITS - len)) & 1);
 				int offset = c - first_code[len];
 				if(offset < count[len])
 				{
-					dst[k] = (byte) order[first_index[len] + offset];
+					lookup[p] = (first_index[len] + offset < 0) ? -1 : order[first_index[len] + offset] | (len << 8);
 					break;
 				}
 			}
 		}
+		// The bits past the end are read as zeros, and the position checked
+		// after each code.
+		long position = 0, end = 8L * src.length;
+		for(int k = 0; k < n; k++)
+		{
+			int x = peekBits(src, position);
+			int e = lookup[x >>> (32 - LOOKUP_BITS)];
+			if(e < 0)
+				throw new ArrayIndexOutOfBoundsException("not a code at bit " + position);
+			if(e != 0)
+			{
+				dst[k] = (byte) e;
+				position += e >>> 8;
+			}
+			else
+			{
+				int c = 0;
+				for(int len = 1; ; len++)
+				{
+					if(len > REGULAR_MAX_CODE_LENGTH)
+						throw new ArrayIndexOutOfBoundsException("not a code at bit " + position);
+					c = (c << 1) | ((x >>> (32 - len)) & 1);
+					int offset = c - first_code[len];
+					if(offset < count[len])
+					{
+						if(first_index[len] + offset < 0)
+							throw new ArrayIndexOutOfBoundsException("not a code at bit " + position);
+						dst[k] = (byte) order[first_index[len] + offset];
+						position += len;
+						break;
+					}
+				}
+			}
+			if(position > end)
+				throw new ArrayIndexOutOfBoundsException("the code ends early");
+		}
 		return dst;
+	}
+
+	/**
+	 * The next 32 bits of src from bit position on, the first in the high bit
+	 * (zeros past the end).
+	 *
+	 * @param src      the bytes
+	 * @param position the first bit
+	 * @return the bits
+	 */
+	private static int peekBits(byte[] src, long position)
+	{
+		int  byte_index = (int) (position >>> 3);
+		long x          = 0;
+		for(int j = 0; j < 5; j++)
+			x = (x << 8) | ((byte_index + j < src.length) ? src[byte_index + j] & 0xFF : 0);
+		return (int) (x >>> (8 - (position & 7)));
 	}
 
 	/**

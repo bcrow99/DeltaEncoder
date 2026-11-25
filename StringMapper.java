@@ -350,6 +350,49 @@ public class StringMapper
 	}
 
 	/**
+	 * For each byte (its bits from the low one): the whole values in it, as
+	 * {@link #unpackStrings} reads them from a value's start when every rank
+	 * under 8 is ones and then a zero (the last rank 8 or more): the ranks, 3
+	 * bits each, the first lowest (bits 0 to 23), how many (bits 24 to 27)
+	 * and the bits they take (bits 28 to 31).
+	 */
+	private static final int[] BYTE_VALUES =
+	{
+		0x88000000, 0x87000001, 0x87000008, 0x86000002, 0x87000040, 0x86000009, 0x86000010, 0x85000003,
+		0x87000200, 0x86000041, 0x86000048, 0x8500000a, 0x86000080, 0x85000011, 0x85000018, 0x84000004,
+		0x87001000, 0x86000201, 0x86000208, 0x85000042, 0x86000240, 0x85000049, 0x85000050, 0x8400000b,
+		0x86000400, 0x85000081, 0x85000088, 0x84000012, 0x850000c0, 0x84000019, 0x84000020, 0x83000005,
+		0x87008000, 0x86001001, 0x86001008, 0x85000202, 0x86001040, 0x85000209, 0x85000210, 0x84000043,
+		0x86001200, 0x85000241, 0x85000248, 0x8400004a, 0x85000280, 0x84000051, 0x84000058, 0x8300000c,
+		0x86002000, 0x85000401, 0x85000408, 0x84000082, 0x85000440, 0x84000089, 0x84000090, 0x83000013,
+		0x85000600, 0x840000c1, 0x840000c8, 0x8300001a, 0x84000100, 0x83000021, 0x83000028, 0x82000006,
+		0x87040000, 0x86008001, 0x86008008, 0x85001002, 0x86008040, 0x85001009, 0x85001010, 0x84000203,
+		0x86008200, 0x85001041, 0x85001048, 0x8400020a, 0x85001080, 0x84000211, 0x84000218, 0x83000044,
+		0x86009000, 0x85001201, 0x85001208, 0x84000242, 0x85001240, 0x84000249, 0x84000250, 0x8300004b,
+		0x85001400, 0x84000281, 0x84000288, 0x83000052, 0x840002c0, 0x83000059, 0x83000060, 0x8200000d,
+		0x86010000, 0x85002001, 0x85002008, 0x84000402, 0x85002040, 0x84000409, 0x84000410, 0x83000083,
+		0x85002200, 0x84000441, 0x84000448, 0x8300008a, 0x84000480, 0x83000091, 0x83000098, 0x82000014,
+		0x85003000, 0x84000601, 0x84000608, 0x830000c2, 0x84000640, 0x830000c9, 0x830000d0, 0x8200001b,
+		0x84000800, 0x83000101, 0x83000108, 0x82000022, 0x83000140, 0x82000029, 0x82000030, 0x81000007,
+		0x77000000, 0x76000001, 0x76000008, 0x75000002, 0x76000040, 0x75000009, 0x75000010, 0x74000003,
+		0x76000200, 0x75000041, 0x75000048, 0x7400000a, 0x75000080, 0x74000011, 0x74000018, 0x73000004,
+		0x76001000, 0x75000201, 0x75000208, 0x74000042, 0x75000240, 0x74000049, 0x74000050, 0x7300000b,
+		0x75000400, 0x74000081, 0x74000088, 0x73000012, 0x740000c0, 0x73000019, 0x73000020, 0x72000005,
+		0x76008000, 0x75001001, 0x75001008, 0x74000202, 0x75001040, 0x74000209, 0x74000210, 0x73000043,
+		0x75001200, 0x74000241, 0x74000248, 0x7300004a, 0x74000280, 0x73000051, 0x73000058, 0x7200000c,
+		0x75002000, 0x74000401, 0x74000408, 0x73000082, 0x74000440, 0x73000089, 0x73000090, 0x72000013,
+		0x74000600, 0x730000c1, 0x730000c8, 0x7200001a, 0x73000100, 0x72000021, 0x72000028, 0x71000006,
+		0x66000000, 0x65000001, 0x65000008, 0x64000002, 0x65000040, 0x64000009, 0x64000010, 0x63000003,
+		0x65000200, 0x64000041, 0x64000048, 0x6300000a, 0x64000080, 0x63000011, 0x63000018, 0x62000004,
+		0x65001000, 0x64000201, 0x64000208, 0x63000042, 0x64000240, 0x63000049, 0x63000050, 0x6200000b,
+		0x64000400, 0x63000081, 0x63000088, 0x62000012, 0x630000c0, 0x62000019, 0x62000020, 0x61000005,
+		0x55000000, 0x54000001, 0x54000008, 0x53000002, 0x54000040, 0x53000009, 0x53000010, 0x52000003,
+		0x54000200, 0x53000041, 0x53000048, 0x5200000a, 0x53000080, 0x52000011, 0x52000018, 0x51000004,
+		0x44000000, 0x43000001, 0x43000008, 0x42000002, 0x43000040, 0x42000009, 0x42000010, 0x41000003,
+		0x33000000, 0x32000001, 0x32000008, 0x31000002, 0x22000000, 0x21000001, 0x11000000, 0x00000000
+	};
+
+	/**
 	 * Unpacks a unary string made by {@link #packStrings}. bitlength is capped at
 	 * the length the string's own data byte records. A malformed string prints
 	 * the exception and returns what was unpacked before it.
@@ -377,60 +420,77 @@ public class StringMapper
 
 		// Bit by bit, "length" counts from 1: a one adds to it (up to
 		// max_length), a zero ends the value (rank length - 1), and a one when
-		// it's already max_length ends the last rank's value. Here the bits
-		// are taken up to 56 at a time, and each run of zeros or ones in them
-		// at once.
-		int length   = 1;
+		// it's already max_length ends the last rank's value. Here, from a
+		// value's start, whole values are read at once while 64 bits are
+		// there: a byte's worth from BYTE_VALUES (when the last rank is 8 or
+		// more), or one value from its ones; a value of more than 56 bits,
+		// and the end, bit by bit.
 		int dst_byte = 0;
 		int i        = 0;
 
 		try
 		{
-			while (dst_byte < size && i < bitlength)
+			while (max_length >= 1 && dst_byte < size && i + 64 <= bitlength)
 			{
-				long x     = bitsFrom(src, i);
-				int  avail = Math.min(56, bitlength - i);
-				int  used  = 0;
-				while (used < avail && dst_byte < size)
-				{
-					if ((x & 1) == 0)
+				long x    = bitsFrom(src, i);   // (64 bits, all the string's)
+				int  used = 0;
+				if (max_length >= 8)
+					while (used <= 56 - 8 && dst_byte + 8 <= size)
 					{
-						// z zeros: the first ends the value under way, each
-						// other one is a value of rank 0.
-						int z = Math.min(Long.numberOfTrailingZeros(x), avail - used);
-						dst[dst_byte++] = inverse_table[length - 1];
-						length = 1;
-						for (int k = 1; k < z && dst_byte < size; k++)
-							dst[dst_byte++] = inverse_table[0];
-						x >>>= z;
-						used += z;
+						int e      = BYTE_VALUES[(int) (x & 255)];
+						int values = (e >>> 24) & 15, taken = e >>> 28;
+						if (values == 0)
+							break;   // eight ones: a value of rank 8 or more
+						for (int j = 0; j < 8; j++)   // (those past the values written over next)
+							dst[dst_byte + j] = inverse_table[(e >>> (3 * j)) & 7];
+						dst_byte += values;
+						x       >>>= taken;
+						used     += taken;
+					}
+				while (dst_byte < size)
+				{
+					int ones = Long.numberOfTrailingZeros(~x), left = 56 - used;
+					if (ones >= max_length && max_length <= left)
+					{
+						dst[dst_byte++] = inverse_table[max_length];
+						x   >>>= max_length;
+						used += max_length;
+					}
+					else if (ones < max_length && ones < left)
+					{
+						dst[dst_byte++] = inverse_table[ones];
+						x   >>>= ones + 1;
+						used += ones + 1;
 					}
 					else
-					{
-						int ones = Math.min(Long.numberOfTrailingZeros(~x), avail - used);
-						x >>>= ones;
-						used += ones;
-						if (max_length < 1)
-							continue;   // one value: ones mean nothing
-						while (ones > 0 && dst_byte < size)
-						{
-							if (length < max_length)
-							{
-								int m = Math.min(max_length - length, ones);
-								length += m;
-								ones   -= m;
-							}
-							else
-							{
-								dst[dst_byte++] = inverse_table[length];
-								length = 1;
-								ones--;
-							}
-						}
-					}
+						break;
+					if (max_length >= 8 && (x & 255) != 255 && used <= 56 - 8)
+						break;   // back to the bytes
 				}
 				i += used;
+				if (used == 0)   // a value of more than 56 bits: bit by bit
+					for (int length = 1; i < bitlength; )
+					{
+						int bit = (src[i >>> 3] >>> (i & 7)) & 1;
+						i++;
+						if (bit == 0)                { dst[dst_byte++] = inverse_table[length - 1]; break; }
+						else if (length < max_length) length++;
+						else                         { dst[dst_byte++] = inverse_table[length]; break; }
+					}
 			}
+			// The rest bit by bit.
+			int length = 1;
+			while (dst_byte < size && i < bitlength)
+			{
+				int bit = (src[i >>> 3] >>> (i & 7)) & 1;
+				i++;
+				if (bit == 0)                { dst[dst_byte++] = inverse_table[length - 1]; length = 1; }
+				else if (max_length < 1)     continue;   // one value: ones mean nothing
+				else if (length < max_length) length++;
+				else                         { dst[dst_byte++] = inverse_table[length]; length = 1; }
+			}
+			for (int j = dst_byte; j < size; j++)
+				dst[j] = 0;   // (any written past the last value)
 		}
 		catch (Exception e)
 		{
