@@ -96,7 +96,7 @@ public class GenericWriter
 	/**
 	 * The Huffman format's version for the LS deltas: 3 (HuffmanWriter's),
 	 * the code lengths coded compactly, with no Deflate
-	 * (NeighbourMapper.packLengths).
+	 * (LengthCoding.packLengths).
 	 */
 	static final int  HUFFMAN_VERSION = 3;
 	/**

@@ -35,7 +35,7 @@ public class HuffmanWriter
 	/**
 	 * The file format's version: bump it in the writer and reader together
 	 * whenever the file layout or a coder's output changes. 3: the code
-	 * lengths coded compactly, with no Deflate (NeighbourMapper.packLengths),
+	 * lengths coded compactly, with no Deflate (LengthCoding.packLengths),
 	 * so the files don't depend on a zlib. 1: the first, the code lengths
 	 * Deflated (HuffmanReader reads it too). (2 is GenericWriter's version 1
 	 * with the delta type.)
@@ -555,7 +555,7 @@ public class HuffmanWriter
 	 * over the string's bytes (CodeMapper's regular Huffman code). Layout:
 	 * int the deltas' minimum, int the unary string's bit length, its rank
 	 * table (DeltaMapper.writeTable), int the (transformed) string's byte
-	 * length, int and the Huffman code lengths (NeighbourMapper.packLengths:
+	 * length, int and the Huffman code lengths (LengthCoding.packLengths:
 	 * compactly, with no Deflate; the formats before had them Deflated,
 	 * CodeMapper.packRegularTables), int and the code. Delta 0 isn't used (the band's first value is
 	 * written instead).
@@ -574,7 +574,7 @@ public class HuffmanWriter
 		int[]  frequency = ArithmeticMapper.getFrequency(string);
 		byte[] lengths = CodeMapper.getRegularHuffmanLength(frequency);
 		byte[] code    = CodeMapper.packRegularCode(string, lengths);
-		byte[] tables  = NeighbourMapper.packLengths(lengths, CodeMapper.REGULAR_MAX_CODE_LENGTH);   // (no Deflate)
+		byte[] tables  = LengthCoding.packLengths(lengths, CodeMapper.REGULAR_MAX_CODE_LENGTH);   // (no Deflate)
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		DataOutputStream out = new DataOutputStream(bytes);
 		out.writeInt(min);
@@ -640,7 +640,7 @@ public class HuffmanWriter
 		h.length = in.readInt();
 		byte[] tables = new byte[in.readInt()]; in.readFully(tables);
 		h.code   = new byte[in.readInt()]; in.readFully(h.code);
-		if(!deflated) h.lengths = NeighbourMapper.unpackLengths(tables, 256, CodeMapper.REGULAR_MAX_CODE_LENGTH);
+		if(!deflated) h.lengths = LengthCoding.unpackLengths(tables, 256, CodeMapper.REGULAR_MAX_CODE_LENGTH);
 		else
 		{
 			try { h.lengths = CodeMapper.unpackRegularTables(tables, 1)[0]; }

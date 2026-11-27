@@ -107,23 +107,35 @@ public class ContextTables
 	 */
 	static int ownContext(int[] d, int[] v, int k, int x, int y, int xdim, int prediction)
 	{
-		int levels = DeltaMapper.MIX_OPINION_LEVELS, top = DeltaMapper.MIX_ACTIVITY_TABLE.length - 1, a, o = levels / 2;
 		if(y >= 1 && x >= 1 && x < xdim - 1)
+			return interiorContext(Math.abs(d[k - 1]) + Math.abs(d[k - xdim]) + Math.abs(d[k - xdim - 1]) + Math.abs(d[k - xdim + 1]),
+			                       v[k - 1], v[k - xdim], v[k - xdim - 1], prediction);
+		int a = (x > 0) ? Math.abs(d[k - 1]) : 0;
+		if(y > 0)
 		{
-			a = Math.abs(d[k - 1]) + Math.abs(d[k - xdim]) + Math.abs(d[k - xdim - 1]) + Math.abs(d[k - xdim + 1]);
-			o += DeltaMapper.gradientLevel(DeltaMapper.med(v[k - 1], v[k - xdim], v[k - xdim - 1]) - prediction);
+			a += Math.abs(d[k - xdim]);
+			if(x > 0) a += Math.abs(d[k - xdim - 1]);
+			if(x < xdim - 1) a += Math.abs(d[k - xdim + 1]);
 		}
-		else
-		{
-			a = (x > 0) ? Math.abs(d[k - 1]) : 0;
-			if(y > 0)
-			{
-				a += Math.abs(d[k - xdim]);
-				if(x > 0) a += Math.abs(d[k - xdim - 1]);
-				if(x < xdim - 1) a += Math.abs(d[k - xdim + 1]);
-			}
-		}
-		return DeltaMapper.MIX_ACTIVITY_TABLE[Math.min(a, top)] * levels + o;
+		return DeltaMapper.MIX_ACTIVITY_TABLE[Math.min(a, DeltaMapper.MIX_ACTIVITY_TABLE.length - 1)] * DeltaMapper.MIX_OPINION_LEVELS
+		       + DeltaMapper.MIX_OPINION_LEVELS / 2;
+	}
+
+	/**
+	 * ownContext inside the image, from its activity and the values left,
+	 * above and above left.
+	 *
+	 * @param activity   the sum of the neighbours' deltas' sizes
+	 * @param w          the value to the left
+	 * @param n          the value above
+	 * @param nw         the value above left
+	 * @param prediction the rebuilding's prediction
+	 * @return the context
+	 */
+	static int interiorContext(int activity, int w, int n, int nw, int prediction)
+	{
+		return DeltaMapper.MIX_ACTIVITY_TABLE[Math.min(activity, DeltaMapper.MIX_ACTIVITY_TABLE.length - 1)] * DeltaMapper.MIX_OPINION_LEVELS
+		       + DeltaMapper.MIX_OPINION_LEVELS / 2 + DeltaMapper.gradientLevel(DeltaMapper.med(w, n, nw) - prediction);
 	}
 
 	/**
@@ -308,14 +320,14 @@ public class ContextTables
 		{
 			int contexts = count.length, top = LEVEL_RANGE * steps;
 			freq = new int[contexts][];
-			NeighbourMapper.BitWriter bits = new NeighbourMapper.BitWriter(1024);
+			LengthCoding.BitWriter bits = new LengthCoding.BitWriter(1024);
 			int[][] level = new int[contexts][];
 			int total = 0, used = 0;
 			for(int c = 0; c < contexts; c++)
 			{
 				int last = -1;
 				for(int s = 0; s < count[c].length; s++) if(count[c][s] > 0) last = s;
-				writeGamma(bits, last + 2);   // (1: not used)
+				LengthCoding.writeGamma(bits, last + 2);   // (1: not used)
 				if(last < 0) continue;
 				level[c] = levels(count[c], last, steps);
 				freq[c] = normalize(level[c], steps, precision);
@@ -331,7 +343,7 @@ public class ContextTables
 				at += level[c].length;
 			}
 			start[used] = total;
-			NeighbourMapper.writeLengthSymbols(bits, chain(all, start, top), 2 * top);
+			LengthCoding.writeLengthSymbols(bits, chain(all, start, top), 2 * top);
 			bytes = bits.toByteArray();
 		}
 
@@ -355,34 +367,6 @@ public class ContextTables
 			}
 			return size;
 		}
-	}
-
-	/**
-	 * Writes v (at least 1) in Elias's gamma code: its bit count less 1 as
-	 * 0 bits, then v.
-	 *
-	 * @param bits the bit stream
-	 * @param v    the number
-	 */
-	static void writeGamma(NeighbourMapper.BitWriter bits, int v)
-	{
-		int n = 32 - Integer.numberOfLeadingZeros(v);
-		if(n > 1) bits.write(0, n - 1);
-		bits.write(v, n);
-	}
-
-	/**
-	 * Reads a number writeGamma wrote.
-	 *
-	 * @param bits the bit stream
-	 * @return the number
-	 * @throws IOException if it's too long to be one
-	 */
-	static int readGamma(NeighbourMapper.BitReader bits) throws IOException
-	{
-		int n = 1;
-		while(bits.read(1) == 0) if(++n > 24) throw new IOException("bad Context tables coding: a table's length");
-		return (n == 1) ? 1 : (1 << (n - 1)) | bits.read(n - 1);
 	}
 
 	/**
@@ -415,8 +399,8 @@ public class ContextTables
 	 * the order the decoder reads them. The tables: a bit stream (most
 	 * significant bit first) of each context's number of levels (its last
 	 * symbol + 1; 0 for a context not used) plus 1, in gamma code
-	 * (writeGamma), then the used contexts' levels, one table after another,
-	 * as chain writes them (NeighbourMapper.writeLengthSymbols, up to twice
+	 * (LengthCoding.writeGamma), then the used contexts' levels, one table after another,
+	 * as chain writes them (LengthCoding.writeLengthSymbols, up to twice
 	 * the top level).
 	 *
 	 * @param delta  the deltas
@@ -606,12 +590,12 @@ public class ContextTables
 			if(mm != null && h.model >= mm.m) throw new IOException("bad Context tables coding: model " + h.model + " of " + mm.m);
 			model = h.model; merged = h.merged; precision = h.precision; value = h.value;
 			int contexts = (mm == null) ? OWN_CONTEXTS : merged ? MERGED_CONTEXTS : CONTEXTS, symbols = value.length, top = LEVEL_RANGE * h.steps;
-			NeighbourMapper.BitReader bits = new NeighbourMapper.BitReader(h.tables);
+			LengthCoding.BitReader bits = new LengthCoding.BitReader(h.tables);
 			int[] length = new int[contexts];
 			int total = 0, used = 0;
 			for(int c = 0; c < contexts; c++)
 			{
-				length[c] = readGamma(bits) - 1;
+				length[c] = LengthCoding.readGamma(bits) - 1;
 				if(length[c] > symbols) throw new IOException("bad Context tables coding: a table longer than the symbols");
 				total += length[c];
 				if(length[c] > 0) used++;
@@ -619,7 +603,7 @@ public class ContextTables
 			int[] start = new int[used + 1];
 			for(int c = 0, at = 0, t = 0; c < contexts; c++) if(length[c] > 0) { start[t++] = at; at += length[c]; }
 			start[used] = total;
-			int[] all = unchain(NeighbourMapper.readLengthSymbols(bits, total, 2 * top), start, top);
+			int[] all = unchain(LengthCoding.readLengthSymbols(bits, total, 2 * top), start, top);
 			if(bits.overrun()) throw new IOException("bad Context tables coding: the tables end too soon");
 			freq = new int[contexts][];
 			lookup = new char[contexts][];
@@ -681,6 +665,64 @@ public class ContextTables
 		{
 			if(at != code.length || x != RANS_LOW) throw new IOException("bad Context tables coding: it doesn't end where it should");
 		}
+
+		/**
+		 * The channel (version 2) decoded and rebuilt from its average
+		 * deltas (ContextTables.average), as next would, a pixel at a time,
+		 * but with rANS's state in locals and the interior's contexts from
+		 * the left value and delta carried along.
+		 *
+		 * @param ydim the band's height
+		 * @param init the first value
+		 * @param d    gets the deltas (xdim * ydim)
+		 * @param v    gets the values (xdim * ydim)
+		 * @throws IOException if the coding isn't what code writes
+		 */
+		void average(int ydim, int init, int[] d, int[] v) throws IOException
+		{
+			try
+			{
+				// Row 0 and each row's first and last columns as next does them.
+				next(0, d, v, init);
+				v[0] = init;
+				for(int c = 1; c < xdim; c++) { next(c, d, v, v[c - 1]); v[c] = v[c - 1] + d[c]; }
+				for(int y = 1, k = xdim; y < ydim; y++)
+				{
+					next(k, d, v, v[k - xdim]);
+					v[k] = v[k - xdim] + d[k];
+					k++;
+					long x = this.x;
+					int at = this.at, mask = (1 << precision) - 1, end = k + xdim - 2;
+					int w = v[k - 1], dw = d[k - 1];
+					for(; k < end; k++)
+					{
+						int n = v[k - xdim], p = (w + n) / 2;
+						int c = interiorContext(Math.abs(dw) + Math.abs(d[k - xdim]) + Math.abs(d[k - xdim - 1]) + Math.abs(d[k - xdim + 1]),
+						                        w, n, v[k - xdim - 1], p);
+						char[] look = lookup[c];
+						if(look == null) throw new IOException("bad Context tables coding: a context with no table");
+						int low = (int) (x & mask), s = look[low];
+						x = freq[c][s] * (x >>> precision) + low - cum[c][s];
+						while(x < RANS_LOW) x = (x << 8) | ((at < code.length) ? code[at++] & 0xff : 0);
+						d[k] = dw = value[s];
+						v[k] = w = p + dw;
+					}
+					this.x = x;
+					this.at = at;
+					if(xdim > 1)
+					{
+						column = xdim - 1;   // (where next's own count would be)
+						row    = y;
+						int p = (v[k - 1] + v[k - xdim]) / 2;
+						next(k, d, v, p);
+						v[k] = p + d[k];
+						k++;
+					}
+				}
+			}
+			catch(UncheckedIOException e) { throw e.getCause(); }
+			finish();
+		}
 	}
 
 	/**
@@ -699,24 +741,8 @@ public class ContextTables
 	static void average(TablesChannel h, int xdim, int ydim, int init, int[] dst, int offset) throws IOException
 	{
 		int n = xdim * ydim;
-		TablesDecoder dec = new TablesDecoder(h, null, xdim, n);
 		int[] d = new int[n], v = new int[n];
-		try
-		{
-			for(int y = 0, k = 0; y < ydim; y++)
-				for(int x = 0; x < xdim; x++, k++)
-				{
-					int p;
-					if(k == 0)      p = init;
-					else if(y == 0) p = v[k - 1];
-					else if(x == 0) p = v[k - xdim];
-					else            p = (v[k - 1] + v[k - xdim]) / 2;
-					dec.next(k, d, v, p);
-					v[k] = (k == 0) ? init : p + d[k];
-				}
-		}
-		catch(UncheckedIOException e) { throw e.getCause(); }
-		dec.finish();
+		new TablesDecoder(h, null, xdim, n).average(ydim, init, d, v);
 		System.arraycopy(v, 0, dst, offset, n);
 	}
 
